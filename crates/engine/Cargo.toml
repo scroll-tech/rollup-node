@@ -38,10 +38,10 @@ reth-testing-utils = { git = "https://github.com/scroll-tech/reth.git" }
 
 [features]
 arbitrary = [
-	"alloy-primitives/arbitrary",
-	"reth-primitives/arbitrary"
+    "alloy-primitives/arbitrary",
+    "reth-primitives/arbitrary"
 ]
 test_utils = [
-	"arbitrary",
-	"dep:arbitrary"
+    "arbitrary",
+    "dep:arbitrary"
 ]

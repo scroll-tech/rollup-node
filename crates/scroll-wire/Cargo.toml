@@ -13,7 +13,7 @@ workspace = true
 reth-eth-wire = { path = "../../../reth/crates/net/eth-wire" }
 reth-primitives = { path = "../../../reth/crates/primitives" }
 alloy-primitives = { version = "0.8.15", default-features = false, features = [
-	"map-foldhash",
+    "map-foldhash",
 ] }
 alloy-rlp = { version = "0.3.10", default-features = false }
 tokio = { version = "1.39", default-features = false, features = ["full"] }
