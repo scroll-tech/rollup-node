@@ -10,7 +10,7 @@ use alloy_rpc_types_engine::{
 use eyre::{bail, eyre, Result};
 use reth_engine_primitives::EngineTypes;
 use reth_rpc_api::EngineApiClient;
-use tracing::{debug, error, warn};
+use tracing::{debug, error, info, warn};
 
 /// The main interface to the Engine API of the EN.
 /// Internally maintains the fork state of the chain.
@@ -54,9 +54,17 @@ where
         };
 
         // wait on engine
-        while let Err(err) = client.fork_choice_updated_v1(fcu, None).await {
-            debug!(target: "engine::driver", ?err, "waiting on engine client");
-            tokio::time::sleep(tokio::time::Duration::from_secs(1)).await;
+        loop {
+            match client.fork_choice_updated_v1(fcu, None).await {
+                Err(err) => {
+                    debug!(target: "engine::driver", ?err, "waiting on engine client");
+                    tokio::time::sleep(tokio::time::Duration::from_secs(1)).await;
+                }
+                Ok(status) => {
+                    info!(target: "engine::driver", payload_status = ?status.payload_status.status, "engine ready");
+                    break
+                }
+            }
         }
 
         Self {
