@@ -4,6 +4,7 @@ use super::{
 use alloy_primitives::FixedBytes;
 use core::task::Poll;
 use futures::{FutureExt, StreamExt};
+use reth_network::Peers;
 use reth_network::{
     cache::LruCache, NetworkConfig as RethNetworkConfig, NetworkHandle as RethNetworkHandle,
     NetworkManager as RethNetworkManager,
@@ -42,6 +43,7 @@ pub struct NetworkManager {
 }
 
 impl NetworkManager {
+    /// Creates a new [`NetworkManager`] instance.
     pub async fn new<C: BlockNumReaderT + 'static>(
         mut config: RethNetworkConfig<C, reth_network::EthNetworkPrimitives>,
         block_import: impl BlockImport + 'static,
@@ -67,6 +69,7 @@ impl NetworkManager {
         }
     }
 
+    /// Returns a new [`NetworkHandle`] instance.
     pub fn handle(&self) -> NetworkHandle {
         NetworkHandle::new(
             self.to_manager_tx.clone(),
@@ -74,6 +77,7 @@ impl NetworkManager {
         )
     }
 
+    /// Announces a new block to the network.
     fn announce_block(&mut self, block: NewBlock) {
         let hash = block.block.hash_slow();
 
@@ -85,8 +89,6 @@ impl NetworkManager {
             .filter_map(|(peer_id, blocks)| (!blocks.contains(&hash)).then_some(*peer_id))
             .collect();
 
-        println!("peers: {:?}", peers);
-
         // Announced to the filtered set of peers
         for peer in peers {
             println!("Announcing block to peer {:?}", peer);
@@ -94,7 +96,8 @@ impl NetworkManager {
         }
     }
 
-    pub fn on_scroll_wire_event(&mut self, event: ScrollWireEvent) {
+    /// Handler for received events from the [`ScrollWireManager`].
+    fn on_scroll_wire_event(&mut self, event: ScrollWireEvent) {
         match event {
             ScrollWireEvent::NewBlock {
                 peer_id,
@@ -124,6 +127,7 @@ impl NetworkManager {
         }
     }
 
+    /// Handler for the result of a block import.
     fn on_block_import_result(&mut self, outcome: BlockImportOutcome) {
         let BlockImportOutcome { peer, result } = outcome;
         match result {
@@ -136,8 +140,19 @@ impl NetworkManager {
                     .insert(hash);
                 self.announce_block(msg);
             }
-            Ok(BlockValidation::ValidHeader { new_block: _ }) => {}
-            _ => {}
+            Ok(BlockValidation::ValidHeader { new_block: msg }) => {
+                let hash = msg.block.hash_slow();
+                self.scroll_wire
+                    .state_mut()
+                    .entry(peer)
+                    .or_insert_with(|| LruCache::new(100))
+                    .insert(hash);
+                self.announce_block(msg);
+            }
+            Err(_) => {
+                self.inner_network_handle
+                    .reputation_change(peer, reth_network_api::ReputationChangeKind::BadBlock);
+            }
         }
     }
 
