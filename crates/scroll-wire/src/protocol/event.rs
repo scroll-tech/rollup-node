@@ -1,11 +1,19 @@
+use crate::protocol::ScrollWireMessage;
 use alloy_primitives::PrimitiveSignature;
+use reth_network::Direction;
+use reth_network_api::PeerId;
+use tokio::sync::mpsc::UnboundedSender;
 
 /// The events that can be emitted by the ScrollWire protocol.
 #[derive(Debug)]
 pub enum ScrollWireEvent {
+    ConnectionEstablished {
+        direction: Direction,
+        peer_id: PeerId,
+        to_connection: UnboundedSender<ScrollWireMessage>,
+    },
     NewBlock {
-        // TODO: This should include a peer_id such that we can track which peer sent the block and
-        // assign reputation accordingly based on the block's validity.
+        peer_id: PeerId,
         block: reth_primitives::Block,
         signature: PrimitiveSignature,
     },

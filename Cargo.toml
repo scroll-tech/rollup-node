@@ -6,7 +6,7 @@ license = "MIT OR Apache-2.0"
 exclude = [".github/"]
 
 [workspace]
-members = [
+members = [ "crates/network",
     "crates/scroll-wire"
 ]
 
