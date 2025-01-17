@@ -29,7 +29,12 @@ pub(crate) fn matching_payloads(
     parent_hash: B256,
 ) -> bool {
     if payload.parent_hash() != parent_hash {
-        debug!(target: "engine::driver", expected = ?parent_hash, got = ?payload.parent_hash(), "mismatch in parent hash");
+        debug!(
+            target: "engine::driver",
+            expected = ?parent_hash,
+            got = ?payload.parent_hash(),
+            "mismatch in parent hash"
+        );
         return false
     }
 
@@ -39,17 +44,32 @@ pub(crate) fn matching_payloads(
         attributes.transactions.as_ref().is_some_and(|v| v == payload_transactions);
 
     if !matching_transactions {
-        debug!(target: "engine::driver", expected = ?attributes.transactions, got = ?payload_transactions, "mismatch in transactions");
+        debug!(
+            target: "engine::driver",
+            expected = ?attributes.transactions,
+            got = ?payload_transactions,
+            "mismatch in transactions"
+        );
         return false
     }
 
     if payload.timestamp() != attributes.payload_attributes.timestamp {
-        debug!(target: "engine::driver", expected = ?attributes.payload_attributes.timestamp, got = ?payload.timestamp(), "mismatch in timestamp");
+        debug!(
+            target: "engine::driver",
+            expected = ?attributes.payload_attributes.timestamp,
+            got = ?payload.timestamp(),
+            "mismatch in timestamp"
+        );
         return false
     }
 
     if payload.prev_randao() != attributes.payload_attributes.prev_randao {
-        debug!(target: "engine::driver", expected = ?attributes.payload_attributes.prev_randao, got = ?payload.prev_randao(), "mismatch in prev_randao");
+        debug!(
+            target: "engine::driver",
+            expected = ?attributes.payload_attributes.prev_randao,
+            got = ?payload.prev_randao(),
+            "mismatch in prev_randao"
+        );
         return false
     }
 

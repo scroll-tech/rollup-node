@@ -7,7 +7,7 @@ use crate::ExecutionPayloadProvider;
 use alloy_rpc_types_engine::{
     ExecutionPayload, ExecutionPayloadV1, ForkchoiceState, PayloadId, PayloadStatusEnum,
 };
-use eyre::{eyre, Result};
+use eyre::{bail, eyre, Result};
 use reth_engine_primitives::EngineTypes;
 use reth_rpc_api::EngineApiClient;
 use tracing::{debug, error, warn};
@@ -170,6 +170,7 @@ where
         match self.client.new_payload_v1(execution_payload).await?.status {
             PayloadStatusEnum::Invalid { validation_error } => {
                 error!(target: "engine::driver", ?validation_error, "failed to issue new execution payload");
+                bail!("invalid payload: {validation_error}")
             }
             PayloadStatusEnum::Syncing => {
                 debug!(target: "engine::driver", "EN syncing");
@@ -194,6 +195,7 @@ where
         match &forkchoice_updated.payload_status.status {
             PayloadStatusEnum::Invalid { validation_error } => {
                 error!(target: "engine::driver", ?validation_error, "failed to issue forkchoice");
+                bail!("invalid fork choice: {validation_error}")
             }
             PayloadStatusEnum::Syncing => {
                 debug!(target: "engine::driver", "EN syncing");

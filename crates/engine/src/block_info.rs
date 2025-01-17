@@ -12,7 +12,7 @@ pub struct BlockInfo {
 
 impl From<ExecutionPayload> for BlockInfo {
     fn from(value: ExecutionPayload) -> Self {
-        Self { number: value.block_number(), hash: value.block_hash() }
+        (&value).into()
     }
 }
 
