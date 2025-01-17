@@ -151,7 +151,12 @@ where
             self.set_safe_block_info(maybe_execution_payload.expect("exists").into());
             self.forkchoice_updated(None).await?;
         } else {
-            // start block building with `no_tx_pool = true`
+            // retrace the head to the safe block
+            self.set_unsafe_block_info(self.safe_block_info);
+
+            // start payload building with `no_tx_pool = true`.
+            // because we retraced the head back to the safe block, this will
+            // return an execution payload build on top of the safe head.
             payload_attributes.no_tx_pool = true;
             let id = self
                 .forkchoice_updated(Some(payload_attributes))
