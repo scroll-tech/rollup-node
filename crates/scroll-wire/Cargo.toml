@@ -6,6 +6,9 @@ rust-version.workspace = true
 license.workspace = true
 exclude.workspace = true
 
+[lints]
+workspace = true
+
 [dependencies]
 reth-eth-wire = { path = "../../../reth/crates/net/eth-wire" }
 reth-primitives = { path = "../../../reth/crates/primitives" }
@@ -13,7 +16,7 @@ alloy-primitives = { version = "0.8.15", default-features = false, features = [
     "map-foldhash",
 ] }
 alloy-rlp = { version = "0.3.10", default-features = false }
-tokio = {version = "1.39", default-features = false, features = ["full"] }
+tokio = { version = "1.39", default-features = false, features = ["full"] }
 tokio-stream = "0.1"
 futures = "0.3"
 reth-network = { path = "../../../reth/crates/net/network" }
