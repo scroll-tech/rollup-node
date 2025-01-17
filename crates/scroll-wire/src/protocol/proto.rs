@@ -1,4 +1,7 @@
-use alloy_primitives::bytes::{Buf, BufMut, BytesMut};
+use alloy_primitives::{
+    bytes::{Buf, BufMut, Bytes, BytesMut},
+    PrimitiveSignature,
+};
 use alloy_rlp::{Decodable, Encodable, RlpDecodable, RlpEncodable};
 use reth_eth_wire::{protocol::Protocol, Capability};
 
@@ -14,15 +17,23 @@ pub enum ScrollWireMessageId {
 /// The different kinds of messages that can be sent over the ScrollWire protocol.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum ScrollWireMessageKind {
-    NewBlock(NewBlockMessage),
+    NewBlock(NewBlock),
 }
 
 /// A message that is used to announce a new block to the network.
 #[derive(Clone, Debug, PartialEq, Eq, RlpEncodable, RlpDecodable)]
-pub struct NewBlockMessage {
-    // TODO: convert to Bytes
-    pub signature: [u8; 65],
+pub struct NewBlock {
+    pub signature: Bytes,
     pub block: reth_primitives::Block,
+}
+
+impl NewBlock {
+    pub fn new(signature: PrimitiveSignature, block: reth_primitives::Block) -> Self {
+        Self {
+            signature: Bytes::from(signature.as_bytes().to_vec()),
+            block,
+        }
+    }
 }
 
 impl TryFrom<u8> for ScrollWireMessageId {
@@ -37,6 +48,7 @@ impl TryFrom<u8> for ScrollWireMessageId {
 }
 
 /// The ScrollWire message type.
+#[derive(Clone, Debug)]
 pub struct ScrollWireMessage {
     pub message_type: ScrollWireMessageId,
     pub message: ScrollWireMessageKind,
@@ -53,8 +65,8 @@ impl ScrollWireMessage {
         Protocol::new(Self::capability(), 1)
     }
 
-    /// Creates a `ScrolWireMessage::NewBlock` message with the provided signature and block.
-    pub fn new_block(block: NewBlockMessage) -> Self {
+    /// Creates a new block message with the provided signature and block.
+    pub fn new_block(block: NewBlock) -> Self {
         Self {
             message_type: ScrollWireMessageId::NewBlock,
             message: ScrollWireMessageKind::NewBlock(block),
@@ -84,7 +96,7 @@ impl ScrollWireMessage {
 
         let kind = match id {
             ScrollWireMessageId::NewBlock => {
-                let new_block = NewBlockMessage::decode(buffer).ok()?;
+                let new_block = NewBlock::decode(buffer).ok()?;
                 ScrollWireMessageKind::NewBlock(new_block)
             }
         };

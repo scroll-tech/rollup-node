@@ -1,6 +1,6 @@
 mod connection;
-mod network;
+mod manager;
 mod protocol;
 
-pub use network::ScrollNetwork;
-pub use protocol::{NewBlockMessage, ScrollWireProtocolHandler};
+pub use manager::ScrollWireManager;
+pub use protocol::{NewBlock, ScrollWireEvent, ScrollWireProtocolHandler};

@@ -7,8 +7,9 @@ exclude = [".github/"]
 
 [workspace]
 members = [
-	"crates/engine",
-	"crates/scroll-wire"
+    "crates/engine",
+    "crates/network",
+    "crates/scroll-wire"
 ]
 
 resolver = "2"

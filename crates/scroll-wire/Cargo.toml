@@ -10,8 +10,8 @@ exclude.workspace = true
 workspace = true
 
 [dependencies]
-reth-eth-wire = { git = "https://github.com/scroll-tech/reth.git" }
-reth-primitives = { git = "https://github.com/scroll-tech/reth.git", default-features = false }
+reth-eth-wire = { path = "../../../reth/crates/net/eth-wire" }
+reth-primitives = { path = "../../../reth/crates/primitives" }
 alloy-primitives = { version = "0.8.15", default-features = false, features = [
 	"map-foldhash",
 ] }
@@ -19,8 +19,8 @@ alloy-rlp = { version = "0.3.10", default-features = false }
 tokio = { version = "1.39", default-features = false, features = ["full"] }
 tokio-stream = "0.1"
 futures = "0.3"
-reth-network = { git = "https://github.com/scroll-tech/reth.git" }
-reth-network-api = { git = "https://github.com/scroll-tech/reth.git" }
-reth-provider = { git = "https://github.com/scroll-tech/reth.git", features = ["test-utils"] }
-reth-scroll-chainspec = { git = "https://github.com/scroll-tech/reth.git" }
+reth-network = { path = "../../../reth/crates/net/network" }
+reth-network-api = { path = "../../../reth/crates/net/network-api" }
+reth-provider = { path = "../../../reth/crates/storage/provider", features = ["test-utils"] }
+reth-scroll-chainspec = { path = "../../../reth/crates/scroll/chainspec" }
 eyre = "0.6"
