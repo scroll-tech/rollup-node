@@ -1,8 +1,7 @@
-use alloy_primitives::PrimitiveSignature;
 use reth_network::NetworkHandle as RethNetworkHandle;
 use reth_network_peers::PeerId;
 use reth_primitives::Block;
-use secp256k1::SecretKey;
+use secp256k1::{ecdsa::Signature, SecretKey};
 use std::sync::Arc;
 use tokio::sync::{mpsc::UnboundedSender, oneshot};
 
@@ -55,7 +54,7 @@ impl NetworkHandle {
     }
 
     /// Announces a block to the network.
-    pub fn announce_block(&self, block: Block, signature: PrimitiveSignature) {
+    pub fn announce_block(&self, block: Block, signature: Signature) {
         self.send_message(NetworkHandleMessage::AnnounceBlock { block, signature });
     }
 
@@ -74,9 +73,6 @@ impl NetworkHandle {
 
 /// A message type used for communication between the [`NetworkHandle`] and the [`super::NetworkManager`].
 pub enum NetworkHandleMessage {
-    AnnounceBlock {
-        block: Block,
-        signature: PrimitiveSignature,
-    },
+    AnnounceBlock { block: Block, signature: Signature },
     Shutdown(oneshot::Sender<()>),
 }

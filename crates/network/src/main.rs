@@ -1,7 +1,8 @@
-use alloy_primitives::PrimitiveSignature;
 use network::{NetworkConfigBuilder, NetworkManager, NoopBlockImport};
 use reth_network::{NetworkInfo, Peers};
 use reth_scroll_chainspec::SCROLL_MAINNET;
+use scroll_wire::ScrollWireConfig;
+use secp256k1::ecdsa::Signature;
 
 #[tokio::main]
 async fn main() {
@@ -9,7 +10,9 @@ async fn main() {
         NetworkConfigBuilder::<reth_network::EthNetworkPrimitives>::with_rng_secret_key()
             .disable_discovery()
             .build_with_noop_provider((*SCROLL_MAINNET).clone());
-    let network_1 = NetworkManager::new(config_1, NoopBlockImport).await;
+    let scroll_wire_config = ScrollWireConfig::new(false);
+    let network_1 =
+        NetworkManager::new(config_1, scroll_wire_config.clone(), NoopBlockImport).await;
     let network_1_handle = network_1.handle();
     let peer_1_id = *network_1_handle.peer_id();
     let peer_1_addr = network_1_handle.inner().local_addr();
@@ -22,7 +25,7 @@ async fn main() {
                 0,
             )))
             .build_with_noop_provider((*SCROLL_MAINNET).clone());
-    let network_2 = NetworkManager::new(config_2, NoopBlockImport).await;
+    let network_2 = NetworkManager::new(config_2, scroll_wire_config, NoopBlockImport).await;
     let network_2_handle = network_2.handle();
     let peer_2_id = *network_2_handle.peer_id();
     let peer_2_addr = network_2_handle.inner().local_addr();
@@ -33,7 +36,7 @@ async fn main() {
     network_1_handle.inner().add_peer(peer_2_id, peer_2_addr);
     network_2_handle.inner().add_peer(peer_1_id, peer_1_addr);
 
-    let signature = PrimitiveSignature::try_from(&[0u8; 65][..]).unwrap();
+    let signature = Signature::from_compact(&[0u8; 64][..]).unwrap();
     let block = reth_primitives::Block::default();
 
     for _ in 0..100 {

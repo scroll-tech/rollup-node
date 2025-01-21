@@ -1,6 +1,6 @@
-use alloy_primitives::PrimitiveSignature;
 use reth_network_peers::PeerId;
 use scroll_wire::NewBlock;
+use secp256k1::ecdsa::Signature;
 use std::task::{Context, Poll};
 
 /// A trait for importing new blocks from the network.
@@ -10,7 +10,7 @@ pub trait BlockImport: std::fmt::Debug + Send + Sync {
         &mut self,
         peer_id: PeerId,
         block: reth_primitives::Block,
-        signature: PrimitiveSignature,
+        signature: Signature,
     );
 
     /// Polls the block import type for results of block import.
@@ -58,7 +58,7 @@ impl BlockImport for NoopBlockImport {
         &mut self,
         _peer_id: PeerId,
         _block: reth_primitives::Block,
-        _signature: PrimitiveSignature,
+        _signature: Signature,
     ) {
         println!("received new block");
     }

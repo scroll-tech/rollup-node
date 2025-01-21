@@ -1,20 +1,20 @@
-use crate::protocol::ScrollWireMessage;
-use alloy_primitives::PrimitiveSignature;
+use crate::protocol::Message;
 use reth_network::Direction;
 use reth_network_api::PeerId;
+use secp256k1::ecdsa::Signature;
 use tokio::sync::mpsc::UnboundedSender;
 
 /// The events that can be emitted by the ScrollWire protocol.
 #[derive(Debug)]
-pub enum ScrollWireEvent {
+pub enum Event {
     ConnectionEstablished {
         direction: Direction,
         peer_id: PeerId,
-        to_connection: UnboundedSender<ScrollWireMessage>,
+        to_connection: UnboundedSender<Message>,
     },
     NewBlock {
         peer_id: PeerId,
         block: reth_primitives::Block,
-        signature: PrimitiveSignature,
+        signature: Signature,
     },
 }

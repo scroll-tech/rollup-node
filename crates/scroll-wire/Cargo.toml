@@ -21,3 +21,7 @@ reth-network-api = { path = "../../../reth/crates/net/network-api" }
 reth-provider = { path = "../../../reth/crates/storage/provider", features = ["test-utils"] }
 reth-scroll-chainspec = { path = "../../../reth/crates/scroll/chainspec" }
 eyre = "0.6"
+secp256k1 = { version = "0.29", default-features = false, features = [
+    "global-context",
+    "recovery",
+] }

@@ -1,21 +1,29 @@
-use super::ScrollWireProtocolConnection;
+use super::{Connection, ScrollWireConfig};
 use crate::{
-    protocol::{ScrollWireMessage, ScrollWireProtocolState},
-    ScrollWireEvent,
+    protocol::{Message, ProtocolState},
+    Event,
 };
-use reth_network::protocol::{ConnectionHandler, OnNotSupported};
+use reth_network::protocol::{ConnectionHandler as ConnectionHandlerTrait, OnNotSupported};
 
 /// The connection handler for the ScrollWire protocol.
-pub struct ScrollWireConnectionHandler {
-    pub state: ScrollWireProtocolState,
+pub struct ConnectionHandler {
+    pub state: ProtocolState,
+    config: ScrollWireConfig,
 }
 
-impl ConnectionHandler for ScrollWireConnectionHandler {
-    type Connection = ScrollWireProtocolConnection;
+impl ConnectionHandler {
+    /// Creates a new [`ScrollWireConnectionHandler`] with the provided state and config.
+    pub fn from_parts(state: ProtocolState, config: ScrollWireConfig) -> Self {
+        Self { state, config }
+    }
+}
+
+impl ConnectionHandlerTrait for ConnectionHandler {
+    type Connection = Connection;
 
     /// The protocol that this connection handler is for.
     fn protocol(&self) -> reth_eth_wire::protocol::Protocol {
-        ScrollWireMessage::protocol()
+        Message::protocol()
     }
 
     /// Called when a incoming connection is invoked by a peer.
@@ -25,8 +33,11 @@ impl ConnectionHandler for ScrollWireConnectionHandler {
         _direction: reth_network::Direction,
         _peer_id: reth_network_api::PeerId,
     ) -> OnNotSupported {
-        // If the peer does not support the scroll-wire protocol then we disconnect.
-        OnNotSupported::Disconnect
+        if self.config.connect_unsupported_peer() {
+            OnNotSupported::KeepAlive
+        } else {
+            OnNotSupported::Disconnect
+        }
     }
 
     /// Called when a connection is established with a peer.
@@ -40,12 +51,12 @@ impl ConnectionHandler for ScrollWireConnectionHandler {
         let (msg_tx, msg_rx) = tokio::sync::mpsc::unbounded_channel();
         self.state
             .events()
-            .send(ScrollWireEvent::ConnectionEstablished {
+            .send(Event::ConnectionEstablished {
                 direction,
                 peer_id,
                 to_connection: msg_tx,
             })
             .expect("Failed to send ConnectionEstablished event");
-        ScrollWireProtocolConnection::new(peer_id, conn, direction, msg_rx, self.state)
+        Connection::new(peer_id, conn, direction, msg_rx, self.state)
     }
 }

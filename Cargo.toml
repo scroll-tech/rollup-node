@@ -6,8 +6,14 @@ license = "MIT OR Apache-2.0"
 exclude = [".github/"]
 
 [workspace]
-members = [ "crates/network",
+members = [ 
+    "bin/gossip", 
+    "crates/network",
     "crates/scroll-wire"
 ]
+
+[workspace.dependencies]
+network = { path = "crates/network" }
+scroll-wire = { path = "crates/scroll-wire" }
 
 resolver = "2"
