@@ -188,6 +188,8 @@ where
 
     /// Calls `engine_newPayloadV1` and logs the result.
     async fn new_payload(&self, execution_payload: ExecutionPayloadV1) -> Result<()> {
+        // TODO: should never enter the `Syncing`, `Accepted` or `Invalid` variants when called from
+        // `handle_payload_attributes`.
         match self.client.new_payload_v1(execution_payload).await?.status {
             PayloadStatusEnum::Invalid { validation_error } => {
                 error!(target: "engine::driver", ?validation_error, "failed to issue new execution payload");
@@ -215,6 +217,8 @@ where
         let fc = self.forkchoice_state();
         let forkchoice_updated = self.client.fork_choice_updated_v1(fc, attributes).await?;
 
+        // TODO: should never enter the `Syncing`, `Accepted` or `Invalid` variants when called from
+        // `handle_payload_attributes`.
         match &forkchoice_updated.payload_status.status {
             PayloadStatusEnum::Invalid { validation_error } => {
                 error!(target: "engine::driver", ?validation_error, "failed to issue forkchoice");
