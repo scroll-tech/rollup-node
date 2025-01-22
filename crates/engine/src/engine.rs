@@ -80,12 +80,6 @@ where
         }
     }
 
-    /// Reorgs the driver by setting the safe and unsafe block info to the provided fork info.
-    pub fn reorg(&mut self, fork: BlockInfo) {
-        self.unsafe_block_info = fork;
-        self.safe_block_info = fork;
-    }
-
     /// Set the finalized L2 block info.
     pub fn set_finalized_block_info(&mut self, finalized_info: BlockInfo) {
         self.finalized_block_info = finalized_info;
