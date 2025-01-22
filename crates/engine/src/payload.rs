@@ -22,7 +22,6 @@ pub struct ScrollPayloadAttributes {
 ///    - all transactions match
 ///    - timestamps are equal
 ///    - `prev_randaos` are equal
-///    - TODO: should we also compare the `fee_recipient` with the `suggested_fee_recipient`?
 pub(crate) fn matching_payloads(
     attributes: &ScrollPayloadAttributes,
     payload: &ExecutionPayload,
@@ -39,8 +38,7 @@ pub(crate) fn matching_payloads(
     }
 
     let payload_transactions = &payload.as_v1().transactions;
-    let matching_transactions = payload_transactions.len() ==
-        attributes.transactions.as_ref().map(|v| v.len()).unwrap_or_default() &&
+    let matching_transactions =
         attributes.transactions.as_ref().is_some_and(|v| v == payload_transactions);
 
     if !matching_transactions {

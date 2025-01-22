@@ -10,7 +10,10 @@ use alloy_rpc_types_engine::{
 use eyre::{bail, eyre, Result};
 use reth_engine_primitives::EngineTypes;
 use reth_rpc_api::EngineApiClient;
-use tracing::{debug, error, info, warn};
+use tokio::time::Duration;
+use tracing::{debug, error, info, instrument, trace, warn};
+
+const ENGINE_BACKOFF_INTERVAL: Duration = Duration::from_secs(1);
 
 /// The main interface to the Engine API of the EN.
 /// Internally maintains the fork state of the chain.
@@ -47,7 +50,7 @@ where
         safe_head: BlockInfo,
         finalized_head: BlockInfo,
     ) -> Self {
-        let fcu = ForkchoiceState {
+        let fcs = ForkchoiceState {
             head_block_hash: unsafe_head.hash,
             safe_block_hash: safe_head.hash,
             finalized_block_hash: finalized_head.hash,
@@ -55,10 +58,10 @@ where
 
         // wait on engine
         loop {
-            match client.fork_choice_updated_v1(fcu, None).await {
+            match client.fork_choice_updated_v1(fcs, None).await {
                 Err(err) => {
                     debug!(target: "engine::driver", ?err, "waiting on engine client");
-                    tokio::time::sleep(tokio::time::Duration::from_secs(1)).await;
+                    tokio::time::sleep(ENGINE_BACKOFF_INTERVAL).await;
                 }
                 Ok(status) => {
                     info!(target: "engine::driver", payload_status = ?status.payload_status.status, "engine ready");
@@ -77,10 +80,10 @@ where
         }
     }
 
-    /// Reorgs the driver by setting the safe and unsafe block info to the finalized info.
-    pub fn reorg(&mut self) {
-        self.unsafe_block_info = self.finalized_block_info;
-        self.safe_block_info = self.finalized_block_info;
+    /// Reorgs the driver by setting the safe and unsafe block info to the provided fork info.
+    pub fn reorg(&mut self, fork: BlockInfo) {
+        self.unsafe_block_info = fork;
+        self.safe_block_info = fork;
     }
 
     /// Set the finalized L2 block info.
@@ -99,7 +102,7 @@ where
     }
 
     /// Returns a [`ForkchoiceState`] from the current state of the [`EngineDriver`].
-    const fn new_forkchoice_state(&self) -> ForkchoiceState {
+    const fn forkchoice_state(&self) -> ForkchoiceState {
         ForkchoiceState {
             head_block_hash: self.unsafe_block_info.hash,
             safe_block_hash: self.safe_block_info.hash,
@@ -110,6 +113,7 @@ where
     /// Handles an execution payload:
     ///   - Sends the payload to the EL via `engine_newPayloadV1`.
     ///   - Sets the current fork choice for the EL via `engine_forkchoiceUpdatedV1`.
+    #[instrument(skip_all, level = "trace", fields(head = %self.unsafe_block_info.hash, safe = %self.safe_block_info.hash, finalized = %self.safe_block_info.hash, payload_block_hash = %execution_payload.block_hash(), payload_block_num = %execution_payload.block_number()))]
     pub async fn handle_execution_payload(
         &mut self,
         execution_payload: ExecutionPayload,
@@ -134,6 +138,7 @@ where
     ///   - If the execution payload matches the attributes:
     ///         - Sets the current fork choice for the EL via `engine_forkchoiceUpdatedV1`,
     ///           advancing the safe head by one.
+    #[instrument(skip_all, level = "trace", fields(head = %self.unsafe_block_info.hash, safe = %self.safe_block_info.hash, finalized = %self.safe_block_info.hash))]
     pub async fn handle_payload_attributes(
         &mut self,
         mut payload_attributes: ScrollPayloadAttributes,
@@ -142,21 +147,24 @@ where
             .execution_payload_provider
             .execution_payload_by_block((self.safe_block_info.number + 1).into())
             .await?;
-        let skip_attributes = maybe_execution_payload.as_ref().is_some_and(|ep| {
-            matching_payloads(&payload_attributes, ep, self.safe_block_info.hash)
-        });
+        let payload_attributes_already_inserted_in_chain =
+            maybe_execution_payload.as_ref().is_some_and(|ep| {
+                matching_payloads(&payload_attributes, ep, self.safe_block_info.hash)
+            });
 
-        if skip_attributes {
-            // set the safe head to the execution payload at safe block + 1 and issue forkchoice
+        if payload_attributes_already_inserted_in_chain {
+            // if the payload attributes match the execution payload at block safe + 1,
+            // this payload has already been passed to the EN in the form of a P2P gossiped
+            // execution payload. We can advance the safe head by one by issuing a
+            // forkchoiceUpdated.
             self.set_safe_block_info(maybe_execution_payload.expect("exists").into());
             self.forkchoice_updated(None).await?;
         } else {
-            // retrace the head to the safe block
+            // Otherwise, we construct a block from the payload attributes on top of the current
+            // safe head.
             self.set_unsafe_block_info(self.safe_block_info);
 
             // start payload building with `no_tx_pool = true`.
-            // because we retraced the head back to the safe block, this will
-            // return an execution payload build on top of the safe head.
             payload_attributes.no_tx_pool = true;
             let id = self
                 .forkchoice_updated(Some(payload_attributes))
@@ -191,7 +199,9 @@ where
             PayloadStatusEnum::Accepted => {
                 warn!(target: "engine::driver", "execution payload part of side chain");
             }
-            _ => {}
+            PayloadStatusEnum::Valid => {
+                trace!(target: "engine::driver", "execution payload valid");
+            }
         }
 
         Ok(())
@@ -202,7 +212,7 @@ where
         &self,
         attributes: Option<ScrollPayloadAttributes>,
     ) -> Result<Option<PayloadId>> {
-        let fc = self.new_forkchoice_state();
+        let fc = self.forkchoice_state();
         let forkchoice_updated = self.client.fork_choice_updated_v1(fc, attributes).await?;
 
         match &forkchoice_updated.payload_status.status {
@@ -216,7 +226,9 @@ where
             PayloadStatusEnum::Accepted => {
                 warn!(target: "engine::driver", "payload attributes part of side chain");
             }
-            _ => {}
+            PayloadStatusEnum::Valid => {
+                trace!(target: "engine::driver", "execution payload valid");
+            }
         }
 
         Ok(forkchoice_updated.payload_id)
