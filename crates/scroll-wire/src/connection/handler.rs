@@ -7,8 +7,9 @@ use reth_network::protocol::{ConnectionHandler as ConnectionHandlerTrait, OnNotS
 use tracing::trace;
 
 /// The connection handler for the ScrollWire protocol.
+#[derive(Debug)]
 pub struct ConnectionHandler {
-    pub state: ProtocolState,
+    state: ProtocolState,
     config: ScrollWireConfig,
 }
 
@@ -58,11 +59,7 @@ impl ConnectionHandlerTrait for ConnectionHandler {
         // Emit a ConnectionEstablished containing the sender to send messages to the connection.
         self.state
             .event_sender()
-            .send(Event::ConnectionEstablished {
-                direction,
-                peer_id,
-                to_connection: msg_tx,
-            })
+            .send(Event::ConnectionEstablished { direction, peer_id, to_connection: msg_tx })
             .expect("Failed to send ConnectionEstablished event - receiver dropped");
 
         Connection::new(peer_id, conn, direction, msg_rx, self.state)

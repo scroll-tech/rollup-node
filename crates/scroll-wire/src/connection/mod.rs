@@ -10,8 +10,7 @@ use reth_network_api::PeerId;
 use secp256k1::ecdsa::Signature;
 use std::{
     pin::Pin,
-    task::Poll,
-    task::{ready, Context},
+    task::{ready, Context, Poll},
 };
 use tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender};
 use tokio_stream::wrappers::UnboundedReceiverStream;
@@ -55,7 +54,7 @@ impl Connection {
 impl Stream for Connection {
     type Item = BytesMut;
 
-    fn poll_next(self: Pin<&mut Self>, cx: &mut Context) -> Poll<Option<Self::Item>> {
+    fn poll_next(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
         let this = self.get_mut();
 
         loop {

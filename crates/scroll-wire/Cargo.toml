@@ -6,20 +6,23 @@ rust-version.workspace = true
 license.workspace = true
 exclude.workspace = true
 
+[lints]
+workspace = true
+
 [dependencies]
-reth-eth-wire = { path = "../../../reth/crates/net/eth-wire" }
-reth-primitives = { path = "../../../reth/crates/primitives" }
+reth-eth-wire = { git = "https://github.com/scroll-tech/reth.git" }
+reth-primitives = { git = "https://github.com/scroll-tech/reth.git" }
 alloy-primitives = { version = "0.8.15", default-features = false, features = [
     "map-foldhash",
 ] }
 alloy-rlp = { version = "0.3.10", default-features = false }
-tokio = {version = "1.39", default-features = false, features = ["full"] }
+tokio = { version = "1.39", default-features = false, features = ["full"] }
 tokio-stream = "0.1"
 futures = "0.3"
-reth-network = { path = "../../../reth/crates/net/network" }
-reth-network-api = { path = "../../../reth/crates/net/network-api" }
-reth-provider = { path = "../../../reth/crates/storage/provider", features = ["test-utils"] }
-reth-scroll-chainspec = { path = "../../../reth/crates/scroll/chainspec" }
+reth-network = { git = "https://github.com/scroll-tech/reth.git" }
+reth-network-api = { git = "https://github.com/scroll-tech/reth.git" }
+reth-provider = { git = "https://github.com/scroll-tech/reth.git", features = ["test-utils"] }
+reth-scroll-chainspec = { git = "https://github.com/scroll-tech/reth.git" }
 eyre = "0.6"
 secp256k1 = { version = "0.29", default-features = false, features = [
     "global-context",

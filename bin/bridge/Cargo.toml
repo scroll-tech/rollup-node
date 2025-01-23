@@ -8,25 +8,25 @@ exclude.workspace = true
 
 [dependencies]
 # reth
-reth-network = { path = "../../../reth/crates/net/network" }
-reth-node-api = { path = "../../../reth/crates/node/api" }
-reth-node-types = { path = "../../../reth/crates/node/types" }
-reth-primitives = { path = "../../../reth/crates/primitives" }
-reth-scroll-chainspec = { path = "../../../reth/crates/scroll/chainspec" }
-reth-tracing = { path = "../../../reth/crates/tracing" }
-reth-transaction-pool = { path = "../../../reth/crates/transaction-pool" }
-reth-cli-util = { path = "../../../reth/crates/cli/util" }
-reth-node-builder = { path = "../../../reth/crates/node/builder" }
-reth-provider = { path = "../../../reth/crates/storage/provider" }
-reth-network-peers = { path = "../../../reth/crates/net/peers" }
+reth-network = { git = "https://github.com/scroll-tech/reth.git" }
+reth-node-api = { git = "https://github.com/scroll-tech/reth.git" }
+reth-node-types = { git = "https://github.com/scroll-tech/reth.git" }
+reth-primitives = { git = "https://github.com/scroll-tech/reth.git" }
+reth-scroll-chainspec = { git = "https://github.com/scroll-tech/reth.git" }
+reth-tracing = { git = "https://github.com/scroll-tech/reth.git" }
+reth-transaction-pool = { git = "https://github.com/scroll-tech/reth.git" }
+reth-cli-util = { git = "https://github.com/scroll-tech/reth.git" }
+reth-node-builder = { git = "https://github.com/scroll-tech/reth.git" }
+reth-provider = { git = "https://github.com/scroll-tech/reth.git" }
+reth-network-peers = { git = "https://github.com/scroll-tech/reth.git" }
 scroll-wire.workspace = true
 network.workspace = true
 tracing = "0.1.0"
 
 
 # scroll
-reth-scroll-cli = { path = "../../../reth/crates/scroll/cli" }
-reth-scroll-node = { path = "../../../reth/crates/scroll/node" }
+reth-scroll-cli = { git = "https://github.com/scroll-tech/reth.git" }
+reth-scroll-node = { git = "https://github.com/scroll-tech/reth.git" }
 
 # misc
 clap = { version = "4", features = ["derive", "env"] }
