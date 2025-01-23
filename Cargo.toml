@@ -117,7 +117,6 @@ reth-network-peers = { git = "https://github.com/scroll-tech/reth.git", default-
 reth-scroll-chainspec = { git = "https://github.com/scroll-tech/reth.git", default-features = false }
 reth-scroll-primitives = { git = "https://github.com/scroll-tech/reth.git", default-features = false }
 
-
 # rollup node
 network = { path = "crates/network" }
 scroll-wire = { path = "crates/scroll-wire" }
