@@ -97,6 +97,9 @@ impl NetworkManager {
         // Create the scroll-wire protocol manager.
         let scroll_wire = ScrollWireManager::new(events);
 
+        // Spawn the inner network manager.
+        tokio::spawn(inner_network_manager);
+
         Self {
             inner_network_handle,
             block_import: Box::new(block_import),

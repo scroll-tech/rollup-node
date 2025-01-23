@@ -123,8 +123,11 @@ scroll-wire = { path = "crates/scroll-wire" }
 
 # misc
 eyre = "0.6"
+futures = { version = "0.3", default-features = false }
 serde = { version = "1.0", default-features = false }
+secp256k1 = { version = "0.29", default-features = false }
 tokio = { version = "1.39", default-features = false }
+tokio-stream = { version = "0.1", default-features = false }
 tracing = "0.1.0"
 
 [patch.crates-io]
