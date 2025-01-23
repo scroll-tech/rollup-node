@@ -7,9 +7,7 @@ pub struct ScrollWireConfig {
 impl ScrollWireConfig {
     /// Creates a new [`ScrollWireConfig`] with the provided configuration.
     pub fn new(connect_unsupported_peer: bool) -> Self {
-        Self {
-            connect_unsupported_peer,
-        }
+        Self { connect_unsupported_peer }
     }
 
     /// Returns a boolean indicating if we should connect to a peer that does not support the

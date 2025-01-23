@@ -1,7 +1,10 @@
 mod event;
-mod handler;
-mod proto;
-
 pub use event::Event;
-pub use handler::{ProtocolState, ProtocolHandler};
-pub use proto::{Message, MessagePayload, NewBlock};
+
+mod handler;
+pub use handler::ProtocolHandler;
+pub(crate) use handler::ProtocolState;
+
+mod proto;
+pub use proto::NewBlock;
+pub(crate) use proto::{Message, MessagePayload};

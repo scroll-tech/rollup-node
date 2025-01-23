@@ -4,14 +4,14 @@ use super::{
 use alloy_primitives::FixedBytes;
 use core::task::Poll;
 use futures::{FutureExt, StreamExt};
-use reth_network::Peers;
 use reth_network::{
     cache::LruCache, NetworkConfig as RethNetworkConfig, NetworkHandle as RethNetworkHandle,
-    NetworkManager as RethNetworkManager,
+    NetworkManager as RethNetworkManager, Peers,
 };
 use reth_storage_api::BlockNumReader as BlockNumReaderT;
-use scroll_wire::{Event, NewBlock, ScrollWireConfig};
-use scroll_wire::{ProtocolHandler, ScrollWireManager, LRU_CACHE_SIZE};
+use scroll_wire::{
+    Event, NewBlock, ProtocolHandler, ScrollWireConfig, ScrollWireManager, LRU_CACHE_SIZE,
+};
 use std::future::Future;
 use tokio::sync::mpsc::{self, UnboundedReceiver, UnboundedSender};
 use tokio_stream::wrappers::UnboundedReceiverStream;
@@ -37,8 +37,8 @@ pub struct NetworkManager {
     inner_network_handle: RethNetworkHandle,
     /// Handles block imports for new blocks received from the network.
     block_import: Box<dyn BlockImport>,
-    /// The receiver half of the channel set up between this type and the [`NetworkHandle`], receives
-    /// commands from the [`NetworkHandle`].
+    /// The receiver half of the channel set up between this type and the [`NetworkHandle`],
+    /// receives commands from the [`NetworkHandle`].
     to_manager_tx: UnboundedSender<NetworkHandleMessage>,
     /// Receiver half of the channel set up between this type and the [`NetworkHandle`], receives
     /// [`NetworkHandleMessage`]s.
@@ -107,7 +107,8 @@ impl NetworkManager {
         }
     }
 
-    /// Sets the new block source. This is used to bridge new blocks announced on the eth-wire protocol.
+    /// Sets the new block source. This is used to bridge new blocks announced on the eth-wire
+    /// protocol.
     pub fn with_new_block_source(mut self, source: UnboundedReceiver<Event>) -> Self {
         self.eth_wire_block_source = Some(source.into());
         self
@@ -115,10 +116,7 @@ impl NetworkManager {
 
     /// Returns a new [`NetworkHandle`] instance.
     pub fn handle(&self) -> NetworkHandle {
-        NetworkHandle::new(
-            self.to_manager_tx.clone(),
-            self.inner_network_handle.clone(),
-        )
+        NetworkHandle::new(self.to_manager_tx.clone(), self.inner_network_handle.clone())
     }
 
     /// Announces a new block to the network.
@@ -144,11 +142,7 @@ impl NetworkManager {
     /// Handler for received events from the [`ScrollWireManager`].
     fn on_scroll_wire_event(&mut self, event: Event) {
         match event {
-            Event::NewBlock {
-                peer_id,
-                block,
-                signature,
-            } => {
+            Event::NewBlock { peer_id, block, signature } => {
                 trace!(target: "network::manager", peer_id = ?peer_id, block = ?block, signature = ?signature, "Received new block");
                 self.block_import.on_new_block(peer_id, block, signature);
             }
@@ -177,8 +171,8 @@ impl NetworkManager {
     fn on_block_import_result(&mut self, outcome: BlockImportOutcome) {
         let BlockImportOutcome { peer, result } = outcome;
         match result {
-            Ok(BlockValidation::ValidBlock { new_block: msg })
-            | Ok(BlockValidation::ValidHeader { new_block: msg }) => {
+            Ok(BlockValidation::ValidBlock { new_block: msg }) |
+            Ok(BlockValidation::ValidHeader { new_block: msg }) => {
                 let hash = msg.block.hash_slow();
                 self.scroll_wire
                     .state_mut()
@@ -219,10 +213,8 @@ impl Future for NetworkManager {
         }
 
         // Next we handle the messages from the eth-wire protocol.
-        while let Some(Poll::Ready(Some(event))) = this
-            .eth_wire_block_source
-            .as_mut()
-            .map(|x| x.poll_next_unpin(cx))
+        while let Some(Poll::Ready(Some(event))) =
+            this.eth_wire_block_source.as_mut().map(|x| x.poll_next_unpin(cx))
         {
             // we should assert that the eth-wire protocol is only sending new blocks.
             debug_assert!(matches!(event, Event::NewBlock { .. }));

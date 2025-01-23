@@ -5,10 +5,10 @@ use reth_network_api::PeerId;
 use tokio::sync::mpsc;
 
 /// A Receiver for ScrollWireEvents.
-pub type ScrollWireEventReceiver = mpsc::UnboundedReceiver<Event>;
+pub(super) type ScrollWireEventReceiver = mpsc::UnboundedReceiver<Event>;
 
 /// A Sender for ScrollWireEvents.
-pub type ScrollWireEventSender = mpsc::UnboundedSender<Event>;
+pub(super) type ScrollWireEventSender = mpsc::UnboundedSender<Event>;
 
 /// The state of the protocol.
 ///
@@ -38,12 +38,11 @@ pub struct ProtocolHandler {
 }
 
 impl ProtocolHandler {
-    /// Creates a tuple of ([`ProtocolHandler`], [`ScrollWireEventReceiver`]) from the provided configuration.
+    /// Creates a tuple of ([`ProtocolHandler`], [`ScrollWireEventReceiver`]) from the provided
+    /// configuration.
     pub fn new(config: ScrollWireConfig) -> (Self, ScrollWireEventReceiver) {
         let (events_tx, events_rx) = mpsc::unbounded_channel();
-        let state = ProtocolState {
-            event_sender: events_tx,
-        };
+        let state = ProtocolState { event_sender: events_tx };
         (Self { state, config }, events_rx)
     }
 
@@ -58,10 +57,7 @@ impl ProtocolHandlerTrait for ProtocolHandler {
 
     /// Called when a incoming connection is invoked by a peer.
     fn on_incoming(&self, _socket_addr: std::net::SocketAddr) -> Option<Self::ConnectionHandler> {
-        Some(ConnectionHandler::from_parts(
-            self.state.clone(),
-            self.config.clone(),
-        ))
+        Some(ConnectionHandler::from_parts(self.state.clone(), self.config.clone()))
     }
 
     /// Called when a connection is established with a peer.
@@ -70,9 +66,6 @@ impl ProtocolHandlerTrait for ProtocolHandler {
         _socket_addr: std::net::SocketAddr,
         _peer_id: PeerId,
     ) -> Option<Self::ConnectionHandler> {
-        Some(ConnectionHandler::from_parts(
-            self.state.clone(),
-            self.config.clone(),
-        ))
+        Some(ConnectionHandler::from_parts(self.state.clone(), self.config.clone()))
     }
 }

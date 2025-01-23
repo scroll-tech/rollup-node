@@ -3,8 +3,8 @@ use alloy_primitives::B256;
 use futures::StreamExt;
 use reth_network::cache::LruCache;
 use reth_network_api::PeerId;
-use std::collections::{hash_map::Entry, HashMap};
 use std::{
+    collections::{hash_map::Entry, HashMap},
     future::Future,
     pin::Pin,
     task::{Context, Poll},
@@ -17,6 +17,7 @@ use tracing::trace;
 pub const LRU_CACHE_SIZE: u32 = 100;
 
 /// A manager for the ScrollWire protocol.
+#[derive(Debug)]
 pub struct ScrollWireManager {
     /// A stream of [`Event`]s produced by the scroll wire protocol.
     events: UnboundedReceiverStream<Event>,
@@ -31,11 +32,7 @@ impl ScrollWireManager {
     /// Creates a new [`ScrollWireManager`] instance.
     pub fn new(events: UnboundedReceiver<Event>) -> Self {
         trace!(target: "scroll_wire::manager", "Creating new ScrollWireManager instance");
-        Self {
-            events: events.into(),
-            connections: HashMap::new(),
-            state: HashMap::new(),
-        }
+        Self { events: events.into(), connections: HashMap::new(), state: HashMap::new() }
     }
 
     /// Announces a new block to the specified peer.
@@ -78,24 +75,12 @@ impl Future for ScrollWireManager {
         // Process events from the network.
         while let Poll::Ready(new_block) = this.events.poll_next_unpin(cx) {
             match new_block {
-                Some(Event::NewBlock {
-                    peer_id,
-                    block,
-                    signature,
-                }) => {
+                Some(Event::NewBlock { peer_id, block, signature }) => {
                     // We announce the block to the network.
                     println!("Received new block with signature [{signature:?}] from the network: {block:?} ");
-                    return Poll::Ready(Event::NewBlock {
-                        peer_id,
-                        block,
-                        signature,
-                    });
+                    return Poll::Ready(Event::NewBlock { peer_id, block, signature });
                 }
-                Some(Event::ConnectionEstablished {
-                    direction,
-                    peer_id,
-                    to_connection,
-                }) => {
+                Some(Event::ConnectionEstablished { direction, peer_id, to_connection }) => {
                     println!(
                         "Established connection with peer: {:?} for direction: {:?}",
                         peer_id, direction

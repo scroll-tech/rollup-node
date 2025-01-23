@@ -40,13 +40,9 @@ impl BlockImport for BridgeBlockImport {
 
         trace!(target: "bridge::import", peer_id = %peer_id, block = ?block, "Received new block from eth-wire protocol");
 
-        // We trigger a new block event to be sent to the network manager. If this results in an error
-        // it means the network manager has been dropped.
-        let _ = self.events.send(Event::NewBlock {
-            peer_id,
-            block,
-            signature,
-        });
+        // We trigger a new block event to be sent to the network manager. If this results in an
+        // error it means the network manager has been dropped.
+        let _ = self.events.send(Event::NewBlock { peer_id, block, signature });
     }
 
     /// There is no polling required for the gossip block import type.

@@ -13,18 +13,14 @@ pub struct NetworkHandle {
 }
 
 impl NetworkHandle {
-    /// Creates a new [`NetworkHandle`] instance from the given [`UnboundedSender`] and [`RethNetworkHandle`].
+    /// Creates a new [`NetworkHandle`] instance from the given [`UnboundedSender`] and
+    /// [`RethNetworkHandle`].
     pub fn new(
         to_manager_tx: UnboundedSender<NetworkHandleMessage>,
         inner_network_handle: RethNetworkHandle,
     ) -> Self {
-        let inner = NetworkInner {
-            to_manager_tx,
-            inner_network_handle,
-        };
-        Self {
-            inner: Arc::new(inner),
-        }
+        let inner = NetworkInner { to_manager_tx, inner_network_handle };
+        Self { inner: Arc::new(inner) }
     }
 }
 
@@ -71,7 +67,8 @@ impl NetworkHandle {
     }
 }
 
-/// A message type used for communication between the [`NetworkHandle`] and the [`super::NetworkManager`].
+/// A message type used for communication between the [`NetworkHandle`] and the
+/// [`super::NetworkManager`].
 pub enum NetworkHandleMessage {
     AnnounceBlock { block: Block, signature: Signature },
     Shutdown(oneshot::Sender<()>),

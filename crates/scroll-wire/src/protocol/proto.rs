@@ -21,17 +21,16 @@ pub enum MessagePayload {
 /// A message that is used to announce a new block to the network.
 #[derive(Clone, Debug, PartialEq, Eq, RlpEncodable, RlpDecodable)]
 pub struct NewBlock {
+    /// The signature from the block author.
     pub signature: Bytes,
+    /// The block that is being announced.
     pub block: reth_primitives::Block,
 }
 
 impl NewBlock {
     /// Returns a [`NewBlock`] instance with the provided signature and block.
     pub fn new(signature: Signature, block: reth_primitives::Block) -> Self {
-        Self {
-            signature: Bytes::from(signature.serialize_compact().to_vec()),
-            block,
-        }
+        Self { signature: Bytes::from(signature.serialize_compact().to_vec()), block }
     }
 }
 
@@ -66,10 +65,7 @@ impl Message {
 
     /// Creates a new block message with the provided signature and block.
     pub fn new_block(block: NewBlock) -> Self {
-        Self {
-            id: MessageId::NewBlock,
-            payload: MessagePayload::NewBlock(block),
-        }
+        Self { id: MessageId::NewBlock, payload: MessagePayload::NewBlock(block) }
     }
 
     /// Encodes the message into a `BytesMut` buffer.

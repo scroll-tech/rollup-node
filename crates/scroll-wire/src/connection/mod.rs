@@ -16,9 +16,10 @@ use tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender};
 use tokio_stream::wrappers::UnboundedReceiverStream;
 
 mod handler;
-pub use handler::ConnectionHandler;
+pub(crate) use handler::ConnectionHandler;
 
 /// Connection between two peers using the scroll wire protocol.
+#[derive(Debug)]
 pub struct Connection {
     /// The inbound connection from the peer.
     pub conn: ProtocolConnection,

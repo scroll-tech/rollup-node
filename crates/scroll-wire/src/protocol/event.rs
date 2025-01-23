@@ -34,19 +34,11 @@ impl Event {
         peer_id: PeerId,
         to_connection: UnboundedSender<Message>,
     ) -> Self {
-        Self::ConnectionEstablished {
-            direction,
-            peer_id,
-            to_connection,
-        }
+        Self::ConnectionEstablished { direction, peer_id, to_connection }
     }
 
     /// Creates a new [`Event::NewBlock`] event.
     pub fn new_block(peer_id: PeerId, block: reth_primitives::Block, signature: Signature) -> Self {
-        Self::NewBlock {
-            peer_id,
-            block,
-            signature,
-        }
+        Self::NewBlock { peer_id, block, signature }
     }
 }

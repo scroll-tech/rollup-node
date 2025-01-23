@@ -8,34 +8,34 @@ exclude.workspace = true
 
 [dependencies]
 # reth
-reth-network = { git = "https://github.com/scroll-tech/reth.git" }
+reth-cli-util = { git = "https://github.com/scroll-tech/reth.git" }
+reth-network.workspace = true
+reth-network-peers.workspace = true
 reth-node-api = { git = "https://github.com/scroll-tech/reth.git" }
+reth-node-builder = { git = "https://github.com/scroll-tech/reth.git" }
 reth-node-types = { git = "https://github.com/scroll-tech/reth.git" }
-reth-primitives = { git = "https://github.com/scroll-tech/reth.git" }
-reth-scroll-chainspec = { git = "https://github.com/scroll-tech/reth.git" }
+reth-primitives.workspace = true
+reth-provider.workspace = true
 reth-tracing = { git = "https://github.com/scroll-tech/reth.git" }
 reth-transaction-pool = { git = "https://github.com/scroll-tech/reth.git" }
-reth-cli-util = { git = "https://github.com/scroll-tech/reth.git" }
-reth-node-builder = { git = "https://github.com/scroll-tech/reth.git" }
-reth-provider = { git = "https://github.com/scroll-tech/reth.git" }
-reth-network-peers = { git = "https://github.com/scroll-tech/reth.git" }
-scroll-wire.workspace = true
-network.workspace = true
-tracing = "0.1.0"
-
 
 # scroll
+reth-scroll-chainspec.workspace = true
 reth-scroll-cli = { git = "https://github.com/scroll-tech/reth.git" }
 reth-scroll-node = { git = "https://github.com/scroll-tech/reth.git" }
+scroll-wire.workspace = true
+network.workspace = true
 
 # misc
 clap = { version = "4", features = ["derive", "env"] }
 eyre = "0.6"
-tokio = {version = "1.39", default-features = false, features = ["full"] }
 secp256k1 = { version = "0.29", default-features = false, features = [
     "global-context",
     "recovery",
 ] }
+tokio = {version = "1.39", default-features = false, features = ["full"] }
+tracing = "0.1.0"
+
 
 [features]
 scroll = [

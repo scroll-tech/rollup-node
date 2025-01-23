@@ -34,7 +34,7 @@ pub(crate) fn matching_payloads(
             got = ?payload.parent_hash(),
             "mismatch in parent hash"
         );
-        return false
+        return false;
     }
 
     let payload_transactions = &payload.as_v1().transactions;
@@ -48,7 +48,7 @@ pub(crate) fn matching_payloads(
             got = ?payload_transactions,
             "mismatch in transactions"
         );
-        return false
+        return false;
     }
 
     if payload.timestamp() != attributes.payload_attributes.timestamp {
@@ -58,7 +58,7 @@ pub(crate) fn matching_payloads(
             got = ?payload.timestamp(),
             "mismatch in timestamp"
         );
-        return false
+        return false;
     }
 
     if payload.prev_randao() != attributes.payload_attributes.prev_randao {
@@ -68,7 +68,7 @@ pub(crate) fn matching_payloads(
             got = ?payload.prev_randao(),
             "mismatch in prev_randao"
         );
-        return false
+        return false;
     }
 
     true

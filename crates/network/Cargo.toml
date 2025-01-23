@@ -7,23 +7,30 @@ license.workspace = true
 exclude.workspace = true
 
 [dependencies]
-reth-eth-wire-types = { git = "https://github.com/scroll-tech/reth.git" }
-reth-network = { git = "https://github.com/scroll-tech/reth.git" }
-reth-network-api = { git = "https://github.com/scroll-tech/reth.git" }
-reth-network-types = { git = "https://github.com/scroll-tech/reth.git" }
-reth-network-peers = { git = "https://github.com/scroll-tech/reth.git" }
-reth-primitives = { git = "https://github.com/scroll-tech/reth.git" }
-reth-discv5 = { git = "https://github.com/scroll-tech/reth.git" }
-reth-tasks = { git = "https://github.com/scroll-tech/reth.git" }
-reth-storage-api = { git = "https://github.com/scroll-tech/reth.git" }
-tokio = {version = "1.39", default-features = false, features = ["full"] }
-tokio-stream = "0.1"
-scroll-wire.workspace = true
-alloy-primitives = { version = "0.8.15", default-features = false, features = [
+# alloy
+alloy-primitives = { workspace = true, features = [
     "map-foldhash",
 ] }
-secp256k1 = { version = "0.29", default-features = false, features = ["global-context", "rand-std", "recovery"] }
-parking_lot = "0.12"
+
+# reth
+reth-discv5 = { git = "https://github.com/scroll-tech/reth.git" }
+reth-eth-wire-types = { git = "https://github.com/scroll-tech/reth.git" }
+reth-network.workspace = true
+reth-network-api.workspace = true
+reth-network-types = { git = "https://github.com/scroll-tech/reth.git" }
+reth-network-peers.workspace = true
+reth-primitives.workspace = true
+reth-storage-api = { git = "https://github.com/scroll-tech/reth.git" }
+reth-tasks = { git = "https://github.com/scroll-tech/reth.git" }
+
+# scroll
+reth-scroll-chainspec.workspace = true
+scroll-wire.workspace = true
+
+# misc
 futures = "0.3"
-reth-scroll-chainspec = { git = "https://github.com/scroll-tech/reth.git" }
+parking_lot = "0.12"
+secp256k1 = { version = "0.29", default-features = false, features = ["global-context", "rand-std", "recovery"] }
+tokio = {version = "1.39", default-features = false, features = ["full"] }
+tokio-stream = "0.1"
 tracing = "0.1.0"

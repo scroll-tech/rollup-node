@@ -65,7 +65,7 @@ where
                 }
                 Ok(status) => {
                     info!(target: "engine::driver", payload_status = ?status.payload_status.status, "engine ready");
-                    break
+                    break;
                 }
             }
         }
