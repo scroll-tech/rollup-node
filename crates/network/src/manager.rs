@@ -11,22 +11,27 @@ use reth_network::{
 };
 use reth_storage_api::BlockNumReader as BlockNumReaderT;
 use scroll_wire::{Event, NewBlock, ScrollWireConfig};
-use scroll_wire::{ProtocolHandler, ScrollWireManager};
+use scroll_wire::{ProtocolHandler, ScrollWireManager, LRU_CACHE_SIZE};
 use std::future::Future;
 use tokio::sync::mpsc::{self, UnboundedReceiver, UnboundedSender};
 use tokio_stream::wrappers::UnboundedReceiverStream;
+use tracing::trace;
 
-/// Manages the state of the rollup node network.
+/// [`NetworkManager`] manages the state of the scroll p2p network.
 ///
 /// This is an endless [`Future`] that drives the state of the entire network forward and includes
 /// the following components:
-/// - inner_network_handle: Responsible for discovery peers and managing connections on the network.
-/// - block_import: Responsible for importing blocks that have been gossiped over the network.
+/// - inner_network_handle: Responsible for peer discover, managing connections between peers and
+///   operation of the eth-wire protocol.
+/// - block_import: Responsible for importing blocks that have been gossiped over the scroll-wire
+///   protocol.
 /// - to_manager_tx: Used to interact with this [`NetworkManager`] by sending messages using the
 ///   [`NetworkHandle`].
 /// - from_handle_rx: Receives commands from the [`NetworkHandle`].
 /// - scroll_wire: The scroll-wire protocol that manages connections and state of the scroll-wire
 ///   protocol.
+/// - eth_wire_block_source: An optional source of new blocks from the eth-wire protocol, this is
+///   used to bridge new blocks announced on the eth-wire protocol to the scroll-wire protocol.
 pub struct NetworkManager {
     /// A handle to the inner reth network manager.
     inner_network_handle: RethNetworkHandle,
@@ -45,7 +50,32 @@ pub struct NetworkManager {
 }
 
 impl NetworkManager {
-    /// Creates a new [`NetworkManager`] instance.
+    /// Creates a new [`NetworkManager`] instance from the provided parts.
+    ///
+    /// This is used when the scroll-wire [`ProtocolHandler`] and the inner network manager
+    /// [`RethNetworkManager`] are instantiated externally.
+    pub fn from_parts(
+        inner_network_handle: RethNetworkHandle,
+        block_import: Box<dyn BlockImport>,
+        events: UnboundedReceiver<Event>,
+    ) -> Self {
+        // Create the channel for sending messages to the network manager from the network handle.
+        let (to_manager_tx, from_handle_rx) = mpsc::unbounded_channel();
+
+        // Create the scroll-wire protocol manager.
+        let scroll_wire = ScrollWireManager::new(events);
+
+        Self {
+            inner_network_handle,
+            block_import,
+            to_manager_tx,
+            from_handle_rx: from_handle_rx.into(),
+            scroll_wire,
+            eth_wire_block_source: None,
+        }
+    }
+
+    /// Creates a new [`NetworkManager`] instance from the provided configuration and block import.
     pub async fn new<C: BlockNumReaderT + 'static>(
         mut network_config: RethNetworkConfig<C, reth_network::EthNetworkPrimitives>,
         scroll_wire_config: ScrollWireConfig,
@@ -58,17 +88,14 @@ impl NetworkManager {
         network_config.extra_protocols.push(scroll_wire_handler);
 
         // Create the inner network manager.
-        let inner_network = RethNetworkManager::new(network_config).await.unwrap();
-        let inner_network_handle = inner_network.handle().clone();
+        let inner_network_manager = RethNetworkManager::new(network_config).await.unwrap();
+        let inner_network_handle = inner_network_manager.handle().clone();
 
         // Create the channel for sending messages to the network manager.
         let (to_manager_tx, from_handle_rx) = mpsc::unbounded_channel();
 
         // Create the scroll-wire protocol manager.
         let scroll_wire = ScrollWireManager::new(events);
-
-        // Spawn the inner network manager.
-        tokio::spawn(inner_network);
 
         Self {
             inner_network_handle,
@@ -96,6 +123,7 @@ impl NetworkManager {
 
     /// Announces a new block to the network.
     fn announce_block(&mut self, block: NewBlock) {
+        // Compute the block hash.
         let hash = block.block.hash_slow();
 
         // Filter the peers that have not seen this block hash.
@@ -106,10 +134,10 @@ impl NetworkManager {
             .filter_map(|(peer_id, blocks)| (!blocks.contains(&hash)).then_some(*peer_id))
             .collect();
 
-        // Announced to the filtered set of peers
-        for peer in peers {
-            println!("Announcing block to peer {:?}", peer);
-            self.scroll_wire.announce_block(peer, &block, hash);
+        // Announce block to the filtered set of peers
+        for peer_id in peers {
+            trace!(target: "network::manager", peer_id = %peer_id, block_hash = %hash, "Announcing new block to peer");
+            self.scroll_wire.announce_block(peer_id, &block, hash);
         }
     }
 
@@ -121,8 +149,10 @@ impl NetworkManager {
                 block,
                 signature,
             } => {
+                trace!(target: "network::manager", peer_id = ?peer_id, block = ?block, signature = ?signature, "Received new block");
                 self.block_import.on_new_block(peer_id, block, signature);
             }
+            // Only `NewBlock` events are expected from the scroll-wire protocol.
             _ => {
                 unreachable!()
             }
@@ -133,7 +163,6 @@ impl NetworkManager {
     fn on_handle_message(&mut self, message: NetworkHandleMessage) {
         match message {
             NetworkHandleMessage::AnnounceBlock { block, signature } => {
-                println!("Announcing block {signature:?} {block:?}");
                 self.announce_block(NewBlock::new(signature, block))
             }
             NetworkHandleMessage::Shutdown(tx) => {
@@ -148,21 +177,13 @@ impl NetworkManager {
     fn on_block_import_result(&mut self, outcome: BlockImportOutcome) {
         let BlockImportOutcome { peer, result } = outcome;
         match result {
-            Ok(BlockValidation::ValidBlock { new_block: msg }) => {
+            Ok(BlockValidation::ValidBlock { new_block: msg })
+            | Ok(BlockValidation::ValidHeader { new_block: msg }) => {
                 let hash = msg.block.hash_slow();
                 self.scroll_wire
                     .state_mut()
                     .entry(peer)
-                    .or_insert_with(|| LruCache::new(100))
-                    .insert(hash);
-                self.announce_block(msg);
-            }
-            Ok(BlockValidation::ValidHeader { new_block: msg }) => {
-                let hash = msg.block.hash_slow();
-                self.scroll_wire
-                    .state_mut()
-                    .entry(peer)
-                    .or_insert_with(|| LruCache::new(100))
+                    .or_insert_with(|| LruCache::new(LRU_CACHE_SIZE))
                     .insert(hash);
                 self.announce_block(msg);
             }
@@ -187,9 +208,7 @@ impl Future for NetworkManager {
     ) -> std::task::Poll<()> {
         let this = self.get_mut();
 
-        println!("Polling network manager");
-
-        // First we handle the block import results.
+        // Handle the block import results.
         while let Poll::Ready(outcome) = this.block_import.poll(cx) {
             this.on_block_import_result(outcome);
         }
@@ -219,7 +238,9 @@ impl Future for NetworkManager {
                 }
                 // All network handles have been dropped so we can shutdown the network.
                 std::task::Poll::Ready(None) => {
-                    return std::task::Poll::Ready(());
+                    // return std::task::Poll::Ready(());
+                    // For now we will return pending to keep the network running.
+                    return std::task::Poll::Pending;
                 }
                 // No additional messages exist break.
                 std::task::Poll::Pending => {

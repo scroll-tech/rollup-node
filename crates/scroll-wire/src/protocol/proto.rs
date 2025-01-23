@@ -3,7 +3,7 @@ use alloy_rlp::{Decodable, Encodable, RlpDecodable, RlpEncodable};
 use reth_eth_wire::{protocol::Protocol, Capability};
 use secp256k1::ecdsa::Signature;
 
-/// The message IDs for messages sent over the ScrollWire protocol.
+/// The message IDs for messages sent over the scroll wire protocol.
 /// This is used to identify the type of message being sent or received
 /// and is a requirement for RLPx multiplexing.
 #[repr(u8)]
@@ -12,7 +12,7 @@ pub enum MessageId {
     NewBlock = 0,
 }
 
-/// The different kinds of messages that can be sent over the ScrollWire protocol.
+/// The different message payloads that can be sent over the ScrollWire protocol.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum MessagePayload {
     NewBlock(NewBlock),
@@ -26,6 +26,7 @@ pub struct NewBlock {
 }
 
 impl NewBlock {
+    /// Returns a [`NewBlock`] instance with the provided signature and block.
     pub fn new(signature: Signature, block: reth_primitives::Block) -> Self {
         Self {
             signature: Bytes::from(signature.serialize_compact().to_vec()),

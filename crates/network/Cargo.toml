@@ -26,4 +26,4 @@ secp256k1 = { version = "0.29", default-features = false, features = ["global-co
 parking_lot = "0.12"
 futures = "0.3"
 reth-scroll-chainspec = { path = "../../../reth/crates/scroll/chainspec" }
-
+tracing = "0.1.0"

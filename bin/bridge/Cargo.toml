@@ -1,0 +1,59 @@
+[package]
+name = "bridge"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+exclude.workspace = true
+
+[dependencies]
+# reth
+reth-network = { path = "../../../reth/crates/net/network" }
+reth-node-api = { path = "../../../reth/crates/node/api" }
+reth-node-types = { path = "../../../reth/crates/node/types" }
+reth-primitives = { path = "../../../reth/crates/primitives" }
+reth-scroll-chainspec = { path = "../../../reth/crates/scroll/chainspec" }
+reth-tracing = { path = "../../../reth/crates/tracing" }
+reth-transaction-pool = { path = "../../../reth/crates/transaction-pool" }
+reth-cli-util = { path = "../../../reth/crates/cli/util" }
+reth-node-builder = { path = "../../../reth/crates/node/builder" }
+reth-provider = { path = "../../../reth/crates/storage/provider" }
+reth-network-peers = { path = "../../../reth/crates/net/peers" }
+scroll-wire.workspace = true
+network.workspace = true
+tracing = "0.1.0"
+
+
+# scroll
+reth-scroll-cli = { path = "../../../reth/crates/scroll/cli" }
+reth-scroll-node = { path = "../../../reth/crates/scroll/node" }
+
+# misc
+clap = { version = "4", features = ["derive", "env"] }
+eyre = "0.6"
+tokio = {version = "1.39", default-features = false, features = ["full"] }
+secp256k1 = { version = "0.29", default-features = false, features = [
+    "global-context",
+    "recovery",
+] }
+
+[features]
+scroll = [
+	"reth-provider/scroll",
+	"reth-scroll-cli/scroll",
+]
+skip-state-root-validation = [
+	"reth-node-builder/skip-state-root-validation",
+	"reth-scroll-node/skip-state-root-validation",
+	"reth-provider/skip-state-root-validation"
+]
+optimism = [
+	"reth-provider/optimism",
+	"reth-scroll-cli/optimism",
+	"reth-scroll-node/optimism"
+]
+
+[[bin]]
+name = "bridge"
+path = "src/main.rs"
+required-features = ["skip-state-root-validation", "scroll"]

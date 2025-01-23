@@ -11,10 +11,14 @@ use std::{
 };
 use tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender};
 use tokio_stream::wrappers::UnboundedReceiverStream;
+use tracing::trace;
+
+/// The size of the LRU cache used to track blocks that have been seen by peers.
+pub const LRU_CACHE_SIZE: u32 = 100;
 
 /// A manager for the ScrollWire protocol.
 pub struct ScrollWireManager {
-    /// A stream of [`ScrollWireEvent`]s produced by the scroll wire protocol.
+    /// A stream of [`Event`]s produced by the scroll wire protocol.
     events: UnboundedReceiverStream<Event>,
     /// A map of connections to peers.
     connections: HashMap<PeerId, UnboundedSender<Message>>,
@@ -26,7 +30,7 @@ pub struct ScrollWireManager {
 impl ScrollWireManager {
     /// Creates a new [`ScrollWireManager`] instance.
     pub fn new(events: UnboundedReceiver<Event>) -> Self {
-        println!("Creating new ScrollNetwork instance");
+        trace!(target: "scroll_wire::manager", "Creating new ScrollWireManager instance");
         Self {
             events: events.into(),
             connections: HashMap::new(),
@@ -37,16 +41,18 @@ impl ScrollWireManager {
     /// Announces a new block to the specified peer.
     pub fn announce_block(&mut self, peer_id: PeerId, block: &NewBlock, hash: B256) {
         if let Entry::Occupied(to_connection) = self.connections.entry(peer_id) {
-            // We send the block to the peer. In we receive an error we remove the peer from the
+            // We send the block to the peer. If we receive an error we remove the peer from the
             // connections map and delete its state as the connection is no longer valid.
             if let Err(_) = to_connection.get().send(Message::new_block(block.clone())) {
+                trace!(target: "scroll_wire::manager", peer_id = %peer_id, "Failed to send block to peer - dropping peer.");
                 self.state.remove(&peer_id);
                 to_connection.remove();
             } else {
                 // Upon successful sending of the block we update the state of the peer.
+                trace!(target: "scroll_wire::manager", peer_id = %peer_id, "Announced block to peer");
                 self.state
                     .entry(peer_id)
-                    .or_insert_with(|| LruCache::new(100))
+                    .or_insert_with(|| LruCache::new(LRU_CACHE_SIZE))
                     .insert(hash);
             }
         }

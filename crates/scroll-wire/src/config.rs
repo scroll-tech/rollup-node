@@ -12,8 +12,8 @@ impl ScrollWireConfig {
         }
     }
 
-    /// Returns a boolean indicating if the ScrollWire protocol should connect to peers that do not
-    /// support the protocol.
+    /// Returns a boolean indicating if we should connect to a peer that does not support the
+    /// scroll protocol.
     pub fn connect_unsupported_peer(&self) -> bool {
         self.connect_unsupported_peer
     }

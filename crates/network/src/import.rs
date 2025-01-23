@@ -2,6 +2,7 @@ use reth_network_peers::PeerId;
 use scroll_wire::NewBlock;
 use secp256k1::ecdsa::Signature;
 use std::task::{Context, Poll};
+use tracing::trace;
 
 /// A trait for importing new blocks from the network.
 pub trait BlockImport: std::fmt::Debug + Send + Sync {
@@ -56,11 +57,11 @@ pub struct NoopBlockImport;
 impl BlockImport for NoopBlockImport {
     fn on_new_block(
         &mut self,
-        _peer_id: PeerId,
-        _block: reth_primitives::Block,
+        peer_id: PeerId,
+        block: reth_primitives::Block,
         _signature: Signature,
     ) {
-        println!("received new block");
+        trace!(target: "network::import::NoopBlockImport", peer_id = %peer_id, block = ?block, "Received new block");
     }
 
     fn poll(&mut self, _cx: &mut std::task::Context<'_>) -> std::task::Poll<BlockImportOutcome> {

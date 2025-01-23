@@ -4,5 +4,5 @@ mod manager;
 mod protocol;
 
 pub use config::ScrollWireConfig;
-pub use manager::ScrollWireManager;
-pub use protocol::{NewBlock, Event, ProtocolHandler};
+pub use manager::{ScrollWireManager, LRU_CACHE_SIZE};
+pub use protocol::{Event, NewBlock, ProtocolHandler};

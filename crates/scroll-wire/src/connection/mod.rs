@@ -19,7 +19,7 @@ use tokio_stream::wrappers::UnboundedReceiverStream;
 mod handler;
 pub use handler::ConnectionHandler;
 
-/// Connection between two peers using the ScrollWire protocol.
+/// Connection between two peers using the scroll wire protocol.
 pub struct Connection {
     /// The inbound connection from the peer.
     pub conn: ProtocolConnection,
@@ -34,7 +34,7 @@ pub struct Connection {
 }
 
 impl Connection {
-    /// Creates a new [`ScrollWireProtocolConnection`] with the provided connection and state.
+    /// Creates a new [`Connection`] with the provided [`ProtocolConnection`] and [`ProtocolState`].
     pub fn new(
         peer_id: PeerId,
         conn: ProtocolConnection,
@@ -46,7 +46,7 @@ impl Connection {
             conn,
             direction,
             outbound: outbound.into(),
-            events: state.events().clone(),
+            events: state.event_sender().clone(),
             peer_id,
         }
     }
@@ -59,7 +59,7 @@ impl Stream for Connection {
         let this = self.get_mut();
 
         loop {
-            // We announce the message to the peer.
+            // We send all the messages in the outbound channel to the peer.
             if let Poll::Ready(Some(msg)) = this.outbound.poll_next_unpin(cx) {
                 println!("broadcasting message: {:?}", msg);
                 return Poll::Ready(Some(msg.encoded()));
@@ -78,7 +78,7 @@ impl Stream for Connection {
             // We handle the message.
             match msg.payload {
                 MessagePayload::NewBlock(new_block) => {
-                    // If the signature is can be decoded then we send a new block event.
+                    // If the signature can be decoded then we send a new block event.
                     if let Some(signature) = Signature::from_compact(&new_block.signature[..]).ok()
                     {
                         this.events

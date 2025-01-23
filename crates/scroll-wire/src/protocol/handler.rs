@@ -10,41 +10,44 @@ pub type ScrollWireEventReceiver = mpsc::UnboundedReceiver<Event>;
 /// A Sender for ScrollWireEvents.
 pub type ScrollWireEventSender = mpsc::UnboundedSender<Event>;
 
-/// The state of the ScrollWire protocol.
+/// The state of the protocol.
 ///
-/// This contains a sender for emitting [`ScrollWireEvent`]s.
+/// This contains a sender for emitting [`Event`]s.
 #[derive(Debug, Clone)]
 pub struct ProtocolState {
-    /// A sender for emitting [`ScrollWireEvent`]s.
-    events: ScrollWireEventSender,
+    /// A sender for emitting [`Event`]s.
+    event_sender: ScrollWireEventSender,
 }
 
 impl ProtocolState {
     /// Returns a reference to the sender for emitting [`ScrollWireEvent`]s.
-    pub fn events(&self) -> &ScrollWireEventSender {
-        &self.events
+    pub fn event_sender(&self) -> &ScrollWireEventSender {
+        &self.event_sender
     }
 }
 
 /// A handler for the ScrollWire protocol.
 ///
-/// This handler contains the state of the protocol ([`ScrollWireProtocolState`]).
+/// This handler contains the state of the protocol ([`ProtocolState`]) and protocol configuration.
 /// This type is responsible for handling incoming and outgoing connections. It would typically be
 /// used for protocol negotiation, but currently we do not have any.
 #[derive(Debug)]
 pub struct ProtocolHandler {
-    pub state: ProtocolState,
+    state: ProtocolState,
     config: ScrollWireConfig,
 }
 
 impl ProtocolHandler {
-    /// Creates a tuple of ([`ScrollWireProtocolHandler`], [`ScrollWireEventReceiver`]).
+    /// Creates a tuple of ([`ProtocolHandler`], [`ScrollWireEventReceiver`]) from the provided configuration.
     pub fn new(config: ScrollWireConfig) -> (Self, ScrollWireEventReceiver) {
         let (events_tx, events_rx) = mpsc::unbounded_channel();
-        let state = ProtocolState { events: events_tx };
+        let state = ProtocolState {
+            event_sender: events_tx,
+        };
         (Self { state, config }, events_rx)
     }
 
+    /// Creates a new [`ProtocolHandler`] with the provided state and config.
     pub fn from_parts(state: ProtocolState, config: ScrollWireConfig) -> Self {
         Self { state, config }
     }

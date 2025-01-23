@@ -7,13 +7,23 @@ exclude = [".github/"]
 
 [workspace]
 members = [ 
-    "bin/gossip", 
+    "bin/bridge", 
     "crates/network",
     "crates/scroll-wire"
 ]
+
+resolver = "2"
+
 
 [workspace.dependencies]
 network = { path = "crates/network" }
 scroll-wire = { path = "crates/scroll-wire" }
 
-resolver = "2"
+[patch.crates-io]
+revm = { git = "https://github.com/scroll-tech/revm.git", branch = "scroll-evm-executor/reth/v53" }
+revm-primitives = { git = "https://github.com/scroll-tech/revm.git", branch = "scroll-evm-executor/reth/v53" }
+revm-interpreter = { git = "https://github.com/scroll-tech/revm.git", branch = "scroll-evm-executor/reth/v53" }
+
+ff = { git = "https://github.com/scroll-tech/ff", branch = "feat/sp1" }
+
+alloy-eip2930 = { git = "https://github.com/scroll-tech/alloy-eips", branch = "v0.3.2" }
