@@ -79,7 +79,7 @@ impl Stream for Connection {
             match msg.payload {
                 MessagePayload::NewBlock(new_block) => {
                     // If the signature can be decoded then we send a new block event.
-                    if let Some(signature) = Signature::from_compact(&new_block.signature[..]).ok()
+                    if let Ok(signature) = Signature::from_compact(&new_block.signature[..])
                     {
                         this.events
                             .send(Event::NewBlock {

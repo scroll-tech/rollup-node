@@ -4,10 +4,10 @@ use reth_network::protocol::ProtocolHandler as ProtocolHandlerTrait;
 use reth_network_api::PeerId;
 use tokio::sync::mpsc;
 
-/// A Receiver for ScrollWireEvents.
+/// A Receiver for `ScrollWireEvents`.
 pub(super) type ScrollWireEventReceiver = mpsc::UnboundedReceiver<Event>;
 
-/// A Sender for ScrollWireEvents.
+/// A Sender for `ScrollWireEvents`.
 pub(super) type ScrollWireEventSender = mpsc::UnboundedSender<Event>;
 
 /// The state of the protocol.
@@ -21,12 +21,12 @@ pub struct ProtocolState {
 
 impl ProtocolState {
     /// Returns a reference to the sender for emitting [`ScrollWireEvent`]s.
-    pub fn event_sender(&self) -> &ScrollWireEventSender {
+    pub const fn event_sender(&self) -> &ScrollWireEventSender {
         &self.event_sender
     }
 }
 
-/// A handler for the ScrollWire protocol.
+/// A handler for the `ScrollWire` protocol.
 ///
 /// This handler contains the state of the protocol ([`ProtocolState`]) and protocol configuration.
 /// This type is responsible for handling incoming and outgoing connections. It would typically be
@@ -47,7 +47,7 @@ impl ProtocolHandler {
     }
 
     /// Creates a new [`ProtocolHandler`] with the provided state and config.
-    pub fn from_parts(state: ProtocolState, config: ScrollWireConfig) -> Self {
+    pub const fn from_parts(state: ProtocolState, config: ScrollWireConfig) -> Self {
         Self { state, config }
     }
 }

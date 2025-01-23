@@ -16,7 +16,7 @@ use tracing::trace;
 /// The size of the LRU cache used to track blocks that have been seen by peers.
 pub const LRU_CACHE_SIZE: u32 = 100;
 
-/// A manager for the ScrollWire protocol.
+/// A manager for the `ScrollWire` protocol.
 #[derive(Debug)]
 pub struct ScrollWireManager {
     /// A stream of [`Event`]s produced by the scroll wire protocol.
@@ -40,7 +40,7 @@ impl ScrollWireManager {
         if let Entry::Occupied(to_connection) = self.connections.entry(peer_id) {
             // We send the block to the peer. If we receive an error we remove the peer from the
             // connections map and delete its state as the connection is no longer valid.
-            if let Err(_) = to_connection.get().send(Message::new_block(block.clone())) {
+            if to_connection.get().send(Message::new_block(block.clone())).is_err() {
                 trace!(target: "scroll_wire::manager", peer_id = %peer_id, "Failed to send block to peer - dropping peer.");
                 self.state.remove(&peer_id);
                 to_connection.remove();
@@ -55,12 +55,12 @@ impl ScrollWireManager {
         }
     }
 
-    /// Returns the state of the ScrollWire protocol.
-    pub fn state(&self) -> &HashMap<PeerId, LruCache<B256>> {
+    /// Returns the state of the `ScrollWire` protocol.
+    pub const fn state(&self) -> &HashMap<PeerId, LruCache<B256>> {
         &self.state
     }
 
-    /// Returns a mutable reference to the state of the ScrollWire protocol.
+    /// Returns a mutable reference to the state of the `ScrollWire` protocol.
     pub fn state_mut(&mut self) -> &mut HashMap<PeerId, LruCache<B256>> {
         &mut self.state
     }

@@ -5,14 +5,14 @@ use secp256k1::ecdsa::Signature;
 
 /// The message IDs for messages sent over the scroll wire protocol.
 /// This is used to identify the type of message being sent or received
-/// and is a requirement for RLPx multiplexing.
+/// and is a requirement for `RLPx` multiplexing.
 #[repr(u8)]
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub enum MessageId {
     NewBlock = 0,
 }
 
-/// The different message payloads that can be sent over the ScrollWire protocol.
+/// The different message payloads that can be sent over the `ScrollWire` protocol.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum MessagePayload {
     NewBlock(NewBlock),
@@ -45,7 +45,7 @@ impl TryFrom<u8> for MessageId {
     }
 }
 
-/// The ScrollWire message type.
+/// The `ScrollWire` message type.
 #[derive(Clone, Debug)]
 pub struct Message {
     pub id: MessageId,
@@ -64,7 +64,7 @@ impl Message {
     }
 
     /// Creates a new block message with the provided signature and block.
-    pub fn new_block(block: NewBlock) -> Self {
+    pub const fn new_block(block: NewBlock) -> Self {
         Self { id: MessageId::NewBlock, payload: MessagePayload::NewBlock(block) }
     }
 

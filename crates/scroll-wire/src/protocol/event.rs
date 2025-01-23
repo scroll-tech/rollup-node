@@ -4,7 +4,7 @@ use reth_network_api::PeerId;
 use secp256k1::ecdsa::Signature;
 use tokio::sync::mpsc::UnboundedSender;
 
-/// The events that can be emitted by the ScrollWire protocol.
+/// The events that can be emitted by the `ScrollWire` protocol.
 #[derive(Debug)]
 pub enum Event {
     /// A new connection has been established.
@@ -29,7 +29,7 @@ pub enum Event {
 
 impl Event {
     /// Creates a new [`Event::ConnectionEstablished`] event.
-    pub fn connection_established(
+    pub const fn connection_established(
         direction: Direction,
         peer_id: PeerId,
         to_connection: UnboundedSender<Message>,
@@ -38,7 +38,7 @@ impl Event {
     }
 
     /// Creates a new [`Event::NewBlock`] event.
-    pub fn new_block(peer_id: PeerId, block: reth_primitives::Block, signature: Signature) -> Self {
+    pub const fn new_block(peer_id: PeerId, block: reth_primitives::Block, signature: Signature) -> Self {
         Self::NewBlock { peer_id, block, signature }
     }
 }

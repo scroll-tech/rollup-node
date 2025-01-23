@@ -43,11 +43,11 @@ pub enum BlockImportError {
 /// A consensus related error that can occur during block import.
 pub enum ConsensusError {
     /// The block is invalid.
-    InvalidBlock,
+    Block,
     /// The state root is invalid.
-    InvalidStateRoot,
+    StateRoot,
     /// The signature is invalid.
-    InvalidSignature,
+    Signature,
 }
 
 /// A block import type that does nothing.

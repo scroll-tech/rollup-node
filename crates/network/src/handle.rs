@@ -41,7 +41,7 @@ impl NetworkHandle {
 
     /// Returns the peer id of the network handle.
     pub fn peer_id(&self) -> &PeerId {
-        &self.inner.inner_network_handle.peer_id()
+        self.inner.inner_network_handle.peer_id()
     }
 
     /// Sends a message to the network manager.
@@ -63,7 +63,7 @@ impl NetworkHandle {
 
     /// Returns the secret key of the network handle.
     pub fn secret_key(&self) -> &SecretKey {
-        &self.inner.inner_network_handle.secret_key()
+        self.inner.inner_network_handle.secret_key()
     }
 }
 
