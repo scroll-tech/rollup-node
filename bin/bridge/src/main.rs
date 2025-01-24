@@ -32,7 +32,7 @@ fn main() {
                 );
             let handle = builder
                 .with_types_and_provider::<ScrollNode, BlockchainProvider<_>>()
-                // override the network builder with the `ScrollBridgeNetworkBuilder`
+                // Override the network builder with the `ScrollBridgeNetworkBuilder`
                 .with_components(ScrollNode::components().network(ScrollBridgeNetworkBuilder))
                 .with_add_ons(ScrollAddOns::default())
                 .launch_with_fn(|builder| {

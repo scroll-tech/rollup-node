@@ -1,4 +1,3 @@
-use network::{NetworkManager as ScrollNetworkManager, NoopBlockImport};
 use reth_network::{
     config::NetworkMode, EthNetworkPrimitives, NetworkConfig, NetworkManager, PeersInfo,
 };
@@ -9,6 +8,7 @@ use reth_primitives::{EthPrimitives, PooledTransaction};
 use reth_scroll_chainspec::ScrollChainSpec;
 use reth_tracing::tracing::info;
 use reth_transaction_pool::{PoolTransaction, TransactionPool};
+use scroll_network::{NetworkManager as ScrollNetworkManager, NoopBlockImport};
 use scroll_wire::{ProtocolHandler, ScrollWireConfig};
 
 /// The network builder for the eth-wire to scroll-wire bridge.
@@ -36,14 +36,18 @@ where
         // Create a scroll-wire protocol handler.
         let (scroll_wire_handler, events) = ProtocolHandler::new(ScrollWireConfig::new(true));
 
-        // Initialize the network manager.
+        // Create the network configuration.
+        let config = ctx.network_config()?;
         let mut config = NetworkConfig {
             network_mode: NetworkMode::Work,
-            block_import: Box::new(super::BridgeBlockImport::new(new_block_tx)),
-            ..ctx.network_config()?
+            block_import: Box::new(super::BridgeBlockImport::new(
+                new_block_tx,
+                config.block_import,
+            )),
+            ..config
         };
 
-        // Add the scroll-wire protocol handler to the network manager.
+        // Add the scroll-wire protocol handler to the network config.
         config.extra_protocols.push(scroll_wire_handler);
 
         // Create the network manager.

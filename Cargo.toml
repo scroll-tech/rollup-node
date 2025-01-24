@@ -118,7 +118,7 @@ reth-scroll-chainspec = { git = "https://github.com/scroll-tech/reth.git", defau
 reth-scroll-primitives = { git = "https://github.com/scroll-tech/reth.git", default-features = false }
 
 # rollup node
-network = { path = "crates/network" }
+scroll-network = { path = "crates/network" }
 scroll-wire = { path = "crates/scroll-wire" }
 
 # misc

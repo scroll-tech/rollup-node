@@ -1,5 +1,5 @@
 [package]
-name = "bridge"
+name = "scroll-bridge"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -24,7 +24,7 @@ reth-scroll-chainspec.workspace = true
 reth-scroll-cli = { git = "https://github.com/scroll-tech/reth.git" }
 reth-scroll-node = { git = "https://github.com/scroll-tech/reth.git" }
 scroll-wire.workspace = true
-network.workspace = true
+scroll-network.workspace = true
 
 # misc
 clap = { version = "4", features = ["derive", "env"] }
