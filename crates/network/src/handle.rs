@@ -1,4 +1,4 @@
-use reth_network::NetworkHandle as RethNetworkHandle;
+use reth_network::{NetworkHandle as RethNetworkHandle, PeersInfo};
 use reth_network_peers::PeerId;
 use reth_primitives::Block;
 use secp256k1::{ecdsa::Signature, SecretKey};
@@ -64,6 +64,10 @@ impl NetworkHandle {
     /// Returns the secret key of the network handle.
     pub fn secret_key(&self) -> &SecretKey {
         self.inner.inner_network_handle.secret_key()
+    }
+
+    pub fn local_node_record(&self) -> reth_network_peers::NodeRecord {
+        self.inner.inner_network_handle.local_node_record()
     }
 }
 

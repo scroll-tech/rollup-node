@@ -13,6 +13,7 @@ reth-network.workspace = true
 reth-network-peers.workspace = true
 reth-node-api = { git = "https://github.com/scroll-tech/reth.git" }
 reth-node-builder = { git = "https://github.com/scroll-tech/reth.git" }
+reth-node-core = { git = "https://github.com/scroll-tech/reth.git" }
 reth-node-types = { git = "https://github.com/scroll-tech/reth.git" }
 reth-primitives.workspace = true
 reth-provider.workspace = true
@@ -35,6 +36,24 @@ secp256k1 = { workspace = true, features = [
 ] }
 tokio = { workspace = true, features = ["full"] }
 tracing.workspace = true
+
+[dev-dependencies]
+# alloy
+alloy-primitives = { version = "0.8.15", default-features = false, features = [
+    "map-foldhash",
+] }
+alloy-genesis = { version = "0.9.2", default-features = false }
+alloy-rpc-types-engine = { version = "0.9.2", default-features = false }
+
+# reth
+reth-e2e-test-utils = { git = "https://github.com/scroll-tech/reth.git" }
+reth-eth-wire-types = { git = "https://github.com/scroll-tech/reth.git" }
+reth-payload-builder = { git = "https://github.com/scroll-tech/reth.git" }
+reth-rpc-server-types = { git = "https://github.com/scroll-tech/reth.git" }
+reth-tasks = { git = "https://github.com/scroll-tech/reth.git" }
+
+# misc
+serde_json = { version = "1.0.94", default-features = false, features = ["alloc"] }
 
 
 [features]

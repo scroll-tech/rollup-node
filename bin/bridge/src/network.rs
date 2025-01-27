@@ -8,7 +8,7 @@ use reth_primitives::{EthPrimitives, PooledTransaction};
 use reth_scroll_chainspec::ScrollChainSpec;
 use reth_tracing::tracing::info;
 use reth_transaction_pool::{PoolTransaction, TransactionPool};
-use scroll_network::{NetworkManager as ScrollNetworkManager, NoopBlockImport};
+use scroll_network::NetworkManager as ScrollNetworkManager;
 use scroll_wire::{ProtocolHandler, ScrollWireConfig};
 
 /// The network builder for the eth-wire to scroll-wire bridge.
@@ -55,9 +55,12 @@ where
         let handle = ctx.start_network(network, pool);
 
         // Create the scroll network manager.
-        let scroll_wire_manager =
-            ScrollNetworkManager::from_parts(handle.clone(), Box::new(NoopBlockImport), events)
-                .with_new_block_source(new_block_rx);
+        let scroll_wire_manager = ScrollNetworkManager::from_parts(
+            handle.clone(),
+            Box::new(super::ValidBlockImport::default()),
+            events,
+        )
+        .with_new_block_source(new_block_rx);
 
         // Spawn the scroll network manager.
         ctx.task_executor().spawn(scroll_wire_manager);

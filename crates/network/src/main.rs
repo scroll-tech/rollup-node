@@ -1,6 +1,6 @@
-use network::{NetworkConfigBuilder, NetworkManager, NoopBlockImport};
 use reth_network::{NetworkInfo, Peers};
 use reth_scroll_chainspec::SCROLL_MAINNET;
+use scroll_network::{NetworkConfigBuilder, NetworkManager, NoopBlockImport};
 use scroll_wire::ScrollWireConfig;
 use secp256k1::ecdsa::Signature;
 
