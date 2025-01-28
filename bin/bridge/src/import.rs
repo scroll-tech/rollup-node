@@ -63,10 +63,8 @@ impl BridgeBlockImport {
 }
 
 impl RethBlockImport for BridgeBlockImport {
-    /// This function is called when a new block is received from the network.
-    ///
-    /// It extracts the signature of the block from the extra data field and sends the block to the
-    /// scroll-wire protocol. It then delegates the block import to the inner block import.
+    /// This function is called when a new block is received from the network, it delegates the
+    /// block import to the inner block import.
     fn on_new_block(
         &mut self,
         peer_id: PeerId,
@@ -79,6 +77,9 @@ impl RethBlockImport for BridgeBlockImport {
     }
 
     /// This function is called when the block import is polled.
+    ///
+    /// If the block import is ready we check if the block is valid and if it is we send the block
+    /// to the scroll-wire protocol and then return the outcome.
     fn poll(
         &mut self,
         cx: &mut Context<'_>,

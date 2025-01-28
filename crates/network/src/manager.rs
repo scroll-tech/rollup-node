@@ -219,7 +219,8 @@ impl Future for NetworkManager {
         while let Some(Poll::Ready(Some(event))) =
             this.eth_wire_block_source.as_mut().map(|x| x.poll_next_unpin(cx))
         {
-            // we should assert that the eth-wire protocol is only sending new blocks.
+            // we should assert that the eth-wire protocol is only sending new blocks. All new
+            // blocks from the eth-wire protocol are valid and do not need to be validated.
             match event {
                 Event::NewBlock { peer_id: _, block, signature } => {
                     let block = NewBlock {
