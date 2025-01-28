@@ -220,8 +220,18 @@ impl Future for NetworkManager {
             this.eth_wire_block_source.as_mut().map(|x| x.poll_next_unpin(cx))
         {
             // we should assert that the eth-wire protocol is only sending new blocks.
-            debug_assert!(matches!(event, Event::NewBlock { .. }));
-            this.on_scroll_wire_event(event);
+            match event {
+                Event::NewBlock { peer_id: _, block, signature } => {
+                    let block = NewBlock {
+                        block,
+                        signature: signature.serialize_compact().to_vec().into(),
+                    };
+                    this.announce_block(block);
+                }
+                _ => {
+                    unreachable!("eth wire source should only send new blocks");
+                }
+            }
         }
 
         // Next we handle the messages from the network handle.

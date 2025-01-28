@@ -1,21 +1,8 @@
-//! Scroll binary
-use reth_node_builder::{
-    components::NodeComponentsBuilder,
-    rpc::{EngineValidatorAddOn, RethRpcAddOns},
-    EngineNodeLauncher, FullNodeTypesAdapter, Node, NodeAdapter, NodeBuilder, NodeComponents,
-    NodeConfig, NodeHandle, NodeTypesWithDBAdapter, NodeTypesWithEngine, PayloadAttributesBuilder,
-    PayloadTypes,
-};
-use reth_node_core::args::{DiscoveryArgs, NetworkArgs, RpcServerArgs};
-use reth_provider::providers::{BlockchainProvider, NodeTypesForProvider, NodeTypesForTree};
-use std::sync::Arc;
-use tracing::{span, Level};
-
 mod network;
 use network::ScrollBridgeNetworkBuilder;
 
 mod import;
-use import::{BridgeBlockImport, ValidBlockImport};
+use import::BridgeBlockImport;
 
 #[global_allocator]
 static ALLOC: reth_cli_util::allocator::Allocator = reth_cli_util::allocator::new_allocator();
@@ -44,7 +31,9 @@ fn main() {
             let handle = builder
                 .with_types_and_provider::<ScrollNode, BlockchainProvider<_>>()
                 // Override the network builder with the `ScrollBridgeNetworkBuilder`
-                .with_components(ScrollNode::components().network(ScrollBridgeNetworkBuilder))
+                .with_components(
+                    ScrollNode::components().network(ScrollBridgeNetworkBuilder::default()),
+                )
                 .with_add_ons(ScrollAddOns::default())
                 .launch_with_fn(|builder| {
                     let launcher = EngineNodeLauncher::new(
@@ -74,22 +63,73 @@ fn main() {
 mod test {
     use alloy_primitives::{Address, B256};
     use alloy_rpc_types_engine::PayloadAttributes;
-    use reth_e2e_test_utils::{node::NodeTestContext, wallet::Wallet, NodeHelperType};
-    use reth_network::{NetworkConfigBuilder, NetworkEventListenerProvider, PeersInfo};
+    use reth_e2e_test_utils::{node::NodeTestContext, NodeHelperType};
+    use reth_network::{NetworkConfigBuilder, PeersInfo};
     use reth_network_peers::PeerId;
-    use reth_node_builder::{rpc::ExtendRpcModules, Node, NodeBuilder, NodeConfig, NodeHandle};
+    use reth_node_builder::{Node, NodeBuilder, NodeConfig, NodeHandle};
     use reth_node_core::args::{DiscoveryArgs, NetworkArgs, RpcServerArgs};
     use reth_payload_builder::EthPayloadBuilderAttributes;
     use reth_provider::providers::BlockchainProvider;
     use reth_rpc_server_types::RpcModuleSelection;
     use reth_scroll_chainspec::{ScrollChainSpec, ScrollChainSpecBuilder};
-    use reth_scroll_node::{ScrollAddOns, ScrollNode};
+    use reth_scroll_node::ScrollNode;
     use reth_tasks::TaskManager;
-    use scroll_network::{BlockImport, BlockImportOutcome, BlockValidation, SCROLL_MAINNET};
-    use scroll_wire::{NewBlock, ScrollWireConfig};
+    use scroll_network::{BlockImport, SCROLL_MAINNET};
+    use scroll_wire::ScrollWireConfig;
     use secp256k1::ecdsa::Signature;
-    use std::{collections::VecDeque, sync::Arc};
+    use std::{
+        collections::VecDeque,
+        sync::Arc,
+        task::{Context, Poll},
+    };
     use tracing::trace;
+
+    /// A block import type that always returns a valid outcome.
+    #[derive(Debug, Default)]
+    pub struct ValidRethBlockImport {
+        /// A buffer for storing the blocks that are received.
+        blocks: VecDeque<(PeerId, reth_network::message::NewBlockMessage<reth_primitives::Block>)>,
+        waker: Option<std::task::Waker>,
+    }
+
+    impl reth_network::import::BlockImport for ValidRethBlockImport {
+        fn on_new_block(
+            &mut self,
+            peer_id: PeerId,
+            incoming_block: reth_network::message::NewBlockMessage<
+                alloy_consensus::Block<reth_primitives::TransactionSigned>,
+            >,
+        ) {
+            trace!(target: "network::import::ValidRethBlockImport", peer_id = %peer_id, block = ?incoming_block.block, "Received new block");
+            self.blocks.push_back((peer_id, incoming_block));
+
+            if let Some(waker) = self.waker.take() {
+                waker.wake();
+            }
+        }
+
+        fn poll(
+            &mut self,
+            cx: &mut Context<'_>,
+        ) -> Poll<
+            reth_network::import::BlockImportOutcome<
+                alloy_consensus::Block<reth_primitives::TransactionSigned>,
+            >,
+        > {
+            // If there are blocks in the buffer we return the first block.
+            if let Some((peer, new_block)) = self.blocks.pop_front() {
+                Poll::Ready(reth_network::import::BlockImportOutcome {
+                    peer,
+                    result: Ok(reth_network::import::BlockValidation::ValidBlock {
+                        block: new_block,
+                    }),
+                })
+            } else {
+                self.waker = Some(cx.waker().clone());
+                Poll::Pending
+            }
+        }
+    }
 
     /// We test the bridge from the eth-wire protocol to the scroll-wire protocol.
     ///
@@ -116,7 +156,7 @@ mod test {
         );
 
         // Setup the bridge node and a standard node.
-        let (mut bridge_node, tasks, _wallet) =
+        let (mut bridge_node, tasks, bridge_peer_id) =
             build_bridge_node(chain_spec.clone()).await.expect("Failed to setup nodes");
 
         // Instantiate the scroll NetworkManager.
@@ -182,7 +222,7 @@ mod test {
                 scroll_wire::Event::NewBlock { block, signature: sig, peer_id } => {
                     assert_eq!(block.hash_slow(), hash);
                     assert_eq!(signature, sig);
-                    // assert_eq!(&peer_id, bridge_node.network.handle().pee);
+                    assert_eq!(peer_id, bridge_peer_id);
                 }
                 _ => panic!("Unexpected message"),
             }
@@ -216,7 +256,7 @@ mod test {
 
         fn poll(
             &mut self,
-            cx: &mut std::task::Context<'_>,
+            _cx: &mut std::task::Context<'_>,
         ) -> std::task::Poll<scroll_network::BlockImportOutcome> {
             std::task::Poll::Pending
         }
@@ -227,7 +267,7 @@ mod test {
 
     pub async fn build_bridge_node(
         chain_spec: Arc<ScrollChainSpec>,
-    ) -> eyre::Result<(NodeHelperType<ScrollNode>, TaskManager, Wallet)> {
+    ) -> eyre::Result<(NodeHelperType<ScrollNode>, TaskManager, PeerId)> {
         // Create a [`TaskManager`] to manage the tasks.
         let tasks = TaskManager::current();
         let exec = tasks.executor();
@@ -256,13 +296,16 @@ mod test {
         let NodeHandle { node, node_exit_future: _ } = NodeBuilder::new(node_config.clone())
             .testing_node(exec.clone())
             .with_types_and_provider::<ScrollNode, BlockchainProvider<_>>()
-            .with_components(node.components_builder().network(super::ScrollBridgeNetworkBuilder))
+            .with_components(node.components_builder().network(
+                super::ScrollBridgeNetworkBuilder::new(Box::new(ValidRethBlockImport::default())),
+            ))
             .with_add_ons(node.add_ons())
             .launch()
             .await?;
+        let peer_id = *node.network.peer_id();
         let node = NodeTestContext::new(node, eth_payload_attributes).await?;
 
-        Ok((node, tasks, Wallet::default().with_chain_id(chain_spec.chain().into())))
+        Ok((node, tasks, peer_id))
     }
 
     /// Helper function to create a new eth payload attributes

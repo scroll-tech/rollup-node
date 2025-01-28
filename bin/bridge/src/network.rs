@@ -8,12 +8,22 @@ use reth_primitives::{EthPrimitives, PooledTransaction};
 use reth_scroll_chainspec::ScrollChainSpec;
 use reth_tracing::tracing::info;
 use reth_transaction_pool::{PoolTransaction, TransactionPool};
-use scroll_network::NetworkManager as ScrollNetworkManager;
+use scroll_network::{NetworkManager as ScrollNetworkManager, NoopBlockImport};
 use scroll_wire::{ProtocolHandler, ScrollWireConfig};
 
 /// The network builder for the eth-wire to scroll-wire bridge.
-#[derive(Debug, Default, Clone, Copy)]
-pub struct ScrollBridgeNetworkBuilder;
+#[derive(Debug, Default)]
+pub struct ScrollBridgeNetworkBuilder {
+    block_import: Option<Box<dyn reth_network::import::BlockImport>>,
+}
+
+#[cfg(test)]
+impl ScrollBridgeNetworkBuilder {
+    /// Creates a new [`ScrollBridgeNetworkBuilder`] with the provided block import.
+    pub(crate) fn new(block_import: Box<dyn reth_network::import::BlockImport>) -> Self {
+        Self { block_import: Some(block_import) }
+    }
+}
 
 impl<Node, Pool> NetworkBuilder<Node, Pool> for ScrollBridgeNetworkBuilder
 where
@@ -42,7 +52,7 @@ where
             network_mode: NetworkMode::Work,
             block_import: Box::new(super::BridgeBlockImport::new(
                 new_block_tx,
-                config.block_import,
+                self.block_import.unwrap_or_else(|| config.block_import),
             )),
             ..config
         };
@@ -55,12 +65,9 @@ where
         let handle = ctx.start_network(network, pool);
 
         // Create the scroll network manager.
-        let scroll_wire_manager = ScrollNetworkManager::from_parts(
-            handle.clone(),
-            Box::new(super::ValidBlockImport::default()),
-            events,
-        )
-        .with_new_block_source(new_block_rx);
+        let scroll_wire_manager =
+            ScrollNetworkManager::from_parts(handle.clone(), Box::new(NoopBlockImport), events)
+                .with_new_block_source(new_block_rx);
 
         // Spawn the scroll network manager.
         ctx.task_executor().spawn(scroll_wire_manager);
