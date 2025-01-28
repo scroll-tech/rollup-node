@@ -6,10 +6,10 @@ use reth_node_builder::{components::NetworkBuilder, BuilderContext, FullNodeType
 use reth_node_types::NodeTypes;
 use reth_primitives::{EthPrimitives, PooledTransaction};
 use reth_scroll_chainspec::ScrollChainSpec;
-use reth_tracing::tracing::info;
 use reth_transaction_pool::{PoolTransaction, TransactionPool};
 use scroll_network::{NetworkManager as ScrollNetworkManager, NoopBlockImport};
 use scroll_wire::{ProtocolHandler, ScrollWireConfig};
+use tracing::info;
 
 /// The network builder for the eth-wire to scroll-wire bridge.
 #[derive(Debug, Default)]
