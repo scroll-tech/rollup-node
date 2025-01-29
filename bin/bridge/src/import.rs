@@ -15,7 +15,10 @@ use tracing::{trace, warn};
 const ECDSA_SIGNATURE_LEN: usize = 64;
 
 /// A block import implementation for the eth-wire protocol that sends block to the scroll-wire
-/// protocol and then delegates the block import to the inner block import.
+/// protocol.
+///
+/// The block import implementation delegates the block import to the inner block import and then
+/// sends the block to the scroll-wire protocol if the block is valid.
 #[derive(Debug)]
 pub struct BridgeBlockImport {
     /// A sender for sending events to the scroll-wire protocol.
@@ -34,6 +37,7 @@ impl BridgeBlockImport {
         Self { events, inner: inner_block_import }
     }
 
+    /// Bridges a new block from the eth-wire protocol to the scroll-wire protocol.
     fn bridge_new_block_to_scroll_wire(
         &self,
         peer_id: PeerId,

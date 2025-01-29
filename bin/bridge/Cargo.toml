@@ -74,7 +74,6 @@ optimism = [
 	"reth-scroll-cli/optimism",
 	"reth-scroll-node/optimism",
 	"reth-node-core/optimism",
-	"reth-primitives/optimism"
 ]
 
 [[bin]]
