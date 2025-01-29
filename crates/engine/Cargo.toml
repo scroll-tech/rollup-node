@@ -17,7 +17,7 @@ alloy-rpc-types-engine.workspace = true
 
 # reth
 reth-engine-primitives = { git = "https://github.com/scroll-tech/reth.git", default-features = false, features = ["scroll"] }
-reth-primitives = { workspace = true, features = ["scroll"] }
+reth-primitives = { workspace = true }
 reth-rpc-api = { git = "https://github.com/scroll-tech/reth.git", default-features = false, features = ["client"] }
 
 # reth-scroll
