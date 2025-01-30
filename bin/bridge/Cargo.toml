@@ -63,6 +63,7 @@ serde_json = { version = "1.0.94", default-features = false, features = ["alloc"
 scroll = [
 	"reth-provider/scroll",
 	"reth-scroll-cli/scroll",
+	"reth-node-api/scroll"
 ]
 skip-state-root-validation = [
 	"reth-node-builder/skip-state-root-validation",
