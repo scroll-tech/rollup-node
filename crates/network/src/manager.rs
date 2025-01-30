@@ -38,8 +38,8 @@ pub struct NetworkManager {
     inner_network_handle: RethNetworkHandle<ScrollNetworkPrimitives>,
     /// Handles block imports for new blocks received from the network.
     block_import: Box<dyn BlockImport>,
-    /// The receiver half of the channel set up between this type and the [`NetworkHandle`],
-    /// receives commands from the [`NetworkHandle`].
+    /// The sender half of the channel set up between this type and the [`NetworkHandle`],
+    /// sends commands to the [`NetworkHandle`].
     to_manager_tx: UnboundedSender<NetworkHandleMessage>,
     /// Receiver half of the channel set up between this type and the [`NetworkHandle`], receives
     /// [`NetworkHandleMessage`]s.

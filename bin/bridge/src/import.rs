@@ -24,7 +24,7 @@ const ECDSA_SIGNATURE_LEN: usize = 64;
 #[derive(Debug)]
 pub struct BridgeBlockImport {
     /// A sender for sending events to the scroll-wire protocol.
-    events: UnboundedSender<Event>,
+    to_scroll_network_manager: UnboundedSender<Event>,
     /// The inner block import.
     inner: Box<dyn RethBlockImport<reth_scroll_primitives::ScrollBlock>>,
 }
@@ -36,7 +36,7 @@ impl BridgeBlockImport {
         events: UnboundedSender<Event>,
         inner_block_import: Box<dyn RethBlockImport<reth_scroll_primitives::ScrollBlock>>,
     ) -> Self {
-        Self { events, inner: inner_block_import }
+        Self { to_scroll_network_manager: events, inner: inner_block_import }
     }
 
     /// Bridges a new block from the eth-wire protocol to the scroll-wire protocol.
@@ -59,9 +59,10 @@ impl BridgeBlockImport {
             let block = block.block.clone();
             trace!(target: "bridge::import", peer_id = %peer_id, block = ?block, "Received new block from eth-wire protocol");
 
-            // We trigger a new block event to be sent to the network manager. If this results in an
-            // error it means the network manager has been dropped.
-            let _ = self.events.send(Event::NewBlock { peer_id, block, signature });
+            // We trigger a new block event to be sent to the rollup node's network manager. If this
+            // results in an
+            let _ =
+                self.to_scroll_network_manager.send(Event::NewBlock { peer_id, block, signature });
         } else {
             warn!(target: "bridge::import", peer_id = %peer_id, "Failed to extract signature from block extra data");
         }

@@ -30,7 +30,7 @@ impl NetworkHandle {
 pub struct NetworkInner {
     /// The sender half of the channel set up between this type and the [`NetworkManager`].
     pub(crate) to_manager_tx: UnboundedSender<NetworkHandleMessage>,
-    /// Tinner network handle which is used to communicate with the inner network.
+    /// Inner network handle which is used to communicate with the inner network.
     pub inner_network_handle: RethNetworkHandle<ScrollNetworkPrimitives>,
 }
 
