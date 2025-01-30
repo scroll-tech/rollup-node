@@ -10,7 +10,7 @@ pub trait BlockImport: std::fmt::Debug + Send + Sync {
     fn on_new_block(
         &mut self,
         peer_id: PeerId,
-        block: reth_primitives::Block,
+        block: reth_scroll_primitives::ScrollBlock,
         signature: Signature,
     );
 
@@ -58,7 +58,7 @@ impl BlockImport for NoopBlockImport {
     fn on_new_block(
         &mut self,
         peer_id: PeerId,
-        block: reth_primitives::Block,
+        block: reth_scroll_primitives::ScrollBlock,
         _signature: Signature,
     ) {
         trace!(target: "network::import::NoopBlockImport", peer_id = %peer_id, block = ?block, "Received new block");

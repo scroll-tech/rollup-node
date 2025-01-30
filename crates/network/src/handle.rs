@@ -1,6 +1,7 @@
 use reth_network::{NetworkHandle as RethNetworkHandle, PeersInfo};
 use reth_network_peers::PeerId;
-use reth_primitives::Block;
+use reth_scroll_node::ScrollNetworkPrimitives;
+use reth_scroll_primitives::ScrollBlock;
 use secp256k1::{ecdsa::Signature, SecretKey};
 use std::sync::Arc;
 use tokio::sync::{mpsc::UnboundedSender, oneshot};
@@ -17,7 +18,7 @@ impl NetworkHandle {
     /// [`RethNetworkHandle`].
     pub fn new(
         to_manager_tx: UnboundedSender<NetworkHandleMessage>,
-        inner_network_handle: RethNetworkHandle,
+        inner_network_handle: RethNetworkHandle<ScrollNetworkPrimitives>,
     ) -> Self {
         let inner = NetworkInner { to_manager_tx, inner_network_handle };
         Self { inner: Arc::new(inner) }
@@ -30,12 +31,12 @@ pub struct NetworkInner {
     /// The sender half of the channel set up between this type and the [`NetworkManager`].
     pub(crate) to_manager_tx: UnboundedSender<NetworkHandleMessage>,
     /// Tinner network handle which is used to communicate with the inner network.
-    pub inner_network_handle: RethNetworkHandle,
+    pub inner_network_handle: RethNetworkHandle<ScrollNetworkPrimitives>,
 }
 
 impl NetworkHandle {
     /// Returns a reference to the inner network handle.
-    pub fn inner(&self) -> &RethNetworkHandle {
+    pub fn inner(&self) -> &RethNetworkHandle<ScrollNetworkPrimitives> {
         &self.inner.inner_network_handle
     }
 
@@ -50,7 +51,7 @@ impl NetworkHandle {
     }
 
     /// Announces a block to the network.
-    pub fn announce_block(&self, block: Block, signature: Signature) {
+    pub fn announce_block(&self, block: ScrollBlock, signature: Signature) {
         self.send_message(NetworkHandleMessage::AnnounceBlock { block, signature });
     }
 
@@ -74,6 +75,6 @@ impl NetworkHandle {
 /// A message type used for communication between the [`NetworkHandle`] and the
 /// [`super::NetworkManager`].
 pub enum NetworkHandleMessage {
-    AnnounceBlock { block: Block, signature: Signature },
+    AnnounceBlock { block: ScrollBlock, signature: Signature },
     Shutdown(oneshot::Sender<()>),
 }

@@ -8,6 +8,7 @@ use reth_network::{
     cache::LruCache, NetworkConfig as RethNetworkConfig, NetworkHandle as RethNetworkHandle,
     NetworkManager as RethNetworkManager, Peers,
 };
+use reth_scroll_node::ScrollNetworkPrimitives;
 use reth_storage_api::BlockNumReader as BlockNumReaderT;
 use scroll_wire::{
     Event, NewBlock, ProtocolHandler, ScrollWireConfig, ScrollWireManager, LRU_CACHE_SIZE,
@@ -34,7 +35,7 @@ use tracing::trace;
 ///   used to bridge new blocks announced on the eth-wire protocol to the scroll-wire protocol.
 pub struct NetworkManager {
     /// A handle to the inner reth network manager.
-    inner_network_handle: RethNetworkHandle,
+    inner_network_handle: RethNetworkHandle<ScrollNetworkPrimitives>,
     /// Handles block imports for new blocks received from the network.
     block_import: Box<dyn BlockImport>,
     /// The receiver half of the channel set up between this type and the [`NetworkHandle`],
@@ -55,7 +56,7 @@ impl NetworkManager {
     /// This is used when the scroll-wire [`ProtocolHandler`] and the inner network manager
     /// [`RethNetworkManager`] are instantiated externally.
     pub fn from_parts(
-        inner_network_handle: RethNetworkHandle,
+        inner_network_handle: RethNetworkHandle<ScrollNetworkPrimitives>,
         block_import: Box<dyn BlockImport>,
         events: UnboundedReceiver<Event>,
     ) -> Self {
@@ -77,7 +78,7 @@ impl NetworkManager {
 
     /// Creates a new [`NetworkManager`] instance from the provided configuration and block import.
     pub async fn new<C: BlockNumReaderT + 'static>(
-        mut network_config: RethNetworkConfig<C, reth_network::EthNetworkPrimitives>,
+        mut network_config: RethNetworkConfig<C, ScrollNetworkPrimitives>,
         scroll_wire_config: ScrollWireConfig,
         block_import: impl BlockImport + 'static,
     ) -> Self {
@@ -88,7 +89,8 @@ impl NetworkManager {
         network_config.extra_protocols.push(scroll_wire_handler);
 
         // Create the inner network manager.
-        let inner_network_manager = RethNetworkManager::new(network_config).await.unwrap();
+        let inner_network_manager =
+            RethNetworkManager::<ScrollNetworkPrimitives>::new(network_config).await.unwrap();
         let inner_network_handle = inner_network_manager.handle().clone();
 
         // Create the channel for sending messages to the network manager.

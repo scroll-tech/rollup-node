@@ -25,6 +25,8 @@ reth-tasks.workspace = true
 
 # scroll
 reth-scroll-chainspec.workspace = true
+reth-scroll-node = { workspace = true, features = ["skip-state-root-validation"] }
+reth-scroll-primitives.workspace = true
 scroll-wire.workspace = true
 
 # misc

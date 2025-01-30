@@ -118,6 +118,7 @@ reth-tasks = { git = "https://github.com/scroll-tech/reth.git" }
 
 # reth-scroll
 reth-scroll-chainspec = { git = "https://github.com/scroll-tech/reth.git", default-features = false }
+reth-scroll-node = { git = "https://github.com/scroll-tech/reth.git", default-features = false }
 reth-scroll-primitives = { git = "https://github.com/scroll-tech/reth.git", default-features = false }
 
 # rollup node
@@ -134,9 +135,11 @@ tokio-stream = { version = "0.1", default-features = false }
 tracing = "0.1.0"
 
 [patch.crates-io]
-revm = { git = "https://github.com/scroll-tech/revm.git", branch = "scroll-evm-executor/reth/v53" }
-revm-primitives = { git = "https://github.com/scroll-tech/revm.git", branch = "scroll-evm-executor/reth/v53" }
-revm-interpreter = { git = "https://github.com/scroll-tech/revm.git", branch = "scroll-evm-executor/reth/v53" }
+revm = { git = "https://github.com/scroll-tech/revm.git", branch = "scroll-evm-executor/reth/v54" }
+revm-primitives = { git = "https://github.com/scroll-tech/revm.git", branch = "scroll-evm-executor/reth/v54" }
+revm-interpreter = { git = "https://github.com/scroll-tech/revm.git", branch = "scroll-evm-executor/reth/v54" }
+
 ff = { git = "https://github.com/scroll-tech/ff", branch = "feat/sp1" }
+
 alloy-eip2930 = { git = "https://github.com/scroll-tech/alloy-eips", branch = "v0.3.2" }
 

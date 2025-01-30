@@ -36,10 +36,10 @@ impl ConnectionHandlerTrait for ConnectionHandler {
         _peer_id: reth_network_api::PeerId,
     ) -> OnNotSupported {
         if self.config.connect_unsupported_peer() {
-            trace!(target: "scroll_wire::connection::handler", "Peer does not support the ScrollWire protocol, keeping connection alive");
+            trace!(target: "scroll_wire::connection::handler", "Peer does not support the ScrollWire protocol, keeping connection alive.");
             OnNotSupported::KeepAlive
         } else {
-            trace!(target: "scroll_wire::connection::handler", "Peer does not support the ScrollWire protocol, disconnecting");
+            trace!(target: "scroll_wire::connection::handler", "Peer does not support the ScrollWire protocol, disconnecting.");
             OnNotSupported::Disconnect
         }
     }

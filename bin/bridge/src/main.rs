@@ -7,7 +7,6 @@ use import::BridgeBlockImport;
 #[global_allocator]
 static ALLOC: reth_cli_util::allocator::Allocator = reth_cli_util::allocator::new_allocator();
 
-#[cfg(all(feature = "scroll", not(feature = "optimism")))]
 fn main() {
     use clap::Parser;
     use reth_node_builder::{engine_tree_config::TreeConfig, EngineNodeLauncher};
@@ -52,28 +51,22 @@ fn main() {
         std::process::exit(1);
     }
 }
-
-#[cfg(any(feature = "optimism", not(feature = "scroll")))]
-fn main() {
-    eprintln!("Scroll feature is not enabled");
-    std::process::exit(1);
-}
-
 #[cfg(test)]
 mod test {
-    use alloy_primitives::{Address, B256};
-    use alloy_rpc_types_engine::PayloadAttributes;
+    use alloy_primitives::B256;
     use reth_e2e_test_utils::{node::NodeTestContext, NodeHelperType};
     use reth_network::{NetworkConfigBuilder, PeersInfo};
     use reth_network_peers::PeerId;
+    use reth_node_api::PayloadBuilderAttributes;
     use reth_node_builder::{Node, NodeBuilder, NodeConfig, NodeHandle};
     use reth_node_core::args::{DiscoveryArgs, NetworkArgs, RpcServerArgs};
-    use reth_payload_builder::EthPayloadBuilderAttributes;
     use reth_provider::providers::BlockchainProvider;
     use reth_rpc_server_types::RpcModuleSelection;
     use reth_scroll_chainspec::{ScrollChainSpec, ScrollChainSpecBuilder};
+    use reth_scroll_engine_primitives::ScrollPayloadBuilderAttributes;
     use reth_scroll_node::ScrollNode;
     use reth_tasks::TaskManager;
+    use scroll_alloy_rpc_types_engine::ScrollPayloadAttributes;
     use scroll_network::{BlockImport, SCROLL_MAINNET};
     use scroll_wire::ScrollWireConfig;
     use secp256k1::ecdsa::Signature;
@@ -88,16 +81,21 @@ mod test {
     #[derive(Debug, Default)]
     pub struct ValidRethBlockImport {
         /// A buffer for storing the blocks that are received.
-        blocks: VecDeque<(PeerId, reth_network::message::NewBlockMessage<reth_primitives::Block>)>,
+        blocks: VecDeque<(
+            PeerId,
+            reth_network::message::NewBlockMessage<reth_scroll_primitives::ScrollBlock>,
+        )>,
         waker: Option<std::task::Waker>,
     }
 
-    impl reth_network::import::BlockImport for ValidRethBlockImport {
+    impl reth_network::import::BlockImport<reth_scroll_primitives::ScrollBlock>
+        for ValidRethBlockImport
+    {
         fn on_new_block(
             &mut self,
             peer_id: PeerId,
             incoming_block: reth_network::message::NewBlockMessage<
-                alloy_consensus::Block<reth_primitives::TransactionSigned>,
+                alloy_consensus::Block<reth_scroll_primitives::ScrollTransactionSigned>,
             >,
         ) {
             trace!(target: "network::import::ValidRethBlockImport", peer_id = %peer_id, block = ?incoming_block.block, "Received new block");
@@ -113,7 +111,7 @@ mod test {
             cx: &mut Context<'_>,
         ) -> Poll<
             reth_network::import::BlockImportOutcome<
-                alloy_consensus::Block<reth_primitives::TransactionSigned>,
+                alloy_consensus::Block<reth_scroll_primitives::ScrollTransactionSigned>,
             >,
         > {
             // If there are blocks in the buffer we return the first block.
@@ -161,11 +159,12 @@ mod test {
 
         // Instantiate the scroll NetworkManager.
         let network_config =
-            NetworkConfigBuilder::<reth_network::EthNetworkPrimitives>::with_rng_secret_key()
-                .disable_discovery()
-                .with_unused_listener_port()
-                .with_pow()
-                .build_with_noop_provider(chain_spec.clone());
+            NetworkConfigBuilder::<reth_scroll_node::ScrollNetworkPrimitives>::with_rng_secret_key(
+            )
+            .disable_discovery()
+            .with_unused_listener_port()
+            .with_pow()
+            .build_with_noop_provider(chain_spec.clone());
         let scroll_wire_config = ScrollWireConfig::new(false);
         let (tx, mut rx) = tokio::sync::mpsc::unbounded_channel();
         let scroll_network = scroll_network::NetworkManager::new(
@@ -246,7 +245,7 @@ mod test {
         fn on_new_block(
             &mut self,
             peer_id: reth_network_peers::PeerId,
-            block: reth_primitives::Block,
+            block: reth_scroll_primitives::ScrollBlock,
             signature: secp256k1::ecdsa::Signature,
         ) {
             trace!(target: "bridge::import::TestBlockImport", peer_id = %peer_id, block = ?block, "Received new block from eth-wire protocol");
@@ -303,20 +302,14 @@ mod test {
             .launch()
             .await?;
         let peer_id = *node.network.peer_id();
-        let node = NodeTestContext::new(node, eth_payload_attributes).await?;
+        let node = NodeTestContext::new(node, scroll_payload_attributes).await?;
 
         Ok((node, tasks, peer_id))
     }
 
     /// Helper function to create a new eth payload attributes
-    fn eth_payload_attributes(timestamp: u64) -> EthPayloadBuilderAttributes {
-        let attributes = PayloadAttributes {
-            timestamp,
-            prev_randao: B256::ZERO,
-            suggested_fee_recipient: Address::ZERO,
-            withdrawals: Some(vec![]),
-            parent_beacon_block_root: Some(B256::ZERO),
-        };
-        EthPayloadBuilderAttributes::new(B256::ZERO, attributes)
+    fn scroll_payload_attributes(_timestamp: u64) -> ScrollPayloadBuilderAttributes {
+        let attributes = ScrollPayloadAttributes::default();
+        ScrollPayloadBuilderAttributes::try_new(B256::ZERO, attributes, 0).unwrap()
     }
 }

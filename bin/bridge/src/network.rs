@@ -1,11 +1,9 @@
-use reth_network::{
-    config::NetworkMode, EthNetworkPrimitives, NetworkConfig, NetworkManager, PeersInfo,
-};
+use reth_network::{config::NetworkMode, NetworkConfig, NetworkManager, PeersInfo};
 use reth_node_api::TxTy;
 use reth_node_builder::{components::NetworkBuilder, BuilderContext, FullNodeTypes};
 use reth_node_types::NodeTypes;
-use reth_primitives::{EthPrimitives, PooledTransaction};
 use reth_scroll_chainspec::ScrollChainSpec;
+use reth_scroll_primitives::ScrollPrimitives;
 use reth_transaction_pool::{PoolTransaction, TransactionPool};
 use scroll_network::{NetworkManager as ScrollNetworkManager, NoopBlockImport};
 use scroll_wire::{ProtocolHandler, ScrollWireConfig};
@@ -14,32 +12,41 @@ use tracing::info;
 /// The network builder for the eth-wire to scroll-wire bridge.
 #[derive(Debug, Default)]
 pub struct ScrollBridgeNetworkBuilder {
-    block_import: Option<Box<dyn reth_network::import::BlockImport>>,
+    block_import:
+        Option<Box<dyn reth_network::import::BlockImport<reth_scroll_primitives::ScrollBlock>>>,
 }
 
 #[cfg(test)]
 impl ScrollBridgeNetworkBuilder {
     /// Creates a new [`ScrollBridgeNetworkBuilder`] with the provided block import.
-    pub(crate) fn new(block_import: Box<dyn reth_network::import::BlockImport>) -> Self {
+    pub(crate) fn new(
+        block_import: Box<
+            dyn reth_network::import::BlockImport<reth_scroll_primitives::ScrollBlock>,
+        >,
+    ) -> Self {
         Self { block_import: Some(block_import) }
     }
 }
 
 impl<Node, Pool> NetworkBuilder<Node, Pool> for ScrollBridgeNetworkBuilder
 where
-    Node: FullNodeTypes<Types: NodeTypes<ChainSpec = ScrollChainSpec, Primitives = EthPrimitives>>,
+    Node:
+        FullNodeTypes<Types: NodeTypes<ChainSpec = ScrollChainSpec, Primitives = ScrollPrimitives>>,
     Pool: TransactionPool<
-            Transaction: PoolTransaction<Consensus = TxTy<Node::Types>, Pooled = PooledTransaction>,
+            Transaction: PoolTransaction<
+                Consensus = TxTy<Node::Types>,
+                Pooled = scroll_alloy_consensus::ScrollPooledTransaction,
+            >,
         > + Unpin
         + 'static,
 {
-    type Primitives = EthNetworkPrimitives;
+    type Primitives = reth_scroll_node::ScrollNetworkPrimitives;
 
     async fn build_network(
         self,
         ctx: &BuilderContext<Node>,
         pool: Pool,
-    ) -> eyre::Result<reth_network::NetworkHandle> {
+    ) -> eyre::Result<reth_network::NetworkHandle<Self::Primitives>> {
         // Create a new block channel to bridge between eth-wire and scroll-wire protocols.
         let (new_block_tx, new_block_rx) = tokio::sync::mpsc::unbounded_channel();
 
@@ -61,7 +68,7 @@ where
         config.extra_protocols.push(scroll_wire_handler);
 
         // Create the network manager.
-        let network = NetworkManager::builder(config).await?;
+        let network = NetworkManager::<Self::Primitives>::builder(config).await?;
         let handle = ctx.start_network(network, pool);
 
         // Create the scroll network manager.

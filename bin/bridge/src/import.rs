@@ -3,6 +3,8 @@ use reth_network::{
     NetworkPrimitives,
 };
 use reth_network_peers::PeerId;
+use reth_scroll_node::ScrollNetworkPrimitives;
+use reth_scroll_primitives::ScrollBlock;
 use scroll_wire::Event;
 use secp256k1::ecdsa::Signature;
 use std::{
@@ -24,7 +26,7 @@ pub struct BridgeBlockImport {
     /// A sender for sending events to the scroll-wire protocol.
     events: UnboundedSender<Event>,
     /// The inner block import.
-    inner: Box<dyn RethBlockImport>,
+    inner: Box<dyn RethBlockImport<reth_scroll_primitives::ScrollBlock>>,
 }
 
 impl BridgeBlockImport {
@@ -32,7 +34,7 @@ impl BridgeBlockImport {
     /// import.
     pub fn new(
         events: UnboundedSender<Event>,
-        inner_block_import: Box<dyn RethBlockImport>,
+        inner_block_import: Box<dyn RethBlockImport<reth_scroll_primitives::ScrollBlock>>,
     ) -> Self {
         Self { events, inner: inner_block_import }
     }
@@ -41,7 +43,7 @@ impl BridgeBlockImport {
     fn bridge_new_block_to_scroll_wire(
         &self,
         peer_id: PeerId,
-        block: Arc<reth_eth_wire_types::NewBlock>,
+        block: Arc<reth_eth_wire_types::NewBlock<ScrollBlock>>,
     ) {
         // We create a reference to the extra data of the incoming block.
         let extra_data = &block.block.extra_data;
@@ -66,14 +68,14 @@ impl BridgeBlockImport {
     }
 }
 
-impl RethBlockImport for BridgeBlockImport {
+impl RethBlockImport<reth_scroll_primitives::ScrollBlock> for BridgeBlockImport {
     /// This function is called when a new block is received from the network, it delegates the
     /// block import to the inner block import.
     fn on_new_block(
         &mut self,
         peer_id: PeerId,
         incoming_block: reth_network::message::NewBlockMessage<
-            <reth_network::EthNetworkPrimitives as NetworkPrimitives>::Block,
+            <ScrollNetworkPrimitives as NetworkPrimitives>::Block,
         >,
     ) {
         // We then delegate the block import to the inner block import.
@@ -89,7 +91,7 @@ impl RethBlockImport for BridgeBlockImport {
         cx: &mut Context<'_>,
     ) -> Poll<
         reth_network::import::BlockImportOutcome<
-            <reth_network::EthNetworkPrimitives as NetworkPrimitives>::Block,
+            <ScrollNetworkPrimitives as NetworkPrimitives>::Block,
         >,
     > {
         if let Poll::Ready(outcome) = self.inner.poll(cx) {

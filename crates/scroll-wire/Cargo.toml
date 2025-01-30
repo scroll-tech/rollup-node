@@ -25,6 +25,7 @@ reth-provider = { workspace = true, features = ["test-utils"] }
 
 # scroll
 reth-scroll-chainspec.workspace = true
+reth-scroll-primitives.workspace = true
 
 # misc
 eyre.workspace = true

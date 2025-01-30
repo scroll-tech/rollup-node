@@ -24,12 +24,12 @@ pub struct NewBlock {
     /// The signature from the block author.
     pub signature: Bytes,
     /// The block that is being announced.
-    pub block: reth_primitives::Block,
+    pub block: reth_scroll_primitives::ScrollBlock,
 }
 
 impl NewBlock {
     /// Returns a [`NewBlock`] instance with the provided signature and block.
-    pub fn new(signature: Signature, block: reth_primitives::Block) -> Self {
+    pub fn new(signature: Signature, block: reth_scroll_primitives::ScrollBlock) -> Self {
         Self { signature: Bytes::from(signature.serialize_compact().to_vec()), block }
     }
 }

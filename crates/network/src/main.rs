@@ -7,7 +7,7 @@ use secp256k1::ecdsa::Signature;
 #[tokio::main]
 async fn main() {
     let config_1 =
-        NetworkConfigBuilder::<reth_network::EthNetworkPrimitives>::with_rng_secret_key()
+        NetworkConfigBuilder::<reth_scroll_node::ScrollNetworkPrimitives>::with_rng_secret_key()
             .disable_discovery()
             .build_with_noop_provider((*SCROLL_MAINNET).clone());
     let scroll_wire_config = ScrollWireConfig::new(false);
@@ -18,7 +18,7 @@ async fn main() {
     let peer_1_addr = network_1_handle.inner().local_addr();
 
     let config_2 =
-        NetworkConfigBuilder::<reth_network::EthNetworkPrimitives>::with_rng_secret_key()
+        NetworkConfigBuilder::<reth_scroll_node::ScrollNetworkPrimitives>::with_rng_secret_key()
             .disable_discovery()
             .listener_addr(std::net::SocketAddr::V4(std::net::SocketAddrV4::new(
                 std::net::Ipv4Addr::UNSPECIFIED,
