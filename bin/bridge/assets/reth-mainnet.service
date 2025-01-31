@@ -11,7 +11,7 @@ User=ubuntu
 Group=ubuntu
 UMask=0002
 EnvironmentFile=/etc/bridge.env
-ExecStart=ETHERSCAN_API_KEY=$ETHERSCAN_API_KEY /usr/local/bin/bridge --chain scroll-mainnet --metrics 0.0.0.0:9001 --debug.etherscan https://api.scrollscan.com/api
+ExecStart=/usr/local/bin/bridge node --chain scroll-mainnet --metrics 0.0.0.0:9001 --debug.etherscan https://api.scrollscan.com/api
 
 [Install]
 WantedBy=multi-user.target
