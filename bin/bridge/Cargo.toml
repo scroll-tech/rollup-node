@@ -64,6 +64,8 @@ reth-tracing = { git = "https://github.com/scroll-tech/reth.git" }
 # misc
 serde_json = { version = "1.0.94", default-features = false, features = ["alloc"] }
 
+[features]
+test-utils = []
 
 [[bin]]
 name = "bridge"

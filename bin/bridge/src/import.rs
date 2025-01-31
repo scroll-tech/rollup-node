@@ -60,7 +60,7 @@ impl BridgeBlockImport {
             trace!(target: "bridge::import", peer_id = %peer_id, block = ?block, "Received new block from eth-wire protocol");
 
             // We trigger a new block event to be sent to the rollup node's network manager. If this
-            // results in an
+            // results in an error it means the network manager has been dropped.
             let _ =
                 self.to_scroll_network_manager.send(Event::NewBlock { peer_id, block, signature });
         } else {

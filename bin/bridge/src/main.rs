@@ -4,9 +4,6 @@ use network::ScrollBridgeNetworkBuilder;
 mod import;
 use import::BridgeBlockImport;
 
-#[cfg(test)]
-mod test;
-
 #[global_allocator]
 static ALLOC: reth_cli_util::allocator::Allocator = reth_cli_util::allocator::new_allocator();
 

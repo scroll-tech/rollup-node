@@ -1,3 +1,4 @@
+#![cfg(feature = "test-utils")]
 
 use alloy_primitives::B256;
 use reth_e2e_test_utils::{node::NodeTestContext, NodeHelperType};
@@ -205,7 +206,6 @@ impl BlockImport for TestBlockImport {
 
 // HELPERS
 // ---------------------------------------------------------------------------------------------
-
 pub async fn build_bridge_node(
     chain_spec: Arc<ScrollChainSpec>,
 ) -> eyre::Result<(NodeHelperType<ScrollNode>, TaskManager, PeerId)> {
@@ -237,9 +237,11 @@ pub async fn build_bridge_node(
     let NodeHandle { node, node_exit_future: _ } = NodeBuilder::new(node_config.clone())
         .testing_node(exec.clone())
         .with_types_and_provider::<ScrollNode, BlockchainProvider<_>>()
-        .with_components(node.components_builder().network(super::ScrollBridgeNetworkBuilder::new(
-            Box::new(ValidRethBlockImport::default()),
-        )))
+        .with_components(node.components_builder().network(
+            scroll_bridge::ScrollBridgeNetworkBuilder::new(Box::new(
+                ValidRethBlockImport::default(),
+            )),
+        ))
         .with_add_ons(node.add_ons())
         .launch()
         .await?;
