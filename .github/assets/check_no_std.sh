@@ -35,7 +35,7 @@ do
 
   set +e  # Disable immediate exit on error
   # Run the command and capture the return code
-#  $cmd
+  $cmd
   ret_code=$?
   set -e  # Re-enable immediate exit on error
 
