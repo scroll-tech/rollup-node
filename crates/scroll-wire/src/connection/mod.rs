@@ -1,64 +1,66 @@
-use crate::protocol::{
-    ScrollWireEvent, ScrollWireMessage, ScrollWireMessageKind, ScrollWireProtocolState,
+use crate::{
+    protocol::{Event, Message, MessagePayload, ProtocolState},
+    ScrollWireConfig,
 };
-use alloy_primitives::PrimitiveSignature;
 use alloy_rlp::BytesMut;
 use futures::{Stream, StreamExt};
 use reth_eth_wire::multiplex::ProtocolConnection;
 use reth_network::Direction;
 use reth_network_api::PeerId;
+use secp256k1::ecdsa::Signature;
 use std::{
     pin::Pin,
-    task::Poll,
-    task::{ready, Context},
+    task::{ready, Context, Poll},
 };
 use tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender};
 use tokio_stream::wrappers::UnboundedReceiverStream;
+use tracing::trace;
 
 mod handler;
-pub use handler::ScrollWireConnectionHandler;
+pub(crate) use handler::ConnectionHandler;
 
-/// Connection between two peers using the ScrollWire protocol.
-pub struct ScrollWireProtocolConnection {
+/// Connection between two peers using the scroll wire protocol.
+#[derive(Debug)]
+pub struct Connection {
     /// The inbound connection from the peer.
     pub conn: ProtocolConnection,
     /// The direction of the connection.
     pub direction: Direction,
     /// A stream of messages to be announced to the peer.
-    pub outbound: UnboundedReceiverStream<ScrollWireMessage>,
+    pub outbound: UnboundedReceiverStream<Message>,
     /// A channel to emit events.
-    pub events: UnboundedSender<ScrollWireEvent>,
+    pub events: UnboundedSender<Event>,
     /// The peer id of the connection.
     pub peer_id: PeerId,
 }
 
-impl ScrollWireProtocolConnection {
-    /// Creates a new [`ScrollWireProtocolConnection`] with the provided connection and state.
+impl Connection {
+    /// Creates a new [`Connection`] with the provided [`ProtocolConnection`] and [`ProtocolState`].
     pub fn new(
         peer_id: PeerId,
         conn: ProtocolConnection,
         direction: Direction,
-        outbound: UnboundedReceiver<ScrollWireMessage>,
-        state: ScrollWireProtocolState,
+        outbound: UnboundedReceiver<Message>,
+        state: ProtocolState,
     ) -> Self {
         Self {
             conn,
             direction,
             outbound: outbound.into(),
-            events: state.events().clone(),
+            events: state.event_sender().clone(),
             peer_id,
         }
     }
 }
 
-impl Stream for ScrollWireProtocolConnection {
+impl Stream for Connection {
     type Item = BytesMut;
 
-    fn poll_next(self: Pin<&mut Self>, cx: &mut Context) -> Poll<Option<Self::Item>> {
+    fn poll_next(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
         let this = self.get_mut();
 
         loop {
-            // We announce the message to the peer.
+            // We send all the messages in the outbound channel to the peer.
             if let Poll::Ready(Some(msg)) = this.outbound.poll_next_unpin(cx) {
                 println!("broadcasting message: {:?}", msg);
                 return Poll::Ready(Some(msg.encoded()));
@@ -69,27 +71,26 @@ impl Stream for ScrollWireProtocolConnection {
                 return Poll::Ready(None);
             };
 
-            // We decode the message.
-            let Some(msg) = ScrollWireMessage::decode(&mut &msg[..]) else {
+            // We decode the message, if the message can not be decoded then we disconnect.
+            let Some(msg) = Message::decode(&mut &msg[..]) else {
                 return Poll::Ready(None);
             };
 
             // We handle the message.
-            match msg.message {
-                ScrollWireMessageKind::NewBlock(new_block) => {
-                    // If the signature is valid then we announce the block to the network.
-                    if let Some(signature) =
-                        TryInto::<PrimitiveSignature>::try_into(&new_block.signature[..]).ok()
-                    {
+            match msg.payload {
+                MessagePayload::NewBlock(new_block) => {
+                    // If the signature can be decoded then we send a new block event.
+                    trace!(target: "scroll_wire::connection", peer_id = %this.peer_id, block = ?new_block.block, "Received new block from peer");
+                    if let Ok(signature) = Signature::from_compact(&new_block.signature[..]) {
                         this.events
-                            .send(ScrollWireEvent::NewBlock {
+                            .send(Event::NewBlock {
                                 block: new_block.block,
                                 signature,
                                 peer_id: this.peer_id,
                             })
                             .unwrap();
                     } else {
-                        // If the signature is invalid then we disconnect.
+                        // If the signature can not be decoded then we disconnect.
                         return Poll::Ready(None);
                     }
                 }

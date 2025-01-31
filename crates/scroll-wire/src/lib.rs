@@ -1,6 +1,11 @@
+//! An implementation of the scroll-wire protocol.
+
+mod config;
+pub use config::ScrollWireConfig;
+
 mod connection;
 mod manager;
-mod protocol;
+pub use manager::{ScrollWireManager, LRU_CACHE_SIZE};
 
-pub use manager::ScrollWireManager;
-pub use protocol::{NewBlock, ScrollWireEvent, ScrollWireProtocolHandler};
+mod protocol;
+pub use protocol::{Event, NewBlock, ProtocolHandler};

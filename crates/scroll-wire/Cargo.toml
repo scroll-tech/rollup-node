@@ -10,17 +10,30 @@ exclude.workspace = true
 workspace = true
 
 [dependencies]
-reth-eth-wire = { path = "../../../reth/crates/net/eth-wire" }
-reth-primitives = { path = "../../../reth/crates/primitives" }
-alloy-primitives = { version = "0.8.15", default-features = false, features = [
+# alloy
+alloy-primitives = { workspace = true, features = [
     "map-foldhash",
 ] }
 alloy-rlp = { version = "0.3.10", default-features = false }
-tokio = { version = "1.39", default-features = false, features = ["full"] }
-tokio-stream = "0.1"
-futures = "0.3"
-reth-network = { path = "../../../reth/crates/net/network" }
-reth-network-api = { path = "../../../reth/crates/net/network-api" }
-reth-provider = { path = "../../../reth/crates/storage/provider", features = ["test-utils"] }
-reth-scroll-chainspec = { path = "../../../reth/crates/scroll/chainspec" }
-eyre = "0.6"
+
+# reth
+reth-eth-wire = { git = "https://github.com/scroll-tech/reth.git" }
+reth-network.workspace = true
+reth-network-api.workspace = true
+reth-primitives.workspace = true
+reth-provider = { workspace = true, features = ["test-utils"] }
+
+# scroll
+reth-scroll-chainspec.workspace = true
+reth-scroll-primitives.workspace = true
+
+# misc
+eyre.workspace = true
+futures.workspace = true
+secp256k1 = { workspace = true, features = [
+    "global-context",
+    "recovery",
+] }
+tokio = { workspace = true, features = ["full"] }
+tokio-stream.workspace = true
+tracing.workspace = true

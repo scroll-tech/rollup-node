@@ -1,7 +1,8 @@
-use alloy_primitives::PrimitiveSignature;
 use reth_network_peers::PeerId;
 use scroll_wire::NewBlock;
+use secp256k1::ecdsa::Signature;
 use std::task::{Context, Poll};
+use tracing::trace;
 
 /// A trait for importing new blocks from the network.
 pub trait BlockImport: std::fmt::Debug + Send + Sync {
@@ -9,8 +10,8 @@ pub trait BlockImport: std::fmt::Debug + Send + Sync {
     fn on_new_block(
         &mut self,
         peer_id: PeerId,
-        block: reth_primitives::Block,
-        signature: PrimitiveSignature,
+        block: reth_scroll_primitives::ScrollBlock,
+        signature: Signature,
     );
 
     /// Polls the block import type for results of block import.
@@ -42,11 +43,11 @@ pub enum BlockImportError {
 /// A consensus related error that can occur during block import.
 pub enum ConsensusError {
     /// The block is invalid.
-    InvalidBlock,
+    Block,
     /// The state root is invalid.
-    InvalidStateRoot,
+    StateRoot,
     /// The signature is invalid.
-    InvalidSignature,
+    Signature,
 }
 
 /// A block import type that does nothing.
@@ -56,11 +57,11 @@ pub struct NoopBlockImport;
 impl BlockImport for NoopBlockImport {
     fn on_new_block(
         &mut self,
-        _peer_id: PeerId,
-        _block: reth_primitives::Block,
-        _signature: PrimitiveSignature,
+        peer_id: PeerId,
+        block: reth_scroll_primitives::ScrollBlock,
+        _signature: Signature,
     ) {
-        println!("received new block");
+        trace!(target: "network::import::NoopBlockImport", peer_id = %peer_id, block = ?block, "Received new block");
     }
 
     fn poll(&mut self, _cx: &mut std::task::Context<'_>) -> std::task::Poll<BlockImportOutcome> {

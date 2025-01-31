@@ -7,6 +7,7 @@ exclude = [".github/"]
 
 [workspace]
 members = [
+    "bin/bridge", 
     "crates/engine",
     "crates/network",
     "crates/scroll-wire"
@@ -104,24 +105,41 @@ too_long_first_doc_paragraph = "allow"
 [workspace.dependencies]
 # alloy
 alloy-primitives = { version = "0.8.15", default-features = false }
+alloy-rpc-types-engine = { version = "0.9.2", default-features = false }
 
 # reth
+reth-eth-wire-types = { git = "https://github.com/scroll-tech/reth.git" }
+reth-network = { git = "https://github.com/scroll-tech/reth.git", default-features = false }
+reth-network-api = { git = "https://github.com/scroll-tech/reth.git", default-features = false }
+reth-network-peers = { git = "https://github.com/scroll-tech/reth.git", default-features = false }
 reth-primitives = { git = "https://github.com/scroll-tech/reth.git", default-features = false }
+reth-provider = { git = "https://github.com/scroll-tech/reth.git", default-features = false }
+reth-tasks = { git = "https://github.com/scroll-tech/reth.git" }
 
 # reth-scroll
+reth-scroll-chainspec = { git = "https://github.com/scroll-tech/reth.git", default-features = false }
+reth-scroll-node = { git = "https://github.com/scroll-tech/reth.git", default-features = false }
 reth-scroll-primitives = { git = "https://github.com/scroll-tech/reth.git", default-features = false }
+
+# rollup node
+scroll-network = { path = "crates/network" }
+scroll-wire = { path = "crates/scroll-wire" }
 
 # misc
 eyre = "0.6"
+futures = { version = "0.3", default-features = false }
+secp256k1 = { version = "0.29", default-features = false }
 serde = { version = "1.0", default-features = false }
 tokio = { version = "1.39", default-features = false }
+tokio-stream = { version = "0.1", default-features = false }
 tracing = "0.1.0"
 
 [patch.crates-io]
-revm = { git = "https://github.com/scroll-tech/revm.git", branch = "scroll-evm-executor/reth/v53" }
-revm-primitives = { git = "https://github.com/scroll-tech/revm.git", branch = "scroll-evm-executor/reth/v53" }
-revm-interpreter = { git = "https://github.com/scroll-tech/revm.git", branch = "scroll-evm-executor/reth/v53" }
+revm = { git = "https://github.com/scroll-tech/revm.git", branch = "scroll-evm-executor/reth/v54" }
+revm-primitives = { git = "https://github.com/scroll-tech/revm.git", branch = "scroll-evm-executor/reth/v54" }
+revm-interpreter = { git = "https://github.com/scroll-tech/revm.git", branch = "scroll-evm-executor/reth/v54" }
 
 ff = { git = "https://github.com/scroll-tech/ff", branch = "feat/sp1" }
 
 alloy-eip2930 = { git = "https://github.com/scroll-tech/alloy-eips", branch = "v0.3.2" }
+

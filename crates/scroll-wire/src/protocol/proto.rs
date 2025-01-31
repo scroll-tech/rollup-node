@@ -1,42 +1,40 @@
-use alloy_primitives::{
-    bytes::{Buf, BufMut, Bytes, BytesMut},
-    PrimitiveSignature,
-};
+use alloy_primitives::bytes::{Buf, BufMut, Bytes, BytesMut};
 use alloy_rlp::{Decodable, Encodable, RlpDecodable, RlpEncodable};
 use reth_eth_wire::{protocol::Protocol, Capability};
+use secp256k1::ecdsa::Signature;
 
-/// The message IDs for messages sent over the ScrollWire protocol.
+/// The message IDs for messages sent over the scroll wire protocol.
 /// This is used to identify the type of message being sent or received
-/// and is a requirement for RLPx multiplexing.
+/// and is a requirement for `RLPx` multiplexing.
 #[repr(u8)]
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
-pub enum ScrollWireMessageId {
+pub enum MessageId {
     NewBlock = 0,
 }
 
-/// The different kinds of messages that can be sent over the ScrollWire protocol.
+/// The different message payloads that can be sent over the `ScrollWire` protocol.
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub enum ScrollWireMessageKind {
+pub enum MessagePayload {
     NewBlock(NewBlock),
 }
 
 /// A message that is used to announce a new block to the network.
 #[derive(Clone, Debug, PartialEq, Eq, RlpEncodable, RlpDecodable)]
 pub struct NewBlock {
+    /// The signature from the block author.
     pub signature: Bytes,
-    pub block: reth_primitives::Block,
+    /// The block that is being announced.
+    pub block: reth_scroll_primitives::ScrollBlock,
 }
 
 impl NewBlock {
-    pub fn new(signature: PrimitiveSignature, block: reth_primitives::Block) -> Self {
-        Self {
-            signature: Bytes::from(signature.as_bytes().to_vec()),
-            block,
-        }
+    /// Returns a [`NewBlock`] instance with the provided signature and block.
+    pub fn new(signature: Signature, block: reth_scroll_primitives::ScrollBlock) -> Self {
+        Self { signature: Bytes::from(signature.serialize_compact().to_vec()), block }
     }
 }
 
-impl TryFrom<u8> for ScrollWireMessageId {
+impl TryFrom<u8> for MessageId {
     type Error = ();
 
     fn try_from(value: u8) -> Result<Self, Self::Error> {
@@ -47,14 +45,14 @@ impl TryFrom<u8> for ScrollWireMessageId {
     }
 }
 
-/// The ScrollWire message type.
+/// The `ScrollWire` message type.
 #[derive(Clone, Debug)]
-pub struct ScrollWireMessage {
-    pub message_type: ScrollWireMessageId,
-    pub message: ScrollWireMessageKind,
+pub struct Message {
+    pub id: MessageId,
+    pub payload: MessagePayload,
 }
 
-impl ScrollWireMessage {
+impl Message {
     /// Returns the capability of the `ScrollWire` protocol.
     pub const fn capability() -> Capability {
         Capability::new_static("scroll-wire", 1)
@@ -66,19 +64,16 @@ impl ScrollWireMessage {
     }
 
     /// Creates a new block message with the provided signature and block.
-    pub fn new_block(block: NewBlock) -> Self {
-        Self {
-            message_type: ScrollWireMessageId::NewBlock,
-            message: ScrollWireMessageKind::NewBlock(block),
-        }
+    pub const fn new_block(block: NewBlock) -> Self {
+        Self { id: MessageId::NewBlock, payload: MessagePayload::NewBlock(block) }
     }
 
     /// Encodes the message into a `BytesMut` buffer.
     pub fn encoded(&self) -> BytesMut {
         let mut buffer = BytesMut::new();
-        buffer.put_u8(self.message_type as u8);
-        match &self.message {
-            ScrollWireMessageKind::NewBlock(new_block) => {
+        buffer.put_u8(self.id as u8);
+        match &self.payload {
+            MessagePayload::NewBlock(new_block) => {
                 new_block.encode(&mut buffer);
             }
         }
@@ -91,19 +86,16 @@ impl ScrollWireMessage {
             return None;
         }
 
-        let id: ScrollWireMessageId = buffer[0].try_into().ok()?;
+        let id: MessageId = buffer[0].try_into().ok()?;
         buffer.advance(1);
 
         let kind = match id {
-            ScrollWireMessageId::NewBlock => {
+            MessageId::NewBlock => {
                 let new_block = NewBlock::decode(buffer).ok()?;
-                ScrollWireMessageKind::NewBlock(new_block)
+                MessagePayload::NewBlock(new_block)
             }
         };
 
-        Some(Self {
-            message_type: id,
-            message: kind,
-        })
+        Some(Self { id, payload: kind })
     }
 }
