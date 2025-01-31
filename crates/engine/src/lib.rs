@@ -8,7 +8,7 @@ mod engine;
 pub use engine::EngineDriver;
 
 mod payload;
-pub use payload::{ExecutionPayloadProvider, ScrollPayloadAttributes};
+pub use payload::ExecutionPayloadProvider;
 
 #[cfg(any(test, feature = "test_utils"))]
 mod test_utils;

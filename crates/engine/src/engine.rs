@@ -1,15 +1,13 @@
-use crate::{
-    block_info::BlockInfo,
-    payload::{matching_payloads, ScrollPayloadAttributes},
-};
+use crate::{block_info::BlockInfo, payload::matching_payloads};
 
 use crate::ExecutionPayloadProvider;
 use alloy_rpc_types_engine::{
     ExecutionPayload, ExecutionPayloadV1, ForkchoiceState, PayloadId, PayloadStatusEnum,
 };
 use eyre::{bail, eyre, Result};
-use reth_engine_primitives::EngineTypes;
+use reth_engine_primitives::PayloadTypes;
 use reth_rpc_api::EngineApiClient;
+use reth_scroll_engine_primitives::ScrollEngineTypes;
 use tokio::time::Duration;
 use tracing::{debug, error, info, instrument, trace, warn};
 
@@ -18,7 +16,7 @@ const ENGINE_BACKOFF_INTERVAL: Duration = Duration::from_secs(1);
 /// The main interface to the Engine API of the EN.
 /// Internally maintains the fork state of the chain.
 #[derive(Debug, Clone)]
-pub struct EngineDriver<EC, P, ET> {
+pub struct EngineDriver<EC, P> {
     /// The engine API client.
     client: EC,
     /// The execution payload provider
@@ -29,17 +27,11 @@ pub struct EngineDriver<EC, P, ET> {
     safe_block_info: BlockInfo,
     /// The finalized L2 block info.
     finalized_block_info: BlockInfo,
-    /// Marker
-    _types: std::marker::PhantomData<ET>,
 }
 
-impl<EC, P, ET> EngineDriver<EC, P, ET>
+impl<EC, P> EngineDriver<EC, P>
 where
-    EC: EngineApiClient<ET> + Sync,
-    ET: EngineTypes<
-        PayloadAttributes = ScrollPayloadAttributes,
-        ExecutionPayloadEnvelopeV1 = ExecutionPayloadV1,
-    >,
+    EC: EngineApiClient<ScrollEngineTypes> + Sync,
     P: ExecutionPayloadProvider,
 {
     /// Initialize the driver and wait for the Engine server to be ready.
@@ -76,7 +68,6 @@ where
             unsafe_block_info: unsafe_head,
             safe_block_info: safe_head,
             finalized_block_info: finalized_head,
-            _types: std::marker::PhantomData,
         }
     }
 
@@ -135,7 +126,7 @@ where
     #[instrument(skip_all, level = "trace", fields(head = %self.unsafe_block_info.hash, safe = %self.safe_block_info.hash, finalized = %self.safe_block_info.hash))]
     pub async fn handle_payload_attributes(
         &mut self,
-        mut payload_attributes: ScrollPayloadAttributes,
+        mut payload_attributes: <ScrollEngineTypes as PayloadTypes>::PayloadAttributes,
     ) -> Result<()> {
         let maybe_execution_payload = self
             .execution_payload_provider
@@ -206,7 +197,7 @@ where
     /// Calls `engine_forkchoiceUpdatedV1` and logs the result.
     async fn forkchoice_updated(
         &self,
-        attributes: Option<ScrollPayloadAttributes>,
+        attributes: Option<<ScrollEngineTypes as PayloadTypes>::PayloadAttributes>,
     ) -> Result<Option<PayloadId>> {
         let fc = self.forkchoice_state();
         let forkchoice_updated = self.client.fork_choice_updated_v1(fc, attributes).await?;
