@@ -8229,9 +8229,7 @@ name = "scroll-bridge"
 version = "0.0.1"
 dependencies = [
  "alloy-consensus",
- "alloy-genesis",
  "alloy-primitives",
- "alloy-rpc-types-engine",
  "clap",
  "eyre",
  "reth-cli-util",
@@ -8243,7 +8241,6 @@ dependencies = [
  "reth-node-builder",
  "reth-node-core",
  "reth-node-types",
- "reth-payload-builder",
  "reth-primitives",
  "reth-provider",
  "reth-rpc-server-types",
