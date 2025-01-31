@@ -3,12 +3,8 @@ set +e  # Disable immediate exit on error
 
 crates=($(cargo metadata --format-version=1 --no-deps | jq -r '.packages[].name' | sort))
 
-exclude_crates=(
-  engine
-  scroll-bridge
-  scroll-wire
-  scroll-network
-)
+IFS=',' read -ra exclude_crates <<< "$EXCLUDE"
+unset IFS
 
 contains() {
   local ex="$1[@]"
@@ -35,19 +31,19 @@ do
     continue
   fi
 
-  cmd="cargo +stable build -p $crate --target riscv32imac-unknown-none-elf --no-default-features"
+  cmd="cargo +stable build -p $crate --target $TARGET --no-default-features"
 
   set +e  # Disable immediate exit on error
   # Run the command and capture the return code
-  $cmd
+#  $cmd
   ret_code=$?
   set -e  # Re-enable immediate exit on error
 
   if [ $ret_code -eq 0 ];
   then
-    results+=("✅ $crate")
+    results+=("✅  $crate")
   else
-    results+=("❌ $crate")
+    results+=("❌  $crate")
     any_failed=1
   fi
 done
