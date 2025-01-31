@@ -100,12 +100,12 @@ impl RethBlockImport<reth_scroll_primitives::ScrollBlock> for BridgeBlockImport 
                 Ok(BlockValidation::ValidBlock { ref block }) |
                 Ok(BlockValidation::ValidHeader { ref block }) => {
                     self.bridge_new_block_to_scroll_wire(outcome.peer, block.block.clone());
-                    return Poll::Ready(outcome)
+                    Poll::Ready(outcome)
                 }
                 Err(_) => Poll::Ready(outcome),
             }
         } else {
-            return Poll::Pending;
+            Poll::Pending
         }
     }
 }

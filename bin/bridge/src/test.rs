@@ -1,4 +1,3 @@
-
 use alloy_primitives::B256;
 use reth_e2e_test_utils::{node::NodeTestContext, NodeHelperType};
 use reth_network::{NetworkConfigBuilder, PeersInfo};
