@@ -33,7 +33,7 @@ zepter: ensure-zepter
 
 ensure-zepter:
 	@if ! command -v zepter &> /dev/null; then \
-		echo "zepter not found. Please follow the instructions provider for installation: https://github.com/ggwpez/zepter?tab=readme-ov-file#install" \
+		echo "zepter not found. Please follow the instructions for installation: https://github.com/ggwpez/zepter?tab=readme-ov-file#install" \
 		exit 1; \
     fi
 
