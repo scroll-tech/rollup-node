@@ -6,7 +6,7 @@ use secp256k1::{ecdsa::Signature, SecretKey};
 use std::sync::Arc;
 use tokio::sync::{mpsc::UnboundedSender, oneshot};
 
-/// A handle used to communicate with the [`NetworkManager`].
+/// A handle used to communicate with the [`super::NetworkManager`].
 #[derive(Debug, Clone)]
 pub struct NetworkHandle {
     /// A reference to the inner network handle.
@@ -28,7 +28,7 @@ impl NetworkHandle {
 /// The inner state of the [`NetworkHandle`].
 #[derive(Debug)]
 pub struct NetworkInner {
-    /// The sender half of the channel set up between this type and the [`NetworkManager`].
+    /// The sender half of the channel set up between this type and the [`super::NetworkManager`].
     pub(crate) to_manager_tx: UnboundedSender<NetworkHandleMessage>,
     /// Inner network handle which is used to communicate with the inner network.
     pub inner_network_handle: RethNetworkHandle<ScrollNetworkPrimitives>,

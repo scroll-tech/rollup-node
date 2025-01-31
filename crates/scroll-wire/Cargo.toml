@@ -20,15 +20,11 @@ alloy-rlp = { version = "0.3.10", default-features = false }
 reth-eth-wire = { git = "https://github.com/scroll-tech/reth.git" }
 reth-network.workspace = true
 reth-network-api.workspace = true
-reth-primitives.workspace = true
-reth-provider = { workspace = true, features = ["test-utils"] }
 
 # scroll
-reth-scroll-chainspec.workspace = true
-reth-scroll-primitives.workspace = true
+reth-scroll-primitives = { workspace = true, features = ["serde"] }
 
 # misc
-eyre.workspace = true
 futures.workspace = true
 secp256k1 = { workspace = true, features = [
     "global-context",

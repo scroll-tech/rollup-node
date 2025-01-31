@@ -59,7 +59,7 @@ where
             network_mode: NetworkMode::Work,
             block_import: Box::new(super::BridgeBlockImport::new(
                 new_block_tx,
-                self.block_import.unwrap_or_else(|| config.block_import),
+                self.block_import.unwrap_or(config.block_import),
             )),
             ..config
         };

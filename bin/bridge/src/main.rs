@@ -1,9 +1,3 @@
-mod network;
-use network::ScrollBridgeNetworkBuilder;
-
-mod import;
-use import::BridgeBlockImport;
-
 #[global_allocator]
 static ALLOC: reth_cli_util::allocator::Allocator = reth_cli_util::allocator::new_allocator();
 
@@ -13,6 +7,7 @@ fn main() {
     use reth_provider::providers::BlockchainProvider;
     use reth_scroll_cli::{Cli, ScrollChainSpecParser, ScrollRollupArgs};
     use reth_scroll_node::{ScrollAddOns, ScrollNode};
+    use scroll_bridge::ScrollBridgeNetworkBuilder;
     reth_cli_util::sigsegv_handler::install();
 
     // Enable backtraces unless a RUST_BACKTRACE value has already been explicitly provided.

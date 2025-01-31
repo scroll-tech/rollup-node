@@ -13,25 +13,20 @@ alloy-primitives = { workspace = true, features = [
 ] }
 
 # reth
-reth-discv5 = { git = "https://github.com/scroll-tech/reth.git" }
-reth-eth-wire-types.workspace = true
 reth-network.workspace = true
 reth-network-api.workspace = true
-reth-network-types = { git = "https://github.com/scroll-tech/reth.git" }
 reth-network-peers.workspace = true
 reth-primitives.workspace = true
 reth-storage-api = { git = "https://github.com/scroll-tech/reth.git" }
-reth-tasks.workspace = true
 
 # scroll
 reth-scroll-chainspec.workspace = true
-reth-scroll-node = { workspace = true, features = ["skip-state-root-validation"] }
+reth-scroll-node = { workspace = true, features = ["skip-state-root-validation", "scroll"] }
 reth-scroll-primitives.workspace = true
 scroll-wire.workspace = true
 
 # misc
 futures.workspace = true
-parking_lot = "0.12"
 secp256k1 = { workspace = true, features = ["global-context", "rand-std", "recovery"] }
 tokio = { workspace = true, features = ["full"] }
 tokio-stream.workspace = true
