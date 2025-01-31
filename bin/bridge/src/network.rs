@@ -16,10 +16,10 @@ pub struct ScrollBridgeNetworkBuilder {
         Option<Box<dyn reth_network::import::BlockImport<reth_scroll_primitives::ScrollBlock>>>,
 }
 
-#[cfg(test)]
 impl ScrollBridgeNetworkBuilder {
     /// Creates a new [`ScrollBridgeNetworkBuilder`] with the provided block import.
-    pub(crate) fn new(
+    #[cfg(feature = "test-utils")]
+    pub fn new(
         block_import: Box<
             dyn reth_network::import::BlockImport<reth_scroll_primitives::ScrollBlock>,
         >,
