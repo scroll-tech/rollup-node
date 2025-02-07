@@ -36,14 +36,14 @@ pub use consensus::PoAConsensus;
 ///
 /// This is an endless [`Future`] that drives the state of the entire network forward and includes
 /// the following components:
-/// - network: Responsible for peer discover, managing connections between peers and
-///  operation of the eth-wire protocol.
-/// - engine: Responsible for importing blocks that have been gossiped over the scroll-wire
-/// protocol.
-/// - consensus: The consensus algorithm used by the rollup node.
-/// - new_block_rx: Receives new blocks from the network.
-/// - forkchoice_state: The forkchoice state of the rollup node.
-/// - pending_block_imports: A list of pending block imports.
+/// - `network`: Responsible for peer discover, managing connections between peers and operation of
+///   the eth-wire protocol.
+/// - `engine`: Responsible for importing blocks that have been gossiped over the scroll-wire
+///   protocol.
+/// - `consensus`: The consensus algorithm used by the rollup node.
+/// - `new_block_rx`: Receives new blocks from the network.
+/// - `forkchoice_state`: The forkchoice state of the rollup node.
+/// - `pending_block_imports`: A list of pending block imports.
 #[derive(Debug)]
 pub struct RollupNodeManager<C, EC, P> {
     /// The network handle used to communicate with the network manager.
@@ -111,8 +111,7 @@ where
         let engine = self.engine.clone();
         let future = Box::pin(async move {
             trace!(target: "scroll_rollup_manager::RollupNodeManager", "handling block import future");
-            let result = match engine.handle_execution_payload(execution_payload.into(), fcs).await
-            {
+            let result = match engine.handle_execution_payload(execution_payload, fcs).await {
                 Ok(_) => Ok(BlockValidation::ValidBlock {
                     new_block: NewBlock {
                         block,
@@ -123,10 +122,7 @@ where
                 Err(EngineDriverError::InvalidExecutionPayload) => {
                     Err(BlockImportError::Validation(BlockValidationError::InvalidBlock))
                 }
-                Err(EngineDriverError::EngineUnavailable) => {
-                    Err(BlockImportError::Validation(BlockValidationError::EngineApiError))
-                }
-                Err(EngineDriverError::FcuFailed) => {
+                Err(EngineDriverError::EngineUnavailable | EngineDriverError::FcuFailed) => {
                     Err(BlockImportError::Validation(BlockValidationError::EngineApiError))
                 }
             };
@@ -136,7 +132,7 @@ where
         self.pending_block_imports.push(future);
     }
 
-    fn get_fcs(&self) -> AlloyForkchoiceState {
+    const fn get_fcs(&self) -> AlloyForkchoiceState {
         AlloyForkchoiceState {
             head_block_hash: self.forkchoice_state.unsafe_block_info().hash,
             safe_block_hash: self.forkchoice_state.safe_block_info().hash,
@@ -151,7 +147,7 @@ where
         }
     }
 
-    fn handle_block_import_outcome(&mut self, outcome: BlockImportOutcome) {
+    fn handle_block_import_outcome(&self, outcome: BlockImportOutcome) {
         trace!(target: "scroll_rollup_manager::RollupNodeManager", ?outcome, "handling block import outcome");
         self.network.handle().block_import_outcome(outcome);
     }

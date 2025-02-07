@@ -33,7 +33,7 @@ where
 {
     /// Create a new [`EngineDriver`] from the provided [`ScrollAuthEngineApiProvider`] and
     /// generic execution payload provider.
-    pub fn new(client: EC, execution_payload_provider: P) -> Self {
+    pub const fn new(client: EC, execution_payload_provider: P) -> Self {
         Self { client, execution_payload_provider }
     }
 
@@ -82,14 +82,14 @@ where
     /// Handles a payload attributes:
     ///   - Retrieves the execution payload for block at safe head + 1.
     ///   - If the payload is missing or doesn't match the attributes:
-    ///         - Starts payload building task on the EL via `engine_forkchoiceUpdatedV1`, passing
-    ///           the provided payload attributes.
-    ///         - Retrieve the payload with `engine_getPayloadV1`.
-    ///         - Sends the constructed payload to the EL via `engine_newPayloadV1`.
-    ///         - Sets the current fork choice for the EL via `engine_forkchoiceUpdatedV1`.
+    ///     - Starts payload building task on the EL via `engine_forkchoiceUpdatedV1`, passing the
+    ///       provided payload attributes.
+    ///     - Retrieve the payload with `engine_getPayloadV1`.
+    ///     - Sends the constructed payload to the EL via `engine_newPayloadV1`.
+    ///     - Sets the current fork choice for the EL via `engine_forkchoiceUpdatedV1`.
     ///   - If the execution payload matches the attributes:
-    ///         - Sets the current fork choice for the EL via `engine_forkchoiceUpdatedV1`,
-    ///           advancing the safe head by one.
+    ///     - Sets the current fork choice for the EL via `engine_forkchoiceUpdatedV1`, advancing
+    ///       the safe head by one.
     // #[instrument(skip_all, level = "trace", fields(head = %self.unsafe_block_info.hash, safe =
     // %self.safe_block_info.hash, finalized = %self.safe_block_info.hash))]
     pub async fn handle_payload_attributes(

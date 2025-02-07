@@ -21,10 +21,8 @@ reth-eth-wire = { git = "https://github.com/scroll-tech/reth.git", branch = "fea
 reth-network.workspace = true
 reth-network-api.workspace = true
 reth-primitives.workspace = true
-reth-provider = { workspace = true, features = ["test-utils"] }
 
 # scroll
-reth-scroll-chainspec.workspace = true
 reth-scroll-primitives.workspace = true
 
 # misc

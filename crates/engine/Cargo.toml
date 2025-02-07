@@ -11,31 +11,27 @@ workspace = true
 
 [dependencies]
 # alloy
-alloy-consensus = { version = "0.9.2", default-features = false }
 alloy-eips = { version = "0.9.2", default-features = false }
 alloy-primitives.workspace = true
 alloy-rpc-types-engine.workspace = true
 
 # scroll-alloy
-scroll-alloy-rpc-types-engine = { git = "https://github.com/scroll-tech/reth.git", branch = "feat/add-deref-blanket-engine-api" }
-scroll-alloy-provider.workspace = true
 scroll-alloy-network.workspace = true
+scroll-alloy-provider.workspace = true
+scroll-alloy-rpc-types-engine = { git = "https://github.com/scroll-tech/reth.git", branch = "feat/add-deref-blanket-engine-api" }
 
 # reth
 reth-engine-primitives = { git = "https://github.com/scroll-tech/reth.git", branch = "feat/add-deref-blanket-engine-api", default-features = false, features = ["scroll"] }
 reth-network-peers.workspace = true
 reth-payload-primitives = { git = "https://github.com/scroll-tech/reth.git", branch = "feat/add-deref-blanket-engine-api" }
 reth-primitives = { workspace = true }
-reth-rpc-api.workspace = true
 
 # reth-scroll
 reth-scroll-primitives = { workspace = true, features = ["serde"] }
 reth-scroll-engine-primitives = { git = "https://github.com/scroll-tech/reth.git", branch = "feat/add-deref-blanket-engine-api", default-features = false }
 
-# scroll
-scroll-network.workspace = true
-
 # misc
+async-trait = "0.1.68"
 eyre.workspace = true
 serde = { workspace = true, features = ["derive"] }
 tokio.workspace = true
@@ -54,7 +50,6 @@ arbitrary = [
 	"reth-primitives/arbitrary",
 	"alloy-eips/arbitrary",
 	"reth-scroll-primitives/arbitrary",
-	"alloy-consensus/arbitrary"
 ]
 test-utils = [
 	"arbitrary",

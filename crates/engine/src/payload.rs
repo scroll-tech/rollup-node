@@ -3,7 +3,6 @@ use alloy_primitives::B256;
 use alloy_rpc_types_engine::ExecutionPayload;
 use scroll_alloy_rpc_types_engine::ScrollPayloadAttributes;
 
-use std::future::Future;
 use tracing::debug;
 
 use crate::EngineDriverError;
@@ -66,12 +65,13 @@ pub(crate) fn matching_payloads(
 }
 
 /// Implementers of the trait can provide the L2 execution payload for a block id.
+#[async_trait::async_trait]
 pub trait ExecutionPayloadProvider {
     /// Returns the [`ExecutionPayload`] for the provided [`BlockId`], or [None].
-    fn execution_payload_by_block(
+    async fn execution_payload_by_block(
         &self,
         block_id: BlockId,
-    ) -> impl Future<Output = Result<Option<ExecutionPayload>, EngineDriverError>> + Send;
+    ) -> Result<Option<ExecutionPayload>, EngineDriverError>;
 }
 
 #[cfg(test)]

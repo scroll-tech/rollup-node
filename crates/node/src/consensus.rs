@@ -12,15 +12,15 @@ pub trait Consensus {
     ) -> Result<(), BlockImportError>;
 }
 
-/// A PoA consensus instance.
+/// A Proof of Authority consensus instance.
 #[derive(Debug)]
 pub struct PoAConsensus {
     _authorized_signers: Vec<PublicKey>,
 }
 
 impl PoAConsensus {
-    /// Creates a new PoA consensus instance with the given authorized signers.
-    pub fn new(authorized_signers: Vec<PublicKey>) -> Self {
+    /// Creates a new [`PoAConsensus`] consensus instance with the given authorized signers.
+    pub const fn new(authorized_signers: Vec<PublicKey>) -> Self {
         Self { _authorized_signers: authorized_signers }
     }
 }
@@ -33,6 +33,6 @@ impl Consensus for PoAConsensus {
     ) -> Result<(), BlockImportError> {
         // TODO: recover the public key from the signature and check if it is in the authorized
         // signers --- CURRENTLY NOOP ---
-        return Ok(())
+        Ok(())
     }
 }

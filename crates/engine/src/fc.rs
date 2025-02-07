@@ -13,7 +13,7 @@ pub struct ForkchoiceState {
 
 impl ForkchoiceState {
     /// Creates a new [`ForkchoiceState`] instance.
-    pub fn new(unsafe_: BlockInfo, safe: BlockInfo, finalized: BlockInfo) -> Self {
+    pub const fn new(unsafe_: BlockInfo, safe: BlockInfo, finalized: BlockInfo) -> Self {
         Self { unsafe_, safe, finalized }
     }
 
@@ -33,17 +33,17 @@ impl ForkchoiceState {
     }
 
     /// Returns the block info for the `unsafe` block.
-    pub fn unsafe_block_info(&self) -> &BlockInfo {
+    pub const fn unsafe_block_info(&self) -> &BlockInfo {
         &self.unsafe_
     }
 
     /// Returns the block info for the `safe` block.
-    pub fn safe_block_info(&self) -> &BlockInfo {
+    pub const fn safe_block_info(&self) -> &BlockInfo {
         &self.safe
     }
 
     /// Returns the block info for the `finalized` block.
-    pub fn finalized_block_info(&self) -> &BlockInfo {
+    pub const fn finalized_block_info(&self) -> &BlockInfo {
         &self.finalized
     }
 }

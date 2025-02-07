@@ -87,7 +87,7 @@ where
                 BlockInfo { number: 0, hash: Default::default() },
             ),
             consensus,
-            new_block_rx.into(),
+            new_block_rx,
         );
 
         ctx.task_executor().spawn(rollup_node_manager);
