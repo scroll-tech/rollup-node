@@ -12,7 +12,7 @@ use reth_scroll_engine_primitives::ScrollEngineTypes;
 use scroll_alloy_provider::ScrollEngineApi;
 
 use tokio::time::Duration;
-use tracing::{debug, error, info, trace, warn};
+use tracing::{debug, error, info, instrument, trace, warn};
 
 const ENGINE_BACKOFF_INTERVAL: Duration = Duration::from_secs(1);
 
@@ -31,8 +31,8 @@ where
     EC: ScrollEngineApi<scroll_alloy_network::Scroll> + Unpin + Send + Sync + 'static,
     P: ExecutionPayloadProvider + Unpin + Send + Sync + 'static,
 {
-    /// Create a new [`EngineDriver`] from the provided [`ScrollAuthEngineApiProvider`] and
-    /// generic execution payload provider.
+    /// Create a new [`EngineDriver`] from the provided [`ScrollEngineApi`] and
+    /// [`ExecutionPayloadProvider`].
     pub const fn new(client: EC, execution_payload_provider: P) -> Self {
         Self { client, execution_payload_provider }
     }
@@ -63,8 +63,12 @@ where
     /// Handles an execution payload:
     ///   - Sends the payload to the EL via `engine_newPayloadV1`.
     ///   - Sets the current fork choice for the EL via `engine_forkchoiceUpdatedV1`.
-    // #[instrument(skip_all, level = "trace", fields(head = payload_block_hash =
-    // %execution_payload.block_hash(), payload_block_num = %execution_payload.block_number()))]
+    #[instrument(skip_all, level = "trace", 
+    fields(
+        payload_block_hash = %execution_payload.block_hash(),
+        payload_block_num = %execution_payload.block_number(),
+        fcs = ?fcs
+    ))]
     pub async fn handle_execution_payload(
         &self,
         execution_payload: ExecutionPayload,

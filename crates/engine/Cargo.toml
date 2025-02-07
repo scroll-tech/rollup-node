@@ -50,6 +50,7 @@ arbitrary = [
 	"reth-primitives/arbitrary",
 	"alloy-eips/arbitrary",
 	"reth-scroll-primitives/arbitrary",
+	"scroll-alloy-rpc-types-engine/arbitrary"
 ]
 test-utils = [
 	"arbitrary",

@@ -138,7 +138,7 @@ async fn can_bridge_blocks() {
     network_handle.announce_block(new_block_1, block_1_hash);
 
     // Observe logs
-    tokio::time::sleep(tokio::time::Duration::from_secs(120)).await;
+    tokio::time::sleep(tokio::time::Duration::from_secs(10)).await;
 
     // TODO: Add assertions
 }

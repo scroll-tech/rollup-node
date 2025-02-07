@@ -1,4 +1,4 @@
-use crate::protocol::{Event, Message, NewBlock};
+use crate::protocol::{NewBlock, ScrollMessage, ScrollWireEvent};
 use alloy_primitives::B256;
 use futures::StreamExt;
 use reth_network::cache::LruCache;
@@ -19,10 +19,10 @@ pub const LRU_CACHE_SIZE: u32 = 100;
 /// A manager for the `ScrollWire` protocol.
 #[derive(Debug)]
 pub struct ScrollWireManager {
-    /// A stream of [`Event`]s produced by the scroll wire protocol.
-    events: UnboundedReceiverStream<Event>,
+    /// A stream of [`ScrollWireEvent`]s produced by the scroll wire protocol.
+    events: UnboundedReceiverStream<ScrollWireEvent>,
     /// A map of connections to peers.
-    connections: HashMap<PeerId, UnboundedSender<Message>>,
+    connections: HashMap<PeerId, UnboundedSender<ScrollMessage>>,
     /// A map of the state of the scroll wire protocol. Currently the state for each peer
     /// is just a cache of the last 100 blocks seen by each peer.
     state: HashMap<PeerId, LruCache<B256>>,
@@ -30,7 +30,7 @@ pub struct ScrollWireManager {
 
 impl ScrollWireManager {
     /// Creates a new [`ScrollWireManager`] instance.
-    pub fn new(events: UnboundedReceiver<Event>) -> Self {
+    pub fn new(events: UnboundedReceiver<ScrollWireEvent>) -> Self {
         trace!(target: "scroll_wire::manager", "Creating new ScrollWireManager instance");
         Self { events: events.into(), connections: HashMap::new(), state: HashMap::new() }
     }
@@ -40,7 +40,7 @@ impl ScrollWireManager {
         if let Entry::Occupied(to_connection) = self.connections.entry(peer_id) {
             // We send the block to the peer. If we receive an error we remove the peer from the
             // connections map and delete its state as the connection is no longer valid.
-            if to_connection.get().send(Message::new_block(block.clone())).is_err() {
+            if to_connection.get().send(ScrollMessage::new_block(block.clone())).is_err() {
                 trace!(target: "scroll_wire::manager", peer_id = %peer_id, "Failed to send block to peer - dropping peer.");
                 self.state.remove(&peer_id);
                 to_connection.remove();
@@ -67,7 +67,7 @@ impl ScrollWireManager {
 }
 
 impl Future for ScrollWireManager {
-    type Output = Event;
+    type Output = ScrollWireEvent;
 
     fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
         let this = self.get_mut();
@@ -75,12 +75,16 @@ impl Future for ScrollWireManager {
         // Process events from the network.
         while let Poll::Ready(new_block) = this.events.poll_next_unpin(cx) {
             match new_block {
-                Some(Event::NewBlock { peer_id, block, signature }) => {
+                Some(ScrollWireEvent::NewBlock { peer_id, block, signature }) => {
                     // We announce the block to the network.
                     trace!("Received new block with signature [{signature:?}] from the network: {block:?} ");
-                    return Poll::Ready(Event::NewBlock { peer_id, block, signature });
+                    return Poll::Ready(ScrollWireEvent::NewBlock { peer_id, block, signature });
                 }
-                Some(Event::ConnectionEstablished { direction, peer_id, to_connection }) => {
+                Some(ScrollWireEvent::ConnectionEstablished {
+                    direction,
+                    peer_id,
+                    to_connection,
+                }) => {
                     trace!(
                         "Established connection with peer: {:?} for direction: {:?}",
                         peer_id,

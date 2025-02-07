@@ -13,7 +13,7 @@ use reth_scroll_node::ScrollNetworkPrimitives;
 use reth_scroll_primitives::ScrollBlock;
 use reth_storage_api::BlockNumReader as BlockNumReaderT;
 use scroll_wire::{
-    Event, NewBlock, ProtocolHandler, ScrollWireConfig, ScrollWireManager, LRU_CACHE_SIZE,
+    NewBlock, ProtocolHandler, ScrollWireConfig, ScrollWireEvent, ScrollWireManager, LRU_CACHE_SIZE,
 };
 use secp256k1::ecdsa::Signature;
 use std::future::Future;
@@ -54,7 +54,7 @@ impl NetworkManager {
     /// [`RethNetworkManager`] are instantiated externally.
     pub fn from_parts(
         inner_network_handle: RethNetworkHandle<ScrollNetworkPrimitives>,
-        events: UnboundedReceiver<Event>,
+        events: UnboundedReceiver<ScrollWireEvent>,
     ) -> Self {
         // Create the channel for sending messages to the network manager from the network handle.
         let (to_manager_tx, from_handle_rx) = mpsc::unbounded_channel();
@@ -128,9 +128,9 @@ impl NetworkManager {
     }
 
     /// Handler for received events from the [`ScrollWireManager`].
-    fn on_scroll_wire_event(&mut self, event: Event) -> Option<NetworkManagerEvent> {
+    fn on_scroll_wire_event(&mut self, event: ScrollWireEvent) -> Option<NetworkManagerEvent> {
         match event {
-            Event::NewBlock { peer_id, block, signature } => {
+            ScrollWireEvent::NewBlock { peer_id, block, signature } => {
                 trace!(target: "network::manager", peer_id = ?peer_id, block = ?block, signature = ?signature, "Received new block");
                 Some(NetworkManagerEvent::NewBlock(NewBlockWithPeer { peer_id, block, signature }))
             }

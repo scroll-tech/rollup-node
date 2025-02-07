@@ -148,17 +148,7 @@ mod tests {
         let prev_randao = B256::arbitrary(&mut unstructured)?;
         let timestamp = u64::arbitrary(&mut unstructured)?;
 
-        let attributes = ScrollPayloadAttributes {
-            payload_attributes: PayloadAttributes {
-                timestamp,
-                prev_randao,
-                suggested_fee_recipient: Default::default(),
-                withdrawals: None,
-                parent_beacon_block_root: None,
-            },
-            transactions: Some(transactions.clone()),
-            no_tx_pool: false,
-        };
+        let attributes = ScrollPayloadAttributes::arbitrary(&mut unstructured)?;
         let payload = ExecutionPayload::V1(ExecutionPayloadV1 {
             prev_randao,
             timestamp,
