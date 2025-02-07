@@ -7,8 +7,14 @@ pub use block_info::BlockInfo;
 mod engine;
 pub use engine::EngineDriver;
 
+mod error;
+pub use error::EngineDriverError;
+
+mod fc;
+pub use fc::ForkchoiceState;
+
 mod payload;
 pub use payload::ExecutionPayloadProvider;
 
-#[cfg(any(test, feature = "test_utils"))]
-mod test_utils;
+#[cfg(any(test, feature = "test-utils"))]
+pub mod test_utils;

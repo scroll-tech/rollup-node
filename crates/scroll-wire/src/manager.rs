@@ -77,13 +77,14 @@ impl Future for ScrollWireManager {
             match new_block {
                 Some(Event::NewBlock { peer_id, block, signature }) => {
                     // We announce the block to the network.
-                    println!("Received new block with signature [{signature:?}] from the network: {block:?} ");
+                    trace!("Received new block with signature [{signature:?}] from the network: {block:?} ");
                     return Poll::Ready(Event::NewBlock { peer_id, block, signature });
                 }
                 Some(Event::ConnectionEstablished { direction, peer_id, to_connection }) => {
-                    println!(
+                    trace!(
                         "Established connection with peer: {:?} for direction: {:?}",
-                        peer_id, direction
+                        peer_id,
+                        direction
                     );
                     this.connections.insert(peer_id, to_connection);
                     this.state.insert(peer_id, LruCache::new(100));

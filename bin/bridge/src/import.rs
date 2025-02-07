@@ -1,11 +1,8 @@
-use reth_network::{
-    import::{BlockImport as RethBlockImport, BlockValidation},
-    NetworkPrimitives,
-};
+use reth_network::{import::BlockImport as RethBlockImport, NetworkPrimitives};
 use reth_network_peers::PeerId;
 use reth_scroll_node::ScrollNetworkPrimitives;
 use reth_scroll_primitives::ScrollBlock;
-use scroll_wire::Event;
+use scroll_network::NewBlockWithPeer;
 use secp256k1::ecdsa::Signature;
 use std::{
     sync::Arc,
@@ -18,25 +15,17 @@ const ECDSA_SIGNATURE_LEN: usize = 64;
 
 /// A block import implementation for the eth-wire protocol that sends block to the scroll-wire
 /// protocol.
-///
-/// The block import implementation delegates the block import to the inner block import and then
-/// sends the block to the scroll-wire protocol if the block is valid.
 #[derive(Debug)]
 pub struct BridgeBlockImport {
     /// A sender for sending events to the scroll-wire protocol.
-    to_scroll_network_manager: UnboundedSender<Event>,
-    /// The inner block import.
-    inner: Box<dyn RethBlockImport<reth_scroll_primitives::ScrollBlock>>,
+    new_block_tx: UnboundedSender<NewBlockWithPeer>,
 }
 
 impl BridgeBlockImport {
     /// Creates a new [`BridgeBlockImport`] instance with the provided events sender and inner block
     /// import.
-    pub fn new(
-        events: UnboundedSender<Event>,
-        inner_block_import: Box<dyn RethBlockImport<reth_scroll_primitives::ScrollBlock>>,
-    ) -> Self {
-        Self { to_scroll_network_manager: events, inner: inner_block_import }
+    pub fn new(new_block_tx: UnboundedSender<NewBlockWithPeer>) -> Self {
+        Self { new_block_tx }
     }
 
     /// Bridges a new block from the eth-wire protocol to the scroll-wire protocol.
@@ -61,8 +50,7 @@ impl BridgeBlockImport {
 
             // We trigger a new block event to be sent to the rollup node's network manager. If this
             // results in an error it means the network manager has been dropped.
-            let _ =
-                self.to_scroll_network_manager.send(Event::NewBlock { peer_id, block, signature });
+            let _ = self.new_block_tx.send(NewBlockWithPeer { peer_id, block, signature });
         } else {
             warn!(target: "bridge::import", peer_id = %peer_id, "Failed to extract signature from block extra data");
         }
@@ -80,32 +68,17 @@ impl RethBlockImport<reth_scroll_primitives::ScrollBlock> for BridgeBlockImport 
         >,
     ) {
         // We then delegate the block import to the inner block import.
-        self.inner.on_new_block(peer_id, incoming_block);
+        self.bridge_new_block_to_scroll_wire(peer_id, incoming_block.block);
     }
 
-    /// This function is called when the block import is polled.
-    ///
-    /// If the block import is ready we check if the block is valid and if it is we send the block
-    /// to the scroll-wire protocol and then return the outcome.
     fn poll(
         &mut self,
-        cx: &mut Context<'_>,
+        _cx: &mut Context<'_>,
     ) -> Poll<
         reth_network::import::BlockImportOutcome<
             <ScrollNetworkPrimitives as NetworkPrimitives>::Block,
         >,
     > {
-        if let Poll::Ready(outcome) = self.inner.poll(cx) {
-            match outcome.result {
-                Ok(BlockValidation::ValidBlock { ref block }) |
-                Ok(BlockValidation::ValidHeader { ref block }) => {
-                    self.bridge_new_block_to_scroll_wire(outcome.peer, block.block.clone());
-                    return Poll::Ready(outcome)
-                }
-                Err(_) => Poll::Ready(outcome),
-            }
-        } else {
-            return Poll::Pending;
-        }
+        Poll::Pending
     }
 }

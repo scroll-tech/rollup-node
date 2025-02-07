@@ -1,14 +1,12 @@
 use alloy_eips::BlockId;
-use alloy_primitives::{Bytes, B256};
-use alloy_rpc_types_engine::{ExecutionPayload, PayloadAttributes};
-use eyre::Result;
-use reth_engine_primitives::PayloadTypes;
-use reth_scroll_engine_primitives::ScrollPayloadTypes;
+use alloy_primitives::B256;
+use alloy_rpc_types_engine::ExecutionPayload;
 use scroll_alloy_rpc_types_engine::ScrollPayloadAttributes;
 
-use serde::{Deserialize, Serialize};
 use std::future::Future;
 use tracing::debug;
+
+use crate::EngineDriverError;
 
 /// Returns true if the [`ScrollPayloadAttributes`] matches the [`ExecutionPayload`]:
 ///    - provided parent hash matches the parent hash of the [`ExecutionPayload`]
@@ -73,13 +71,14 @@ pub trait ExecutionPayloadProvider {
     fn execution_payload_by_block(
         &self,
         block_id: BlockId,
-    ) -> impl Future<Output = Result<Option<ExecutionPayload>>> + Send;
+    ) -> impl Future<Output = Result<Option<ExecutionPayload>, EngineDriverError>> + Send;
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use alloy_rpc_types_engine::ExecutionPayloadV1;
+    use alloy_primitives::Bytes;
+    use alloy_rpc_types_engine::{ExecutionPayloadV1, PayloadAttributes};
     use arbitrary::{Arbitrary, Unstructured};
     use reth_testing_utils::{generators, generators::Rng};
 
@@ -102,57 +101,74 @@ mod tests {
         }
     }
 
-    // #[test]
-    // fn test_matching_payloads() -> Result<()> {
-    //     let mut bytes = [0u8; 1024];
-    //     generators::rng().fill(bytes.as_mut_slice());
-    //     let mut unstructured = Unstructured::new(&bytes);
+    #[test]
+    fn test_matching_payloads() -> eyre::Result<()> {
+        let mut bytes = [0u8; 1024];
+        generators::rng().fill(bytes.as_mut_slice());
+        let mut unstructured = Unstructured::new(&bytes);
 
-    //     let parent_hash = B256::arbitrary(&mut unstructured)?;
-    //     let transactions = Vec::<Bytes>::arbitrary(&mut unstructured)?;
-    //     let prev_randao = B256::arbitrary(&mut unstructured)?;
-    //     let timestamp = u64::arbitrary(&mut unstructured)?;
+        let parent_hash = B256::arbitrary(&mut unstructured)?;
+        let transactions = Vec::<Bytes>::arbitrary(&mut unstructured)?;
+        let prev_randao = B256::arbitrary(&mut unstructured)?;
+        let timestamp = u64::arbitrary(&mut unstructured)?;
 
-    //     let mut attributes = ScrollPayloadAttributes::arbitrary(&mut unstructured)?;
-    //     attributes.transactions = Some(transactions.clone());
-    //     attributes.payload_attributes.timestamp = timestamp;
-    //     attributes.payload_attributes.prev_randao = prev_randao;
+        let attributes = ScrollPayloadAttributes {
+            payload_attributes: PayloadAttributes {
+                timestamp,
+                prev_randao,
+                suggested_fee_recipient: Default::default(),
+                withdrawals: None,
+                parent_beacon_block_root: None,
+            },
+            transactions: Some(transactions.clone()),
+            no_tx_pool: false,
+        };
 
-    //     let payload = ExecutionPayload::V1(ExecutionPayloadV1 {
-    //         prev_randao,
-    //         timestamp,
-    //         transactions,
-    //         parent_hash,
-    //         ..default_execution_payload_v1()
-    //     });
+        let payload = ExecutionPayload::V1(ExecutionPayloadV1 {
+            prev_randao,
+            timestamp,
+            transactions,
+            parent_hash,
+            ..default_execution_payload_v1()
+        });
 
-    //     assert!(matching_payloads(&attributes, &payload, parent_hash));
+        assert!(matching_payloads(&attributes, &payload, parent_hash));
 
-    //     Ok(())
-    // }
+        Ok(())
+    }
 
-    // #[test]
-    // fn test_mismatched_payloads() -> Result<()> {
-    //     let mut bytes = [0u8; 1024];
-    //     generators::rng().fill(bytes.as_mut_slice());
-    //     let mut unstructured = Unstructured::new(&bytes);
+    #[test]
+    fn test_mismatched_payloads() -> eyre::Result<()> {
+        let mut bytes = [0u8; 1024];
+        generators::rng().fill(bytes.as_mut_slice());
+        let mut unstructured = Unstructured::new(&bytes);
 
-    //     let parent_hash = B256::arbitrary(&mut unstructured)?;
-    //     let transactions = Vec::<Bytes>::arbitrary(&mut unstructured)?;
-    //     let prev_randao = B256::arbitrary(&mut unstructured)?;
-    //     let timestamp = u64::arbitrary(&mut unstructured)?;
+        let parent_hash = B256::arbitrary(&mut unstructured)?;
+        let transactions = Vec::<Bytes>::arbitrary(&mut unstructured)?;
+        let prev_randao = B256::arbitrary(&mut unstructured)?;
+        let timestamp = u64::arbitrary(&mut unstructured)?;
 
-    //     let attributes = ScrollPayloadAttributes::arbitrary(&mut unstructured)?;
-    //     let payload = ExecutionPayload::V1(ExecutionPayloadV1 {
-    //         prev_randao,
-    //         timestamp,
-    //         transactions,
-    //         parent_hash,
-    //         ..default_execution_payload_v1()
-    //     });
+        let attributes = ScrollPayloadAttributes {
+            payload_attributes: PayloadAttributes {
+                timestamp,
+                prev_randao,
+                suggested_fee_recipient: Default::default(),
+                withdrawals: None,
+                parent_beacon_block_root: None,
+            },
+            transactions: Some(transactions.clone()),
+            no_tx_pool: false,
+        };
+        let payload = ExecutionPayload::V1(ExecutionPayloadV1 {
+            prev_randao,
+            timestamp,
+            transactions,
+            parent_hash,
+            ..default_execution_payload_v1()
+        });
 
-    //     assert!(!matching_payloads(&attributes, &payload, parent_hash));
+        assert!(!matching_payloads(&attributes, &payload, parent_hash));
 
-    //     Ok(())
-    // }
+        Ok(())
+    }
 }

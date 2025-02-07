@@ -91,6 +91,7 @@ impl Stream for Connection {
                             .unwrap();
                     } else {
                         // If the signature can not be decoded then we disconnect.
+                        trace!(target: "scroll_wire::connection", peer_id = %this.peer_id, "Received new block with invalid signature from peer - dropping the scroll-wire connection." );
                         return Poll::Ready(None);
                     }
                 }
