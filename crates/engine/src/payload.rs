@@ -78,7 +78,7 @@ pub trait ExecutionPayloadProvider {
 mod tests {
     use super::*;
     use alloy_primitives::Bytes;
-    use alloy_rpc_types_engine::{ExecutionPayloadV1, PayloadAttributes};
+    use alloy_rpc_types_engine::ExecutionPayloadV1;
     use arbitrary::{Arbitrary, Unstructured};
     use reth_testing_utils::{generators, generators::Rng};
 
@@ -112,17 +112,10 @@ mod tests {
         let prev_randao = B256::arbitrary(&mut unstructured)?;
         let timestamp = u64::arbitrary(&mut unstructured)?;
 
-        let attributes = ScrollPayloadAttributes {
-            payload_attributes: PayloadAttributes {
-                timestamp,
-                prev_randao,
-                suggested_fee_recipient: Default::default(),
-                withdrawals: None,
-                parent_beacon_block_root: None,
-            },
-            transactions: Some(transactions.clone()),
-            no_tx_pool: false,
-        };
+        let mut attributes = ScrollPayloadAttributes::arbitrary(&mut unstructured)?;
+        attributes.transactions = Some(transactions.clone());
+        attributes.payload_attributes.timestamp = timestamp;
+        attributes.payload_attributes.prev_randao = prev_randao;
 
         let payload = ExecutionPayload::V1(ExecutionPayloadV1 {
             prev_randao,
