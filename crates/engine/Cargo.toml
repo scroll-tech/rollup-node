@@ -27,8 +27,8 @@ reth-payload-primitives = { git = "https://github.com/scroll-tech/reth.git", bra
 reth-primitives = { workspace = true }
 
 # reth-scroll
-reth-scroll-primitives = { workspace = true, features = ["serde"] }
-reth-scroll-engine-primitives = { git = "https://github.com/scroll-tech/reth.git", branch = "feat/add-deref-blanket-engine-api", default-features = false }
+reth-scroll-primitives = { workspace = true, features = ["scroll", "serde"] }
+reth-scroll-engine-primitives = { git = "https://github.com/scroll-tech/reth.git", branch = "feat/add-deref-blanket-engine-api", default-features = false, features = ["scroll"] }
 
 # misc
 async-trait = "0.1.68"

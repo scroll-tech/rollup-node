@@ -80,8 +80,6 @@ test-utils = [
 	"reth-provider/test-utils",
 	"reth-transaction-pool/test-utils",
 	"scroll-engine/test-utils",
-	"reth-payload-builder/test-utils",
-	"reth-payload-builder/test-utils"
 ]
 
 [[bin]]
