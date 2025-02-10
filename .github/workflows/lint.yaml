@@ -107,7 +107,7 @@ jobs:
         with:
           cache-on-failure: true
       - name: Run feature check
-        run: cargo hack check --feature-powerset --no-dev-deps
+        run: cargo hack check --feature-powerset
 
   no_std:
     runs-on: ubuntu-latest
