@@ -2039,6 +2039,7 @@ dependencies = [
  "lock_api",
  "once_cell",
  "parking_lot_core",
+ "serde",
 ]
 
 [[package]]
@@ -4254,6 +4255,7 @@ dependencies = [
  "libc",
  "log",
  "mio 0.8.11",
+ "serde",
  "walkdir",
  "windows-sys 0.48.0",
 ]
@@ -7729,6 +7731,7 @@ dependencies = [
  "reth-storage-errors",
  "reth-trie",
  "revm",
+ "serde",
  "tracing",
  "triehash",
 ]

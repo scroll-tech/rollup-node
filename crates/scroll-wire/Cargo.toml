@@ -23,7 +23,7 @@ reth-network-api.workspace = true
 reth-primitives.workspace = true
 
 # scroll
-reth-scroll-primitives.workspace = true
+reth-scroll-primitives = { workspace = true, features = ["serde"] }
 
 # misc
 eyre.workspace = true

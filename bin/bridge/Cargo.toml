@@ -35,7 +35,7 @@ reth-scroll-chainspec.workspace = true
 reth-scroll-cli = { git = "https://github.com/scroll-tech/reth.git", branch = "feat/add-deref-blanket-engine-api", features = ["scroll"] }
 reth-scroll-engine-primitives = { git = "https://github.com/scroll-tech/reth.git", branch = "feat/add-deref-blanket-engine-api" }
 reth-scroll-node = { workspace = true, features = ["skip-state-root-validation"] }
-reth-scroll-primitives = { workspace = true, features = ["serde"] }
+reth-scroll-primitives = { workspace = true }
 scroll-wire.workspace = true
 scroll-network.workspace = true
 scroll-engine = { workspace = true, features = ["test-utils"] }
@@ -83,7 +83,23 @@ test-utils = [
 	"reth-payload-builder/test-utils",
 	"reth-payload-builder/test-utils"
 ]
+serde = [
+	"alloy-primitives/serde",
+	"alloy-rpc-types-engine/serde",
+	"reth-eth-wire-types/serde",
+	"reth-network/serde",
+	"reth-provider/serde",
+	"reth-scroll-primitives/serde",
+	"scroll-alloy-consensus/serde",
+	"scroll-alloy-rpc-types-engine/serde",
+	"scroll-engine/serde",
+	"scroll-network/serde",
+	"scroll-wire/serde",
+	"secp256k1/serde",
+	"rollup-node-manager/serde"
+]
 
 [[bin]]
 name = "bridge"
 path = "src/main.rs"
+required-features = ["serde"]

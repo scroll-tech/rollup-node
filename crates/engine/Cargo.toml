@@ -27,7 +27,7 @@ reth-payload-primitives = { git = "https://github.com/scroll-tech/reth.git", bra
 reth-primitives = { workspace = true }
 
 # reth-scroll
-reth-scroll-primitives = { workspace = true, features = ["scroll", "serde"] }
+reth-scroll-primitives = { workspace = true, features = ["scroll"] }
 reth-scroll-engine-primitives = { git = "https://github.com/scroll-tech/reth.git", branch = "feat/add-deref-blanket-engine-api", default-features = false, features = ["scroll"] }
 
 # misc
@@ -56,4 +56,11 @@ test-utils = [
 	"arbitrary",
 	"dep:arbitrary",
 	"reth-primitives/test-utils"
+]
+serde = [
+	"alloy-eips/serde",
+	"alloy-primitives/serde",
+	"alloy-rpc-types-engine/serde",
+	"reth-scroll-primitives/serde",
+	"scroll-alloy-rpc-types-engine/serde"
 ]
