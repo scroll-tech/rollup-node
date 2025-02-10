@@ -35,3 +35,13 @@ secp256k1 = { workspace = true, features = [
 tokio = { workspace = true, features = ["full"] }
 tokio-stream.workspace = true
 tracing.workspace = true
+
+[features]
+serde = [
+	"alloy-primitives/serde",
+	"reth-eth-wire/serde",
+	"reth-network/serde",
+	"reth-network-api/serde",
+	"reth-scroll-primitives/serde",
+	"secp256k1/serde"
+]
