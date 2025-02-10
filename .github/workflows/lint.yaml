@@ -117,7 +117,7 @@ jobs:
         include:
           - type: wasm
             target: wasm32-unknown-unknown
-            exclude: engine,scroll-wire,scroll-bridge,scroll-network
+            exclude: scroll-engine,scroll-wire,scroll-bridge,scroll-network,scroll-rollup-node
           - type: riscv
             target: riscv32imac-unknown-none-elf
             exclude: engine,scroll-wire,scroll-bridge,scroll-network
