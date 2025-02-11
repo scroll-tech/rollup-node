@@ -29,8 +29,9 @@ mod consensus;
 use consensus::Consensus;
 pub use consensus::PoAConsensus;
 
-// mod error;
-// use error::EngineManagerError;
+/// A future that resolves to a tuple of the block info and the block import outcome.
+type PendingBlockImportFuture =
+    Pin<Box<dyn Future<Output = (Option<BlockInfo>, Option<BlockImportOutcome>)> + Send>>;
 
 /// The main manager for the rollup node.
 ///
@@ -43,18 +44,21 @@ pub use consensus::PoAConsensus;
 /// - `consensus`: The consensus algorithm used by the rollup node.
 /// - `new_block_rx`: Receives new blocks from the network.
 /// - `forkchoice_state`: The forkchoice state of the rollup node.
-/// - `pending_block_imports`: A list of pending block imports.
+/// - `pending_block_imports`: A collection of pending block imports.
 #[derive(Debug)]
 pub struct RollupNodeManager<C, EC, P> {
     /// The network handle used to communicate with the network manager.
     network: NetworkManager,
+    ///  The engine driver used to communicate with the engine.
     engine: Arc<EngineDriver<EC, P>>,
+    /// The consensus algorithm used by the rollup node.
     consensus: C,
+    /// The receiver for new blocks received from the network (used to bridge from eth-wire).
     new_block_rx: UnboundedReceiverStream<NewBlockWithPeer>,
+    /// The forkchoice state of the rollup node.
     forkchoice_state: ForkchoiceState,
-    pending_block_imports: FuturesUnordered<
-        Pin<Box<dyn Future<Output = (Option<BlockInfo>, Option<BlockImportOutcome>)> + Send>>,
-    >,
+    /// A collection of pending block imports.
+    pending_block_imports: FuturesUnordered<PendingBlockImportFuture>,
 }
 
 impl<C, EC, P> RollupNodeManager<C, EC, P>
@@ -87,8 +91,7 @@ where
     /// to validate the correctness of the block.
     pub fn handle_new_block(&mut self, block_with_peer: NewBlockWithPeer) {
         let NewBlockWithPeer { peer_id: peer, block, signature } = block_with_peer;
-
-        trace!("Received new block from peer {:?}", peer);
+        trace!("Received new block from peer {:?} - hash {:?}", peer, block.hash_slow());
 
         // Validate the consensus of the block.
         // TODO: Should we spawn a task to validate the consensus of the block?
@@ -105,7 +108,7 @@ where
         let fcs = self.get_alloy_fcs();
         let engine = self.engine.clone();
         let future = Box::pin(async move {
-            trace!(target: "scroll_rollup_manager::RollupNodeManager", "handling block import future");
+            trace!(target: "scroll_rollup_manager::RollupNodeManager", "handling block import future for block {:?}", block.hash_slow());
 
             // convert the block to an execution payload and update the forkchoice state
             let execution_payload: ExecutionPayload =
@@ -124,11 +127,12 @@ where
                             },
                         })),
                     ),
-                    Ok(false) => (None, None),
-                    Err(EngineDriverError::EngineUnavailable) => (None, None),
-                    Err(EngineDriverError::InvalidExecutionPayload) |
-                    Err(EngineDriverError::ExecutionPayloadPartOfSideChain) |
-                    Err(EngineDriverError::InvalidFcu) => (
+                    Ok(false) | Err(EngineDriverError::EngineUnavailable) => (None, None),
+                    Err(
+                        EngineDriverError::InvalidExecutionPayload |
+                        EngineDriverError::ExecutionPayloadPartOfSideChain |
+                        EngineDriverError::InvalidFcu,
+                    ) => (
                         None,
                         Some(Err(BlockImportError::Validation(BlockValidationError::InvalidBlock))),
                     ),

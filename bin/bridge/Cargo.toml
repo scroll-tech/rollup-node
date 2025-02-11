@@ -98,7 +98,8 @@ serde = [
 	"scroll-network/serde",
 	"scroll-wire/serde",
 	"secp256k1/serde",
-	"rollup-node-manager/serde"
+	"rollup-node-manager/serde",
+	"alloy-chains/serde"
 ]
 
 [[bin]]
