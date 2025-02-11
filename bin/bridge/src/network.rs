@@ -1,16 +1,14 @@
-use alloy_rpc_types_engine::JwtSecret;
 use reth_network::{config::NetworkMode, NetworkConfig, NetworkManager, PeersInfo};
 use reth_node_api::TxTy;
 use reth_node_builder::{components::NetworkBuilder, BuilderContext, FullNodeTypes};
 use reth_node_types::NodeTypes;
+use reth_rpc_builder::config::RethRpcServerConfig;
 use reth_scroll_chainspec::ScrollChainSpec;
 use reth_scroll_primitives::ScrollPrimitives;
 use reth_transaction_pool::{PoolTransaction, TransactionPool};
 use rollup_node_manager::{PoAConsensus, RollupNodeManager};
 use scroll_alloy_provider::ScrollAuthEngineApiProvider;
-use scroll_engine::{
-    test_utils::NoopExecutionPayloadProvider, BlockInfo, EngineDriver, ForkchoiceState,
-};
+use scroll_engine::{test_utils::NoopExecutionPayloadProvider, EngineDriver, ForkchoiceState};
 use scroll_network::NetworkManager as ScrollNetworkManager;
 use scroll_wire::{ProtocolHandler, ScrollWireConfig};
 use tracing::info;
@@ -67,13 +65,10 @@ where
         let payload_provider = NoopExecutionPayloadProvider;
 
         let auth_port = ctx.config().rpc.auth_port;
+        let auth_secret = ctx.config().rpc.auth_jwt_secret(ctx.config().datadir().jwt())?;
 
-        let jwt_secret =
-            JwtSecret::from_hex("cee25419f4013499e38abda2ef6527177b30d10433ae0c9fadd9dac556b4aaad")
-                .unwrap();
-        // let jwt_secret = JwtSecret::from_file(&jwt_path)?;
         let engine_api = ScrollAuthEngineApiProvider::new(
-            jwt_secret,
+            auth_secret,
             format!("http://localhost:{auth_port}").parse()?,
         );
         let engine = EngineDriver::new(engine_api, payload_provider);
@@ -81,10 +76,8 @@ where
         let rollup_node_manager = RollupNodeManager::new(
             scroll_network_manager,
             engine,
-            ForkchoiceState::new(
-                BlockInfo { number: 0, hash: Default::default() },
-                BlockInfo { number: 0, hash: Default::default() },
-                BlockInfo { number: 0, hash: Default::default() },
+            ForkchoiceState::genesis(
+                ctx.config().chain.chain.try_into().expect("must be a named chain"),
             ),
             consensus,
             new_block_rx,

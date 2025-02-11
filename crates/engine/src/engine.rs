@@ -72,15 +72,30 @@ where
     pub async fn handle_execution_payload(
         &self,
         execution_payload: ExecutionPayload,
-        fcs: ForkchoiceState,
-    ) -> Result<(), EngineDriverError> {
-        // let block_info: BlockInfo = (&execution_payload).into();
+        mut fcs: ForkchoiceState,
+    ) -> Result<bool, EngineDriverError> {
+        // Convert the payload to the V1 format.
         let execution_payload = execution_payload.into_v1();
-        self.new_payload(execution_payload).await?;
-        // self.set_unsafe_block_info(block_info);
-        self.forkchoice_updated(fcs, None).await?;
 
-        Ok(())
+        // update the fork choice state with the new block hash.
+        fcs.head_block_hash = execution_payload.block_num_hash().hash;
+
+        // Issue the new payload to the EN.
+        let payload_status = self.new_payload(execution_payload).await?;
+
+        // If the EN is still syncing then we do not attempt to update the fork choice.
+        if payload_status.is_syncing() {
+            return Ok(false);
+        }
+
+        // Invoke the FCU with the new state.
+        let fcu = self.forkchoice_updated(fcs, None).await?;
+
+        // We should never have a case where the fork choice is syncing as we have already validated
+        // the payload and provided it to the EN.
+        debug_assert!(fcu.is_valid());
+
+        Ok(true)
     }
 
     /// Handles a payload attributes:
@@ -99,14 +114,14 @@ where
     pub async fn handle_payload_attributes(
         &mut self,
         safe_block_info: BlockInfo,
-        fcs: ForkchoiceState,
+        mut fcs: ForkchoiceState,
         mut payload_attributes: <ScrollEngineTypes as PayloadTypes>::PayloadAttributes,
-    ) -> Result<(), EngineDriverError> {
+    ) -> Result<(BlockInfo, bool), EngineDriverError> {
         let maybe_execution_payload = self
             .execution_payload_provider
             .execution_payload_by_block((safe_block_info.number + 1).into())
             .await
-            .map_err(|_| EngineDriverError::EngineUnavailable)?;
+            .map_err(|_| EngineDriverError::ExecutionPayloadProviderUnavailable)?;
         let payload_attributes_already_inserted_in_chain = maybe_execution_payload
             .as_ref()
             .is_some_and(|ep| matching_payloads(&payload_attributes, ep, safe_block_info.hash));
@@ -116,10 +131,15 @@ where
             // this payload has already been passed to the EN in the form of a P2P gossiped
             // execution payload. We can advance the safe head by one by issuing a
             // forkchoiceUpdated.
+            let safe_block_info: BlockInfo =
+                maybe_execution_payload.expect("execution payload exists").into();
+            fcs.safe_block_hash = safe_block_info.hash;
             self.forkchoice_updated(fcs, None).await?;
+            Ok((safe_block_info, false))
         } else {
             // Otherwise, we construct a block from the payload attributes on top of the current
             // safe head.
+            fcs.head_block_hash = fcs.safe_block_hash;
 
             // start payload building with `no_tx_pool = true`.
             payload_attributes.no_tx_pool = true;
@@ -130,45 +150,54 @@ where
                 .get_payload(fc_updated.payload_id.expect("payload attributes has been set"))
                 .await?;
 
-            // issue the execution payload to the EL and set the new forkchoice
-            let _safe_block_inf: BlockInfo = (&execution_payload).into();
-            self.new_payload(execution_payload.into_v1()).await?;
-            self.forkchoice_updated(fcs, None).await?;
-        }
+            // issue the execution payload to the EL
+            let safe_block_info: BlockInfo = (&execution_payload).into();
+            let result = self.new_payload(execution_payload.into_v1()).await?;
 
-        Ok(())
+            // we should only have a valid payload when deriving from payload attributes (should not
+            // be syncing)!
+            debug_assert!(result.is_valid());
+
+            // update the fork choice state with the new block hash.
+            fcs.head_block_hash = safe_block_info.hash;
+            fcs.safe_block_hash = safe_block_info.hash;
+            self.forkchoice_updated(fcs, None).await?;
+
+            Ok((safe_block_info, true))
+        }
     }
 
     /// Calls `engine_newPayloadV1` and logs the result.
     async fn new_payload(
         &self,
         execution_payload: ExecutionPayloadV1,
-    ) -> Result<(), EngineDriverError> {
+    ) -> Result<PayloadStatusEnum, EngineDriverError> {
         // TODO: should never enter the `Syncing`, `Accepted` or `Invalid` variants when called from
         // `handle_payload_attributes`.
-        match self
+        let response = self
             .client
             .new_payload_v1(execution_payload)
             .await
-            .map_err(|_| EngineDriverError::EngineUnavailable)?
-            .status
-        {
+            .map_err(|_| EngineDriverError::EngineUnavailable)?;
+
+        match response.status {
             PayloadStatusEnum::Invalid { validation_error } => {
-                error!(target: "engine::driver", ?validation_error, "failed to issue new execution payload");
+                error!(target: "engine::driver", ?validation_error, "execution payload is invalid");
                 return Err(EngineDriverError::InvalidExecutionPayload)
             }
             PayloadStatusEnum::Syncing => {
-                debug!(target: "engine::driver", "EN syncing");
+                debug!(target: "engine::driver", "execution client is syncing");
             }
             PayloadStatusEnum::Accepted => {
-                warn!(target: "engine::driver", "execution payload part of side chain");
+                error!(target: "engine::driver", "execution payload part of side chain");
+                return Err(EngineDriverError::ExecutionPayloadPartOfSideChain)
             }
             PayloadStatusEnum::Valid => {
                 trace!(target: "engine::driver", "execution payload valid");
             }
-        }
+        };
 
-        Ok(())
+        Ok(response.status)
     }
 
     /// Calls `engine_forkchoiceUpdatedV1` and logs the result.
@@ -188,18 +217,19 @@ where
         match &forkchoice_updated.payload_status.status {
             PayloadStatusEnum::Invalid { validation_error } => {
                 error!(target: "engine::driver", ?validation_error, "failed to issue forkchoice");
-                return Err(EngineDriverError::FcuFailed)
+                return Err(EngineDriverError::InvalidFcu)
             }
             PayloadStatusEnum::Syncing => {
                 debug!(target: "engine::driver", "EN syncing");
             }
             PayloadStatusEnum::Accepted => {
                 warn!(target: "engine::driver", "payload attributes part of side chain");
+                unreachable!("forkchoice_updated should never return an `Accepted` status");
             }
             PayloadStatusEnum::Valid => {
                 trace!(target: "engine::driver", "execution payload valid");
             }
-        }
+        };
 
         Ok(forkchoice_updated)
     }

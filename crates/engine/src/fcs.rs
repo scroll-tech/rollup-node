@@ -1,4 +1,7 @@
 use crate::BlockInfo;
+use alloy_chains::NamedChain;
+use alloy_rpc_types_engine::ForkchoiceState as AlloyForkchoiceState;
+use reth_scroll_chainspec::{SCROLL_MAINNET_GENESIS_HASH, SCROLL_SEPOLIA_GENESIS_HASH};
 
 /// The fork choice state.
 ///
@@ -15,6 +18,17 @@ impl ForkchoiceState {
     /// Creates a new [`ForkchoiceState`] instance.
     pub const fn new(unsafe_: BlockInfo, safe: BlockInfo, finalized: BlockInfo) -> Self {
         Self { unsafe_, safe, finalized }
+    }
+
+    /// Creates a [`ForkchoiceState`] instance that represents the genesis state of the provided
+    /// chain.
+    pub const fn genesis(chain: NamedChain) -> Self {
+        let block_info = match chain {
+            NamedChain::Scroll => BlockInfo { hash: SCROLL_MAINNET_GENESIS_HASH, number: 0 },
+            NamedChain::ScrollSepolia => BlockInfo { hash: SCROLL_SEPOLIA_GENESIS_HASH, number: 0 },
+            _ => panic!("unsupported chain"),
+        };
+        Self::new(block_info, block_info, block_info)
     }
 
     /// Updates the `unsafe` block info.
@@ -45,5 +59,14 @@ impl ForkchoiceState {
     /// Returns the block info for the `finalized` block.
     pub const fn finalized_block_info(&self) -> &BlockInfo {
         &self.finalized
+    }
+
+    /// Returns the [`AlloyForkchoiceState`] representation of the fork choice state.
+    pub const fn get_alloy_fcs(&self) -> AlloyForkchoiceState {
+        AlloyForkchoiceState {
+            head_block_hash: self.unsafe_.hash,
+            safe_block_hash: self.safe.hash,
+            finalized_block_hash: self.finalized.hash,
+        }
     }
 }

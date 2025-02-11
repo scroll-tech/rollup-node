@@ -4,24 +4,18 @@ use reth_network::protocol::ProtocolHandler as ProtocolHandlerTrait;
 use reth_network_api::PeerId;
 use tokio::sync::mpsc;
 
-/// A Receiver for `ScrollWireEvents`.
-pub(super) type ScrollWireEventReceiver = mpsc::UnboundedReceiver<ScrollWireEvent>;
-
-/// A Sender for `ScrollWireEvents`.
-pub(super) type ScrollWireEventSender = mpsc::UnboundedSender<ScrollWireEvent>;
-
 /// The state of the protocol.
 ///
 /// This contains a sender for emitting [`ScrollWireEvent`]s.
 #[derive(Debug, Clone)]
 pub struct ProtocolState {
     /// A sender for emitting [`ScrollWireEvent`]s.
-    event_sender: ScrollWireEventSender,
+    event_sender: mpsc::UnboundedSender<ScrollWireEvent>,
 }
 
 impl ProtocolState {
     /// Returns a reference to the sender for emitting [`ScrollWireEvent`]s.
-    pub const fn event_sender(&self) -> &ScrollWireEventSender {
+    pub const fn event_sender(&self) -> &mpsc::UnboundedSender<ScrollWireEvent> {
         &self.event_sender
     }
 }
@@ -40,7 +34,7 @@ pub struct ProtocolHandler {
 impl ProtocolHandler {
     /// Creates a tuple of (`protocol_handler`, `event_receiver`) from the provided
     /// configuration.
-    pub fn new(config: ScrollWireConfig) -> (Self, ScrollWireEventReceiver) {
+    pub fn new(config: ScrollWireConfig) -> (Self, mpsc::UnboundedReceiver<ScrollWireEvent>) {
         let (events_tx, events_rx) = mpsc::unbounded_channel();
         let state = ProtocolState { event_sender: events_tx };
         (Self { state, config }, events_rx)

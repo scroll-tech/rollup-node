@@ -8,6 +8,7 @@ exclude.workspace = true
 
 [dependencies]
 # alloy
+alloy-chains.workspace = true
 alloy-rpc-types-engine.workspace = true
 
 # scroll-alloy
@@ -28,6 +29,7 @@ reth-node-types = { git = "https://github.com/scroll-tech/reth.git", branch = "f
 reth-primitives.workspace = true
 reth-provider = { workspace = true, features = ["scroll", "skip-state-root-validation"]}
 reth-rpc-api = { workspace = true, features = ["client"] }
+reth-rpc-builder = { git = "https://github.com/scroll-tech/reth.git", branch = "feat/add-deref-blanket-engine-api" }
 reth-transaction-pool = { git = "https://github.com/scroll-tech/reth.git", branch = "feat/add-deref-blanket-engine-api" }
 
 # scroll

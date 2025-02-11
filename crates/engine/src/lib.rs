@@ -10,8 +10,8 @@ pub use engine::EngineDriver;
 mod error;
 pub use error::EngineDriverError;
 
-mod fc;
-pub use fc::ForkchoiceState;
+mod fcs;
+pub use fcs::ForkchoiceState;
 
 mod payload;
 pub use payload::ExecutionPayloadProvider;

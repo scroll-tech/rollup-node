@@ -1,9 +1,3 @@
-mod network;
-use network::ScrollBridgeNetworkBuilder;
-
-mod import;
-use import::BridgeBlockImport;
-
 #[global_allocator]
 static ALLOC: reth_cli_util::allocator::Allocator = reth_cli_util::allocator::new_allocator();
 
@@ -30,7 +24,9 @@ fn main() {
             let handle = builder
                 .with_types_and_provider::<ScrollNode, BlockchainProvider<_>>()
                 // Override the network builder with the `ScrollBridgeNetworkBuilder`
-                .with_components(ScrollNode::components().network(ScrollBridgeNetworkBuilder))
+                .with_components(
+                    ScrollNode::components().network(scroll_bridge::ScrollBridgeNetworkBuilder),
+                )
                 .with_add_ons(ScrollAddOns::default())
                 .launch_with_fn(|builder| {
                     let launcher = EngineNodeLauncher::new(

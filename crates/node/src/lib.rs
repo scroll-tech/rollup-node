@@ -52,8 +52,9 @@ pub struct RollupNodeManager<C, EC, P> {
     consensus: C,
     new_block_rx: UnboundedReceiverStream<NewBlockWithPeer>,
     forkchoice_state: ForkchoiceState,
-    pending_block_imports:
-        FuturesUnordered<Pin<Box<dyn Future<Output = BlockImportOutcome> + Send>>>,
+    pending_block_imports: FuturesUnordered<
+        Pin<Box<dyn Future<Output = (Option<BlockInfo>, Option<BlockImportOutcome>)> + Send>>,
+    >,
 }
 
 impl<C, EC, P> RollupNodeManager<C, EC, P>
@@ -100,44 +101,50 @@ where
             return;
         }
 
-        // Update the forkchoice state with the new block.
-        let execution_payload: ExecutionPayload =
-            ExecutionPayloadV1::from_block_slow(&block).into();
-        let unsafe_block_info: BlockInfo = (&execution_payload).into();
-        self.forkchoice_state.update_unsafe_block_info(unsafe_block_info);
-        let fcs = self.get_fcs();
-
         // Send the block to the engine to validate the correctness of the block.
+        let fcs = self.get_alloy_fcs();
         let engine = self.engine.clone();
         let future = Box::pin(async move {
             trace!(target: "scroll_rollup_manager::RollupNodeManager", "handling block import future");
-            let result = match engine.handle_execution_payload(execution_payload, fcs).await {
-                Ok(_) => Ok(BlockValidation::ValidBlock {
-                    new_block: NewBlock {
-                        block,
-                        signature: signature.serialize_compact().to_vec().into(),
-                    },
-                }),
-                // TODO: Implement From<EngineDriverError> for BlockImportError
-                Err(EngineDriverError::InvalidExecutionPayload) => {
-                    Err(BlockImportError::Validation(BlockValidationError::InvalidBlock))
-                }
-                Err(EngineDriverError::EngineUnavailable | EngineDriverError::FcuFailed) => {
-                    Err(BlockImportError::Validation(BlockValidationError::EngineApiError))
-                }
-            };
-            BlockImportOutcome { peer, result }
+
+            // convert the block to an execution payload and update the forkchoice state
+            let execution_payload: ExecutionPayload =
+                ExecutionPayloadV1::from_block_slow(&block).into();
+            let unsafe_block_info: BlockInfo = (&execution_payload).into();
+
+            // process the execution payload
+            let (unsafe_block_info, import_outcome) =
+                match engine.handle_execution_payload(execution_payload, fcs).await {
+                    Ok(true) => (
+                        Some(unsafe_block_info),
+                        Some(Ok(BlockValidation::ValidBlock {
+                            new_block: NewBlock {
+                                block,
+                                signature: signature.serialize_compact().to_vec().into(),
+                            },
+                        })),
+                    ),
+                    Ok(false) => (None, None),
+                    Err(EngineDriverError::EngineUnavailable) => (None, None),
+                    Err(EngineDriverError::InvalidExecutionPayload) |
+                    Err(EngineDriverError::ExecutionPayloadPartOfSideChain) |
+                    Err(EngineDriverError::InvalidFcu) => (
+                        None,
+                        Some(Err(BlockImportError::Validation(BlockValidationError::InvalidBlock))),
+                    ),
+                    Err(EngineDriverError::ExecutionPayloadProviderUnavailable) => {
+                        unreachable!("ExecutionPayloadProvider is not used in this context")
+                    }
+                };
+
+            (unsafe_block_info, import_outcome.map(|result| BlockImportOutcome { peer, result }))
         });
 
         self.pending_block_imports.push(future);
     }
 
-    const fn get_fcs(&self) -> AlloyForkchoiceState {
-        AlloyForkchoiceState {
-            head_block_hash: self.forkchoice_state.unsafe_block_info().hash,
-            safe_block_hash: self.forkchoice_state.safe_block_info().hash,
-            finalized_block_hash: self.forkchoice_state.finalized_block_info().hash,
-        }
+    const fn get_alloy_fcs(&self) -> AlloyForkchoiceState {
+        self.forkchoice_state.get_alloy_fcs()
     }
 
     /// Handles a network manager event.
@@ -147,9 +154,19 @@ where
         }
     }
 
-    fn handle_block_import_outcome(&self, outcome: BlockImportOutcome) {
+    fn handle_block_import_outcome(
+        &mut self,
+        unsafe_block_info: Option<BlockInfo>,
+        outcome: Option<BlockImportOutcome>,
+    ) {
         trace!(target: "scroll_rollup_manager::RollupNodeManager", ?outcome, "handling block import outcome");
-        self.network.handle().block_import_outcome(outcome);
+        if let Some(unsafe_block_info) = unsafe_block_info {
+            self.forkchoice_state.update_unsafe_block_info(unsafe_block_info);
+        }
+
+        if let Some(outcome) = outcome {
+            self.network.handle().block_import_outcome(outcome);
+        }
     }
 }
 
@@ -164,11 +181,11 @@ where
     fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
         let this = self.get_mut();
 
-        trace!("Polling RollupNodeManager");
-
         // Handle pending block imports.
-        while let Poll::Ready(Some(outcome)) = this.pending_block_imports.poll_next_unpin(cx) {
-            this.handle_block_import_outcome(outcome);
+        while let Poll::Ready(Some((block_info, outcome))) =
+            this.pending_block_imports.poll_next_unpin(cx)
+        {
+            this.handle_block_import_outcome(block_info, outcome);
         }
 
         // Handle blocks received from the eth-wire protocol.

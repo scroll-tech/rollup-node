@@ -26,7 +26,6 @@ reth-primitives.workspace = true
 reth-scroll-primitives = { workspace = true, features = ["serde"] }
 
 # misc
-eyre.workspace = true
 futures.workspace = true
 secp256k1 = { workspace = true, features = [
     "global-context",

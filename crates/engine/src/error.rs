@@ -3,8 +3,12 @@
 pub enum EngineDriverError {
     /// The engine is unavailable.
     EngineUnavailable,
-    /// The engine failed to validate the execution payload.
+    /// The execution payload is invalid.
     InvalidExecutionPayload,
+    /// The execution payload is part of a side chain.
+    ExecutionPayloadPartOfSideChain,
     /// The engine failed to execute the fork choice update.
-    FcuFailed,
+    InvalidFcu,
+    /// The execution payload provider is unavailable.
+    ExecutionPayloadProviderUnavailable,
 }

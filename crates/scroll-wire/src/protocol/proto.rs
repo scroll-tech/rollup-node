@@ -55,7 +55,7 @@ pub struct ScrollMessage {
 impl ScrollMessage {
     /// Returns the capability of the scroll wire protocol.
     pub const fn capability() -> Capability {
-        Capability::new_static("scroll-wire", 1)
+        Capability::new_static("scroll", 1)
     }
 
     /// Returns the capability of the scroll wire protocol.
