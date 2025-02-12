@@ -122,7 +122,7 @@ impl NetworkManager {
 
         // Announce block to the filtered set of peers
         for peer_id in peers {
-            trace!(target: "network::manager", peer_id = %peer_id, block_hash = %hash, "Announcing new block to peer");
+            trace!(target: "scroll::network::manager", peer_id = %peer_id, block_hash = %hash, "Announcing new block to peer");
             self.scroll_wire.announce_block(peer_id, &block, hash);
         }
     }
@@ -131,7 +131,7 @@ impl NetworkManager {
     fn on_scroll_wire_event(&mut self, event: ScrollWireEvent) -> Option<NetworkManagerEvent> {
         match event {
             ScrollWireEvent::NewBlock { peer_id, block, signature } => {
-                trace!(target: "network::manager", peer_id = ?peer_id, block = ?block, signature = ?signature, "Received new block");
+                trace!(target: "scroll::network::manager", peer_id = ?peer_id, block = ?block, signature = ?signature, "Received new block");
                 Some(NetworkManagerEvent::NewBlock(NewBlockWithPeer { peer_id, block, signature }))
             }
             // Only `NewBlock` events are expected from the scroll-wire protocol.
@@ -164,7 +164,7 @@ impl NetworkManager {
         match result {
             Ok(BlockValidation::ValidBlock { new_block: msg }) |
             Ok(BlockValidation::ValidHeader { new_block: msg }) => {
-                trace!(target: "network::manager", peer_id = ?peer, block = ?msg.block, "Block import successful - announcing block to network");
+                trace!(target: "scroll::network::manager", peer_id = ?peer, block = ?msg.block, "Block import successful - announcing block to network");
                 let hash = msg.block.hash_slow();
                 self.scroll_wire
                     .state_mut()
@@ -174,17 +174,14 @@ impl NetworkManager {
                 self.announce_block(msg);
             }
             Err(BlockImportError::Consensus(err)) => {
-                trace!(target: "network::manager", peer_id = ?peer, ?err, "Block import failed - consensus error - penalizing peer");
+                trace!(target: "scroll::network::manager", peer_id = ?peer, ?err, "Block import failed - consensus error - penalizing peer");
                 self.inner_network_handle()
                     .reputation_change(peer, reth_network_api::ReputationChangeKind::BadBlock);
             }
             Err(BlockImportError::Validation(BlockValidationError::InvalidBlock)) => {
-                trace!(target: "network::manager", peer_id = ?peer, "Block import failed - invalid block - penalizing peer");
+                trace!(target: "scroll::network::manager", peer_id = ?peer, "Block import failed - invalid block - penalizing peer");
                 self.inner_network_handle()
                     .reputation_change(peer, reth_network_api::ReputationChangeKind::BadBlock);
-            }
-            Err(err) => {
-                trace!(target: "network::manager", peer_id = ?peer, ?err, "Block import failed. Other error kind, not penalizing peer");
             }
         }
     }
@@ -201,7 +198,7 @@ impl Future for NetworkManager {
         self: std::pin::Pin<&mut Self>,
         cx: &mut std::task::Context<'_>,
     ) -> std::task::Poll<Self::Output> {
-        trace!(target: "network::manager", "Polling network manager");
+        trace!(target: "scroll::network::manager", "Polling network manager");
 
         let this = self.get_mut();
 

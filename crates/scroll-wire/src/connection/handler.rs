@@ -36,10 +36,10 @@ impl ConnectionHandlerTrait for ScrollConnectionHandler {
         _peer_id: reth_network_api::PeerId,
     ) -> OnNotSupported {
         if self.config.connect_unsupported_peer() {
-            trace!(target: "scroll_wire::connection::handler", "Peer does not support the ScrollWire protocol, keeping connection alive.");
+            trace!(target: "scroll::wire::connection::handler", "Peer does not support the ScrollWire protocol, keeping connection alive.");
             OnNotSupported::KeepAlive
         } else {
-            trace!(target: "scroll_wire::connection::handler", "Peer does not support the ScrollWire protocol, disconnecting.");
+            trace!(target: "scroll::wire::connection::handler", "Peer does not support the ScrollWire protocol, disconnecting.");
             OnNotSupported::Disconnect
         }
     }
@@ -51,7 +51,7 @@ impl ConnectionHandlerTrait for ScrollConnectionHandler {
         peer_id: reth_network_api::PeerId,
         conn: reth_eth_wire::multiplex::ProtocolConnection,
     ) -> Self::Connection {
-        trace!(target: "scroll_wire::connection::handler", peer_id = %peer_id, direction = ?direction, "Connection established with peer");
+        trace!(target: "scroll::wire::connection::handler", peer_id = %peer_id, direction = ?direction, "Connection established with peer");
 
         // Create a new channel for sending messages to the connection.
         let (msg_tx, msg_rx) = tokio::sync::mpsc::unbounded_channel();

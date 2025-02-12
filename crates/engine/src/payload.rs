@@ -19,7 +19,7 @@ pub(crate) fn matching_payloads(
 ) -> bool {
     if payload.parent_hash() != parent_hash {
         debug!(
-            target: "engine::driver",
+            target: "scroll::engine::driver",
             expected = ?parent_hash,
             got = ?payload.parent_hash(),
             "mismatch in parent hash"
@@ -33,7 +33,7 @@ pub(crate) fn matching_payloads(
 
     if !matching_transactions {
         debug!(
-            target: "engine::driver",
+            target: "scroll::engine::driver",
             expected = ?attributes.transactions,
             got = ?payload_transactions,
             "mismatch in transactions"
@@ -43,7 +43,7 @@ pub(crate) fn matching_payloads(
 
     if payload.timestamp() != attributes.payload_attributes.timestamp {
         debug!(
-            target: "engine::driver",
+            target: "scroll::engine::driver",
             expected = ?attributes.payload_attributes.timestamp,
             got = ?payload.timestamp(),
             "mismatch in timestamp"
@@ -53,7 +53,7 @@ pub(crate) fn matching_payloads(
 
     if payload.prev_randao() != attributes.payload_attributes.prev_randao {
         debug!(
-            target: "engine::driver",
+            target: "scroll::engine::driver",
             expected = ?attributes.payload_attributes.prev_randao,
             got = ?payload.prev_randao(),
             "mismatch in prev_randao"

@@ -9,6 +9,7 @@ use std::{
 
 use alloy_rpc_types_engine::{
     ExecutionPayload, ExecutionPayloadV1, ForkchoiceState as AlloyForkchoiceState,
+    PayloadStatusEnum,
 };
 use futures::{stream::FuturesUnordered, FutureExt, StreamExt};
 use scroll_alloy_network::Scroll as ScrollNetwork;
@@ -91,16 +92,16 @@ where
     /// to validate the correctness of the block.
     pub fn handle_new_block(&mut self, block_with_peer: NewBlockWithPeer) {
         let NewBlockWithPeer { peer_id: peer, block, signature } = block_with_peer;
-        trace!("Received new block from peer {:?} - hash {:?}", peer, block.hash_slow());
+        trace!(target: "scroll::node::manager", "Received new block from peer {:?} - hash {:?}", peer, block.hash_slow());
 
         // Validate the consensus of the block.
         // TODO: Should we spawn a task to validate the consensus of the block?
         //       Is the consensus validation blocking?
         if let Err(err) = self.consensus.validate_new_block(&block, &signature) {
-            error!(target: "manager::RollupNodeManager", ?err, "consensus checks failed on block {:?} from peer {:?}", block.hash_slow(), peer);
+            error!(target: "scroll::node::manager", ?err, "consensus checks failed on block {:?} from peer {:?}", block.hash_slow(), peer);
             self.network
                 .handle()
-                .block_import_outcome(BlockImportOutcome { peer, result: Err(err) });
+                .block_import_outcome(BlockImportOutcome { peer, result: Err(err.into()) });
             return;
         }
 
@@ -108,7 +109,7 @@ where
         let fcs = self.get_alloy_fcs();
         let engine = self.engine.clone();
         let future = Box::pin(async move {
-            trace!(target: "scroll_rollup_manager::RollupNodeManager", "handling block import future for block {:?}", block.hash_slow());
+            trace!(target: "scroll::node::manager", "handling block import future for block {:?}", block.hash_slow());
 
             // convert the block to an execution payload and update the forkchoice state
             let execution_payload: ExecutionPayload =
@@ -116,9 +117,14 @@ where
             let unsafe_block_info: BlockInfo = (&execution_payload).into();
 
             // process the execution payload
+            // TODO: needs testing
             let (unsafe_block_info, import_outcome) =
                 match engine.handle_execution_payload(execution_payload, fcs).await {
-                    Ok(true) => (
+                    Err(EngineDriverError::InvalidExecutionPayload) => (
+                        Some(unsafe_block_info),
+                        Some(Err(BlockImportError::Validation(BlockValidationError::InvalidBlock))),
+                    ),
+                    Ok((PayloadStatusEnum::Valid, PayloadStatusEnum::Valid)) => (
                         Some(unsafe_block_info),
                         Some(Ok(BlockValidation::ValidBlock {
                             new_block: NewBlock {
@@ -127,18 +133,7 @@ where
                             },
                         })),
                     ),
-                    Ok(false) | Err(EngineDriverError::EngineUnavailable) => (None, None),
-                    Err(
-                        EngineDriverError::InvalidExecutionPayload |
-                        EngineDriverError::ExecutionPayloadPartOfSideChain |
-                        EngineDriverError::InvalidFcu,
-                    ) => (
-                        None,
-                        Some(Err(BlockImportError::Validation(BlockValidationError::InvalidBlock))),
-                    ),
-                    Err(EngineDriverError::ExecutionPayloadProviderUnavailable) => {
-                        unreachable!("ExecutionPayloadProvider is not used in this context")
-                    }
+                    _ => (None, None),
                 };
 
             (unsafe_block_info, import_outcome.map(|result| BlockImportOutcome { peer, result }))
@@ -152,22 +147,28 @@ where
     }
 
     /// Handles a network manager event.
+    ///
+    /// Currently the network manager only emits a `NewBlock` event.
     fn handle_network_manager_event(&mut self, event: NetworkManagerEvent) {
         match event {
             NetworkManagerEvent::NewBlock(block) => self.handle_new_block(block),
         }
     }
 
+    /// Handles a block import outcome.
     fn handle_block_import_outcome(
         &mut self,
         unsafe_block_info: Option<BlockInfo>,
         outcome: Option<BlockImportOutcome>,
     ) {
-        trace!(target: "scroll_rollup_manager::RollupNodeManager", ?outcome, "handling block import outcome");
+        trace!(target: "scroll::node::manager", ?outcome, "handling block import outcome");
+
+        // If we have an unsafe block info, update the forkchoice state.
         if let Some(unsafe_block_info) = unsafe_block_info {
             self.forkchoice_state.update_unsafe_block_info(unsafe_block_info);
         }
 
+        // If we have an outcome, send it to the network manager.
         if let Some(outcome) = outcome {
             self.network.handle().block_import_outcome(outcome);
         }

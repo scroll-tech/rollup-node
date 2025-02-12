@@ -85,7 +85,7 @@ where
 
         ctx.task_executor().spawn(rollup_node_manager);
 
-        info!(target: "reth::cli", enode=%handle.local_node_record(), "P2P networking initialized");
+        info!(target: "scroll::reth::cli", enode=%handle.local_node_record(), "P2P networking initialized");
         Ok(handle)
     }
 }

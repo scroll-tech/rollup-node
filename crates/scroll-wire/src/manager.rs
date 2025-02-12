@@ -31,7 +31,7 @@ pub struct ScrollWireManager {
 impl ScrollWireManager {
     /// Creates a new [`ScrollWireManager`] instance.
     pub fn new(events: UnboundedReceiver<ScrollWireEvent>) -> Self {
-        trace!(target: "scroll_wire::manager", "Creating new ScrollWireManager instance");
+        trace!(target: "scroll::wire::manager", "Creating new ScrollWireManager instance");
         Self { events: events.into(), connections: HashMap::new(), state: HashMap::new() }
     }
 
@@ -41,12 +41,12 @@ impl ScrollWireManager {
             // We send the block to the peer. If we receive an error we remove the peer from the
             // connections map and delete its state as the connection is no longer valid.
             if to_connection.get().send(ScrollMessage::new_block(block.clone())).is_err() {
-                trace!(target: "scroll_wire::manager", peer_id = %peer_id, "Failed to send block to peer - dropping peer.");
+                trace!(target: "scroll::wire::manager", peer_id = %peer_id, "Failed to send block to peer - dropping peer.");
                 self.state.remove(&peer_id);
                 to_connection.remove();
             } else {
                 // Upon successful sending of the block we update the state of the peer.
-                trace!(target: "scroll_wire::manager", peer_id = %peer_id, "Announced block to peer");
+                trace!(target: "scroll::wire::manager", peer_id = %peer_id, "Announced block to peer");
                 self.state
                     .entry(peer_id)
                     .or_insert_with(|| LruCache::new(LRU_CACHE_SIZE))

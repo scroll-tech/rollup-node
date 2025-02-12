@@ -12,7 +12,7 @@ use reth_scroll_engine_primitives::ScrollEngineTypes;
 use scroll_alloy_provider::ScrollEngineApi;
 
 use tokio::time::Duration;
-use tracing::{debug, error, info, instrument, trace, warn};
+use tracing::{debug, error, info, instrument, trace};
 
 const ENGINE_BACKOFF_INTERVAL: Duration = Duration::from_secs(1);
 
@@ -47,11 +47,11 @@ where
         loop {
             match client.fork_choice_updated_v1(fcs, None).await {
                 Err(err) => {
-                    debug!(target: "engine::driver", ?err, "waiting on engine client");
+                    debug!(target: "scroll::engine::driver", ?err, "waiting on engine client");
                     tokio::time::sleep(ENGINE_BACKOFF_INTERVAL).await;
                 }
                 Ok(status) => {
-                    info!(target: "engine::driver", payload_status = ?status.payload_status.status, "engine ready");
+                    info!(target: "scroll::engine::driver", payload_status = ?status.payload_status.status, "engine ready");
                     break;
                 }
             }
@@ -73,7 +73,7 @@ where
         &self,
         execution_payload: ExecutionPayload,
         mut fcs: ForkchoiceState,
-    ) -> Result<bool, EngineDriverError> {
+    ) -> Result<(PayloadStatusEnum, PayloadStatusEnum), EngineDriverError> {
         // Convert the payload to the V1 format.
         let execution_payload = execution_payload.into_v1();
 
@@ -83,11 +83,6 @@ where
         // Issue the new payload to the EN.
         let payload_status = self.new_payload(execution_payload).await?;
 
-        // If the EN is still syncing then we do not attempt to update the fork choice.
-        if payload_status.is_syncing() {
-            return Ok(false);
-        }
-
         // Invoke the FCU with the new state.
         let fcu = self.forkchoice_updated(fcs, None).await?;
 
@@ -95,7 +90,7 @@ where
         // the payload and provided it to the EN.
         debug_assert!(fcu.is_valid());
 
-        Ok(true)
+        Ok((payload_status, fcu.payload_status.status))
     }
 
     /// Handles a payload attributes:
@@ -180,20 +175,20 @@ where
             .await
             .map_err(|_| EngineDriverError::EngineUnavailable)?;
 
-        match response.status {
+        match &response.status {
             PayloadStatusEnum::Invalid { validation_error } => {
-                error!(target: "engine::driver", ?validation_error, "execution payload is invalid");
+                error!(target: "scroll::engine::driver", ?validation_error, "execution payload is invalid");
                 return Err(EngineDriverError::InvalidExecutionPayload)
             }
             PayloadStatusEnum::Syncing => {
-                debug!(target: "engine::driver", "execution client is syncing");
+                debug!(target: "scroll::engine::driver", "execution client is syncing");
+                return Err(EngineDriverError::Syncing)
             }
             PayloadStatusEnum::Accepted => {
-                error!(target: "engine::driver", "execution payload part of side chain");
-                return Err(EngineDriverError::ExecutionPayloadPartOfSideChain)
+                error!(target: "scroll::engine::driver", "execution payload part of side chain");
             }
             PayloadStatusEnum::Valid => {
-                trace!(target: "engine::driver", "execution payload valid");
+                trace!(target: "scroll::engine::driver", "execution payload valid");
             }
         };
 
@@ -216,18 +211,17 @@ where
         // `handle_payload_attributes`.
         match &forkchoice_updated.payload_status.status {
             PayloadStatusEnum::Invalid { validation_error } => {
-                error!(target: "engine::driver", ?validation_error, "failed to issue forkchoice");
+                error!(target: "scroll::engine::driver", ?validation_error, "failed to issue forkchoice");
                 return Err(EngineDriverError::InvalidFcu)
             }
             PayloadStatusEnum::Syncing => {
-                debug!(target: "engine::driver", "EN syncing");
+                debug!(target: "scroll::engine::driver", "head has been seen before, but not part of the chain");
             }
             PayloadStatusEnum::Accepted => {
-                warn!(target: "engine::driver", "payload attributes part of side chain");
-                unreachable!("forkchoice_updated should never return an `Accepted` status");
+                unreachable!("forkchoice update should never return an `Accepted` status");
             }
             PayloadStatusEnum::Valid => {
-                trace!(target: "engine::driver", "execution payload valid");
+                trace!(target: "scroll::engine::driver", "forkchoice updated");
             }
         };
 

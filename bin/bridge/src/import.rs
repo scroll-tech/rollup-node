@@ -46,13 +46,13 @@ impl BridgeBlockImport {
             .and_then(|i| Signature::from_compact(&extra_data[i..]).ok())
         {
             let block = block.block.clone();
-            trace!(target: "bridge::import", peer_id = %peer_id, block = ?block, "Received new block from eth-wire protocol");
+            trace!(target: "scroll::bridge::import", peer_id = %peer_id, block = ?block, "Received new block from eth-wire protocol");
 
             // We trigger a new block event to be sent to the rollup node's network manager. If this
             // results in an error it means the network manager has been dropped.
             let _ = self.new_block_tx.send(NewBlockWithPeer { peer_id, block, signature });
         } else {
-            warn!(target: "bridge::import", peer_id = %peer_id, "Failed to extract signature from block extra data");
+            warn!(target: "scroll::bridge::import", peer_id = %peer_id, "Failed to extract signature from block extra data");
         }
     }
 }

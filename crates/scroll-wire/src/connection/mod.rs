@@ -81,7 +81,7 @@ impl Stream for ScrollWireConnection {
             match msg.payload {
                 ScrollMessagePayload::NewBlock(new_block) => {
                     // If the signature can be decoded then we send a new block event.
-                    trace!(target: "scroll_wire::connection", peer_id = %this.peer_id, block = ?new_block.block, "Received new block from peer");
+                    trace!(target: "scroll::wire::connection", peer_id = %this.peer_id, block = ?new_block.block, "Received new block from peer");
                     if let Ok(signature) = Signature::from_compact(&new_block.signature[..]) {
                         this.events
                             .send(ScrollWireEvent::NewBlock {
@@ -92,7 +92,7 @@ impl Stream for ScrollWireConnection {
                             .unwrap();
                     } else {
                         // If the signature can not be decoded then we disconnect.
-                        trace!(target: "scroll_wire::connection", peer_id = %this.peer_id, "Received new block with invalid signature from peer - dropping the scroll-wire connection." );
+                        trace!(target: "scroll::wire::connection", peer_id = %this.peer_id, "Received new block with invalid signature from peer - dropping the scroll-wire connection." );
                         return Poll::Ready(None);
                     }
                 }

@@ -40,5 +40,16 @@ pub enum ConsensusError {
 #[derive(Debug)]
 pub enum BlockValidationError {
     InvalidBlock,
-    EngineApiError,
+}
+
+impl From<ConsensusError> for BlockImportError {
+    fn from(error: ConsensusError) -> Self {
+        Self::Consensus(error)
+    }
+}
+
+impl From<BlockValidationError> for BlockImportError {
+    fn from(error: BlockValidationError) -> Self {
+        Self::Validation(error)
+    }
 }
