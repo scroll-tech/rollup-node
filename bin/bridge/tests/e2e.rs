@@ -14,7 +14,7 @@ use reth_scroll_engine_primitives::ScrollPayloadBuilderAttributes;
 use reth_scroll_node::{ScrollNetworkPrimitives, ScrollNode};
 use reth_tasks::TaskManager;
 use scroll_alloy_rpc_types_engine::ScrollPayloadAttributes;
-use scroll_network::SCROLL_MAINNET;
+use scroll_network::{NewBlockWithPeer, SCROLL_MAINNET};
 use scroll_wire::ScrollWireConfig;
 use std::{path::PathBuf, sync::Arc};
 use tracing::trace;
@@ -37,7 +37,7 @@ async fn can_bridge_blocks() {
     let chain_spec = (*SCROLL_MAINNET).clone();
 
     // Setup the bridge node and a standard node.
-    let (mut bridge_node, tasks, _bridge_peer_id) =
+    let (mut bridge_node, tasks, bridge_peer_id) =
         build_bridge_node(chain_spec.clone()).await.expect("Failed to setup nodes");
 
     // Instantiate the scroll NetworkManager.
@@ -87,10 +87,15 @@ async fn can_bridge_blocks() {
     trace!("Announcing block to eth-wire network");
     network_handle.announce_block(new_block_1, block_1_hash);
 
-    // Observe logs
-    tokio::time::sleep(tokio::time::Duration::from_secs(10)).await;
+    // Assert block received from the bridge node on the scroll wire protocol is correct
+    let scroll_network::NetworkManagerEvent::NewBlock(NewBlockWithPeer {
+        peer_id,
+        block,
+        signature: _,
+    }) = scroll_network.await;
 
-    // Add assertions here
+    assert_eq!(peer_id, bridge_peer_id);
+    assert_eq!(block.hash_slow(), block_1_hash);
 }
 
 // HELPERS

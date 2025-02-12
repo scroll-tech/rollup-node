@@ -16,6 +16,7 @@ alloy-rpc-types-engine.workspace = true
 reth-rpc-api.workspace = true
 reth-engine-primitives = { git = "https://github.com/scroll-tech/reth.git", branch = "feat/add-deref-blanket-engine-api", default-features = false, features = ["scroll"] }
 reth-tasks.workspace = true
+reth-tokio-util = { git = "https://github.com/scroll-tech/reth.git", branch = "feat/add-deref-blanket-engine-api", default-features = false }
 
 # reth-scroll
 reth-scroll-primitives.workspace = true

@@ -222,14 +222,16 @@ impl Future for NetworkManager {
 
         // Next we handle the scroll-wire events.
         while let Poll::Ready(event) = this.scroll_wire.poll_unpin(cx) {
-            this.on_scroll_wire_event(event);
+            if let Some(event) = this.on_scroll_wire_event(event) {
+                return std::task::Poll::Ready(event);
+            }
         }
 
         std::task::Poll::Pending
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct NewBlockWithPeer {
     pub peer_id: PeerId,
     pub block: ScrollBlock,

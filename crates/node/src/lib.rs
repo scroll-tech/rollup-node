@@ -12,6 +12,7 @@ use alloy_rpc_types_engine::{
     PayloadStatusEnum,
 };
 use futures::{stream::FuturesUnordered, FutureExt, StreamExt};
+use reth_tokio_util::{EventSender, EventStream};
 use scroll_alloy_network::Scroll as ScrollNetwork;
 use scroll_alloy_provider::ScrollEngineApi;
 use scroll_engine::{
@@ -25,6 +26,9 @@ use scroll_wire::NewBlock;
 use tokio::sync::mpsc::UnboundedReceiver;
 use tokio_stream::wrappers::UnboundedReceiverStream;
 use tracing::{error, trace};
+
+mod event;
+pub use event::RollupEvent;
 
 mod consensus;
 use consensus::Consensus;
@@ -60,7 +64,11 @@ pub struct RollupNodeManager<C, EC, P> {
     forkchoice_state: ForkchoiceState,
     /// A collection of pending block imports.
     pending_block_imports: FuturesUnordered<PendingBlockImportFuture>,
+    /// An event sender for sending events to subscribers of the rollup node manager.
+    event_sender: Option<EventSender<RollupEvent>>,
 }
+
+const EVENT_CHANNEL_SIZE: usize = 100;
 
 impl<C, EC, P> RollupNodeManager<C, EC, P>
 where
@@ -83,7 +91,21 @@ where
             new_block_rx: new_block_rx.into(),
             forkchoice_state,
             pending_block_imports: FuturesUnordered::new(),
+            event_sender: None,
         }
+    }
+
+    /// Returns a new event listener for the rollup node manager.
+    pub fn event_listener(&mut self) -> EventStream<RollupEvent> {
+        if let Some(event_sender) = &self.event_sender {
+            return event_sender.new_listener()
+        };
+
+        let event_sender = EventSender::new(EVENT_CHANNEL_SIZE);
+        let event_listener = event_sender.new_listener();
+        self.event_sender = Some(event_sender);
+
+        event_listener
     }
 
     /// Handles a new block received from the network.
@@ -91,6 +113,10 @@ where
     /// We will first validate the consensus of the block, then we will send the block to the engine
     /// to validate the correctness of the block.
     pub fn handle_new_block(&mut self, block_with_peer: NewBlockWithPeer) {
+        if let Some(event_sender) = self.event_sender.as_ref() {
+            let _ = event_sender.notify(RollupEvent::NewBlockReceived(block_with_peer.clone()));
+        }
+
         let NewBlockWithPeer { peer_id: peer, block, signature } = block_with_peer;
         trace!(target: "scroll::node::manager", "Received new block from peer {:?} - hash {:?}", peer, block.hash_slow());
 

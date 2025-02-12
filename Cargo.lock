@@ -7973,6 +7973,7 @@ dependencies = [
  "reth-scroll-engine-primitives",
  "reth-scroll-primitives",
  "reth-tasks",
+ "reth-tokio-util",
  "scroll-alloy-network",
  "scroll-alloy-provider",
  "scroll-engine",
