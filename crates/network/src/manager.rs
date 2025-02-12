@@ -1,6 +1,9 @@
 use crate::{BlockImportError, BlockValidationError};
 
-use super::{BlockImportOutcome, BlockValidation, NetworkHandle, NetworkHandleMessage};
+use super::{
+    BlockImportOutcome, BlockValidation, NetworkHandle, NetworkHandleMessage, NetworkManagerEvent,
+    NewBlockWithPeer,
+};
 use alloy_primitives::FixedBytes;
 use core::task::Poll;
 use futures::{FutureExt, StreamExt};
@@ -8,14 +11,11 @@ use reth_network::{
     cache::LruCache, NetworkConfig as RethNetworkConfig, NetworkHandle as RethNetworkHandle,
     NetworkManager as RethNetworkManager, Peers,
 };
-use reth_network_api::PeerId;
 use reth_scroll_node::ScrollNetworkPrimitives;
-use reth_scroll_primitives::ScrollBlock;
 use reth_storage_api::BlockNumReader as BlockNumReaderT;
 use scroll_wire::{
     NewBlock, ProtocolHandler, ScrollWireConfig, ScrollWireEvent, ScrollWireManager, LRU_CACHE_SIZE,
 };
-use secp256k1::ecdsa::Signature;
 use std::future::Future;
 use tokio::sync::mpsc::{self, UnboundedReceiver};
 use tokio_stream::wrappers::UnboundedReceiverStream;
@@ -25,17 +25,10 @@ use tracing::trace;
 ///
 /// This is an endless [`Future`] that drives the state of the entire network forward and includes
 /// the following components:
-/// - inner_network_handle: Responsible for peer discover, managing connections between peers and
-///   operation of the eth-wire protocol.
-/// - block_import: Responsible for importing blocks that have been gossiped over the scroll-wire
-///   protocol.
-/// - to_manager_tx: Used to interact with this [`NetworkManager`] by sending messages using the
+/// - `handle`: Used to interact with this [`NetworkManager`] by sending messages using the
 ///   [`NetworkHandle`].
-/// - from_handle_rx: Receives commands from the [`NetworkHandle`].
-/// - scroll_wire: The scroll-wire protocol that manages connections and state of the scroll-wire
-///   protocol.
-/// - eth_wire_block_source: An optional source of new blocks from the eth-wire protocol, this is
-///   used to bridge new blocks announced on the eth-wire protocol to the scroll-wire protocol.
+/// - `from_handle_rx`: Receives commands from the [`NetworkHandle`].
+/// - `scroll_wire`: The type that manages connections and state of the scroll wire protocol.
 #[derive(Debug)]
 pub struct NetworkManager {
     /// A handle used to interact with the network manager.
@@ -43,7 +36,7 @@ pub struct NetworkManager {
     /// Receiver half of the channel set up between this type and the [`NetworkHandle`], receives
     /// [`NetworkHandleMessage`]s.
     from_handle_rx: UnboundedReceiverStream<NetworkHandleMessage>,
-    /// The scroll-wire protocol.
+    /// The scroll wire protocol manager.
     scroll_wire: ScrollWireManager,
 }
 
@@ -229,16 +222,4 @@ impl Future for NetworkManager {
 
         std::task::Poll::Pending
     }
-}
-
-#[derive(Debug, Clone)]
-pub struct NewBlockWithPeer {
-    pub peer_id: PeerId,
-    pub block: ScrollBlock,
-    pub signature: Signature,
-}
-
-#[derive(Debug)]
-pub enum NetworkManagerEvent {
-    NewBlock(NewBlockWithPeer),
 }

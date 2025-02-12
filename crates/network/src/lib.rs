@@ -1,3 +1,6 @@
+mod event;
+pub use event::{NetworkManagerEvent, NewBlockWithPeer};
+
 mod handle;
 pub use handle::{NetworkHandle, NetworkHandleMessage};
 
@@ -8,7 +11,7 @@ pub use import::{
 };
 
 mod manager;
-pub use manager::{NetworkManager, NetworkManagerEvent, NewBlockWithPeer};
+pub use manager::NetworkManager;
 
 pub use reth_network::{EthNetworkPrimitives, NetworkConfigBuilder};
 pub use reth_scroll_chainspec::SCROLL_MAINNET;

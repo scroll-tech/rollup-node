@@ -114,7 +114,7 @@ where
     /// to validate the correctness of the block.
     pub fn handle_new_block(&mut self, block_with_peer: NewBlockWithPeer) {
         if let Some(event_sender) = self.event_sender.as_ref() {
-            let _ = event_sender.notify(RollupEvent::NewBlockReceived(block_with_peer.clone()));
+            event_sender.notify(RollupEvent::NewBlockReceived(block_with_peer.clone()));
         }
 
         let NewBlockWithPeer { peer_id: peer, block, signature } = block_with_peer;
