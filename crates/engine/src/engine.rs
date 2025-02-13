@@ -72,19 +72,16 @@ where
     pub async fn handle_execution_payload(
         &self,
         execution_payload: ExecutionPayload,
-        mut fcs: ForkchoiceState,
+        fcs: ForkchoiceState,
     ) -> Result<(PayloadStatusEnum, PayloadStatusEnum), EngineDriverError> {
         // Convert the payload to the V1 format.
         let execution_payload = execution_payload.into_v1();
 
-        // update the fork choice state with the new block hash.
-        fcs.head_block_hash = execution_payload.block_num_hash().hash;
+        // Invoke the FCU with the new state.
+        let fcu = self.forkchoice_updated(fcs, None).await?;
 
         // Issue the new payload to the EN.
         let payload_status = self.new_payload(execution_payload).await?;
-
-        // Invoke the FCU with the new state.
-        let fcu = self.forkchoice_updated(fcs, None).await?;
 
         // We should never have a case where the fork choice is syncing as we have already validated
         // the payload and provided it to the EN.

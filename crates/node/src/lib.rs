@@ -131,6 +131,16 @@ where
             return;
         }
 
+        // If the forkchoice state is at genesis, update the forkchoice state with the parent of the
+        // block.
+        if self.forkchoice_state.is_genesis() {
+            let parent = block.parent_num_hash();
+            self.forkchoice_state.update_unsafe_block_info(BlockInfo {
+                number: parent.number,
+                hash: block.parent_hash,
+            });
+        }
+
         // Send the block to the engine to validate the correctness of the block.
         let fcs = self.get_alloy_fcs();
         let engine = self.engine.clone();

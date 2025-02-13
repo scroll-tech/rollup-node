@@ -124,7 +124,7 @@ impl NetworkManager {
     fn on_scroll_wire_event(&mut self, event: ScrollWireEvent) -> Option<NetworkManagerEvent> {
         match event {
             ScrollWireEvent::NewBlock { peer_id, block, signature } => {
-                trace!(target: "scroll::network::manager", peer_id = ?peer_id, block = ?block, signature = ?signature, "Received new block");
+                trace!(target: "scroll::network::manager", peer_id = ?peer_id, block = ?block.hash_slow(), signature = ?signature, "Received new block");
                 Some(NetworkManagerEvent::NewBlock(NewBlockWithPeer { peer_id, block, signature }))
             }
             // Only `NewBlock` events are expected from the scroll-wire protocol.
@@ -191,8 +191,6 @@ impl Future for NetworkManager {
         self: std::pin::Pin<&mut Self>,
         cx: &mut std::task::Context<'_>,
     ) -> std::task::Poll<Self::Output> {
-        trace!(target: "scroll::network::manager", "Polling network manager");
-
         let this = self.get_mut();
 
         // We handle the messages from the network handle.

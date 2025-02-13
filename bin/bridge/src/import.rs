@@ -46,7 +46,7 @@ impl BridgeBlockImport {
             .and_then(|i| Signature::from_compact(&extra_data[i..]).ok())
         {
             let block = block.block.clone();
-            trace!(target: "scroll::bridge::import", peer_id = %peer_id, block = ?block, "Received new block from eth-wire protocol");
+            trace!(target: "scroll::bridge::import", peer_id = %peer_id, block = ?block.hash_slow(), "Received new block from eth-wire protocol");
 
             // We trigger a new block event to be sent to the rollup node's network manager. If this
             // results in an error it means the network manager has been dropped.

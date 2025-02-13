@@ -77,7 +77,7 @@ impl Future for ScrollWireManager {
             match new_block {
                 Some(ScrollWireEvent::NewBlock { peer_id, block, signature }) => {
                     // We announce the block to the network.
-                    trace!("Received new block with signature [{signature:?}] from the network: {block:?} ");
+                    trace!(target: "scroll::wire::manager", "Received new block with signature [{signature:?}] from the network: {:?} ", block.hash_slow());
                     return Poll::Ready(ScrollWireEvent::NewBlock { peer_id, block, signature });
                 }
                 Some(ScrollWireEvent::ConnectionEstablished {

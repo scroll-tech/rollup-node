@@ -69,4 +69,9 @@ impl ForkchoiceState {
             finalized_block_hash: self.finalized.hash,
         }
     }
+
+    /// Returns `true` if the fork choice state is the genesis state.
+    pub fn is_genesis(&self) -> bool {
+        self.unsafe_.number == 0
+    }
 }

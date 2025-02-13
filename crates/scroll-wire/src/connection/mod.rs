@@ -81,7 +81,7 @@ impl Stream for ScrollWireConnection {
             match msg.payload {
                 ScrollMessagePayload::NewBlock(new_block) => {
                     // If the signature can be decoded then we send a new block event.
-                    trace!(target: "scroll::wire::connection", peer_id = %this.peer_id, block = ?new_block.block, "Received new block from peer");
+                    trace!(target: "scroll::wire::connection", peer_id = %this.peer_id, block = ?new_block.block.hash_slow(), "Received new block from peer");
                     if let Ok(signature) = Signature::from_compact(&new_block.signature[..]) {
                         this.events
                             .send(ScrollWireEvent::NewBlock {
