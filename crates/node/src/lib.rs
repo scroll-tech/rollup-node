@@ -1,6 +1,5 @@
 //! This library contains the main manager for the rollup node.
 
-use alloy_eips::eip1898::NumHash;
 use alloy_rpc_types_engine::{
     ExecutionPayload, ExecutionPayloadV1, ForkchoiceState as AlloyForkchoiceState,
     PayloadStatusEnum,

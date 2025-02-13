@@ -48,5 +48,6 @@ serde = [
 	"scroll-engine/serde",
 	"scroll-network/serde",
 	"scroll-wire/serde",
-	"secp256k1/serde"
+	"secp256k1/serde",
+	"alloy-eips/serde"
 ]

@@ -15,7 +15,7 @@ pub struct ForkchoiceState {
 }
 
 impl ForkchoiceState {
-    /// Creates a new [`ForkchoiceState`] instance from the given ['BlockInfo'] instance.
+    /// Creates a new [`ForkchoiceState`] instance from the given [`BlockInfo`] instance.
     pub const fn from_block_info(block_info: BlockInfo) -> Self {
         Self::new(block_info, block_info, block_info)
     }
