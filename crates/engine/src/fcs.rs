@@ -71,7 +71,7 @@ impl ForkchoiceState {
     }
 
     /// Returns `true` if the fork choice state is the genesis state.
-    pub fn is_genesis(&self) -> bool {
+    pub const fn is_genesis(&self) -> bool {
         self.unsafe_.number == 0
     }
 }
