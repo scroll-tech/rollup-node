@@ -12,7 +12,7 @@ workspace = true
 [dependencies]
 # alloy
 alloy-chains.workspace = true
-alloy-eips = { version = "0.9.2", default-features = false }
+alloy-eips.workspace = true
 alloy-primitives.workspace = true
 alloy-rpc-types-engine.workspace = true
 

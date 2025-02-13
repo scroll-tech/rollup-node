@@ -15,6 +15,11 @@ pub struct ForkchoiceState {
 }
 
 impl ForkchoiceState {
+    /// Creates a new [`ForkchoiceState`] instance from the given ['BlockInfo'] instance.
+    pub const fn from_block_info(block_info: BlockInfo) -> Self {
+        Self::new(block_info, block_info, block_info)
+    }
+
     /// Creates a new [`ForkchoiceState`] instance.
     pub const fn new(unsafe_: BlockInfo, safe: BlockInfo, finalized: BlockInfo) -> Self {
         Self { unsafe_, safe, finalized }

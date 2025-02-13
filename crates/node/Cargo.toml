@@ -8,6 +8,7 @@ exclude.workspace = true
 
 [dependencies]
 # alloy
+alloy-eips.workspace = true
 alloy-rpc-types-engine.workspace = true
 
 # scroll-alloy

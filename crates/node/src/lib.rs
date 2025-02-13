@@ -1,12 +1,6 @@
 //! This library contains the main manager for the rollup node.
 
-use std::{
-    future::Future,
-    pin::Pin,
-    sync::Arc,
-    task::{Context, Poll},
-};
-
+use alloy_eips::eip1898::NumHash;
 use alloy_rpc_types_engine::{
     ExecutionPayload, ExecutionPayloadV1, ForkchoiceState as AlloyForkchoiceState,
     PayloadStatusEnum,
@@ -23,6 +17,12 @@ use scroll_network::{
     NetworkManagerEvent, NewBlockWithPeer,
 };
 use scroll_wire::NewBlock;
+use std::{
+    future::Future,
+    pin::Pin,
+    sync::Arc,
+    task::{Context, Poll},
+};
 use tokio::sync::mpsc::UnboundedReceiver;
 use tokio_stream::wrappers::UnboundedReceiverStream;
 use tracing::{error, trace};
@@ -134,10 +134,10 @@ where
         // If the forkchoice state is at genesis, update the forkchoice state with the parent of the
         // block.
         if self.forkchoice_state.is_genesis() {
-            let parent = block.parent_num_hash();
-            self.forkchoice_state.update_unsafe_block_info(BlockInfo {
-                number: parent.number,
-                hash: block.parent_hash,
+            let block_num_hash = block.parent_num_hash();
+            self.forkchoice_state = ForkchoiceState::from_block_info(BlockInfo {
+                number: block_num_hash.number,
+                hash: block_num_hash.hash,
             });
         }
 
