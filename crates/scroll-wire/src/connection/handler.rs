@@ -1,31 +1,31 @@
-use super::{Connection, ScrollWireConfig};
+use super::{ScrollWireConfig, ScrollWireConnection};
 use crate::{
-    protocol::{Message, ProtocolState},
-    Event,
+    protocol::{ProtocolState, ScrollMessage},
+    ScrollWireEvent,
 };
 use reth_network::protocol::{ConnectionHandler as ConnectionHandlerTrait, OnNotSupported};
 use tracing::trace;
 
 /// The connection handler for the `ScrollWire` protocol.
 #[derive(Debug)]
-pub struct ConnectionHandler {
+pub struct ScrollConnectionHandler {
     state: ProtocolState,
     config: ScrollWireConfig,
 }
 
-impl ConnectionHandler {
-    /// Creates a new [`ConnectionHandler`] with the provided state and config.
+impl ScrollConnectionHandler {
+    /// Creates a new [`ScrollConnectionHandler`] with the provided state and config.
     pub const fn from_parts(state: ProtocolState, config: ScrollWireConfig) -> Self {
         Self { state, config }
     }
 }
 
-impl ConnectionHandlerTrait for ConnectionHandler {
-    type Connection = Connection;
+impl ConnectionHandlerTrait for ScrollConnectionHandler {
+    type Connection = ScrollWireConnection;
 
     /// The protocol that this connection handler is for.
     fn protocol(&self) -> reth_eth_wire::protocol::Protocol {
-        Message::protocol()
+        ScrollMessage::protocol()
     }
 
     /// Called when a incoming connection is invoked by a peer.
@@ -36,10 +36,10 @@ impl ConnectionHandlerTrait for ConnectionHandler {
         _peer_id: reth_network_api::PeerId,
     ) -> OnNotSupported {
         if self.config.connect_unsupported_peer() {
-            trace!(target: "scroll_wire::connection::handler", "Peer does not support the ScrollWire protocol, keeping connection alive.");
+            trace!(target: "scroll::wire::connection::handler", "Peer does not support the ScrollWire protocol, keeping connection alive.");
             OnNotSupported::KeepAlive
         } else {
-            trace!(target: "scroll_wire::connection::handler", "Peer does not support the ScrollWire protocol, disconnecting.");
+            trace!(target: "scroll::wire::connection::handler", "Peer does not support the ScrollWire protocol, disconnecting.");
             OnNotSupported::Disconnect
         }
     }
@@ -51,7 +51,7 @@ impl ConnectionHandlerTrait for ConnectionHandler {
         peer_id: reth_network_api::PeerId,
         conn: reth_eth_wire::multiplex::ProtocolConnection,
     ) -> Self::Connection {
-        trace!(target: "scroll_wire::connection::handler", peer_id = %peer_id, direction = ?direction, "Connection established with peer");
+        trace!(target: "scroll::wire::connection::handler", peer_id = %peer_id, direction = ?direction, "Connection established with peer");
 
         // Create a new channel for sending messages to the connection.
         let (msg_tx, msg_rx) = tokio::sync::mpsc::unbounded_channel();
@@ -59,9 +59,13 @@ impl ConnectionHandlerTrait for ConnectionHandler {
         // Emit a ConnectionEstablished containing the sender to send messages to the connection.
         self.state
             .event_sender()
-            .send(Event::ConnectionEstablished { direction, peer_id, to_connection: msg_tx })
+            .send(ScrollWireEvent::ConnectionEstablished {
+                direction,
+                peer_id,
+                to_connection: msg_tx,
+            })
             .expect("Failed to send ConnectionEstablished event - receiver dropped");
 
-        Connection::new(peer_id, conn, direction, msg_rx, self.state)
+        ScrollWireConnection::new(peer_id, conn, direction, msg_rx, self.state)
     }
 }
