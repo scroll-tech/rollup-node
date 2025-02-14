@@ -179,7 +179,6 @@ where
             }
             PayloadStatusEnum::Syncing => {
                 debug!(target: "scroll::engine::driver", "execution client is syncing");
-                return Err(EngineDriverError::Syncing)
             }
             PayloadStatusEnum::Accepted => {
                 error!(target: "scroll::engine::driver", "execution payload part of side chain");
