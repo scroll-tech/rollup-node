@@ -2,31 +2,20 @@ use reth_network::{config::NetworkMode, NetworkConfig, NetworkManager, PeersInfo
 use reth_node_api::TxTy;
 use reth_node_builder::{components::NetworkBuilder, BuilderContext, FullNodeTypes};
 use reth_node_types::NodeTypes;
+use reth_rpc_builder::config::RethRpcServerConfig;
 use reth_scroll_chainspec::ScrollChainSpec;
 use reth_scroll_primitives::ScrollPrimitives;
 use reth_transaction_pool::{PoolTransaction, TransactionPool};
-use scroll_network::{NetworkManager as ScrollNetworkManager, NoopBlockImport};
+use rollup_node_manager::{PoAConsensus, RollupNodeManager};
+use scroll_alloy_provider::ScrollAuthEngineApiProvider;
+use scroll_engine::{test_utils::NoopExecutionPayloadProvider, EngineDriver, ForkchoiceState};
+use scroll_network::NetworkManager as ScrollNetworkManager;
 use scroll_wire::{ProtocolHandler, ScrollWireConfig};
 use tracing::info;
 
 /// The network builder for the eth-wire to scroll-wire bridge.
 #[derive(Debug, Default)]
-pub struct ScrollBridgeNetworkBuilder {
-    block_import:
-        Option<Box<dyn reth_network::import::BlockImport<reth_scroll_primitives::ScrollBlock>>>,
-}
-
-impl ScrollBridgeNetworkBuilder {
-    /// Creates a new [`ScrollBridgeNetworkBuilder`] with the provided block import.
-    #[cfg(feature = "test-utils")]
-    pub fn new(
-        block_import: Box<
-            dyn reth_network::import::BlockImport<reth_scroll_primitives::ScrollBlock>,
-        >,
-    ) -> Self {
-        Self { block_import: Some(block_import) }
-    }
-}
+pub struct ScrollBridgeNetworkBuilder;
 
 impl<Node, Pool> NetworkBuilder<Node, Pool> for ScrollBridgeNetworkBuilder
 where
@@ -57,10 +46,7 @@ where
         let config = ctx.network_config()?;
         let mut config = NetworkConfig {
             network_mode: NetworkMode::Work,
-            block_import: Box::new(super::BridgeBlockImport::new(
-                new_block_tx,
-                self.block_import.unwrap_or(config.block_import),
-            )),
+            block_import: Box::new(super::BridgeBlockImport::new(new_block_tx.clone())),
             ..config
         };
 
@@ -72,14 +58,34 @@ where
         let handle = ctx.start_network(network, pool);
 
         // Create the scroll network manager.
-        let scroll_wire_manager =
-            ScrollNetworkManager::from_parts(handle.clone(), Box::new(NoopBlockImport), events)
-                .with_new_block_source(new_block_rx);
+        let scroll_network_manager = ScrollNetworkManager::from_parts(handle.clone(), events);
 
         // Spawn the scroll network manager.
-        ctx.task_executor().spawn(scroll_wire_manager);
+        let consensus = PoAConsensus::new(vec![]);
+        let payload_provider = NoopExecutionPayloadProvider;
 
-        info!(target: "reth::cli", enode=%handle.local_node_record(), "P2P networking initialized");
+        let auth_port = ctx.config().rpc.auth_port;
+        let auth_secret = ctx.config().rpc.auth_jwt_secret(ctx.config().datadir().jwt())?;
+
+        let engine_api = ScrollAuthEngineApiProvider::new(
+            auth_secret,
+            format!("http://localhost:{auth_port}").parse()?,
+        );
+        let engine = EngineDriver::new(engine_api, payload_provider);
+
+        let rollup_node_manager = RollupNodeManager::new(
+            scroll_network_manager,
+            engine,
+            ForkchoiceState::genesis(
+                ctx.config().chain.chain.try_into().expect("must be a named chain"),
+            ),
+            consensus,
+            new_block_rx,
+        );
+
+        ctx.task_executor().spawn(rollup_node_manager);
+
+        info!(target: "scroll::reth::cli", enode=%handle.local_node_record(), "P2P networking initialized");
         Ok(handle)
     }
 }

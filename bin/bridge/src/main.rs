@@ -7,7 +7,6 @@ fn main() {
     use reth_provider::providers::BlockchainProvider;
     use reth_scroll_cli::{Cli, ScrollChainSpecParser, ScrollRollupArgs};
     use reth_scroll_node::{ScrollAddOns, ScrollNode};
-    use scroll_bridge::ScrollBridgeNetworkBuilder;
     reth_cli_util::sigsegv_handler::install();
 
     // Enable backtraces unless a RUST_BACKTRACE value has already been explicitly provided.
@@ -26,7 +25,7 @@ fn main() {
                 .with_types_and_provider::<ScrollNode, BlockchainProvider<_>>()
                 // Override the network builder with the `ScrollBridgeNetworkBuilder`
                 .with_components(
-                    ScrollNode::components().network(ScrollBridgeNetworkBuilder::default()),
+                    ScrollNode::components().network(scroll_bridge::ScrollBridgeNetworkBuilder),
                 )
                 .with_add_ons(ScrollAddOns::default())
                 .launch_with_fn(|builder| {

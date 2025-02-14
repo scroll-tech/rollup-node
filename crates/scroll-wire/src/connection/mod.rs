@@ -1,5 +1,5 @@
 use crate::{
-    protocol::{Event, Message, MessagePayload, ProtocolState},
+    protocol::{ProtocolState, ScrollMessage, ScrollMessagePayload, ScrollWireEvent},
     ScrollWireConfig,
 };
 use alloy_rlp::BytesMut;
@@ -17,30 +17,31 @@ use tokio_stream::wrappers::UnboundedReceiverStream;
 use tracing::trace;
 
 mod handler;
-pub(crate) use handler::ConnectionHandler;
+pub(crate) use handler::ScrollConnectionHandler;
 
 /// Connection between two peers using the scroll wire protocol.
 #[derive(Debug)]
-pub struct Connection {
+pub struct ScrollWireConnection {
     /// The inbound connection from the peer.
     pub conn: ProtocolConnection,
     /// The direction of the connection.
     pub direction: Direction,
     /// A stream of messages to be announced to the peer.
-    pub outbound: UnboundedReceiverStream<Message>,
+    pub outbound: UnboundedReceiverStream<ScrollMessage>,
     /// A channel to emit events.
-    pub events: UnboundedSender<Event>,
+    pub events: UnboundedSender<ScrollWireEvent>,
     /// The peer id of the connection.
     pub peer_id: PeerId,
 }
 
-impl Connection {
-    /// Creates a new [`Connection`] with the provided [`ProtocolConnection`] and [`ProtocolState`].
+impl ScrollWireConnection {
+    /// Creates a new [`ScrollWireConnection`] with the provided [`ProtocolConnection`] and
+    /// [`ProtocolState`].
     pub fn new(
         peer_id: PeerId,
         conn: ProtocolConnection,
         direction: Direction,
-        outbound: UnboundedReceiver<Message>,
+        outbound: UnboundedReceiver<ScrollMessage>,
         state: ProtocolState,
     ) -> Self {
         Self {
@@ -53,7 +54,7 @@ impl Connection {
     }
 }
 
-impl Stream for Connection {
+impl Stream for ScrollWireConnection {
     type Item = BytesMut;
 
     fn poll_next(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
@@ -72,18 +73,18 @@ impl Stream for Connection {
             };
 
             // We decode the message, if the message can not be decoded then we disconnect.
-            let Some(msg) = Message::decode(&mut &msg[..]) else {
+            let Some(msg) = ScrollMessage::decode(&mut &msg[..]) else {
                 return Poll::Ready(None);
             };
 
             // We handle the message.
             match msg.payload {
-                MessagePayload::NewBlock(new_block) => {
+                ScrollMessagePayload::NewBlock(new_block) => {
                     // If the signature can be decoded then we send a new block event.
-                    trace!(target: "scroll_wire::connection", peer_id = %this.peer_id, block = ?new_block.block, "Received new block from peer");
+                    trace!(target: "scroll::wire::connection", peer_id = %this.peer_id, block = ?new_block.block.hash_slow(), "Received new block from peer");
                     if let Ok(signature) = Signature::from_compact(&new_block.signature[..]) {
                         this.events
-                            .send(Event::NewBlock {
+                            .send(ScrollWireEvent::NewBlock {
                                 block: new_block.block,
                                 signature,
                                 peer_id: this.peer_id,
@@ -91,6 +92,7 @@ impl Stream for Connection {
                             .unwrap();
                     } else {
                         // If the signature can not be decoded then we disconnect.
+                        trace!(target: "scroll::wire::connection", peer_id = %this.peer_id, "Received new block with invalid signature from peer - dropping the scroll-wire connection." );
                         return Poll::Ready(None);
                     }
                 }
