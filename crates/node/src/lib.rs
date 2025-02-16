@@ -141,7 +141,7 @@ where
         }
 
         // Send the block to the engine to validate the correctness of the block.
-        let fcs = self.get_alloy_fcs();
+        let mut fcs = self.get_alloy_fcs();
         let engine = self.engine.clone();
         let future = Box::pin(async move {
             trace!(target: "scroll::node::manager", "handling block import future for block {:?}", block.hash_slow());
@@ -150,6 +150,7 @@ where
             let execution_payload: ExecutionPayload =
                 ExecutionPayloadV1::from_block_slow(&block).into();
             let unsafe_block_info: BlockInfo = (&execution_payload).into();
+            fcs.head_block_hash = unsafe_block_info.hash;
 
             // process the execution payload
             // TODO: needs testing

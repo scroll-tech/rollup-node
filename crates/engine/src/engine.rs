@@ -77,11 +77,11 @@ where
         // Convert the payload to the V1 format.
         let execution_payload = execution_payload.into_v1();
 
-        // Invoke the FCU with the new state.
-        let fcu = self.forkchoice_updated(fcs, None).await?;
-
         // Issue the new payload to the EN.
         let payload_status = self.new_payload(execution_payload).await?;
+
+        // Invoke the FCU with the new state.
+        let fcu = self.forkchoice_updated(fcs, None).await?;
 
         // We should never have a case where the fork choice is syncing as we have already validated
         // the payload and provided it to the EN.
