@@ -43,11 +43,11 @@ workspace = true
 
 [features]
 serde = [
-	"alloy-rpc-types-engine/serde",
-	"reth-scroll-primitives/serde",
-	"scroll-engine/serde",
-	"scroll-network/serde",
-	"scroll-wire/serde",
-	"secp256k1/serde",
-	"alloy-eips/serde"
+    "alloy-rpc-types-engine/serde",
+    "reth-scroll-primitives/serde",
+    "scroll-engine/serde",
+    "scroll-network/serde",
+    "scroll-wire/serde",
+    "secp256k1/serde",
+    "alloy-eips/serde",
 ]

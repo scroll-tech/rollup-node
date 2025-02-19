@@ -8,9 +8,7 @@ exclude.workspace = true
 
 [dependencies]
 # alloy
-alloy-primitives = { workspace = true, features = [
-    "map-foldhash",
-] }
+alloy-primitives = { workspace = true, features = ["map-foldhash"] }
 
 # reth
 reth-discv5 = { git = "https://github.com/scroll-tech/reth.git", branch = "feat/add-deref-blanket-engine-api" }
@@ -39,13 +37,13 @@ tracing.workspace = true
 
 [features]
 serde = [
-	"alloy-primitives/serde",
-	"parking_lot/serde",
-	"reth-eth-wire-types/serde",
-	"reth-network/serde",
-	"reth-network-api/serde",
-	"reth-network-types/serde",
-	"reth-scroll-primitives/serde",
-	"scroll-wire/serde",
-	"secp256k1/serde"
+    "alloy-primitives/serde",
+    "parking_lot/serde",
+    "reth-eth-wire-types/serde",
+    "reth-network/serde",
+    "reth-network-api/serde",
+    "reth-network-types/serde",
+    "reth-scroll-primitives/serde",
+    "scroll-wire/serde",
+    "secp256k1/serde",
 ]
