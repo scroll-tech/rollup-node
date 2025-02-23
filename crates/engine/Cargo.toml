@@ -22,8 +22,6 @@ scroll-alloy-provider.workspace = true
 scroll-alloy-rpc-types-engine = { git = "https://github.com/scroll-tech/reth.git", branch = "feat/add-deref-blanket-engine-api" }
 
 # reth
-reth-engine-primitives = { git = "https://github.com/scroll-tech/reth.git", branch = "feat/add-deref-blanket-engine-api", default-features = false, features = ["scroll"] }
-reth-network-peers.workspace = true
 reth-payload-primitives = { git = "https://github.com/scroll-tech/reth.git", branch = "feat/add-deref-blanket-engine-api" }
 reth-primitives = { workspace = true }
 
@@ -32,10 +30,12 @@ reth-scroll-chainspec.workspace = true
 reth-scroll-primitives = { workspace = true, features = ["scroll"] }
 reth-scroll-engine-primitives = { git = "https://github.com/scroll-tech/reth.git", branch = "feat/add-deref-blanket-engine-api", default-features = false, features = ["scroll"] }
 
+# rollup-node
+rollup-node-primitives.workspace = true
+
 # misc
-async-trait = "0.1.68"
+async-trait.workspace = true
 eyre.workspace = true
-serde = { workspace = true, features = ["derive"] }
 tokio.workspace = true
 tracing.workspace = true
 

@@ -1,7 +1,7 @@
-use crate::{block_info::BlockInfo, payload::matching_payloads};
-
 use super::error::EngineDriverError;
+use crate::payload::matching_payloads;
 use crate::ExecutionPayloadProvider;
+
 use alloy_rpc_types_engine::{
     ExecutionPayload, ExecutionPayloadV1, ForkchoiceState, ForkchoiceUpdated, PayloadId,
     PayloadStatusEnum,
@@ -9,6 +9,7 @@ use alloy_rpc_types_engine::{
 use eyre::Result;
 use reth_payload_primitives::PayloadTypes;
 use reth_scroll_engine_primitives::ScrollEngineTypes;
+use rollup_node_primitives::BlockInfo;
 use scroll_alloy_provider::ScrollEngineApi;
 
 use tokio::time::Duration;
@@ -174,7 +175,7 @@ where
         match &response.status {
             PayloadStatusEnum::Invalid { validation_error } => {
                 error!(target: "scroll::engine::driver", ?validation_error, "execution payload is invalid");
-                return Err(EngineDriverError::InvalidExecutionPayload)
+                return Err(EngineDriverError::InvalidExecutionPayload);
             }
             PayloadStatusEnum::Syncing => {
                 debug!(target: "scroll::engine::driver", "execution client is syncing");
@@ -207,7 +208,7 @@ where
         match &forkchoice_updated.payload_status.status {
             PayloadStatusEnum::Invalid { validation_error } => {
                 error!(target: "scroll::engine::driver", ?validation_error, "failed to issue forkchoice");
-                return Err(EngineDriverError::InvalidFcu)
+                return Err(EngineDriverError::InvalidFcu);
             }
             PayloadStatusEnum::Syncing => {
                 debug!(target: "scroll::engine::driver", "head has been seen before, but not part of the chain");
