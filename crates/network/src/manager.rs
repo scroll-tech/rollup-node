@@ -211,7 +211,7 @@ impl Stream for NetworkManager {
         }
 
         // Next we handle the scroll-wire events.
-        while let Poll::Ready(event) = this.scroll_wire.poll_unpin(cx) {
+        if let Poll::Ready(event) = this.scroll_wire.poll_unpin(cx) {
             return std::task::Poll::Ready(Some(this.on_scroll_wire_event(event)));
         }
 
