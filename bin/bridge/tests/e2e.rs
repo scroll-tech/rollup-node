@@ -1,6 +1,7 @@
 #![cfg(feature = "test-utils")]
 
 use alloy_primitives::B256;
+use futures::StreamExt;
 use reth_e2e_test_utils::{node::NodeTestContext, NodeHelperType};
 use reth_network::{NetworkConfigBuilder, PeersInfo};
 use reth_network_peers::PeerId;
@@ -48,7 +49,7 @@ async fn can_bridge_blocks() {
             .with_pow()
             .build_with_noop_provider(chain_spec.clone());
     let scroll_wire_config = ScrollWireConfig::new(false);
-    let scroll_network =
+    let mut scroll_network =
         scroll_network::NetworkManager::new(network_config, scroll_wire_config).await;
     let scroll_network_handle = scroll_network.handle();
 
@@ -88,14 +89,17 @@ async fn can_bridge_blocks() {
     network_handle.announce_block(new_block_1, block_1_hash);
 
     // Assert block received from the bridge node on the scroll wire protocol is correct
-    let scroll_network::NetworkManagerEvent::NewBlock(NewBlockWithPeer {
+    if let Some(scroll_network::NetworkManagerEvent::NewBlock(NewBlockWithPeer {
         peer_id,
         block,
         signature: _,
-    }) = scroll_network.await;
-
-    assert_eq!(peer_id, bridge_peer_id);
-    assert_eq!(block.hash_slow(), block_1_hash);
+    })) = scroll_network.next().await
+    {
+        assert_eq!(peer_id, bridge_peer_id);
+        assert_eq!(block.hash_slow(), block_1_hash);
+    } else {
+        panic!("Failed to receive block from scroll-wire network");
+    }
 }
 
 // HELPERS

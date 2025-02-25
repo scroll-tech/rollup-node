@@ -4,7 +4,7 @@ use alloy_rpc_types_engine::{
     ExecutionPayload, ExecutionPayloadV1, ForkchoiceState as AlloyForkchoiceState,
     PayloadStatusEnum,
 };
-use futures::{stream::FuturesUnordered, FutureExt, StreamExt};
+use futures::{stream::FuturesOrdered, StreamExt};
 use reth_tokio_util::{EventSender, EventStream};
 use scroll_alloy_network::Scroll as ScrollNetwork;
 use scroll_alloy_provider::ScrollEngineApi;
@@ -33,6 +33,9 @@ mod consensus;
 use consensus::Consensus;
 pub use consensus::PoAConsensus;
 
+/// The size of the event channel.
+const EVENT_CHANNEL_SIZE: usize = 100;
+
 /// A future that resolves to a tuple of the block info and the block import outcome.
 type PendingBlockImportFuture =
     Pin<Box<dyn Future<Output = (Option<BlockInfo>, Option<BlockImportOutcome>)> + Send>>;
@@ -49,9 +52,10 @@ type PendingBlockImportFuture =
 /// - `new_block_rx`: Receives new blocks from the network.
 /// - `forkchoice_state`: The forkchoice state of the rollup node.
 /// - `pending_block_imports`: A collection of pending block imports.
+/// - `event_sender`: An event sender for sending events to subscribers of the rollup node manager.
 #[derive(Debug)]
 pub struct RollupNodeManager<C, EC, P> {
-    /// The network handle used to communicate with the network manager.
+    /// The network manager that manages the scroll p2p network.
     network: NetworkManager,
     ///  The engine driver used to communicate with the engine.
     engine: Arc<EngineDriver<EC, P>>,
@@ -62,12 +66,10 @@ pub struct RollupNodeManager<C, EC, P> {
     /// The forkchoice state of the rollup node.
     forkchoice_state: ForkchoiceState,
     /// A collection of pending block imports.
-    pending_block_imports: FuturesUnordered<PendingBlockImportFuture>,
+    pending_block_imports: FuturesOrdered<PendingBlockImportFuture>,
     /// An event sender for sending events to subscribers of the rollup node manager.
     event_sender: Option<EventSender<RollupEvent>>,
 }
-
-const EVENT_CHANNEL_SIZE: usize = 100;
 
 impl<C, EC, P> RollupNodeManager<C, EC, P>
 where
@@ -89,7 +91,7 @@ where
             consensus,
             new_block_rx: new_block_rx.into(),
             forkchoice_state,
-            pending_block_imports: FuturesUnordered::new(),
+            pending_block_imports: FuturesOrdered::new(),
             event_sender: None,
         }
     }
@@ -111,7 +113,7 @@ where
     ///
     /// We will first validate the consensus of the block, then we will send the block to the engine
     /// to validate the correctness of the block.
-    pub fn handle_new_block(&mut self, block_with_peer: NewBlockWithPeer) {
+    pub fn handle_new_block(&mut self, block_with_peer: NewBlockWithPeer, cx: &mut Context<'_>) {
         if let Some(event_sender) = self.event_sender.as_ref() {
             event_sender.notify(RollupEvent::NewBlockReceived(block_with_peer.clone()));
         }
@@ -175,7 +177,8 @@ where
             (unsafe_block_info, import_outcome.map(|result| BlockImportOutcome { peer, result }))
         });
 
-        self.pending_block_imports.push(future);
+        self.pending_block_imports.push_back(future);
+        cx.waker().wake_by_ref();
     }
 
     const fn get_alloy_fcs(&self) -> AlloyForkchoiceState {
@@ -185,9 +188,9 @@ where
     /// Handles a network manager event.
     ///
     /// Currently the network manager only emits a `NewBlock` event.
-    fn handle_network_manager_event(&mut self, event: NetworkManagerEvent) {
+    fn handle_network_manager_event(&mut self, event: NetworkManagerEvent, cx: &mut Context<'_>) {
         match event {
-            NetworkManagerEvent::NewBlock(block) => self.handle_new_block(block),
+            NetworkManagerEvent::NewBlock(block) => self.handle_new_block(block, cx),
         }
     }
 
@@ -231,13 +234,12 @@ where
 
         // Handle blocks received from the eth-wire protocol.
         while let Poll::Ready(Some(block)) = this.new_block_rx.poll_next_unpin(cx) {
-            this.handle_new_block(block);
-            cx.waker().wake_by_ref();
+            this.handle_new_block(block, cx);
         }
 
         // Handle network manager events.
-        while let Poll::Ready(event) = this.network.poll_unpin(cx) {
-            this.handle_network_manager_event(event);
+        while let Poll::Ready(Some(event)) = this.network.poll_next_unpin(cx) {
+            this.handle_network_manager_event(event, cx);
         }
 
         Poll::Pending

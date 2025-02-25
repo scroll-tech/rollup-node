@@ -97,9 +97,9 @@ checksum = "683d7910e743518b0e34f1186f92494becacb047c7b6bf616c96772180fef923"
 
 [[package]]
 name = "alloy-chains"
-version = "0.1.61"
+version = "0.1.62"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3a754dbb534198644cb8355b8c23f4aaecf03670fb9409242be1fa1e25897ee9"
+checksum = "1317fde6d2d3cd6082a15144c23230697a5e1a91a27d1facc146715d3b4b2046"
 dependencies = [
  "alloy-primitives",
  "alloy-rlp",
@@ -107,7 +107,7 @@ dependencies = [
  "num_enum",
  "proptest",
  "serde",
- "strum",
+ "strum 0.27.1",
 ]
 
 [[package]]
@@ -554,7 +554,7 @@ dependencies = [
  "jsonwebtoken",
  "rand 0.8.5",
  "serde",
- "strum",
+ "strum 0.26.3",
 ]
 
 [[package]]
@@ -1188,9 +1188,9 @@ checksum = "ace50bade8e6234aa140d9a2f552bbee1db4d353f69b8217bc503490fc1a9f26"
 
 [[package]]
 name = "backon"
-version = "1.3.0"
+version = "1.4.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ba5289ec98f68f28dd809fd601059e6aa908bb8f6108620930828283d4ee23d7"
+checksum = "49fef586913a57ff189f25c9b3d034356a5bf6b3fa9a7f067588fe1698ba1f5d"
 dependencies = [
  "fastrand",
  "tokio",
@@ -1332,15 +1332,16 @@ dependencies = [
 
 [[package]]
 name = "blake3"
-version = "1.5.5"
+version = "1.6.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b8ee0c1824c4dea5b5f81736aff91bae041d2c07ee1192bec91054e10e3e601e"
+checksum = "1230237285e3e10cde447185e8975408ae24deaa67205ce684805c25bc0c7937"
 dependencies = [
  "arrayref",
  "arrayvec",
  "cc",
  "cfg-if",
  "constant_time_eq",
+ "memmap2",
 ]
 
 [[package]]
@@ -1593,9 +1594,9 @@ dependencies = [
 
 [[package]]
 name = "clap"
-version = "4.5.29"
+version = "4.5.30"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8acebd8ad879283633b343856142139f2da2317c96b05b4dd6181c61e2480184"
+checksum = "92b7b18d71fad5313a1e320fa9897994228ce274b60faa4d694fe0ea89cd9e6d"
 dependencies = [
  "clap_builder",
  "clap_derive",
@@ -1603,9 +1604,9 @@ dependencies = [
 
 [[package]]
 name = "clap_builder"
-version = "4.5.29"
+version = "4.5.30"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f6ba32cbda51c7e1dfd49acc1457ba1a7dec5b64fe360e828acb13ca8dc9c2f9"
+checksum = "a35db2071778a7344791a4fb4f95308b5673d219dee3ae348b86642574ecc90c"
 dependencies = [
  "anstream",
  "anstyle",
@@ -2475,6 +2476,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "fastrlp"
+version = "0.4.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "ce8dba4714ef14b8274c371879b175aa55b16b30f269663f19d576f380018dc4"
+dependencies = [
+ "arrayvec",
+ "auto_impl",
+ "bytes",
+]
+
+[[package]]
 name = "fdlimit"
 version = "0.3.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2805,9 +2817,9 @@ dependencies = [
 
 [[package]]
 name = "h2"
-version = "0.4.7"
+version = "0.4.8"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ccae279728d634d083c00f6099cb58f01cc99c145b84b8be2f6c74618d79922e"
+checksum = "5017294ff4bb30944501348f6f8e42e6ad28f42c8bbef7a74029aff064a4e3c2"
 dependencies = [
  "atomic-waker",
  "bytes",
@@ -3815,6 +3827,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "libm"
+version = "0.2.11"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "8355be11b20d696c8f18f6cc018c4e372165b1fa8126cef092399c9951984ffa"
+
+[[package]]
 name = "libp2p-identity"
 version = "0.2.10"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4358,6 +4376,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "071dfc062690e90b734c0b2273ce72ad0ffa95f0c74596bc250dcfd960262841"
 dependencies = [
  "autocfg",
+ "libm",
 ]
 
 [[package]]
@@ -4434,9 +4453,9 @@ dependencies = [
 
 [[package]]
 name = "op-alloy-consensus"
-version = "0.10.3"
+version = "0.10.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "23f7ff02e5f3ba62c8dd5d9a630c818f50147bca7b0d78e89de59ed46b5d02e1"
+checksum = "bc796860410e85a9cd881ee074c3dc0120b90696d82d09348ebb563d4ade67e4"
 dependencies = [
  "alloy-consensus",
  "alloy-eips 0.11.1",
@@ -4452,9 +4471,9 @@ dependencies = [
 
 [[package]]
 name = "op-alloy-rpc-types-engine"
-version = "0.10.3"
+version = "0.10.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "20120c629465e52e5cdb0ac8df0ba45e184b456fcd55d17ea9ec1247d6968bb4"
+checksum = "24a03ea4f6374aa13524753136eeceee76196acad6b1306399ab8f1856872384"
 dependencies = [
  "alloy-consensus",
  "alloy-eips 0.11.1",
@@ -5059,8 +5078,8 @@ dependencies = [
  "itertools 0.13.0",
  "lru 0.12.5",
  "paste",
- "strum",
- "strum_macros",
+ "strum 0.26.3",
+ "strum_macros 0.26.4",
  "unicode-segmentation",
  "unicode-truncate",
  "unicode-width 0.1.14",
@@ -5068,9 +5087,9 @@ dependencies = [
 
 [[package]]
 name = "raw-cpuid"
-version = "11.3.0"
+version = "11.4.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c6928fa44c097620b706542d428957635951bade7143269085389d42c8a4927e"
+checksum = "529468c1335c1c03919960dfefdb1b3648858c20d7ec2d0663e728e4a717efbc"
 dependencies = [
  "bitflags 2.8.0",
 ]
@@ -5223,7 +5242,7 @@ dependencies = [
 [[package]]
 name = "reth-chain-state"
 version = "1.1.5"
-source = "git+https://github.com/scroll-tech/reth.git?branch=feat/add-deref-blanket-engine-api#215d671a3f4d005eb4e01ce1f7d77f6320515f45"
+source = "git+https://github.com/scroll-tech/reth.git?branch=feat/add-deref-blanket-engine-api#b4bb326eaecaf33b6452ecdf013a0122cb4f4d86"
 dependencies = [
  "alloy-consensus",
  "alloy-eips 0.11.1",
@@ -5252,7 +5271,7 @@ dependencies = [
 [[package]]
 name = "reth-chainspec"
 version = "1.1.5"
-source = "git+https://github.com/scroll-tech/reth.git?branch=feat/add-deref-blanket-engine-api#215d671a3f4d005eb4e01ce1f7d77f6320515f45"
+source = "git+https://github.com/scroll-tech/reth.git?branch=feat/add-deref-blanket-engine-api#b4bb326eaecaf33b6452ecdf013a0122cb4f4d86"
 dependencies = [
  "alloy-chains",
  "alloy-consensus",
@@ -5271,7 +5290,7 @@ dependencies = [
 [[package]]
 name = "reth-cli"
 version = "1.1.5"
-source = "git+https://github.com/scroll-tech/reth.git?branch=feat/add-deref-blanket-engine-api#215d671a3f4d005eb4e01ce1f7d77f6320515f45"
+source = "git+https://github.com/scroll-tech/reth.git?branch=feat/add-deref-blanket-engine-api#b4bb326eaecaf33b6452ecdf013a0122cb4f4d86"
 dependencies = [
  "alloy-genesis",
  "clap",
@@ -5285,7 +5304,7 @@ dependencies = [
 [[package]]
 name = "reth-cli-commands"
 version = "1.1.5"
-source = "git+https://github.com/scroll-tech/reth.git?branch=feat/add-deref-blanket-engine-api#215d671a3f4d005eb4e01ce1f7d77f6320515f45"
+source = "git+https://github.com/scroll-tech/reth.git?branch=feat/add-deref-blanket-engine-api#b4bb326eaecaf33b6452ecdf013a0122cb4f4d86"
 dependencies = [
  "ahash",
  "alloy-consensus",
@@ -5346,7 +5365,7 @@ dependencies = [
 [[package]]
 name = "reth-cli-runner"
 version = "1.1.5"
-source = "git+https://github.com/scroll-tech/reth.git?branch=feat/add-deref-blanket-engine-api#215d671a3f4d005eb4e01ce1f7d77f6320515f45"
+source = "git+https://github.com/scroll-tech/reth.git?branch=feat/add-deref-blanket-engine-api#b4bb326eaecaf33b6452ecdf013a0122cb4f4d86"
 dependencies = [
  "reth-tasks",
  "tokio",
@@ -5356,7 +5375,7 @@ dependencies = [
 [[package]]
 name = "reth-cli-util"
 version = "1.1.5"
-source = "git+https://github.com/scroll-tech/reth.git?branch=feat/add-deref-blanket-engine-api#215d671a3f4d005eb4e01ce1f7d77f6320515f45"
+source = "git+https://github.com/scroll-tech/reth.git?branch=feat/add-deref-blanket-engine-api#b4bb326eaecaf33b6452ecdf013a0122cb4f4d86"
 dependencies = [
  "alloy-eips 0.11.1",
  "alloy-primitives",
@@ -5373,7 +5392,7 @@ dependencies = [
 [[package]]
 name = "reth-codecs"
 version = "1.1.5"
-source = "git+https://github.com/scroll-tech/reth.git?branch=feat/add-deref-blanket-engine-api#215d671a3f4d005eb4e01ce1f7d77f6320515f45"
+source = "git+https://github.com/scroll-tech/reth.git?branch=feat/add-deref-blanket-engine-api#b4bb326eaecaf33b6452ecdf013a0122cb4f4d86"
 dependencies = [
  "alloy-consensus",
  "alloy-eips 0.11.1",
@@ -5392,7 +5411,7 @@ dependencies = [
 [[package]]
 name = "reth-codecs-derive"
 version = "1.1.5"
-source = "git+https://github.com/scroll-tech/reth.git?branch=feat/add-deref-blanket-engine-api#215d671a3f4d005eb4e01ce1f7d77f6320515f45"
+source = "git+https://github.com/scroll-tech/reth.git?branch=feat/add-deref-blanket-engine-api#b4bb326eaecaf33b6452ecdf013a0122cb4f4d86"
 dependencies = [
  "convert_case",
  "proc-macro2",
@@ -5403,7 +5422,7 @@ dependencies = [
 [[package]]
 name = "reth-config"
 version = "1.1.5"
-source = "git+https://github.com/scroll-tech/reth.git?branch=feat/add-deref-blanket-engine-api#215d671a3f4d005eb4e01ce1f7d77f6320515f45"
+source = "git+https://github.com/scroll-tech/reth.git?branch=feat/add-deref-blanket-engine-api#b4bb326eaecaf33b6452ecdf013a0122cb4f4d86"
 dependencies = [
  "eyre",
  "humantime-serde",
@@ -5417,7 +5436,7 @@ dependencies = [
 [[package]]
 name = "reth-consensus"
 version = "1.1.5"
-source = "git+https://github.com/scroll-tech/reth.git?branch=feat/add-deref-blanket-engine-api#215d671a3f4d005eb4e01ce1f7d77f6320515f45"
+source = "git+https://github.com/scroll-tech/reth.git?branch=feat/add-deref-blanket-engine-api#b4bb326eaecaf33b6452ecdf013a0122cb4f4d86"
 dependencies = [
  "alloy-consensus",
  "alloy-eips 0.11.1",
@@ -5430,7 +5449,7 @@ dependencies = [
 [[package]]
 name = "reth-consensus-common"
 version = "1.1.5"
-source = "git+https://github.com/scroll-tech/reth.git?branch=feat/add-deref-blanket-engine-api#215d671a3f4d005eb4e01ce1f7d77f6320515f45"
+source = "git+https://github.com/scroll-tech/reth.git?branch=feat/add-deref-blanket-engine-api#b4bb326eaecaf33b6452ecdf013a0122cb4f4d86"
 dependencies = [
  "alloy-consensus",
  "alloy-eips 0.11.1",
@@ -5443,7 +5462,7 @@ dependencies = [
 [[package]]
 name = "reth-consensus-debug-client"
 version = "1.1.5"
-source = "git+https://github.com/scroll-tech/reth.git?branch=feat/add-deref-blanket-engine-api#215d671a3f4d005eb4e01ce1f7d77f6320515f45"
+source = "git+https://github.com/scroll-tech/reth.git?branch=feat/add-deref-blanket-engine-api#b4bb326eaecaf33b6452ecdf013a0122cb4f4d86"
 dependencies = [
  "alloy-consensus",
  "alloy-eips 0.11.1",
@@ -5467,7 +5486,7 @@ dependencies = [
 [[package]]
 name = "reth-db"
 version = "1.1.5"
-source = "git+https://github.com/scroll-tech/reth.git?branch=feat/add-deref-blanket-engine-api#215d671a3f4d005eb4e01ce1f7d77f6320515f45"
+source = "git+https://github.com/scroll-tech/reth.git?branch=feat/add-deref-blanket-engine-api#b4bb326eaecaf33b6452ecdf013a0122cb4f4d86"
 dependencies = [
  "alloy-consensus",
  "alloy-primitives",
@@ -5491,7 +5510,7 @@ dependencies = [
  "reth-trie-common",
  "rustc-hash 2.1.1",
  "serde",
- "strum",
+ "strum 0.26.3",
  "sysinfo",
  "tempfile",
  "thiserror 2.0.11",
@@ -5500,7 +5519,7 @@ dependencies = [
 [[package]]
 name = "reth-db-api"
 version = "1.1.5"
-source = "git+https://github.com/scroll-tech/reth.git?branch=feat/add-deref-blanket-engine-api#215d671a3f4d005eb4e01ce1f7d77f6320515f45"
+source = "git+https://github.com/scroll-tech/reth.git?branch=feat/add-deref-blanket-engine-api#b4bb326eaecaf33b6452ecdf013a0122cb4f4d86"
 dependencies = [
  "alloy-consensus",
  "alloy-genesis",
@@ -5529,7 +5548,7 @@ dependencies = [
 [[package]]
 name = "reth-db-common"
 version = "1.1.5"
-source = "git+https://github.com/scroll-tech/reth.git?branch=feat/add-deref-blanket-engine-api#215d671a3f4d005eb4e01ce1f7d77f6320515f45"
+source = "git+https://github.com/scroll-tech/reth.git?branch=feat/add-deref-blanket-engine-api#b4bb326eaecaf33b6452ecdf013a0122cb4f4d86"
 dependencies = [
  "alloy-consensus",
  "alloy-genesis",
@@ -5558,7 +5577,7 @@ dependencies = [
 [[package]]
 name = "reth-db-models"
 version = "1.1.5"
-source = "git+https://github.com/scroll-tech/reth.git?branch=feat/add-deref-blanket-engine-api#215d671a3f4d005eb4e01ce1f7d77f6320515f45"
+source = "git+https://github.com/scroll-tech/reth.git?branch=feat/add-deref-blanket-engine-api#b4bb326eaecaf33b6452ecdf013a0122cb4f4d86"
 dependencies = [
  "alloy-eips 0.11.1",
  "alloy-primitives",
@@ -5574,7 +5593,7 @@ dependencies = [
 [[package]]
 name = "reth-discv4"
 version = "1.1.5"
-source = "git+https://github.com/scroll-tech/reth.git?branch=feat/add-deref-blanket-engine-api#215d671a3f4d005eb4e01ce1f7d77f6320515f45"
+source = "git+https://github.com/scroll-tech/reth.git?branch=feat/add-deref-blanket-engine-api#b4bb326eaecaf33b6452ecdf013a0122cb4f4d86"
 dependencies = [
  "alloy-primitives",
  "alloy-rlp",
@@ -5600,7 +5619,7 @@ dependencies = [
 [[package]]
 name = "reth-discv5"
 version = "1.1.5"
-source = "git+https://github.com/scroll-tech/reth.git?branch=feat/add-deref-blanket-engine-api#215d671a3f4d005eb4e01ce1f7d77f6320515f45"
+source = "git+https://github.com/scroll-tech/reth.git?branch=feat/add-deref-blanket-engine-api#b4bb326eaecaf33b6452ecdf013a0122cb4f4d86"
 dependencies = [
  "alloy-primitives",
  "alloy-rlp",
@@ -5624,7 +5643,7 @@ dependencies = [
 [[package]]
 name = "reth-dns-discovery"
 version = "1.1.5"
-source = "git+https://github.com/scroll-tech/reth.git?branch=feat/add-deref-blanket-engine-api#215d671a3f4d005eb4e01ce1f7d77f6320515f45"
+source = "git+https://github.com/scroll-tech/reth.git?branch=feat/add-deref-blanket-engine-api#b4bb326eaecaf33b6452ecdf013a0122cb4f4d86"
 dependencies = [
  "alloy-primitives",
  "data-encoding",
@@ -5648,7 +5667,7 @@ dependencies = [
 [[package]]
 name = "reth-downloaders"
 version = "1.1.5"
-source = "git+https://github.com/scroll-tech/reth.git?branch=feat/add-deref-blanket-engine-api#215d671a3f4d005eb4e01ce1f7d77f6320515f45"
+source = "git+https://github.com/scroll-tech/reth.git?branch=feat/add-deref-blanket-engine-api#b4bb326eaecaf33b6452ecdf013a0122cb4f4d86"
 dependencies = [
  "alloy-consensus",
  "alloy-eips 0.11.1",
@@ -5683,7 +5702,7 @@ dependencies = [
 [[package]]
 name = "reth-e2e-test-utils"
 version = "1.1.5"
-source = "git+https://github.com/scroll-tech/reth.git?branch=feat/add-deref-blanket-engine-api#215d671a3f4d005eb4e01ce1f7d77f6320515f45"
+source = "git+https://github.com/scroll-tech/reth.git?branch=feat/add-deref-blanket-engine-api#b4bb326eaecaf33b6452ecdf013a0122cb4f4d86"
 dependencies = [
  "alloy-consensus",
  "alloy-eips 0.11.1",
@@ -5731,7 +5750,7 @@ dependencies = [
 [[package]]
 name = "reth-ecies"
 version = "1.1.5"
-source = "git+https://github.com/scroll-tech/reth.git?branch=feat/add-deref-blanket-engine-api#215d671a3f4d005eb4e01ce1f7d77f6320515f45"
+source = "git+https://github.com/scroll-tech/reth.git?branch=feat/add-deref-blanket-engine-api#b4bb326eaecaf33b6452ecdf013a0122cb4f4d86"
 dependencies = [
  "aes",
  "alloy-primitives",
@@ -5762,7 +5781,7 @@ dependencies = [
 [[package]]
 name = "reth-engine-local"
 version = "1.1.5"
-source = "git+https://github.com/scroll-tech/reth.git?branch=feat/add-deref-blanket-engine-api#215d671a3f4d005eb4e01ce1f7d77f6320515f45"
+source = "git+https://github.com/scroll-tech/reth.git?branch=feat/add-deref-blanket-engine-api#b4bb326eaecaf33b6452ecdf013a0122cb4f4d86"
 dependencies = [
  "alloy-consensus",
  "alloy-primitives",
@@ -5793,7 +5812,7 @@ dependencies = [
 [[package]]
 name = "reth-engine-primitives"
 version = "1.1.5"
-source = "git+https://github.com/scroll-tech/reth.git?branch=feat/add-deref-blanket-engine-api#215d671a3f4d005eb4e01ce1f7d77f6320515f45"
+source = "git+https://github.com/scroll-tech/reth.git?branch=feat/add-deref-blanket-engine-api#b4bb326eaecaf33b6452ecdf013a0122cb4f4d86"
 dependencies = [
  "alloy-consensus",
  "alloy-eips 0.11.1",
@@ -5815,7 +5834,7 @@ dependencies = [
 [[package]]
 name = "reth-engine-service"
 version = "1.1.5"
-source = "git+https://github.com/scroll-tech/reth.git?branch=feat/add-deref-blanket-engine-api#215d671a3f4d005eb4e01ce1f7d77f6320515f45"
+source = "git+https://github.com/scroll-tech/reth.git?branch=feat/add-deref-blanket-engine-api#b4bb326eaecaf33b6452ecdf013a0122cb4f4d86"
 dependencies = [
  "futures",
  "pin-project",
@@ -5838,7 +5857,7 @@ dependencies = [
 [[package]]
 name = "reth-engine-tree"
 version = "1.1.5"
-source = "git+https://github.com/scroll-tech/reth.git?branch=feat/add-deref-blanket-engine-api#215d671a3f4d005eb4e01ce1f7d77f6320515f45"
+source = "git+https://github.com/scroll-tech/reth.git?branch=feat/add-deref-blanket-engine-api#b4bb326eaecaf33b6452ecdf013a0122cb4f4d86"
 dependencies = [
  "alloy-consensus",
  "alloy-eips 0.11.1",
@@ -5887,7 +5906,7 @@ dependencies = [
 [[package]]
 name = "reth-engine-util"
 version = "1.1.5"
-source = "git+https://github.com/scroll-tech/reth.git?branch=feat/add-deref-blanket-engine-api#215d671a3f4d005eb4e01ce1f7d77f6320515f45"
+source = "git+https://github.com/scroll-tech/reth.git?branch=feat/add-deref-blanket-engine-api#b4bb326eaecaf33b6452ecdf013a0122cb4f4d86"
 dependencies = [
  "alloy-consensus",
  "alloy-eips 0.11.1",
@@ -5922,7 +5941,7 @@ dependencies = [
 [[package]]
 name = "reth-errors"
 version = "1.1.5"
-source = "git+https://github.com/scroll-tech/reth.git?branch=feat/add-deref-blanket-engine-api#215d671a3f4d005eb4e01ce1f7d77f6320515f45"
+source = "git+https://github.com/scroll-tech/reth.git?branch=feat/add-deref-blanket-engine-api#b4bb326eaecaf33b6452ecdf013a0122cb4f4d86"
 dependencies = [
  "reth-consensus",
  "reth-execution-errors",
@@ -5934,7 +5953,7 @@ dependencies = [
 [[package]]
 name = "reth-eth-wire"
 version = "1.1.5"
-source = "git+https://github.com/scroll-tech/reth.git?branch=feat/add-deref-blanket-engine-api#215d671a3f4d005eb4e01ce1f7d77f6320515f45"
+source = "git+https://github.com/scroll-tech/reth.git?branch=feat/add-deref-blanket-engine-api#b4bb326eaecaf33b6452ecdf013a0122cb4f4d86"
 dependencies = [
  "alloy-chains",
  "alloy-primitives",
@@ -5962,7 +5981,7 @@ dependencies = [
 [[package]]
 name = "reth-eth-wire-types"
 version = "1.1.5"
-source = "git+https://github.com/scroll-tech/reth.git?branch=feat/add-deref-blanket-engine-api#215d671a3f4d005eb4e01ce1f7d77f6320515f45"
+source = "git+https://github.com/scroll-tech/reth.git?branch=feat/add-deref-blanket-engine-api#b4bb326eaecaf33b6452ecdf013a0122cb4f4d86"
 dependencies = [
  "alloy-chains",
  "alloy-consensus",
@@ -5983,7 +6002,7 @@ dependencies = [
 [[package]]
 name = "reth-ethereum-cli"
 version = "1.1.5"
-source = "git+https://github.com/scroll-tech/reth.git?branch=feat/add-deref-blanket-engine-api#215d671a3f4d005eb4e01ce1f7d77f6320515f45"
+source = "git+https://github.com/scroll-tech/reth.git?branch=feat/add-deref-blanket-engine-api#b4bb326eaecaf33b6452ecdf013a0122cb4f4d86"
 dependencies = [
  "eyre",
  "reth-chainspec",
@@ -5993,7 +6012,7 @@ dependencies = [
 [[package]]
 name = "reth-ethereum-consensus"
 version = "1.1.5"
-source = "git+https://github.com/scroll-tech/reth.git?branch=feat/add-deref-blanket-engine-api#215d671a3f4d005eb4e01ce1f7d77f6320515f45"
+source = "git+https://github.com/scroll-tech/reth.git?branch=feat/add-deref-blanket-engine-api#b4bb326eaecaf33b6452ecdf013a0122cb4f4d86"
 dependencies = [
  "alloy-consensus",
  "alloy-eips 0.11.1",
@@ -6009,7 +6028,7 @@ dependencies = [
 [[package]]
 name = "reth-ethereum-engine-primitives"
 version = "1.1.5"
-source = "git+https://github.com/scroll-tech/reth.git?branch=feat/add-deref-blanket-engine-api#215d671a3f4d005eb4e01ce1f7d77f6320515f45"
+source = "git+https://github.com/scroll-tech/reth.git?branch=feat/add-deref-blanket-engine-api#b4bb326eaecaf33b6452ecdf013a0122cb4f4d86"
 dependencies = [
  "alloy-eips 0.11.1",
  "alloy-primitives",
@@ -6027,7 +6046,7 @@ dependencies = [
 [[package]]
 name = "reth-ethereum-forks"
 version = "1.1.5"
-source = "git+https://github.com/scroll-tech/reth.git?branch=feat/add-deref-blanket-engine-api#215d671a3f4d005eb4e01ce1f7d77f6320515f45"
+source = "git+https://github.com/scroll-tech/reth.git?branch=feat/add-deref-blanket-engine-api#b4bb326eaecaf33b6452ecdf013a0122cb4f4d86"
 dependencies = [
  "alloy-chains",
  "alloy-eip2124",
@@ -6043,7 +6062,7 @@ dependencies = [
 [[package]]
 name = "reth-ethereum-primitives"
 version = "1.1.5"
-source = "git+https://github.com/scroll-tech/reth.git?branch=feat/add-deref-blanket-engine-api#215d671a3f4d005eb4e01ce1f7d77f6320515f45"
+source = "git+https://github.com/scroll-tech/reth.git?branch=feat/add-deref-blanket-engine-api#b4bb326eaecaf33b6452ecdf013a0122cb4f4d86"
 dependencies = [
  "alloy-consensus",
  "alloy-eips 0.11.1",
@@ -6066,7 +6085,7 @@ dependencies = [
 [[package]]
 name = "reth-etl"
 version = "1.1.5"
-source = "git+https://github.com/scroll-tech/reth.git?branch=feat/add-deref-blanket-engine-api#215d671a3f4d005eb4e01ce1f7d77f6320515f45"
+source = "git+https://github.com/scroll-tech/reth.git?branch=feat/add-deref-blanket-engine-api#b4bb326eaecaf33b6452ecdf013a0122cb4f4d86"
 dependencies = [
  "rayon",
  "reth-db-api",
@@ -6076,7 +6095,7 @@ dependencies = [
 [[package]]
 name = "reth-evm"
 version = "1.1.5"
-source = "git+https://github.com/scroll-tech/reth.git?branch=feat/add-deref-blanket-engine-api#215d671a3f4d005eb4e01ce1f7d77f6320515f45"
+source = "git+https://github.com/scroll-tech/reth.git?branch=feat/add-deref-blanket-engine-api#b4bb326eaecaf33b6452ecdf013a0122cb4f4d86"
 dependencies = [
  "alloy-consensus",
  "alloy-eips 0.11.1",
@@ -6102,7 +6121,7 @@ dependencies = [
 [[package]]
 name = "reth-execution-errors"
 version = "1.1.5"
-source = "git+https://github.com/scroll-tech/reth.git?branch=feat/add-deref-blanket-engine-api#215d671a3f4d005eb4e01ce1f7d77f6320515f45"
+source = "git+https://github.com/scroll-tech/reth.git?branch=feat/add-deref-blanket-engine-api#b4bb326eaecaf33b6452ecdf013a0122cb4f4d86"
 dependencies = [
  "alloy-eips 0.11.1",
  "alloy-primitives",
@@ -6117,7 +6136,7 @@ dependencies = [
 [[package]]
 name = "reth-execution-types"
 version = "1.1.5"
-source = "git+https://github.com/scroll-tech/reth.git?branch=feat/add-deref-blanket-engine-api#215d671a3f4d005eb4e01ce1f7d77f6320515f45"
+source = "git+https://github.com/scroll-tech/reth.git?branch=feat/add-deref-blanket-engine-api#b4bb326eaecaf33b6452ecdf013a0122cb4f4d86"
 dependencies = [
  "alloy-consensus",
  "alloy-eips 0.11.1",
@@ -6135,7 +6154,7 @@ dependencies = [
 [[package]]
 name = "reth-exex"
 version = "1.1.5"
-source = "git+https://github.com/scroll-tech/reth.git?branch=feat/add-deref-blanket-engine-api#215d671a3f4d005eb4e01ce1f7d77f6320515f45"
+source = "git+https://github.com/scroll-tech/reth.git?branch=feat/add-deref-blanket-engine-api#b4bb326eaecaf33b6452ecdf013a0122cb4f4d86"
 dependencies = [
  "alloy-consensus",
  "alloy-eips 0.11.1",
@@ -6172,7 +6191,7 @@ dependencies = [
 [[package]]
 name = "reth-exex-types"
 version = "1.1.5"
-source = "git+https://github.com/scroll-tech/reth.git?branch=feat/add-deref-blanket-engine-api#215d671a3f4d005eb4e01ce1f7d77f6320515f45"
+source = "git+https://github.com/scroll-tech/reth.git?branch=feat/add-deref-blanket-engine-api#b4bb326eaecaf33b6452ecdf013a0122cb4f4d86"
 dependencies = [
  "alloy-eips 0.11.1",
  "alloy-primitives",
@@ -6187,7 +6206,7 @@ dependencies = [
 [[package]]
 name = "reth-fs-util"
 version = "1.1.5"
-source = "git+https://github.com/scroll-tech/reth.git?branch=feat/add-deref-blanket-engine-api#215d671a3f4d005eb4e01ce1f7d77f6320515f45"
+source = "git+https://github.com/scroll-tech/reth.git?branch=feat/add-deref-blanket-engine-api#b4bb326eaecaf33b6452ecdf013a0122cb4f4d86"
 dependencies = [
  "serde",
  "serde_json",
@@ -6197,7 +6216,7 @@ dependencies = [
 [[package]]
 name = "reth-invalid-block-hooks"
 version = "1.1.5"
-source = "git+https://github.com/scroll-tech/reth.git?branch=feat/add-deref-blanket-engine-api#215d671a3f4d005eb4e01ce1f7d77f6320515f45"
+source = "git+https://github.com/scroll-tech/reth.git?branch=feat/add-deref-blanket-engine-api#b4bb326eaecaf33b6452ecdf013a0122cb4f4d86"
 dependencies = [
  "alloy-consensus",
  "alloy-primitives",
@@ -6224,7 +6243,7 @@ dependencies = [
 [[package]]
 name = "reth-ipc"
 version = "1.1.5"
-source = "git+https://github.com/scroll-tech/reth.git?branch=feat/add-deref-blanket-engine-api#215d671a3f4d005eb4e01ce1f7d77f6320515f45"
+source = "git+https://github.com/scroll-tech/reth.git?branch=feat/add-deref-blanket-engine-api#b4bb326eaecaf33b6452ecdf013a0122cb4f4d86"
 dependencies = [
  "async-trait",
  "bytes",
@@ -6245,7 +6264,7 @@ dependencies = [
 [[package]]
 name = "reth-libmdbx"
 version = "1.1.5"
-source = "git+https://github.com/scroll-tech/reth.git?branch=feat/add-deref-blanket-engine-api#215d671a3f4d005eb4e01ce1f7d77f6320515f45"
+source = "git+https://github.com/scroll-tech/reth.git?branch=feat/add-deref-blanket-engine-api#b4bb326eaecaf33b6452ecdf013a0122cb4f4d86"
 dependencies = [
  "bitflags 2.8.0",
  "byteorder",
@@ -6262,7 +6281,7 @@ dependencies = [
 [[package]]
 name = "reth-mdbx-sys"
 version = "1.1.5"
-source = "git+https://github.com/scroll-tech/reth.git?branch=feat/add-deref-blanket-engine-api#215d671a3f4d005eb4e01ce1f7d77f6320515f45"
+source = "git+https://github.com/scroll-tech/reth.git?branch=feat/add-deref-blanket-engine-api#b4bb326eaecaf33b6452ecdf013a0122cb4f4d86"
 dependencies = [
  "bindgen",
  "cc",
@@ -6271,7 +6290,7 @@ dependencies = [
 [[package]]
 name = "reth-metrics"
 version = "1.1.5"
-source = "git+https://github.com/scroll-tech/reth.git?branch=feat/add-deref-blanket-engine-api#215d671a3f4d005eb4e01ce1f7d77f6320515f45"
+source = "git+https://github.com/scroll-tech/reth.git?branch=feat/add-deref-blanket-engine-api#b4bb326eaecaf33b6452ecdf013a0122cb4f4d86"
 dependencies = [
  "futures",
  "metrics",
@@ -6283,7 +6302,7 @@ dependencies = [
 [[package]]
 name = "reth-net-banlist"
 version = "1.1.5"
-source = "git+https://github.com/scroll-tech/reth.git?branch=feat/add-deref-blanket-engine-api#215d671a3f4d005eb4e01ce1f7d77f6320515f45"
+source = "git+https://github.com/scroll-tech/reth.git?branch=feat/add-deref-blanket-engine-api#b4bb326eaecaf33b6452ecdf013a0122cb4f4d86"
 dependencies = [
  "alloy-primitives",
 ]
@@ -6291,7 +6310,7 @@ dependencies = [
 [[package]]
 name = "reth-net-nat"
 version = "1.1.5"
-source = "git+https://github.com/scroll-tech/reth.git?branch=feat/add-deref-blanket-engine-api#215d671a3f4d005eb4e01ce1f7d77f6320515f45"
+source = "git+https://github.com/scroll-tech/reth.git?branch=feat/add-deref-blanket-engine-api#b4bb326eaecaf33b6452ecdf013a0122cb4f4d86"
 dependencies = [
  "futures-util",
  "if-addrs",
@@ -6305,7 +6324,7 @@ dependencies = [
 [[package]]
 name = "reth-network"
 version = "1.1.5"
-source = "git+https://github.com/scroll-tech/reth.git?branch=feat/add-deref-blanket-engine-api#215d671a3f4d005eb4e01ce1f7d77f6320515f45"
+source = "git+https://github.com/scroll-tech/reth.git?branch=feat/add-deref-blanket-engine-api#b4bb326eaecaf33b6452ecdf013a0122cb4f4d86"
 dependencies = [
  "alloy-consensus",
  "alloy-eips 0.11.1",
@@ -6360,7 +6379,7 @@ dependencies = [
 [[package]]
 name = "reth-network-api"
 version = "1.1.5"
-source = "git+https://github.com/scroll-tech/reth.git?branch=feat/add-deref-blanket-engine-api#215d671a3f4d005eb4e01ce1f7d77f6320515f45"
+source = "git+https://github.com/scroll-tech/reth.git?branch=feat/add-deref-blanket-engine-api#b4bb326eaecaf33b6452ecdf013a0122cb4f4d86"
 dependencies = [
  "alloy-primitives",
  "alloy-rpc-types-admin",
@@ -6383,7 +6402,7 @@ dependencies = [
 [[package]]
 name = "reth-network-p2p"
 version = "1.1.5"
-source = "git+https://github.com/scroll-tech/reth.git?branch=feat/add-deref-blanket-engine-api#215d671a3f4d005eb4e01ce1f7d77f6320515f45"
+source = "git+https://github.com/scroll-tech/reth.git?branch=feat/add-deref-blanket-engine-api#b4bb326eaecaf33b6452ecdf013a0122cb4f4d86"
 dependencies = [
  "alloy-consensus",
  "alloy-eips 0.11.1",
@@ -6406,7 +6425,7 @@ dependencies = [
 [[package]]
 name = "reth-network-peers"
 version = "1.1.5"
-source = "git+https://github.com/scroll-tech/reth.git?branch=feat/add-deref-blanket-engine-api#215d671a3f4d005eb4e01ce1f7d77f6320515f45"
+source = "git+https://github.com/scroll-tech/reth.git?branch=feat/add-deref-blanket-engine-api#b4bb326eaecaf33b6452ecdf013a0122cb4f4d86"
 dependencies = [
  "alloy-primitives",
  "alloy-rlp",
@@ -6421,7 +6440,7 @@ dependencies = [
 [[package]]
 name = "reth-network-types"
 version = "1.1.5"
-source = "git+https://github.com/scroll-tech/reth.git?branch=feat/add-deref-blanket-engine-api#215d671a3f4d005eb4e01ce1f7d77f6320515f45"
+source = "git+https://github.com/scroll-tech/reth.git?branch=feat/add-deref-blanket-engine-api#b4bb326eaecaf33b6452ecdf013a0122cb4f4d86"
 dependencies = [
  "alloy-eip2124",
  "humantime-serde",
@@ -6435,7 +6454,7 @@ dependencies = [
 [[package]]
 name = "reth-nippy-jar"
 version = "1.1.5"
-source = "git+https://github.com/scroll-tech/reth.git?branch=feat/add-deref-blanket-engine-api#215d671a3f4d005eb4e01ce1f7d77f6320515f45"
+source = "git+https://github.com/scroll-tech/reth.git?branch=feat/add-deref-blanket-engine-api#b4bb326eaecaf33b6452ecdf013a0122cb4f4d86"
 dependencies = [
  "anyhow",
  "bincode",
@@ -6452,7 +6471,7 @@ dependencies = [
 [[package]]
 name = "reth-node-api"
 version = "1.1.5"
-source = "git+https://github.com/scroll-tech/reth.git?branch=feat/add-deref-blanket-engine-api#215d671a3f4d005eb4e01ce1f7d77f6320515f45"
+source = "git+https://github.com/scroll-tech/reth.git?branch=feat/add-deref-blanket-engine-api#b4bb326eaecaf33b6452ecdf013a0122cb4f4d86"
 dependencies = [
  "alloy-rpc-types-engine",
  "eyre",
@@ -6473,7 +6492,7 @@ dependencies = [
 [[package]]
 name = "reth-node-builder"
 version = "1.1.5"
-source = "git+https://github.com/scroll-tech/reth.git?branch=feat/add-deref-blanket-engine-api#215d671a3f4d005eb4e01ce1f7d77f6320515f45"
+source = "git+https://github.com/scroll-tech/reth.git?branch=feat/add-deref-blanket-engine-api#b4bb326eaecaf33b6452ecdf013a0122cb4f4d86"
 dependencies = [
  "alloy-consensus",
  "alloy-eips 0.11.1",
@@ -6535,7 +6554,7 @@ dependencies = [
 [[package]]
 name = "reth-node-core"
 version = "1.1.5"
-source = "git+https://github.com/scroll-tech/reth.git?branch=feat/add-deref-blanket-engine-api#215d671a3f4d005eb4e01ce1f7d77f6320515f45"
+source = "git+https://github.com/scroll-tech/reth.git?branch=feat/add-deref-blanket-engine-api#b4bb326eaecaf33b6452ecdf013a0122cb4f4d86"
 dependencies = [
  "alloy-consensus",
  "alloy-eips 0.11.1",
@@ -6574,7 +6593,7 @@ dependencies = [
  "secp256k1",
  "serde",
  "shellexpand",
- "strum",
+ "strum 0.26.3",
  "thiserror 2.0.11",
  "toml",
  "tracing",
@@ -6584,7 +6603,7 @@ dependencies = [
 [[package]]
 name = "reth-node-events"
 version = "1.1.5"
-source = "git+https://github.com/scroll-tech/reth.git?branch=feat/add-deref-blanket-engine-api#215d671a3f4d005eb4e01ce1f7d77f6320515f45"
+source = "git+https://github.com/scroll-tech/reth.git?branch=feat/add-deref-blanket-engine-api#b4bb326eaecaf33b6452ecdf013a0122cb4f4d86"
 dependencies = [
  "alloy-consensus",
  "alloy-eips 0.11.1",
@@ -6608,7 +6627,7 @@ dependencies = [
 [[package]]
 name = "reth-node-metrics"
 version = "1.1.5"
-source = "git+https://github.com/scroll-tech/reth.git?branch=feat/add-deref-blanket-engine-api#215d671a3f4d005eb4e01ce1f7d77f6320515f45"
+source = "git+https://github.com/scroll-tech/reth.git?branch=feat/add-deref-blanket-engine-api#b4bb326eaecaf33b6452ecdf013a0122cb4f4d86"
 dependencies = [
  "eyre",
  "http",
@@ -6629,7 +6648,7 @@ dependencies = [
 [[package]]
 name = "reth-node-types"
 version = "1.1.5"
-source = "git+https://github.com/scroll-tech/reth.git?branch=feat/add-deref-blanket-engine-api#215d671a3f4d005eb4e01ce1f7d77f6320515f45"
+source = "git+https://github.com/scroll-tech/reth.git?branch=feat/add-deref-blanket-engine-api#b4bb326eaecaf33b6452ecdf013a0122cb4f4d86"
 dependencies = [
  "reth-chainspec",
  "reth-db-api",
@@ -6642,7 +6661,7 @@ dependencies = [
 [[package]]
 name = "reth-optimism-primitives"
 version = "1.1.5"
-source = "git+https://github.com/scroll-tech/reth.git?branch=feat/add-deref-blanket-engine-api#215d671a3f4d005eb4e01ce1f7d77f6320515f45"
+source = "git+https://github.com/scroll-tech/reth.git?branch=feat/add-deref-blanket-engine-api#b4bb326eaecaf33b6452ecdf013a0122cb4f4d86"
 dependencies = [
  "alloy-consensus",
  "alloy-eips 0.11.1",
@@ -6664,7 +6683,7 @@ dependencies = [
 [[package]]
 name = "reth-payload-builder"
 version = "1.1.5"
-source = "git+https://github.com/scroll-tech/reth.git?branch=feat/add-deref-blanket-engine-api#215d671a3f4d005eb4e01ce1f7d77f6320515f45"
+source = "git+https://github.com/scroll-tech/reth.git?branch=feat/add-deref-blanket-engine-api#b4bb326eaecaf33b6452ecdf013a0122cb4f4d86"
 dependencies = [
  "alloy-consensus",
  "alloy-primitives",
@@ -6687,7 +6706,7 @@ dependencies = [
 [[package]]
 name = "reth-payload-builder-primitives"
 version = "1.1.5"
-source = "git+https://github.com/scroll-tech/reth.git?branch=feat/add-deref-blanket-engine-api#215d671a3f4d005eb4e01ce1f7d77f6320515f45"
+source = "git+https://github.com/scroll-tech/reth.git?branch=feat/add-deref-blanket-engine-api#b4bb326eaecaf33b6452ecdf013a0122cb4f4d86"
 dependencies = [
  "alloy-rpc-types-engine",
  "async-trait",
@@ -6701,7 +6720,7 @@ dependencies = [
 [[package]]
 name = "reth-payload-primitives"
 version = "1.1.5"
-source = "git+https://github.com/scroll-tech/reth.git?branch=feat/add-deref-blanket-engine-api#215d671a3f4d005eb4e01ce1f7d77f6320515f45"
+source = "git+https://github.com/scroll-tech/reth.git?branch=feat/add-deref-blanket-engine-api#b4bb326eaecaf33b6452ecdf013a0122cb4f4d86"
 dependencies = [
  "alloy-eips 0.11.1",
  "alloy-primitives",
@@ -6720,7 +6739,7 @@ dependencies = [
 [[package]]
 name = "reth-payload-util"
 version = "1.1.5"
-source = "git+https://github.com/scroll-tech/reth.git?branch=feat/add-deref-blanket-engine-api#215d671a3f4d005eb4e01ce1f7d77f6320515f45"
+source = "git+https://github.com/scroll-tech/reth.git?branch=feat/add-deref-blanket-engine-api#b4bb326eaecaf33b6452ecdf013a0122cb4f4d86"
 dependencies = [
  "alloy-consensus",
  "alloy-primitives",
@@ -6730,7 +6749,7 @@ dependencies = [
 [[package]]
 name = "reth-payload-validator"
 version = "1.1.5"
-source = "git+https://github.com/scroll-tech/reth.git?branch=feat/add-deref-blanket-engine-api#215d671a3f4d005eb4e01ce1f7d77f6320515f45"
+source = "git+https://github.com/scroll-tech/reth.git?branch=feat/add-deref-blanket-engine-api#b4bb326eaecaf33b6452ecdf013a0122cb4f4d86"
 dependencies = [
  "alloy-rpc-types",
  "reth-chainspec",
@@ -6741,7 +6760,7 @@ dependencies = [
 [[package]]
 name = "reth-primitives"
 version = "1.1.5"
-source = "git+https://github.com/scroll-tech/reth.git?branch=feat/add-deref-blanket-engine-api#215d671a3f4d005eb4e01ce1f7d77f6320515f45"
+source = "git+https://github.com/scroll-tech/reth.git?branch=feat/add-deref-blanket-engine-api#b4bb326eaecaf33b6452ecdf013a0122cb4f4d86"
 dependencies = [
  "alloy-consensus",
  "arbitrary",
@@ -6756,7 +6775,7 @@ dependencies = [
 [[package]]
 name = "reth-primitives-traits"
 version = "1.1.5"
-source = "git+https://github.com/scroll-tech/reth.git?branch=feat/add-deref-blanket-engine-api#215d671a3f4d005eb4e01ce1f7d77f6320515f45"
+source = "git+https://github.com/scroll-tech/reth.git?branch=feat/add-deref-blanket-engine-api#b4bb326eaecaf33b6452ecdf013a0122cb4f4d86"
 dependencies = [
  "alloy-consensus",
  "alloy-eips 0.11.1",
@@ -6788,7 +6807,7 @@ dependencies = [
 [[package]]
 name = "reth-provider"
 version = "1.1.5"
-source = "git+https://github.com/scroll-tech/reth.git?branch=feat/add-deref-blanket-engine-api#215d671a3f4d005eb4e01ce1f7d77f6320515f45"
+source = "git+https://github.com/scroll-tech/reth.git?branch=feat/add-deref-blanket-engine-api#b4bb326eaecaf33b6452ecdf013a0122cb4f4d86"
 dependencies = [
  "alloy-consensus",
  "alloy-eips 0.11.1",
@@ -6825,7 +6844,7 @@ dependencies = [
  "reth-trie",
  "reth-trie-db",
  "revm",
- "strum",
+ "strum 0.26.3",
  "tokio",
  "tracing",
 ]
@@ -6833,7 +6852,7 @@ dependencies = [
 [[package]]
 name = "reth-prune"
 version = "1.1.5"
-source = "git+https://github.com/scroll-tech/reth.git?branch=feat/add-deref-blanket-engine-api#215d671a3f4d005eb4e01ce1f7d77f6320515f45"
+source = "git+https://github.com/scroll-tech/reth.git?branch=feat/add-deref-blanket-engine-api#b4bb326eaecaf33b6452ecdf013a0122cb4f4d86"
 dependencies = [
  "alloy-consensus",
  "alloy-eips 0.11.1",
@@ -6862,7 +6881,7 @@ dependencies = [
 [[package]]
 name = "reth-prune-types"
 version = "1.1.5"
-source = "git+https://github.com/scroll-tech/reth.git?branch=feat/add-deref-blanket-engine-api#215d671a3f4d005eb4e01ce1f7d77f6320515f45"
+source = "git+https://github.com/scroll-tech/reth.git?branch=feat/add-deref-blanket-engine-api#b4bb326eaecaf33b6452ecdf013a0122cb4f4d86"
 dependencies = [
  "alloy-primitives",
  "arbitrary",
@@ -6876,7 +6895,7 @@ dependencies = [
 [[package]]
 name = "reth-revm"
 version = "1.1.5"
-source = "git+https://github.com/scroll-tech/reth.git?branch=feat/add-deref-blanket-engine-api#215d671a3f4d005eb4e01ce1f7d77f6320515f45"
+source = "git+https://github.com/scroll-tech/reth.git?branch=feat/add-deref-blanket-engine-api#b4bb326eaecaf33b6452ecdf013a0122cb4f4d86"
 dependencies = [
  "alloy-eips 0.11.1",
  "alloy-primitives",
@@ -6890,7 +6909,7 @@ dependencies = [
 [[package]]
 name = "reth-rpc"
 version = "1.1.5"
-source = "git+https://github.com/scroll-tech/reth.git?branch=feat/add-deref-blanket-engine-api#215d671a3f4d005eb4e01ce1f7d77f6320515f45"
+source = "git+https://github.com/scroll-tech/reth.git?branch=feat/add-deref-blanket-engine-api#b4bb326eaecaf33b6452ecdf013a0122cb4f4d86"
 dependencies = [
  "alloy-consensus",
  "alloy-dyn-abi",
@@ -6960,7 +6979,7 @@ dependencies = [
 [[package]]
 name = "reth-rpc-api"
 version = "1.1.5"
-source = "git+https://github.com/scroll-tech/reth.git?branch=feat/add-deref-blanket-engine-api#215d671a3f4d005eb4e01ce1f7d77f6320515f45"
+source = "git+https://github.com/scroll-tech/reth.git?branch=feat/add-deref-blanket-engine-api#b4bb326eaecaf33b6452ecdf013a0122cb4f4d86"
 dependencies = [
  "alloy-eips 0.11.1",
  "alloy-json-rpc",
@@ -6985,7 +7004,7 @@ dependencies = [
 [[package]]
 name = "reth-rpc-builder"
 version = "1.1.5"
-source = "git+https://github.com/scroll-tech/reth.git?branch=feat/add-deref-blanket-engine-api#215d671a3f4d005eb4e01ce1f7d77f6320515f45"
+source = "git+https://github.com/scroll-tech/reth.git?branch=feat/add-deref-blanket-engine-api#b4bb326eaecaf33b6452ecdf013a0122cb4f4d86"
 dependencies = [
  "alloy-network",
  "alloy-provider",
@@ -7023,7 +7042,7 @@ dependencies = [
 [[package]]
 name = "reth-rpc-engine-api"
 version = "1.1.5"
-source = "git+https://github.com/scroll-tech/reth.git?branch=feat/add-deref-blanket-engine-api#215d671a3f4d005eb4e01ce1f7d77f6320515f45"
+source = "git+https://github.com/scroll-tech/reth.git?branch=feat/add-deref-blanket-engine-api#b4bb326eaecaf33b6452ecdf013a0122cb4f4d86"
 dependencies = [
  "alloy-eips 0.11.1",
  "alloy-primitives",
@@ -7053,7 +7072,7 @@ dependencies = [
 [[package]]
 name = "reth-rpc-eth-api"
 version = "1.1.5"
-source = "git+https://github.com/scroll-tech/reth.git?branch=feat/add-deref-blanket-engine-api#215d671a3f4d005eb4e01ce1f7d77f6320515f45"
+source = "git+https://github.com/scroll-tech/reth.git?branch=feat/add-deref-blanket-engine-api#b4bb326eaecaf33b6452ecdf013a0122cb4f4d86"
 dependencies = [
  "alloy-consensus",
  "alloy-dyn-abi",
@@ -7097,7 +7116,7 @@ dependencies = [
 [[package]]
 name = "reth-rpc-eth-types"
 version = "1.1.5"
-source = "git+https://github.com/scroll-tech/reth.git?branch=feat/add-deref-blanket-engine-api#215d671a3f4d005eb4e01ce1f7d77f6320515f45"
+source = "git+https://github.com/scroll-tech/reth.git?branch=feat/add-deref-blanket-engine-api#b4bb326eaecaf33b6452ecdf013a0122cb4f4d86"
 dependencies = [
  "alloy-consensus",
  "alloy-eips 0.11.1",
@@ -7140,7 +7159,7 @@ dependencies = [
 [[package]]
 name = "reth-rpc-layer"
 version = "1.1.5"
-source = "git+https://github.com/scroll-tech/reth.git?branch=feat/add-deref-blanket-engine-api#215d671a3f4d005eb4e01ce1f7d77f6320515f45"
+source = "git+https://github.com/scroll-tech/reth.git?branch=feat/add-deref-blanket-engine-api#b4bb326eaecaf33b6452ecdf013a0122cb4f4d86"
 dependencies = [
  "alloy-rpc-types-engine",
  "http",
@@ -7154,7 +7173,7 @@ dependencies = [
 [[package]]
 name = "reth-rpc-server-types"
 version = "1.1.5"
-source = "git+https://github.com/scroll-tech/reth.git?branch=feat/add-deref-blanket-engine-api#215d671a3f4d005eb4e01ce1f7d77f6320515f45"
+source = "git+https://github.com/scroll-tech/reth.git?branch=feat/add-deref-blanket-engine-api#b4bb326eaecaf33b6452ecdf013a0122cb4f4d86"
 dependencies = [
  "alloy-eips 0.11.1",
  "alloy-primitives",
@@ -7164,13 +7183,13 @@ dependencies = [
  "reth-errors",
  "reth-network-api",
  "serde",
- "strum",
+ "strum 0.26.3",
 ]
 
 [[package]]
 name = "reth-rpc-types-compat"
 version = "1.1.5"
-source = "git+https://github.com/scroll-tech/reth.git?branch=feat/add-deref-blanket-engine-api#215d671a3f4d005eb4e01ce1f7d77f6320515f45"
+source = "git+https://github.com/scroll-tech/reth.git?branch=feat/add-deref-blanket-engine-api#b4bb326eaecaf33b6452ecdf013a0122cb4f4d86"
 dependencies = [
  "alloy-consensus",
  "alloy-eips 0.11.1",
@@ -7186,7 +7205,7 @@ dependencies = [
 [[package]]
 name = "reth-scroll-chainspec"
 version = "1.1.5"
-source = "git+https://github.com/scroll-tech/reth.git?branch=feat/add-deref-blanket-engine-api#215d671a3f4d005eb4e01ce1f7d77f6320515f45"
+source = "git+https://github.com/scroll-tech/reth.git?branch=feat/add-deref-blanket-engine-api#b4bb326eaecaf33b6452ecdf013a0122cb4f4d86"
 dependencies = [
  "alloy-chains",
  "alloy-consensus",
@@ -7209,7 +7228,7 @@ dependencies = [
 [[package]]
 name = "reth-scroll-cli"
 version = "1.1.5"
-source = "git+https://github.com/scroll-tech/reth.git?branch=feat/add-deref-blanket-engine-api#215d671a3f4d005eb4e01ce1f7d77f6320515f45"
+source = "git+https://github.com/scroll-tech/reth.git?branch=feat/add-deref-blanket-engine-api#b4bb326eaecaf33b6452ecdf013a0122cb4f4d86"
 dependencies = [
  "clap",
  "eyre",
@@ -7231,7 +7250,7 @@ dependencies = [
 [[package]]
 name = "reth-scroll-consensus"
 version = "1.1.5"
-source = "git+https://github.com/scroll-tech/reth.git?branch=feat/add-deref-blanket-engine-api#215d671a3f4d005eb4e01ce1f7d77f6320515f45"
+source = "git+https://github.com/scroll-tech/reth.git?branch=feat/add-deref-blanket-engine-api#b4bb326eaecaf33b6452ecdf013a0122cb4f4d86"
 dependencies = [
  "revm",
 ]
@@ -7239,7 +7258,7 @@ dependencies = [
 [[package]]
 name = "reth-scroll-engine-primitives"
 version = "1.1.5"
-source = "git+https://github.com/scroll-tech/reth.git?branch=feat/add-deref-blanket-engine-api#215d671a3f4d005eb4e01ce1f7d77f6320515f45"
+source = "git+https://github.com/scroll-tech/reth.git?branch=feat/add-deref-blanket-engine-api#b4bb326eaecaf33b6452ecdf013a0122cb4f4d86"
 dependencies = [
  "alloy-consensus",
  "alloy-eips 0.11.1",
@@ -7264,7 +7283,7 @@ dependencies = [
 [[package]]
 name = "reth-scroll-evm"
 version = "1.1.5"
-source = "git+https://github.com/scroll-tech/reth.git?branch=feat/add-deref-blanket-engine-api#215d671a3f4d005eb4e01ce1f7d77f6320515f45"
+source = "git+https://github.com/scroll-tech/reth.git?branch=feat/add-deref-blanket-engine-api#b4bb326eaecaf33b6452ecdf013a0122cb4f4d86"
 dependencies = [
  "alloy-consensus",
  "alloy-eips 0.11.1",
@@ -7290,7 +7309,7 @@ dependencies = [
 [[package]]
 name = "reth-scroll-forks"
 version = "1.1.5"
-source = "git+https://github.com/scroll-tech/reth.git?branch=feat/add-deref-blanket-engine-api#215d671a3f4d005eb4e01ce1f7d77f6320515f45"
+source = "git+https://github.com/scroll-tech/reth.git?branch=feat/add-deref-blanket-engine-api#b4bb326eaecaf33b6452ecdf013a0122cb4f4d86"
 dependencies = [
  "alloy-chains",
  "alloy-primitives",
@@ -7302,7 +7321,7 @@ dependencies = [
 [[package]]
 name = "reth-scroll-node"
 version = "1.1.5"
-source = "git+https://github.com/scroll-tech/reth.git?branch=feat/add-deref-blanket-engine-api#215d671a3f4d005eb4e01ce1f7d77f6320515f45"
+source = "git+https://github.com/scroll-tech/reth.git?branch=feat/add-deref-blanket-engine-api#b4bb326eaecaf33b6452ecdf013a0122cb4f4d86"
 dependencies = [
  "alloy-consensus",
  "alloy-eips 0.11.1",
@@ -7342,7 +7361,7 @@ dependencies = [
 [[package]]
 name = "reth-scroll-payload"
 version = "1.1.5"
-source = "git+https://github.com/scroll-tech/reth.git?branch=feat/add-deref-blanket-engine-api#215d671a3f4d005eb4e01ce1f7d77f6320515f45"
+source = "git+https://github.com/scroll-tech/reth.git?branch=feat/add-deref-blanket-engine-api#b4bb326eaecaf33b6452ecdf013a0122cb4f4d86"
 dependencies = [
  "futures-util",
  "reth-payload-builder",
@@ -7352,7 +7371,7 @@ dependencies = [
 [[package]]
 name = "reth-scroll-primitives"
 version = "1.1.5"
-source = "git+https://github.com/scroll-tech/reth.git?branch=feat/add-deref-blanket-engine-api#215d671a3f4d005eb4e01ce1f7d77f6320515f45"
+source = "git+https://github.com/scroll-tech/reth.git?branch=feat/add-deref-blanket-engine-api#b4bb326eaecaf33b6452ecdf013a0122cb4f4d86"
 dependencies = [
  "alloy-consensus",
  "alloy-eips 0.11.1",
@@ -7377,7 +7396,7 @@ dependencies = [
 [[package]]
 name = "reth-scroll-rpc"
 version = "1.1.5"
-source = "git+https://github.com/scroll-tech/reth.git?branch=feat/add-deref-blanket-engine-api#215d671a3f4d005eb4e01ce1f7d77f6320515f45"
+source = "git+https://github.com/scroll-tech/reth.git?branch=feat/add-deref-blanket-engine-api#b4bb326eaecaf33b6452ecdf013a0122cb4f4d86"
 dependencies = [
  "alloy-consensus",
  "alloy-eips 0.11.1",
@@ -7413,7 +7432,7 @@ dependencies = [
 [[package]]
 name = "reth-stages"
 version = "1.1.5"
-source = "git+https://github.com/scroll-tech/reth.git?branch=feat/add-deref-blanket-engine-api#215d671a3f4d005eb4e01ce1f7d77f6320515f45"
+source = "git+https://github.com/scroll-tech/reth.git?branch=feat/add-deref-blanket-engine-api#b4bb326eaecaf33b6452ecdf013a0122cb4f4d86"
 dependencies = [
  "alloy-consensus",
  "alloy-eips 0.11.1",
@@ -7458,7 +7477,7 @@ dependencies = [
 [[package]]
 name = "reth-stages-api"
 version = "1.1.5"
-source = "git+https://github.com/scroll-tech/reth.git?branch=feat/add-deref-blanket-engine-api#215d671a3f4d005eb4e01ce1f7d77f6320515f45"
+source = "git+https://github.com/scroll-tech/reth.git?branch=feat/add-deref-blanket-engine-api#b4bb326eaecaf33b6452ecdf013a0122cb4f4d86"
 dependencies = [
  "alloy-eips 0.11.1",
  "alloy-primitives",
@@ -7485,7 +7504,7 @@ dependencies = [
 [[package]]
 name = "reth-stages-types"
 version = "1.1.5"
-source = "git+https://github.com/scroll-tech/reth.git?branch=feat/add-deref-blanket-engine-api#215d671a3f4d005eb4e01ce1f7d77f6320515f45"
+source = "git+https://github.com/scroll-tech/reth.git?branch=feat/add-deref-blanket-engine-api#b4bb326eaecaf33b6452ecdf013a0122cb4f4d86"
 dependencies = [
  "alloy-primitives",
  "arbitrary",
@@ -7499,7 +7518,7 @@ dependencies = [
 [[package]]
 name = "reth-static-file"
 version = "1.1.5"
-source = "git+https://github.com/scroll-tech/reth.git?branch=feat/add-deref-blanket-engine-api#215d671a3f4d005eb4e01ce1f7d77f6320515f45"
+source = "git+https://github.com/scroll-tech/reth.git?branch=feat/add-deref-blanket-engine-api#b4bb326eaecaf33b6452ecdf013a0122cb4f4d86"
 dependencies = [
  "alloy-primitives",
  "parking_lot",
@@ -7520,19 +7539,19 @@ dependencies = [
 [[package]]
 name = "reth-static-file-types"
 version = "1.1.5"
-source = "git+https://github.com/scroll-tech/reth.git?branch=feat/add-deref-blanket-engine-api#215d671a3f4d005eb4e01ce1f7d77f6320515f45"
+source = "git+https://github.com/scroll-tech/reth.git?branch=feat/add-deref-blanket-engine-api#b4bb326eaecaf33b6452ecdf013a0122cb4f4d86"
 dependencies = [
  "alloy-primitives",
  "clap",
  "derive_more",
  "serde",
- "strum",
+ "strum 0.26.3",
 ]
 
 [[package]]
 name = "reth-storage-api"
 version = "1.1.5"
-source = "git+https://github.com/scroll-tech/reth.git?branch=feat/add-deref-blanket-engine-api#215d671a3f4d005eb4e01ce1f7d77f6320515f45"
+source = "git+https://github.com/scroll-tech/reth.git?branch=feat/add-deref-blanket-engine-api#b4bb326eaecaf33b6452ecdf013a0122cb4f4d86"
 dependencies = [
  "alloy-consensus",
  "alloy-eips 0.11.1",
@@ -7557,7 +7576,7 @@ dependencies = [
 [[package]]
 name = "reth-storage-errors"
 version = "1.1.5"
-source = "git+https://github.com/scroll-tech/reth.git?branch=feat/add-deref-blanket-engine-api#215d671a3f4d005eb4e01ce1f7d77f6320515f45"
+source = "git+https://github.com/scroll-tech/reth.git?branch=feat/add-deref-blanket-engine-api#b4bb326eaecaf33b6452ecdf013a0122cb4f4d86"
 dependencies = [
  "alloy-eips 0.11.1",
  "alloy-primitives",
@@ -7573,7 +7592,7 @@ dependencies = [
 [[package]]
 name = "reth-tasks"
 version = "1.1.5"
-source = "git+https://github.com/scroll-tech/reth.git?branch=feat/add-deref-blanket-engine-api#215d671a3f4d005eb4e01ce1f7d77f6320515f45"
+source = "git+https://github.com/scroll-tech/reth.git?branch=feat/add-deref-blanket-engine-api#b4bb326eaecaf33b6452ecdf013a0122cb4f4d86"
 dependencies = [
  "auto_impl",
  "dyn-clone",
@@ -7591,7 +7610,7 @@ dependencies = [
 [[package]]
 name = "reth-testing-utils"
 version = "1.1.5"
-source = "git+https://github.com/scroll-tech/reth.git?branch=feat/add-deref-blanket-engine-api#215d671a3f4d005eb4e01ce1f7d77f6320515f45"
+source = "git+https://github.com/scroll-tech/reth.git?branch=feat/add-deref-blanket-engine-api#b4bb326eaecaf33b6452ecdf013a0122cb4f4d86"
 dependencies = [
  "alloy-consensus",
  "alloy-eips 0.11.1",
@@ -7606,7 +7625,7 @@ dependencies = [
 [[package]]
 name = "reth-tokio-util"
 version = "1.1.5"
-source = "git+https://github.com/scroll-tech/reth.git?branch=feat/add-deref-blanket-engine-api#215d671a3f4d005eb4e01ce1f7d77f6320515f45"
+source = "git+https://github.com/scroll-tech/reth.git?branch=feat/add-deref-blanket-engine-api#b4bb326eaecaf33b6452ecdf013a0122cb4f4d86"
 dependencies = [
  "tokio",
  "tokio-stream",
@@ -7616,7 +7635,7 @@ dependencies = [
 [[package]]
 name = "reth-tracing"
 version = "1.1.5"
-source = "git+https://github.com/scroll-tech/reth.git?branch=feat/add-deref-blanket-engine-api#215d671a3f4d005eb4e01ce1f7d77f6320515f45"
+source = "git+https://github.com/scroll-tech/reth.git?branch=feat/add-deref-blanket-engine-api#b4bb326eaecaf33b6452ecdf013a0122cb4f4d86"
 dependencies = [
  "clap",
  "eyre",
@@ -7631,7 +7650,7 @@ dependencies = [
 [[package]]
 name = "reth-transaction-pool"
 version = "1.1.5"
-source = "git+https://github.com/scroll-tech/reth.git?branch=feat/add-deref-blanket-engine-api#215d671a3f4d005eb4e01ce1f7d77f6320515f45"
+source = "git+https://github.com/scroll-tech/reth.git?branch=feat/add-deref-blanket-engine-api#b4bb326eaecaf33b6452ecdf013a0122cb4f4d86"
 dependencies = [
  "alloy-consensus",
  "alloy-eips 0.11.1",
@@ -7671,7 +7690,7 @@ dependencies = [
 [[package]]
 name = "reth-trie"
 version = "1.1.5"
-source = "git+https://github.com/scroll-tech/reth.git?branch=feat/add-deref-blanket-engine-api#215d671a3f4d005eb4e01ce1f7d77f6320515f45"
+source = "git+https://github.com/scroll-tech/reth.git?branch=feat/add-deref-blanket-engine-api#b4bb326eaecaf33b6452ecdf013a0122cb4f4d86"
 dependencies = [
  "alloy-consensus",
  "alloy-eips 0.11.1",
@@ -7697,7 +7716,7 @@ dependencies = [
 [[package]]
 name = "reth-trie-common"
 version = "1.1.5"
-source = "git+https://github.com/scroll-tech/reth.git?branch=feat/add-deref-blanket-engine-api#215d671a3f4d005eb4e01ce1f7d77f6320515f45"
+source = "git+https://github.com/scroll-tech/reth.git?branch=feat/add-deref-blanket-engine-api#b4bb326eaecaf33b6452ecdf013a0122cb4f4d86"
 dependencies = [
  "alloy-consensus",
  "alloy-primitives",
@@ -7721,7 +7740,7 @@ dependencies = [
 [[package]]
 name = "reth-trie-db"
 version = "1.1.5"
-source = "git+https://github.com/scroll-tech/reth.git?branch=feat/add-deref-blanket-engine-api#215d671a3f4d005eb4e01ce1f7d77f6320515f45"
+source = "git+https://github.com/scroll-tech/reth.git?branch=feat/add-deref-blanket-engine-api#b4bb326eaecaf33b6452ecdf013a0122cb4f4d86"
 dependencies = [
  "alloy-primitives",
  "alloy-rlp",
@@ -7743,7 +7762,7 @@ dependencies = [
 [[package]]
 name = "reth-trie-parallel"
 version = "1.1.5"
-source = "git+https://github.com/scroll-tech/reth.git?branch=feat/add-deref-blanket-engine-api#215d671a3f4d005eb4e01ce1f7d77f6320515f45"
+source = "git+https://github.com/scroll-tech/reth.git?branch=feat/add-deref-blanket-engine-api#b4bb326eaecaf33b6452ecdf013a0122cb4f4d86"
 dependencies = [
  "alloy-primitives",
  "alloy-rlp",
@@ -7766,7 +7785,7 @@ dependencies = [
 [[package]]
 name = "reth-trie-sparse"
 version = "1.1.5"
-source = "git+https://github.com/scroll-tech/reth.git?branch=feat/add-deref-blanket-engine-api#215d671a3f4d005eb4e01ce1f7d77f6320515f45"
+source = "git+https://github.com/scroll-tech/reth.git?branch=feat/add-deref-blanket-engine-api#b4bb326eaecaf33b6452ecdf013a0122cb4f4d86"
 dependencies = [
  "alloy-primitives",
  "alloy-rlp",
@@ -7781,7 +7800,7 @@ dependencies = [
 [[package]]
 name = "reth-zstd-compressors"
 version = "1.1.5"
-source = "git+https://github.com/scroll-tech/reth.git?branch=feat/add-deref-blanket-engine-api#215d671a3f4d005eb4e01ce1f7d77f6320515f45"
+source = "git+https://github.com/scroll-tech/reth.git?branch=feat/add-deref-blanket-engine-api#b4bb326eaecaf33b6452ecdf013a0122cb4f4d86"
 dependencies = [
  "zstd",
 ]
@@ -7997,17 +8016,19 @@ checksum = "afab94fb28594581f62d981211a9a4d53cc8130bbcbbb89a0440d9b8e81a7746"
 
 [[package]]
 name = "ruint"
-version = "1.12.3"
+version = "1.13.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2c3cc4c2511671f327125da14133d0c5c5d137f006a1017a16f557bc85b16286"
+checksum = "825df406ec217a8116bd7b06897c6cc8f65ffefc15d030ae2c9540acc9ed50b6"
 dependencies = [
  "alloy-rlp",
  "arbitrary",
  "ark-ff 0.3.0",
  "ark-ff 0.4.2",
  "bytes",
- "fastrlp",
+ "fastrlp 0.3.1",
+ "fastrlp 0.4.0",
  "num-bigint",
+ "num-integer",
  "num-traits",
  "parity-scale-codec",
  "primitive-types",
@@ -8248,7 +8269,7 @@ checksum = "94143f37725109f92c262ed2cf5e59bce7498c01bcc1502d7b9afe439a4e9f49"
 [[package]]
 name = "scroll-alloy-consensus"
 version = "1.1.5"
-source = "git+https://github.com/scroll-tech/reth.git?branch=feat/add-deref-blanket-engine-api#215d671a3f4d005eb4e01ce1f7d77f6320515f45"
+source = "git+https://github.com/scroll-tech/reth.git?branch=feat/add-deref-blanket-engine-api#b4bb326eaecaf33b6452ecdf013a0122cb4f4d86"
 dependencies = [
  "alloy-consensus",
  "alloy-eips 0.11.1",
@@ -8267,7 +8288,7 @@ dependencies = [
 [[package]]
 name = "scroll-alloy-network"
 version = "1.1.5"
-source = "git+https://github.com/scroll-tech/reth.git?branch=feat/add-deref-blanket-engine-api#215d671a3f4d005eb4e01ce1f7d77f6320515f45"
+source = "git+https://github.com/scroll-tech/reth.git?branch=feat/add-deref-blanket-engine-api#b4bb326eaecaf33b6452ecdf013a0122cb4f4d86"
 dependencies = [
  "alloy-consensus",
  "alloy-network",
@@ -8281,7 +8302,7 @@ dependencies = [
 [[package]]
 name = "scroll-alloy-provider"
 version = "1.1.5"
-source = "git+https://github.com/scroll-tech/reth.git?branch=feat/add-deref-blanket-engine-api#215d671a3f4d005eb4e01ce1f7d77f6320515f45"
+source = "git+https://github.com/scroll-tech/reth.git?branch=feat/add-deref-blanket-engine-api#b4bb326eaecaf33b6452ecdf013a0122cb4f4d86"
 dependencies = [
  "alloy-primitives",
  "alloy-provider",
@@ -8302,7 +8323,7 @@ dependencies = [
 [[package]]
 name = "scroll-alloy-rpc-types"
 version = "1.1.5"
-source = "git+https://github.com/scroll-tech/reth.git?branch=feat/add-deref-blanket-engine-api#215d671a3f4d005eb4e01ce1f7d77f6320515f45"
+source = "git+https://github.com/scroll-tech/reth.git?branch=feat/add-deref-blanket-engine-api#b4bb326eaecaf33b6452ecdf013a0122cb4f4d86"
 dependencies = [
  "alloy-consensus",
  "alloy-eips 0.11.1",
@@ -8319,7 +8340,7 @@ dependencies = [
 [[package]]
 name = "scroll-alloy-rpc-types-engine"
 version = "1.1.5"
-source = "git+https://github.com/scroll-tech/reth.git?branch=feat/add-deref-blanket-engine-api#215d671a3f4d005eb4e01ce1f7d77f6320515f45"
+source = "git+https://github.com/scroll-tech/reth.git?branch=feat/add-deref-blanket-engine-api#b4bb326eaecaf33b6452ecdf013a0122cb4f4d86"
 dependencies = [
  "alloy-primitives",
  "alloy-rpc-types-engine",
@@ -8878,7 +8899,16 @@ version = "0.26.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "8fec0f0aef304996cf250b31b5a10dee7980c85da9d759361292b8bca5a18f06"
 dependencies = [
- "strum_macros",
+ "strum_macros 0.26.4",
+]
+
+[[package]]
+name = "strum"
+version = "0.27.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "f64def088c51c9510a8579e3c5d67c65349dcf755e5479ad3d010aa6454e2c32"
+dependencies = [
+ "strum_macros 0.27.1",
 ]
 
 [[package]]
@@ -8886,6 +8916,19 @@ name = "strum_macros"
 version = "0.26.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "4c6bee85a5a24955dc440386795aa378cd9cf82acd5f764469152d2270e581be"
+dependencies = [
+ "heck",
+ "proc-macro2",
+ "quote",
+ "rustversion",
+ "syn 2.0.98",
+]
+
+[[package]]
+name = "strum_macros"
+version = "0.27.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "c77a8c5abcaf0f9ce05d62342b7d298c346515365c36b673df4ebe3ced01fde8"
 dependencies = [
  "heck",
  "proc-macro2",
@@ -8994,9 +9037,9 @@ checksum = "55937e1799185b12863d447f42597ed69d9928686b8d88a1df17376a097d8369"
 
 [[package]]
 name = "tempfile"
-version = "3.17.0"
+version = "3.17.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a40f762a77d2afa88c2d919489e390a12bdd261ed568e60cfa7e48d4e20f0d33"
+checksum = "22e5a0acb1f3f55f65cc4a866c361b2fb2a0ff6366785ae6fbb5f85df07ba230"
 dependencies = [
  "cfg-if",
  "fastrand",
@@ -9185,9 +9228,9 @@ dependencies = [
 
 [[package]]
 name = "tokio-tungstenite"
-version = "0.26.1"
+version = "0.26.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "be4bf6fecd69fcdede0ec680aaf474cdab988f9de6bc73d3758f0160e3b7025a"
+checksum = "7a9daff607c6d2bf6c16fd681ccb7eecc83e4e2cdc1ca067ffaadfca5de7f084"
 dependencies = [
  "futures-util",
  "log",
@@ -9465,17 +9508,16 @@ checksum = "e421abadd41a4225275504ea4d6566923418b7f05506fbc9c0fe86ba7396114b"
 
 [[package]]
 name = "tungstenite"
-version = "0.26.1"
+version = "0.26.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "413083a99c579593656008130e29255e54dcaae495be556cc26888f211648c24"
+checksum = "4793cb5e56680ecbb1d843515b23b6de9a75eb04b66643e256a396d43be33c13"
 dependencies = [
- "byteorder",
  "bytes",
  "data-encoding",
  "http",
  "httparse",
  "log",
- "rand 0.8.5",
+ "rand 0.9.0",
  "rustls",
  "rustls-pki-types",
  "sha1",
@@ -9485,9 +9527,9 @@ dependencies = [
 
 [[package]]
 name = "typenum"
-version = "1.17.0"
+version = "1.18.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "42ff0bf0c66b8238c6f3b578df37d0b7848e55df8577b3f74f92a69acceeb825"
+checksum = "1dccffe3ce07af9386bfd29e80c0ab1a8205a2fc34e4bcd40364df902cfa8f3f"
 
 [[package]]
 name = "ucd-trie"
@@ -9533,9 +9575,9 @@ checksum = "75b844d17643ee918803943289730bec8aac480150456169e647ed0b576ba539"
 
 [[package]]
 name = "unicode-ident"
-version = "1.0.16"
+version = "1.0.17"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a210d160f08b701c8721ba1c726c11662f877ea6b7094007e1ca9a1041945034"
+checksum = "00e2473a93778eb0bad35909dff6a10d28e63f792f16ed15e404fca9d5eeedbe"
 
 [[package]]
 name = "unicode-segmentation"
@@ -9632,9 +9674,9 @@ checksum = "06abde3611657adf66d383f00b093d7faecc7fa57071cce2578660c9f1010821"
 
 [[package]]
 name = "uuid"
-version = "1.13.1"
+version = "1.13.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ced87ca4be083373936a67f8de945faa23b6b42384bd5b64434850802c6dccd0"
+checksum = "8c1f41ffb7cf259f1ecc2876861a17e7142e63ead296f671f81f6ae85903e0d6"
 dependencies = [
  "getrandom 0.3.1",
 ]

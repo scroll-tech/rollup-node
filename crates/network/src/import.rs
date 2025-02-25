@@ -37,8 +37,10 @@ pub enum ConsensusError {
     Signature,
 }
 
+/// An error that can occur during block validation.
 #[derive(Debug)]
 pub enum BlockValidationError {
+    /// The block is invalid.
     InvalidBlock,
 }
 

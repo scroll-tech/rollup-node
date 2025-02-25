@@ -6,7 +6,7 @@ use super::{
 };
 use alloy_primitives::FixedBytes;
 use core::task::Poll;
-use futures::{FutureExt, StreamExt};
+use futures::{FutureExt, Stream, StreamExt};
 use reth_network::{
     cache::LruCache, NetworkConfig as RethNetworkConfig, NetworkHandle as RethNetworkHandle,
     NetworkManager as RethNetworkManager, Peers,
@@ -16,7 +16,6 @@ use reth_storage_api::BlockNumReader as BlockNumReaderT;
 use scroll_wire::{
     NewBlock, ProtocolHandler, ScrollWireConfig, ScrollWireEvent, ScrollWireManager, LRU_CACHE_SIZE,
 };
-use std::future::Future;
 use tokio::sync::mpsc::{self, UnboundedReceiver};
 use tokio_stream::wrappers::UnboundedReceiverStream;
 use tracing::trace;
@@ -121,11 +120,11 @@ impl NetworkManager {
     }
 
     /// Handler for received events from the [`ScrollWireManager`].
-    fn on_scroll_wire_event(&mut self, event: ScrollWireEvent) -> Option<NetworkManagerEvent> {
+    fn on_scroll_wire_event(&mut self, event: ScrollWireEvent) -> NetworkManagerEvent {
         match event {
             ScrollWireEvent::NewBlock { peer_id, block, signature } => {
                 trace!(target: "scroll::network::manager", peer_id = ?peer_id, block = ?block.hash_slow(), signature = ?signature, "Received new block");
-                Some(NetworkManagerEvent::NewBlock(NewBlockWithPeer { peer_id, block, signature }))
+                NetworkManagerEvent::NewBlock(NewBlockWithPeer { peer_id, block, signature })
             }
             // Only `NewBlock` events are expected from the scroll-wire protocol.
             _ => {
@@ -184,13 +183,13 @@ impl NetworkManager {
     }
 }
 
-impl Future for NetworkManager {
-    type Output = NetworkManagerEvent;
+impl Stream for NetworkManager {
+    type Item = NetworkManagerEvent;
 
-    fn poll(
+    fn poll_next(
         self: std::pin::Pin<&mut Self>,
         cx: &mut std::task::Context<'_>,
-    ) -> std::task::Poll<Self::Output> {
+    ) -> std::task::Poll<Option<Self::Item>> {
         let this = self.get_mut();
 
         // We handle the messages from the network handle.
@@ -213,9 +212,7 @@ impl Future for NetworkManager {
 
         // Next we handle the scroll-wire events.
         while let Poll::Ready(event) = this.scroll_wire.poll_unpin(cx) {
-            if let Some(event) = this.on_scroll_wire_event(event) {
-                return std::task::Poll::Ready(event);
-            }
+            return std::task::Poll::Ready(Some(this.on_scroll_wire_event(event)));
         }
 
         std::task::Poll::Pending

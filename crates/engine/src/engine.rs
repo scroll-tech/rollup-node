@@ -101,8 +101,7 @@ where
     ///   - If the execution payload matches the attributes:
     ///     - Sets the current fork choice for the EL via `engine_forkchoiceUpdatedV1`, advancing
     ///       the safe head by one.
-    // #[instrument(skip_all, level = "trace", fields(head = %self.unsafe_block_info.hash, safe =
-    // %self.safe_block_info.hash, finalized = %self.safe_block_info.hash))]
+    #[instrument(skip_all, level = "trace", fields(safe_block_info = ?safe_block_info, fcs = ?fcs, payload_attributes = ?payload_attributes))]
     pub async fn handle_payload_attributes(
         &mut self,
         safe_block_info: BlockInfo,
