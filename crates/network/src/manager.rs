@@ -22,8 +22,8 @@ use tracing::trace;
 
 /// [`NetworkManager`] manages the state of the scroll p2p network.
 ///
-/// This is an endless [`Future`] that drives the state of the entire network forward and includes
-/// the following components:
+/// This manager drives the state of the entire network forward and includes the following
+/// components:
 /// - `handle`: Used to interact with this [`NetworkManager`] by sending messages using the
 ///   [`NetworkHandle`].
 /// - `from_handle_rx`: Receives commands from the [`NetworkHandle`].
