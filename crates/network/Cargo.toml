@@ -13,21 +13,39 @@ alloy-primitives = { workspace = true, features = [
 ] }
 
 # reth
+reth-discv5 = { git = "https://github.com/scroll-tech/reth.git", branch = "feat/add-deref-blanket-engine-api" }
+reth-eth-wire-types.workspace = true
 reth-network.workspace = true
 reth-network-api.workspace = true
+reth-network-types = { git = "https://github.com/scroll-tech/reth.git", branch = "feat/add-deref-blanket-engine-api" }
 reth-network-peers.workspace = true
 reth-primitives.workspace = true
-reth-storage-api = { git = "https://github.com/scroll-tech/reth.git" }
+reth-storage-api = { git = "https://github.com/scroll-tech/reth.git", branch = "feat/add-deref-blanket-engine-api" }
+reth-tasks.workspace = true
 
 # scroll
 reth-scroll-chainspec.workspace = true
-reth-scroll-node = { workspace = true, features = ["skip-state-root-validation", "scroll"] }
+reth-scroll-node = { workspace = true, features = ["scroll", "skip-state-root-validation"] }
 reth-scroll-primitives.workspace = true
 scroll-wire.workspace = true
 
 # misc
 futures.workspace = true
+parking_lot = "0.12"
 secp256k1 = { workspace = true, features = ["global-context", "rand-std", "recovery"] }
 tokio = { workspace = true, features = ["full"] }
 tokio-stream.workspace = true
 tracing.workspace = true
+
+[features]
+serde = [
+	"alloy-primitives/serde",
+	"parking_lot/serde",
+	"reth-eth-wire-types/serde",
+	"reth-network/serde",
+	"reth-network-api/serde",
+	"reth-network-types/serde",
+	"reth-scroll-primitives/serde",
+	"scroll-wire/serde",
+	"secp256k1/serde"
+]

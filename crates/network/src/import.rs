@@ -1,32 +1,19 @@
 use reth_network_peers::PeerId;
 use scroll_wire::NewBlock;
-use secp256k1::ecdsa::Signature;
-use std::task::{Context, Poll};
-use tracing::trace;
 
-/// A trait for importing new blocks from the network.
-pub trait BlockImport: std::fmt::Debug + Send + Sync {
-    /// Called when a new block is received from the network.
-    fn on_new_block(
-        &mut self,
-        peer_id: PeerId,
-        block: reth_scroll_primitives::ScrollBlock,
-        signature: Signature,
-    );
-
-    /// Polls the block import type for results of block import.
-    fn poll(&mut self, cx: &mut Context<'_>) -> Poll<BlockImportOutcome>;
-}
+pub type BlockImportResult = Result<BlockValidation, BlockImportError>;
 
 /// The outcome of a block import operation.
+#[derive(Debug)]
 pub struct BlockImportOutcome {
     /// The peer that the block was received from.
     pub peer: PeerId,
     /// The result of the block import operation.
-    pub result: Result<BlockValidation, BlockImportError>,
+    pub result: BlockImportResult,
 }
 
 /// The result of a block validation operation.
+#[derive(Debug)]
 pub enum BlockValidation {
     /// The block header is valid.
     ValidHeader { new_block: NewBlock },
@@ -35,36 +22,36 @@ pub enum BlockValidation {
 }
 
 /// An error that can occur during block import.
+#[derive(Debug)]
 pub enum BlockImportError {
     /// An error occurred during consensus.
     Consensus(ConsensusError),
+    /// An error occurred during block validation.
+    Validation(BlockValidationError),
 }
 
 /// A consensus related error that can occur during block import.
+#[derive(Debug)]
 pub enum ConsensusError {
-    /// The block is invalid.
-    Block,
-    /// The state root is invalid.
-    StateRoot,
     /// The signature is invalid.
     Signature,
 }
 
-/// A block import type that does nothing.
+/// An error that can occur during block validation.
 #[derive(Debug)]
-pub struct NoopBlockImport;
+pub enum BlockValidationError {
+    /// The block is invalid.
+    InvalidBlock,
+}
 
-impl BlockImport for NoopBlockImport {
-    fn on_new_block(
-        &mut self,
-        peer_id: PeerId,
-        block: reth_scroll_primitives::ScrollBlock,
-        _signature: Signature,
-    ) {
-        trace!(target: "network::import::NoopBlockImport", peer_id = %peer_id, block = ?block, "Received new block");
+impl From<ConsensusError> for BlockImportError {
+    fn from(error: ConsensusError) -> Self {
+        Self::Consensus(error)
     }
+}
 
-    fn poll(&mut self, _cx: &mut std::task::Context<'_>) -> std::task::Poll<BlockImportOutcome> {
-        std::task::Poll::Pending
+impl From<BlockValidationError> for BlockImportError {
+    fn from(error: BlockValidationError) -> Self {
+        Self::Validation(error)
     }
 }

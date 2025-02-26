@@ -7,8 +7,14 @@ pub use block_info::BlockInfo;
 mod engine;
 pub use engine::EngineDriver;
 
-mod payload;
-pub use payload::{ExecutionPayloadProvider, ScrollPayloadAttributes};
+mod error;
+pub use error::EngineDriverError;
 
-#[cfg(any(test, feature = "test_utils"))]
-mod test_utils;
+mod fcs;
+pub use fcs::ForkchoiceState;
+
+mod payload;
+pub use payload::ExecutionPayloadProvider;
+
+#[cfg(any(test, feature = "test-utils"))]
+pub mod test_utils;

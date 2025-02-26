@@ -1,8 +1,14 @@
-mod import;
-pub use import::{BlockImport, BlockImportOutcome, BlockValidation, NoopBlockImport};
+mod event;
+pub use event::{NetworkManagerEvent, NewBlockWithPeer};
 
 mod handle;
 pub use handle::{NetworkHandle, NetworkHandleMessage};
+
+mod import;
+pub use import::{
+    BlockImportError, BlockImportOutcome, BlockImportResult, BlockValidation, BlockValidationError,
+    ConsensusError,
+};
 
 mod manager;
 pub use manager::NetworkManager;

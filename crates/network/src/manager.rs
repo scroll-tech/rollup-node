@@ -1,9 +1,12 @@
+use crate::{BlockImportError, BlockValidationError};
+
 use super::{
-    BlockImport, BlockImportOutcome, BlockValidation, NetworkHandle, NetworkHandleMessage,
+    BlockImportOutcome, BlockValidation, NetworkHandle, NetworkHandleMessage, NetworkManagerEvent,
+    NewBlockWithPeer,
 };
 use alloy_primitives::FixedBytes;
 use core::task::Poll;
-use futures::{FutureExt, StreamExt};
+use futures::{FutureExt, Stream, StreamExt};
 use reth_network::{
     cache::LruCache, NetworkConfig as RethNetworkConfig, NetworkHandle as RethNetworkHandle,
     NetworkManager as RethNetworkManager, Peers,
@@ -11,43 +14,29 @@ use reth_network::{
 use reth_scroll_node::ScrollNetworkPrimitives;
 use reth_storage_api::BlockNumReader as BlockNumReaderT;
 use scroll_wire::{
-    Event, NewBlock, ProtocolHandler, ScrollWireConfig, ScrollWireManager, LRU_CACHE_SIZE,
+    NewBlock, ProtocolHandler, ScrollWireConfig, ScrollWireEvent, ScrollWireManager, LRU_CACHE_SIZE,
 };
-use std::future::Future;
-use tokio::sync::mpsc::{self, UnboundedReceiver, UnboundedSender};
+use tokio::sync::mpsc::{self, UnboundedReceiver};
 use tokio_stream::wrappers::UnboundedReceiverStream;
 use tracing::trace;
 
 /// [`NetworkManager`] manages the state of the scroll p2p network.
 ///
-/// This is an endless [`Future`] that drives the state of the entire network forward and includes
-/// the following components:
-/// - inner_network_handle: Responsible for peer discover, managing connections between peers and
-///   operation of the eth-wire protocol.
-/// - block_import: Responsible for importing blocks that have been gossiped over the scroll-wire
-///   protocol.
-/// - to_manager_tx: Used to interact with this [`NetworkManager`] by sending messages using the
+/// This manager drives the state of the entire network forward and includes the following
+/// components:
+/// - `handle`: Used to interact with this [`NetworkManager`] by sending messages using the
 ///   [`NetworkHandle`].
-/// - from_handle_rx: Receives commands from the [`NetworkHandle`].
-/// - scroll_wire: The scroll-wire protocol that manages connections and state of the scroll-wire
-///   protocol.
-/// - eth_wire_block_source: An optional source of new blocks from the eth-wire protocol, this is
-///   used to bridge new blocks announced on the eth-wire protocol to the scroll-wire protocol.
+/// - `from_handle_rx`: Receives commands from the [`NetworkHandle`].
+/// - `scroll_wire`: The type that manages connections and state of the scroll wire protocol.
+#[derive(Debug)]
 pub struct NetworkManager {
-    /// A handle to the inner reth network manager.
-    inner_network_handle: RethNetworkHandle<ScrollNetworkPrimitives>,
-    /// Handles block imports for new blocks received from the network.
-    block_import: Box<dyn BlockImport>,
-    /// The sender half of the channel set up between this type and the [`NetworkHandle`],
-    /// sends commands to the [`NetworkHandle`].
-    to_manager_tx: UnboundedSender<NetworkHandleMessage>,
+    /// A handle used to interact with the network manager.
+    handle: NetworkHandle,
     /// Receiver half of the channel set up between this type and the [`NetworkHandle`], receives
     /// [`NetworkHandleMessage`]s.
     from_handle_rx: UnboundedReceiverStream<NetworkHandleMessage>,
-    /// The scroll-wire protocol.
+    /// The scroll wire protocol manager.
     scroll_wire: ScrollWireManager,
-    /// An optional source of new blocks from the eth-wire protocol.
-    eth_wire_block_source: Option<UnboundedReceiverStream<Event>>,
 }
 
 impl NetworkManager {
@@ -57,8 +46,7 @@ impl NetworkManager {
     /// [`RethNetworkManager`] are instantiated externally.
     pub fn from_parts(
         inner_network_handle: RethNetworkHandle<ScrollNetworkPrimitives>,
-        block_import: Box<dyn BlockImport>,
-        events: UnboundedReceiver<Event>,
+        events: UnboundedReceiver<ScrollWireEvent>,
     ) -> Self {
         // Create the channel for sending messages to the network manager from the network handle.
         let (to_manager_tx, from_handle_rx) = mpsc::unbounded_channel();
@@ -66,21 +54,15 @@ impl NetworkManager {
         // Create the scroll-wire protocol manager.
         let scroll_wire = ScrollWireManager::new(events);
 
-        Self {
-            inner_network_handle,
-            block_import,
-            to_manager_tx,
-            from_handle_rx: from_handle_rx.into(),
-            scroll_wire,
-            eth_wire_block_source: None,
-        }
+        let handle = NetworkHandle::new(to_manager_tx, inner_network_handle);
+
+        Self { handle, from_handle_rx: from_handle_rx.into(), scroll_wire }
     }
 
     /// Creates a new [`NetworkManager`] instance from the provided configuration and block import.
     pub async fn new<C: BlockNumReaderT + 'static>(
         mut network_config: RethNetworkConfig<C, ScrollNetworkPrimitives>,
         scroll_wire_config: ScrollWireConfig,
-        block_import: impl BlockImport + 'static,
     ) -> Self {
         // Create the scroll-wire protocol handler.
         let (scroll_wire_handler, events) = ProtocolHandler::new(scroll_wire_config);
@@ -96,32 +78,25 @@ impl NetworkManager {
         // Create the channel for sending messages to the network manager.
         let (to_manager_tx, from_handle_rx) = mpsc::unbounded_channel();
 
+        let handle = NetworkHandle::new(to_manager_tx, inner_network_handle);
+
         // Create the scroll-wire protocol manager.
         let scroll_wire = ScrollWireManager::new(events);
 
         // Spawn the inner network manager.
         tokio::spawn(inner_network_manager);
 
-        Self {
-            inner_network_handle,
-            block_import: Box::new(block_import),
-            to_manager_tx,
-            from_handle_rx: from_handle_rx.into(),
-            scroll_wire,
-            eth_wire_block_source: None,
-        }
-    }
-
-    /// Sets the new block source. This is used to bridge new blocks announced on the eth-wire
-    /// protocol.
-    pub fn with_new_block_source(mut self, source: UnboundedReceiver<Event>) -> Self {
-        self.eth_wire_block_source = Some(source.into());
-        self
+        Self { handle, from_handle_rx: from_handle_rx.into(), scroll_wire }
     }
 
     /// Returns a new [`NetworkHandle`] instance.
-    pub fn handle(&self) -> NetworkHandle {
-        NetworkHandle::new(self.to_manager_tx.clone(), self.inner_network_handle.clone())
+    pub fn handle(&self) -> &NetworkHandle {
+        &self.handle
+    }
+
+    /// Returns an inner network handle [`RethNetworkHandle`].
+    pub fn inner_network_handle(&self) -> &RethNetworkHandle<ScrollNetworkPrimitives> {
+        self.handle.inner()
     }
 
     /// Announces a new block to the network.
@@ -139,17 +114,17 @@ impl NetworkManager {
 
         // Announce block to the filtered set of peers
         for peer_id in peers {
-            trace!(target: "network::manager", peer_id = %peer_id, block_hash = %hash, "Announcing new block to peer");
+            trace!(target: "scroll::network::manager", peer_id = %peer_id, block_hash = %hash, "Announcing new block to peer");
             self.scroll_wire.announce_block(peer_id, &block, hash);
         }
     }
 
     /// Handler for received events from the [`ScrollWireManager`].
-    fn on_scroll_wire_event(&mut self, event: Event) {
+    fn on_scroll_wire_event(&mut self, event: ScrollWireEvent) -> NetworkManagerEvent {
         match event {
-            Event::NewBlock { peer_id, block, signature } => {
-                trace!(target: "network::manager", peer_id = ?peer_id, block = ?block, signature = ?signature, "Received new block");
-                self.block_import.on_new_block(peer_id, block, signature);
+            ScrollWireEvent::NewBlock { peer_id, block, signature } => {
+                trace!(target: "scroll::network::manager", peer_id = ?peer_id, block = ?block.hash_slow(), signature = ?signature, "Received new block");
+                NetworkManagerEvent::NewBlock(NewBlockWithPeer { peer_id, block, signature })
             }
             // Only `NewBlock` events are expected from the scroll-wire protocol.
             _ => {
@@ -163,6 +138,9 @@ impl NetworkManager {
         match message {
             NetworkHandleMessage::AnnounceBlock { block, signature } => {
                 self.announce_block(NewBlock::new(signature, block))
+            }
+            NetworkHandleMessage::BlockImportOutcome(outcome) => {
+                self.on_block_import_result(outcome);
             }
             NetworkHandleMessage::Shutdown(tx) => {
                 tx.send(()).unwrap()
@@ -178,6 +156,7 @@ impl NetworkManager {
         match result {
             Ok(BlockValidation::ValidBlock { new_block: msg }) |
             Ok(BlockValidation::ValidHeader { new_block: msg }) => {
+                trace!(target: "scroll::network::manager", peer_id = ?peer, block = ?msg.block, "Block import successful - announcing block to network");
                 let hash = msg.block.hash_slow();
                 self.scroll_wire
                     .state_mut()
@@ -186,58 +165,34 @@ impl NetworkManager {
                     .insert(hash);
                 self.announce_block(msg);
             }
-            Err(_) => {
-                self.inner_network_handle
+            Err(BlockImportError::Consensus(err)) => {
+                trace!(target: "scroll::network::manager", peer_id = ?peer, ?err, "Block import failed - consensus error - penalizing peer");
+                self.inner_network_handle()
+                    .reputation_change(peer, reth_network_api::ReputationChangeKind::BadBlock);
+            }
+            Err(BlockImportError::Validation(BlockValidationError::InvalidBlock)) => {
+                trace!(target: "scroll::network::manager", peer_id = ?peer, "Block import failed - invalid block - penalizing peer");
+                self.inner_network_handle()
                     .reputation_change(peer, reth_network_api::ReputationChangeKind::BadBlock);
             }
         }
     }
 
     pub async fn perform_network_shutdown(&mut self) {
-        self.inner_network_handle.shutdown().await.unwrap()
+        self.inner_network_handle().shutdown().await.unwrap()
     }
 }
 
-impl Future for NetworkManager {
-    type Output = ();
+impl Stream for NetworkManager {
+    type Item = NetworkManagerEvent;
 
-    fn poll(
+    fn poll_next(
         self: std::pin::Pin<&mut Self>,
         cx: &mut std::task::Context<'_>,
-    ) -> std::task::Poll<()> {
+    ) -> std::task::Poll<Option<Self::Item>> {
         let this = self.get_mut();
 
-        // Handle the block import results.
-        while let Poll::Ready(outcome) = this.block_import.poll(cx) {
-            this.on_block_import_result(outcome);
-        }
-
-        // Next we handle the scroll-wire events.
-        while let Poll::Ready(event) = this.scroll_wire.poll_unpin(cx) {
-            this.on_scroll_wire_event(event);
-        }
-
-        // Next we handle the messages from the eth-wire protocol.
-        while let Some(Poll::Ready(Some(event))) =
-            this.eth_wire_block_source.as_mut().map(|x| x.poll_next_unpin(cx))
-        {
-            // we should assert that the eth-wire protocol is only sending new blocks. All new
-            // blocks from the eth-wire protocol are valid and do not need to be validated.
-            match event {
-                Event::NewBlock { peer_id: _, block, signature } => {
-                    let block = NewBlock {
-                        block,
-                        signature: signature.serialize_compact().to_vec().into(),
-                    };
-                    this.announce_block(block);
-                }
-                _ => {
-                    unreachable!("eth wire source should only send new blocks");
-                }
-            }
-        }
-
-        // Next we handle the messages from the network handle.
+        // We handle the messages from the network handle.
         loop {
             match this.from_handle_rx.poll_next_unpin(cx) {
                 // A message has been received from the network handle.
@@ -248,13 +203,18 @@ impl Future for NetworkManager {
                 std::task::Poll::Ready(None) => {
                     // return std::task::Poll::Ready(());
                     // For now we will return pending to keep the network running.
-                    return std::task::Poll::Pending;
+                    break;
                 }
                 // No additional messages exist break.
-                std::task::Poll::Pending => {
-                    return std::task::Poll::Pending;
-                }
+                std::task::Poll::Pending => break,
             }
         }
+
+        // Next we handle the scroll-wire events.
+        if let Poll::Ready(event) = this.scroll_wire.poll_unpin(cx) {
+            return std::task::Poll::Ready(Some(this.on_scroll_wire_event(event)));
+        }
+
+        std::task::Poll::Pending
     }
 }

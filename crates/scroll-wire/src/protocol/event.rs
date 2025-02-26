@@ -1,12 +1,12 @@
-use crate::protocol::Message;
+use crate::protocol::ScrollMessage;
 use reth_network::Direction;
 use reth_network_api::PeerId;
 use secp256k1::ecdsa::Signature;
 use tokio::sync::mpsc::UnboundedSender;
 
-/// The events that can be emitted by the `ScrollWire` protocol.
+/// The events that can be emitted by the scroll wire protocol.
 #[derive(Debug)]
-pub enum Event {
+pub enum ScrollWireEvent {
     /// A new connection has been established.
     ConnectionEstablished {
         /// The direction of the connection.
@@ -14,7 +14,7 @@ pub enum Event {
         /// The peer id of the connection.
         peer_id: PeerId,
         /// A sender for sending messages to the connection.
-        to_connection: UnboundedSender<Message>,
+        to_connection: UnboundedSender<ScrollMessage>,
     },
     /// A new block received from the network
     NewBlock {
@@ -27,17 +27,17 @@ pub enum Event {
     },
 }
 
-impl Event {
-    /// Creates a new [`Event::ConnectionEstablished`] event.
+impl ScrollWireEvent {
+    /// Creates a new [`ScrollWireEvent::ConnectionEstablished`] event.
     pub const fn connection_established(
         direction: Direction,
         peer_id: PeerId,
-        to_connection: UnboundedSender<Message>,
+        to_connection: UnboundedSender<ScrollMessage>,
     ) -> Self {
         Self::ConnectionEstablished { direction, peer_id, to_connection }
     }
 
-    /// Creates a new [`Event::NewBlock`] event.
+    /// Creates a new [`ScrollWireEvent::NewBlock`] event.
     pub const fn new_block(
         peer_id: PeerId,
         block: reth_scroll_primitives::ScrollBlock,

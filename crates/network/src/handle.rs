@@ -50,6 +50,10 @@ impl NetworkHandle {
         let _ = self.inner.to_manager_tx.send(msg);
     }
 
+    pub fn block_import_outcome(&self, outcome: super::BlockImportOutcome) {
+        self.send_message(NetworkHandleMessage::BlockImportOutcome(outcome));
+    }
+
     /// Announces a block to the network.
     pub fn announce_block(&self, block: ScrollBlock, signature: Signature) {
         self.send_message(NetworkHandleMessage::AnnounceBlock { block, signature });
@@ -74,7 +78,9 @@ impl NetworkHandle {
 
 /// A message type used for communication between the [`NetworkHandle`] and the
 /// [`super::NetworkManager`].
+#[derive(Debug)]
 pub enum NetworkHandleMessage {
     AnnounceBlock { block: ScrollBlock, signature: Signature },
+    BlockImportOutcome(super::BlockImportOutcome),
     Shutdown(oneshot::Sender<()>),
 }

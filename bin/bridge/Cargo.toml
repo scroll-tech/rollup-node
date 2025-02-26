@@ -8,37 +8,47 @@ exclude.workspace = true
 
 [dependencies]
 # alloy
-alloy-consensus = { version = "0.9.2", default-features = false }
+alloy-chains.workspace = true
+alloy-rpc-types-engine.workspace = true
 
 # scroll-alloy
-scroll-alloy-consensus = { git = "https://github.com/scroll-tech/reth.git" }
-scroll-alloy-rpc-types-engine= { git = "https://github.com/scroll-tech/reth.git" }
+scroll-alloy-consensus = { git = "https://github.com/scroll-tech/reth.git", branch = "feat/add-deref-blanket-engine-api" }
+scroll-alloy-network = { git = "https://github.com/scroll-tech/reth.git", branch = "feat/add-deref-blanket-engine-api" }
+scroll-alloy-rpc-types-engine= { git = "https://github.com/scroll-tech/reth.git", branch = "feat/add-deref-blanket-engine-api" }
+scroll-alloy-provider.workspace = true
 
 # reth
-reth-cli-util = { git = "https://github.com/scroll-tech/reth.git" }
+reth-cli-util = { git = "https://github.com/scroll-tech/reth.git", branch = "feat/add-deref-blanket-engine-api" }
 reth-eth-wire-types.workspace = true
 reth-network.workspace = true
 reth-network-peers.workspace = true
-reth-node-api = { git = "https://github.com/scroll-tech/reth.git", features = ["scroll"] }
-reth-node-builder = { git = "https://github.com/scroll-tech/reth.git", features = ["skip-state-root-validation"] }
-reth-node-core = { git = "https://github.com/scroll-tech/reth.git" }
-reth-node-types = { git = "https://github.com/scroll-tech/reth.git" }
+reth-node-api = { git = "https://github.com/scroll-tech/reth.git", branch = "feat/add-deref-blanket-engine-api", features = ["scroll"] }
+reth-node-builder = { git = "https://github.com/scroll-tech/reth.git", branch = "feat/add-deref-blanket-engine-api", features = ["skip-state-root-validation"] }
+reth-node-core = { git = "https://github.com/scroll-tech/reth.git", branch = "feat/add-deref-blanket-engine-api" }
+reth-node-types = { git = "https://github.com/scroll-tech/reth.git", branch = "feat/add-deref-blanket-engine-api" }
 reth-primitives.workspace = true
 reth-provider = { workspace = true, features = ["scroll", "skip-state-root-validation"]}
-reth-transaction-pool = { git = "https://github.com/scroll-tech/reth.git" }
+reth-rpc-api = { workspace = true, features = ["client"] }
+reth-rpc-builder = { git = "https://github.com/scroll-tech/reth.git", branch = "feat/add-deref-blanket-engine-api" }
+reth-transaction-pool = { git = "https://github.com/scroll-tech/reth.git", branch = "feat/add-deref-blanket-engine-api" }
 
 # scroll
 reth-scroll-chainspec.workspace = true
-reth-scroll-cli = { git = "https://github.com/scroll-tech/reth.git", features = ["scroll"] }
-reth-scroll-engine-primitives = { git = "https://github.com/scroll-tech/reth.git" }
+reth-scroll-cli = { git = "https://github.com/scroll-tech/reth.git", branch = "feat/add-deref-blanket-engine-api", features = ["scroll"] }
+reth-scroll-engine-primitives = { git = "https://github.com/scroll-tech/reth.git", branch = "feat/add-deref-blanket-engine-api" }
 reth-scroll-node = { workspace = true, features = ["skip-state-root-validation"] }
-reth-scroll-primitives.workspace = true
+reth-scroll-primitives = { workspace = true }
 scroll-wire.workspace = true
 scroll-network.workspace = true
+scroll-engine = { workspace = true, features = ["test-utils"] }
+
+# rollup-node
+rollup-node-manager.workspace = true
 
 # misc
 clap = { version = "4", features = ["derive", "env"] }
 eyre.workspace = true
+futures.workspace = true
 secp256k1 = { workspace = true, features = [
     "global-context",
     "recovery",
@@ -51,25 +61,48 @@ tracing.workspace = true
 alloy-primitives = { workspace = true, default-features = false, features = [
     "map-foldhash",
 ] }
+alloy-rpc-types-engine.workspace = true
 
 # reth
-reth-e2e-test-utils = { git = "https://github.com/scroll-tech/reth.git" }
-reth-rpc-server-types = { git = "https://github.com/scroll-tech/reth.git" }
+reth-e2e-test-utils = { git = "https://github.com/scroll-tech/reth.git", branch = "feat/add-deref-blanket-engine-api" }
+reth-payload-builder = { git = "https://github.com/scroll-tech/reth.git", branch = "feat/add-deref-blanket-engine-api" }
+reth-rpc-server-types = { git = "https://github.com/scroll-tech/reth.git", branch = "feat/add-deref-blanket-engine-api" }
 reth-tasks.workspace = true
-reth-tracing = { git = "https://github.com/scroll-tech/reth.git" }
+reth-tracing = { git = "https://github.com/scroll-tech/reth.git", branch = "feat/add-deref-blanket-engine-api" }
 
-# misc
+# misc
 serde_json = { version = "1.0.94", default-features = false, features = ["alloc"] }
+tokio = { workspace = true, features = ["full"] }
 
 [features]
 test-utils = [
-    "reth-network/test-utils",
-    "reth-node-builder/test-utils",
-    "reth-primitives/test-utils",
-    "reth-provider/test-utils",
-    "reth-transaction-pool/test-utils"
+	"reth-network/test-utils",
+	"reth-node-builder/test-utils",
+	"reth-primitives/test-utils",
+	"reth-provider/test-utils",
+	"reth-transaction-pool/test-utils",
+	"scroll-engine/test-utils",
+	"reth-payload-builder/test-utils",
+	"reth-payload-builder/test-utils"
+]
+serde = [
+	"alloy-primitives/serde",
+	"alloy-rpc-types-engine/serde",
+	"reth-eth-wire-types/serde",
+	"reth-network/serde",
+	"reth-provider/serde",
+	"reth-scroll-primitives/serde",
+	"scroll-alloy-consensus/serde",
+	"scroll-alloy-rpc-types-engine/serde",
+	"scroll-engine/serde",
+	"scroll-network/serde",
+	"scroll-wire/serde",
+	"secp256k1/serde",
+	"rollup-node-manager/serde",
+	"alloy-chains/serde"
 ]
 
 [[bin]]
 name = "bridge"
 path = "src/main.rs"
+required-features = ["serde"]
