@@ -22,6 +22,8 @@ scroll-alloy-provider.workspace = true
 scroll-alloy-rpc-types-engine = { git = "https://github.com/scroll-tech/reth.git", branch = "feat/add-deref-blanket-engine-api" }
 
 # reth
+reth-engine-primitives = { git = "https://github.com/scroll-tech/reth.git", branch = "feat/add-deref-blanket-engine-api", default-features = false, features = ["scroll"] }
+reth-network-peers.workspace = true
 reth-payload-primitives = { git = "https://github.com/scroll-tech/reth.git", branch = "feat/add-deref-blanket-engine-api" }
 reth-primitives = { workspace = true }
 
@@ -30,12 +32,10 @@ reth-scroll-chainspec.workspace = true
 reth-scroll-primitives = { workspace = true, features = ["scroll"] }
 reth-scroll-engine-primitives = { git = "https://github.com/scroll-tech/reth.git", branch = "feat/add-deref-blanket-engine-api", default-features = false, features = ["scroll"] }
 
-# rollup-node
-rollup-node-primitives.workspace = true
-
 # misc
-async-trait.workspace = true
+async-trait = "0.1.68"
 eyre.workspace = true
+serde = { workspace = true, features = ["derive"] }
 tokio.workspace = true
 tracing.workspace = true
 
@@ -48,23 +48,23 @@ reth-testing-utils = { git = "https://github.com/scroll-tech/reth.git", branch =
 
 [features]
 arbitrary = [
-    "alloy-primitives/arbitrary",
-    "reth-primitives/arbitrary",
-    "alloy-eips/arbitrary",
-    "reth-scroll-primitives/arbitrary",
-    "scroll-alloy-rpc-types-engine/arbitrary",
-    "alloy-chains/arbitrary",
+	"alloy-primitives/arbitrary",
+	"reth-primitives/arbitrary",
+	"alloy-eips/arbitrary",
+	"reth-scroll-primitives/arbitrary",
+	"scroll-alloy-rpc-types-engine/arbitrary",
+	"alloy-chains/arbitrary"
 ]
 test-utils = [
-    "arbitrary",
-    "dep:arbitrary",
-    "reth-primitives/test-utils",
+	"arbitrary",
+	"dep:arbitrary",
+	"reth-primitives/test-utils"
 ]
 serde = [
-    "alloy-eips/serde",
-    "alloy-primitives/serde",
-    "alloy-rpc-types-engine/serde",
-    "reth-scroll-primitives/serde",
-    "scroll-alloy-rpc-types-engine/serde",
-    "alloy-chains/serde",
+	"alloy-eips/serde",
+	"alloy-primitives/serde",
+	"alloy-rpc-types-engine/serde",
+	"reth-scroll-primitives/serde",
+	"scroll-alloy-rpc-types-engine/serde",
+	"alloy-chains/serde"
 ]
