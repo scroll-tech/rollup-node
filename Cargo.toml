@@ -11,8 +11,8 @@ members = [
     "crates/engine",
     "crates/node",
     "crates/network",
-    "crates/scroll-wire"
-]
+    "crates/scroll-wire",
+    "crates/primitives", "crates/l1", "crates/database"]
 
 resolver = "2"
 
@@ -133,6 +133,7 @@ reth-scroll-primitives = { git = "https://github.com/scroll-tech/reth.git", bran
 # rollup node
 scroll-engine = { path = "crates/engine" }
 scroll-network = { path = "crates/network" }
+scroll-primitives = { path = "crates/primitives" }
 scroll-wire = { path = "crates/scroll-wire" }
 rollup-node-manager = { path = "crates/node" }
 

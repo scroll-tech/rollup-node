@@ -1,0 +1,21 @@
+[package]
+name = "scroll-primitives"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+exclude.workspace = true
+
+[dependencies]
+# alloy 
+alloy-consensus = { version = "0.11.1", default-features = false }
+alloy-primitives.workspace = true
+
+# scroll-alloy
+scroll-alloy-consensus = { git = "https://github.com/scroll-tech/reth.git", branch = "feat/add-deref-blanket-engine-api" }
+
+# reth-scroll
+reth-scroll-primitives.workspace = true
+
+[lints]
+workspace = true
