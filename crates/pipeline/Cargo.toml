@@ -1,5 +1,5 @@
 [package]
-name = "scroll-l1"
+name = "pipeline"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -7,10 +7,8 @@ license.workspace = true
 exclude.workspace = true
 
 [dependencies]
-# alloy
-alloy-sol-types = { version = "0.8.20", features = ["json"] }
-alloy-contract = { version = "0.11.1", default-features = false }
-alloy-primitives.workspace = true
+# scroll-alloy
+scroll-alloy-rpc-types-engine.workspace = true
 
 # rollup-node
 scroll-primitives.workspace = true

@@ -11,6 +11,8 @@ use scroll_alloy_provider::ScrollEngineApi;
 use scroll_engine::{
     BlockInfo, EngineDriver, EngineDriverError, ExecutionPayloadProvider, ForkchoiceState,
 };
+use scroll_indexer::Indexer;
+use scroll_l1::{L1Event, L1Watcher};
 use scroll_network::{
     BlockImportError, BlockImportOutcome, BlockValidation, BlockValidationError, NetworkManager,
     NetworkManagerEvent, NewBlockWithPeer,
@@ -32,6 +34,9 @@ pub use event::RollupEvent;
 mod consensus;
 use consensus::Consensus;
 pub use consensus::PoAConsensus;
+
+mod config;
+pub use config::Config;
 
 /// The size of the event channel.
 const EVENT_CHANNEL_SIZE: usize = 100;
@@ -55,12 +60,18 @@ type PendingBlockImportFuture =
 /// - `event_sender`: An event sender for sending events to subscribers of the rollup node manager.
 #[derive(Debug)]
 pub struct RollupNodeManager<C, EC, P> {
+    /// The configuration of the rollup node.
+    config: Config,
     /// The network manager that manages the scroll p2p network.
     network: NetworkManager,
     ///  The engine driver used to communicate with the engine.
     engine: Arc<EngineDriver<EC, P>>,
     /// The consensus algorithm used by the rollup node.
     consensus: C,
+    /// The L1 watcher for observing events from the L1.
+    l1_watcher: L1Watcher,
+    /// The indexer for indexing rollup node data.
+    indexer: Indexer,
     /// The receiver for new blocks received from the network (used to bridge from eth-wire).
     new_block_rx: UnboundedReceiverStream<NewBlockWithPeer>,
     /// The forkchoice state of the rollup node.
@@ -79,16 +90,22 @@ where
 {
     /// Create a new [`RollupNodeManager`] instance.
     pub fn new(
+        config: Config,
         network: NetworkManager,
         engine: EngineDriver<EC, P>,
-        forkchoice_state: ForkchoiceState,
         consensus: C,
+        l1_watcher: L1Watcher,
+        indexer: Indexer,
+        forkchoice_state: ForkchoiceState,
         new_block_rx: UnboundedReceiver<NewBlockWithPeer>,
     ) -> Self {
         Self {
+            config,
             network,
             engine: Arc::new(engine),
             consensus,
+            l1_watcher,
+            indexer,
             new_block_rx: new_block_rx.into(),
             forkchoice_state,
             pending_block_imports: FuturesOrdered::new(),
@@ -194,6 +211,11 @@ where
         }
     }
 
+    /// Handles an L1 event from the L1 watcher.
+    fn handle_l1_event(&mut self, _event: L1Event) {
+        todo!();
+    }
+
     /// Handles a block import outcome.
     fn handle_block_import_outcome(
         &mut self,
@@ -224,6 +246,11 @@ where
 
     fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
         let this = self.get_mut();
+
+        // Handle observations from the L1 watcher.
+        while let Poll::Ready(Some(event)) = this.l1_watcher.poll_next_unpin(cx) {
+            this.handle_l1_event(event);
+        }
 
         // Handle pending block imports.
         while let Poll::Ready(Some((block_info, outcome))) =

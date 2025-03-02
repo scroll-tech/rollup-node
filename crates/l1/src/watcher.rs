@@ -1,8 +1,8 @@
+use super::L1Event;
 use futures::Stream;
 
-mod observation;
-pub use observation::L1Event;
-
+/// A watcher for observing events from the L1.
+#[derive(Debug)]
 pub struct L1Watcher;
 
 impl Stream for L1Watcher {

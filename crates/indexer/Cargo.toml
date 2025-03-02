@@ -1,5 +1,5 @@
 [package]
-name = "scroll-l1"
+name = "scroll-indexer"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -7,16 +7,9 @@ license.workspace = true
 exclude.workspace = true
 
 [dependencies]
-# alloy
-alloy-sol-types = { version = "0.8.20", features = ["json"] }
-alloy-contract = { version = "0.11.1", default-features = false }
-alloy-primitives.workspace = true
-
 # rollup-node
+scroll-l1.workspace = true
 scroll-primitives.workspace = true
-
-# misc
-futures.workspace = true
 
 [lints]
 workspace = true

@@ -3829,17 +3829,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "l1"
-version = "0.0.1"
-dependencies = [
- "alloy-contract",
- "alloy-primitives",
- "alloy-sol-types",
- "futures",
- "scroll-primitives",
-]
-
-[[package]]
 name = "lazy_static"
 version = "1.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4709,6 +4698,15 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "8b870d8c151b6f2fb93e84a13146138f05d02ed11c7e7c54f8826aaaf7c9f184"
 
 [[package]]
+name = "pipeline"
+version = "0.0.1"
+dependencies = [
+ "futures",
+ "scroll-alloy-rpc-types-engine",
+ "scroll-primitives",
+]
+
+[[package]]
 name = "pkcs8"
 version = "0.10.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4924,6 +4922,10 @@ dependencies = [
  "quote",
  "syn 2.0.98",
 ]
+
+[[package]]
+name = "provider"
+version = "0.0.1"
 
 [[package]]
 name = "quanta"
@@ -8038,6 +8040,8 @@ dependencies = [
  "scroll-alloy-network",
  "scroll-alloy-provider",
  "scroll-engine",
+ "scroll-indexer",
+ "scroll-l1",
  "scroll-network",
  "scroll-wire",
  "secp256k1",
@@ -8461,6 +8465,25 @@ dependencies = [
 ]
 
 [[package]]
+name = "scroll-indexer"
+version = "0.0.1"
+dependencies = [
+ "scroll-l1",
+ "scroll-primitives",
+]
+
+[[package]]
+name = "scroll-l1"
+version = "0.0.1"
+dependencies = [
+ "alloy-contract",
+ "alloy-primitives",
+ "alloy-sol-types",
+ "futures",
+ "scroll-primitives",
+]
+
+[[package]]
 name = "scroll-network"
 version = "0.0.1"
 dependencies = [
@@ -8624,6 +8647,17 @@ name = "send_wrapper"
 version = "0.6.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "cd0b0ec5f1c1ca621c432a25813d8d60c88abe6d3e08a3eb9cf37d97a0fe3d73"
+
+[[package]]
+name = "sequencer"
+version = "0.0.1"
+dependencies = [
+ "futures",
+ "reth-scroll-primitives",
+ "scroll-alloy-rpc-types-engine",
+ "scroll-primitives",
+ "tokio",
+]
 
 [[package]]
 name = "serde"
