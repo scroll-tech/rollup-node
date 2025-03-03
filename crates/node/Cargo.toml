@@ -31,6 +31,7 @@ scroll-engine.workspace = true
 scroll-indexer.workspace = true
 scroll-l1.workspace = true
 scroll-network.workspace = true
+scroll-pipeline.workspace = true
 scroll-wire.workspace = true
 
 # misc

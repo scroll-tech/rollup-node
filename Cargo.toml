@@ -12,7 +12,14 @@ members = [
     "crates/node",
     "crates/network",
     "crates/scroll-wire",
-    "crates/primitives", "crates/l1", "crates/database", "crates/indexer", "crates/sequencer", "crates/pipeline", "crates/provider"]
+    "crates/primitives", 
+    "crates/l1", 
+    "crates/database", 
+    "crates/indexer", 
+    "crates/sequencer", 
+    "crates/pipeline", 
+    "crates/provider", 
+    "crates/codec"]
 
 resolver = "2"
 
@@ -136,6 +143,7 @@ scroll-engine = { path = "crates/engine" }
 scroll-indexer = { path = "crates/indexer" }
 scroll-l1 = { path = "crates/l1" }
 scroll-network = { path = "crates/network" }
+scroll-pipeline = { path = "crates/pipeline"}
 scroll-primitives = { path = "crates/primitives" }
 scroll-wire = { path = "crates/scroll-wire" }
 rollup-node-manager = { path = "crates/node" }

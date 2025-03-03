@@ -9,15 +9,18 @@ use scroll_primitives::BatchInput;
 pub struct Pipeline;
 
 impl Pipeline {
+    /// Creates a new [`Pipeline`] instance.
     pub fn new() -> Self {
         Pipeline
     }
 
+    /// Handles a batch input.
     pub fn handle_batch_input(&mut self, _batch_input: BatchInput) {
         // Handle the batch input.
         todo!()
     }
 
+    /// Gets the next scroll payload.
     pub fn next(&mut self) -> Option<ScrollPayloadAttributes> {
         // Get the next scroll payload.
         todo!()

@@ -7,7 +7,7 @@ pub use input::BatchInput;
 /// A batch is the unit of settlement to L1 for the scroll rollup.
 ///
 /// A batch contains a list of chunks, which contain a list of block commitments.
-/// A batch additionally contains metadata related to the unit of settlement.
+/// A batch additionally contains metadata related to the batch.
 #[derive(Debug)]
 pub struct Batch {
     /// The index of the batch.

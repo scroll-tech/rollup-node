@@ -1,5 +1,5 @@
 [package]
-name = "scroll-pipeline"
+name = "codec"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -7,14 +7,6 @@ license.workspace = true
 exclude.workspace = true
 
 [dependencies]
-# scroll-alloy
-scroll-alloy-rpc-types-engine.workspace = true
-
-# rollup-node
-scroll-primitives.workspace = true
-
-# misc
-futures.workspace = true
 
 [lints]
 workspace = true

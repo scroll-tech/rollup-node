@@ -1656,6 +1656,10 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f46ad14479a25103f283c0f10005961cf086d8dc42205bb44c46ac563475dca6"
 
 [[package]]
+name = "codec"
+version = "0.0.1"
+
+[[package]]
 name = "coins-bip32"
 version = "0.12.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4696,15 +4700,6 @@ name = "pin-utils"
 version = "0.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "8b870d8c151b6f2fb93e84a13146138f05d02ed11c7e7c54f8826aaaf7c9f184"
-
-[[package]]
-name = "pipeline"
-version = "0.0.1"
-dependencies = [
- "futures",
- "scroll-alloy-rpc-types-engine",
- "scroll-primitives",
-]
 
 [[package]]
 name = "pkcs8"
@@ -8043,6 +8038,7 @@ dependencies = [
  "scroll-indexer",
  "scroll-l1",
  "scroll-network",
+ "scroll-pipeline",
  "scroll-wire",
  "secp256k1",
  "tokio",
@@ -8510,6 +8506,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "scroll-pipeline"
+version = "0.0.1"
+dependencies = [
+ "futures",
+ "scroll-alloy-rpc-types-engine",
+ "scroll-primitives",
+]
+
+[[package]]
 name = "scroll-primitives"
 version = "0.0.1"
 dependencies = [
@@ -8655,6 +8660,7 @@ dependencies = [
  "futures",
  "reth-scroll-primitives",
  "scroll-alloy-rpc-types-engine",
+ "scroll-engine",
  "scroll-primitives",
  "tokio",
 ]

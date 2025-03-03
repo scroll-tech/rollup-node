@@ -17,6 +17,7 @@ use scroll_network::{
     BlockImportError, BlockImportOutcome, BlockValidation, BlockValidationError, NetworkManager,
     NetworkManagerEvent, NewBlockWithPeer,
 };
+use scroll_pipeline::Pipeline;
 use scroll_wire::NewBlock;
 use std::{
     future::Future,
@@ -37,6 +38,9 @@ pub use consensus::PoAConsensus;
 
 mod config;
 pub use config::Config;
+
+mod state;
+pub use state::State;
 
 /// The size of the event channel.
 const EVENT_CHANNEL_SIZE: usize = 100;
@@ -72,6 +76,8 @@ pub struct RollupNodeManager<C, EC, P> {
     l1_watcher: L1Watcher,
     /// The indexer for indexing rollup node data.
     indexer: Indexer,
+    /// The pipeline that derives the scroll chain from L1 events.
+    pipeline: Pipeline,
     /// The receiver for new blocks received from the network (used to bridge from eth-wire).
     new_block_rx: UnboundedReceiverStream<NewBlockWithPeer>,
     /// The forkchoice state of the rollup node.
@@ -96,6 +102,7 @@ where
         consensus: C,
         l1_watcher: L1Watcher,
         indexer: Indexer,
+        pipeline: Pipeline,
         forkchoice_state: ForkchoiceState,
         new_block_rx: UnboundedReceiver<NewBlockWithPeer>,
     ) -> Self {
@@ -106,6 +113,7 @@ where
             consensus,
             l1_watcher,
             indexer,
+            pipeline,
             new_block_rx: new_block_rx.into(),
             forkchoice_state,
             pending_block_imports: FuturesOrdered::new(),
@@ -213,7 +221,7 @@ where
 
     /// Handles an L1 event from the L1 watcher.
     fn handle_l1_event(&mut self, _event: L1Event) {
-        todo!();
+        todo!()
     }
 
     /// Handles a block import outcome.
