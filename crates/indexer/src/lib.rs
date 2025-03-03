@@ -14,6 +14,7 @@ impl Indexer {
         match event {
             L1Event::CommitBatch(batch_input) => self.handle_batch_input(batch_input).await,
             L1Event::Reorg(block_number) => self.handle_reorg(block_number).await,
+            L1Event::NewBlock(block_number) => todo!(),
             L1Event::Finalized(block_number) => self.handle_finalized(block_number).await,
             L1Event::L1Message(l1_message) => self.handle_l1_message(l1_message).await,
         }

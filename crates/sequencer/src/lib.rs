@@ -13,6 +13,7 @@ pub struct Sequencer<EC, P> {
     // TODO: Replace with appropriate buffer type that is reorg aware.
     /// A transaction queue for L1 messages.
     tx_queue: VecDeque<L1Message>,
+    // TODO: Move to a rollup node manager.
     /// The interval at which the sequencer creates new [`ScrollBlock`]s.
     block_interval: Interval,
     /// The [`EngineDriver`] that the sequencer uses to interact with the EngineAPI of the
