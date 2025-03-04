@@ -9,4 +9,6 @@ pub(crate) type L1WatcherResult<T> = Result<T, L1WatcherError>;
 pub enum L1WatcherError {
     #[error("execution provider error: {0:?}")]
     Provider(#[from] RpcError<TransportErrorKind>),
+    #[error("missing block {0}")]
+    MissingBlock(u64),
 }
