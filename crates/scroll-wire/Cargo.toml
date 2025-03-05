@@ -17,10 +17,9 @@ alloy-primitives = { workspace = true, features = [
 alloy-rlp = { version = "0.3.10", default-features = false }
 
 # reth
-reth-eth-wire = { git = "https://github.com/scroll-tech/reth.git", branch = "feat/add-deref-blanket-engine-api" }
+reth-eth-wire = { git = "https://github.com/scroll-tech/reth.git", branch = "fix/header-validation" }
 reth-network.workspace = true
 reth-network-api.workspace = true
-reth-primitives.workspace = true
 
 # scroll
 reth-scroll-primitives = { workspace = true, features = ["serde"] }
@@ -37,10 +36,10 @@ tracing.workspace = true
 
 [features]
 serde = [
-	"alloy-primitives/serde",
-	"reth-eth-wire/serde",
-	"reth-network/serde",
-	"reth-network-api/serde",
-	"reth-scroll-primitives/serde",
-	"secp256k1/serde"
+    "alloy-primitives/serde",
+    "reth-eth-wire/serde",
+    "reth-network/serde",
+    "reth-network-api/serde",
+    "reth-scroll-primitives/serde",
+    "secp256k1/serde"
 ]

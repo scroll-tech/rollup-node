@@ -16,14 +16,9 @@ scroll-alloy-network.workspace = true
 scroll-alloy-provider.workspace = true
 
 # reth
-reth-engine-primitives = { git = "https://github.com/scroll-tech/reth.git", branch = "feat/add-deref-blanket-engine-api", default-features = false, features = ["scroll"] }
-reth-network-peers.workspace = true
-reth-rpc-api.workspace = true
-reth-tasks.workspace = true
-reth-tokio-util = { git = "https://github.com/scroll-tech/reth.git", branch = "feat/add-deref-blanket-engine-api", default-features = false }
+reth-tokio-util = { git = "https://github.com/scroll-tech/reth.git", branch = "fix/header-validation", default-features = false }
 
 # reth-scroll
-reth-scroll-engine-primitives.workspace = true
 reth-scroll-primitives.workspace = true
 
 # scroll
@@ -43,11 +38,11 @@ workspace = true
 
 [features]
 serde = [
-	"alloy-rpc-types-engine/serde",
-	"reth-scroll-primitives/serde",
-	"scroll-engine/serde",
-	"scroll-network/serde",
-	"scroll-wire/serde",
-	"secp256k1/serde",
-	"alloy-eips/serde"
+    "alloy-rpc-types-engine/serde",
+    "reth-scroll-primitives/serde",
+    "scroll-engine/serde",
+    "scroll-network/serde",
+    "scroll-wire/serde",
+    "secp256k1/serde",
+    "alloy-eips/serde"
 ]

@@ -19,23 +19,20 @@ alloy-rpc-types-engine.workspace = true
 # scroll-alloy
 scroll-alloy-network.workspace = true
 scroll-alloy-provider.workspace = true
-scroll-alloy-rpc-types-engine = { git = "https://github.com/scroll-tech/reth.git", branch = "feat/add-deref-blanket-engine-api" }
+scroll-alloy-rpc-types-engine = { git = "https://github.com/scroll-tech/reth.git", branch = "fix/header-validation" }
 
 # reth
-reth-engine-primitives = { git = "https://github.com/scroll-tech/reth.git", branch = "feat/add-deref-blanket-engine-api", default-features = false, features = ["scroll"] }
-reth-network-peers.workspace = true
-reth-payload-primitives = { git = "https://github.com/scroll-tech/reth.git", branch = "feat/add-deref-blanket-engine-api" }
+reth-payload-primitives = { git = "https://github.com/scroll-tech/reth.git", branch = "fix/header-validation" }
 reth-primitives = { workspace = true }
 
 # reth-scroll
 reth-scroll-chainspec.workspace = true
-reth-scroll-primitives = { workspace = true, features = ["scroll"] }
-reth-scroll-engine-primitives = { git = "https://github.com/scroll-tech/reth.git", branch = "feat/add-deref-blanket-engine-api", default-features = false, features = ["scroll"] }
+reth-scroll-primitives.workspace = true
+reth-scroll-engine-primitives = { git = "https://github.com/scroll-tech/reth.git", branch = "fix/header-validation", default-features = false }
 
 # misc
 async-trait = "0.1.68"
 eyre.workspace = true
-serde = { workspace = true, features = ["derive"] }
 tokio.workspace = true
 tracing.workspace = true
 
@@ -44,27 +41,27 @@ arbitrary = { version = "1.3", optional = true }
 
 [dev-dependencies]
 arbitrary = "1.3"
-reth-testing-utils = { git = "https://github.com/scroll-tech/reth.git", branch = "feat/add-deref-blanket-engine-api" }
+reth-testing-utils = { git = "https://github.com/scroll-tech/reth.git", branch = "fix/header-validation" }
 
 [features]
 arbitrary = [
-	"alloy-primitives/arbitrary",
-	"reth-primitives/arbitrary",
-	"alloy-eips/arbitrary",
-	"reth-scroll-primitives/arbitrary",
-	"scroll-alloy-rpc-types-engine/arbitrary",
-	"alloy-chains/arbitrary"
+    "alloy-primitives/arbitrary",
+    "reth-primitives/arbitrary",
+    "alloy-eips/arbitrary",
+    "reth-scroll-primitives/arbitrary",
+    "scroll-alloy-rpc-types-engine/arbitrary",
+    "alloy-chains/arbitrary"
 ]
 test-utils = [
-	"arbitrary",
-	"dep:arbitrary",
-	"reth-primitives/test-utils"
+    "arbitrary",
+    "dep:arbitrary",
+    "reth-primitives/test-utils"
 ]
 serde = [
-	"alloy-eips/serde",
-	"alloy-primitives/serde",
-	"alloy-rpc-types-engine/serde",
-	"reth-scroll-primitives/serde",
-	"scroll-alloy-rpc-types-engine/serde",
-	"alloy-chains/serde"
+    "alloy-eips/serde",
+    "alloy-primitives/serde",
+    "alloy-rpc-types-engine/serde",
+    "reth-scroll-primitives/serde",
+    "scroll-alloy-rpc-types-engine/serde",
+    "alloy-chains/serde"
 ]
