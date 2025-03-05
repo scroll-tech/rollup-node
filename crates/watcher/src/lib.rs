@@ -13,11 +13,13 @@ mod error;
 /// Common test helpers
 pub mod test_utils;
 
-use crate::contract::{try_decode_commit_call, try_decode_log, CommitBatch, QueueTransaction};
+use crate::contract::{
+    try_decode_commit_call, try_decode_log, CommitBatch, FinalizeBatch, QueueTransaction,
+};
 use std::{collections::VecDeque, sync::Arc, time::Duration};
 
 use alloy_network::Ethereum;
-use alloy_primitives::{BlockNumber, Bytes};
+use alloy_primitives::{BlockNumber, Bytes, B256};
 use alloy_provider::{Network, Provider};
 use alloy_rpc_types_eth::{BlockNumberOrTag, BlockTransactionsKind, Log, TransactionTrait};
 use error::L1WatcherResult;
@@ -71,8 +73,15 @@ pub struct L1Watcher<EP> {
 pub enum L1Notification {
     /// A notification for a reorg of the L1 up to a given block number.
     Reorg(u64),
-    /// A notification of a new batch being commited for the rollup.
+    /// A new batch has been commited on the L1 rollup contract.
     BatchCommit(BatchInput),
+    /// A new batch has been finalized on the L1 rollup contract.
+    BatchFinalization {
+        /// The hash of the finalized batch.
+        hash: B256,
+        /// The block number the batch was finalized at.
+        block_number: BlockNumber,
+    },
     /// A new [`L1Message`] has been added to the L1 message queue.
     L1Message(L1MessageWithBlockNumber),
     /// A new block has been added to the L1.
@@ -146,7 +155,7 @@ where
     pub async fn step(&mut self) -> L1WatcherResult<()> {
         // handle the finalized block.
         let finalized = self.finalized_block(false).await?;
-        self.handle_finalized_block(&finalized.header);
+        self.handle_finalized_block(&finalized.header).await;
 
         // handle the latest block.
         let latest = self.latest_block(false).await?;
@@ -154,7 +163,11 @@ where
 
         // index the next range of blocks.
         let logs = self.next_filtered_logs().await?;
+
+        // handle all events.
         self.handle_l1_messages(&logs).await?;
+        self.handle_batch_commits(&logs).await?;
+        self.handle_batch_finalization(&logs).await?;
 
         // update the latest block the l1 watcher has indexed.
         self.update_current_block(&latest);
@@ -165,11 +178,11 @@ where
     /// Handle the finalized block:
     ///   - Update state and notify channel about finalization.
     ///   - Drain finalized blocks from state.
-    fn handle_finalized_block(&mut self, finalized: &Header) {
+    async fn handle_finalized_block(&mut self, finalized: &Header) {
         // update the state and notify on channel.
         if self.l1_state.finalized < finalized.number {
             self.l1_state.finalized = finalized.number;
-            let _ = self.sender.send(Arc::new(L1Notification::Finalized(finalized.number)));
+            self.notify(L1Notification::Finalized(finalized.number)).await;
         }
 
         // shortcircuit.
@@ -229,7 +242,7 @@ where
                 }
 
                 // send the reorg block number on the channel.
-                let _ = self.sender.send(Arc::new(L1Notification::Reorg(number))).await;
+                self.notify(L1Notification::Reorg(number)).await;
             }
 
             // set the unfinalized chain.
@@ -238,7 +251,7 @@ where
 
         // Update the state and notify on the channel.
         self.l1_state.head = latest.number;
-        let _ = self.sender.send(Arc::new(L1Notification::NewBlock(latest.number))).await;
+        self.notify(L1Notification::NewBlock(latest.number)).await;
 
         Ok(())
     }
@@ -254,7 +267,7 @@ where
         for (msg, bn) in l1_messages {
             let block_number = bn.ok_or(FilterLogError::MissingBlockNumber)?;
             let notification = L1MessageWithBlockNumber::new(block_number, msg);
-            let _ = self.sender.send(Arc::new(L1Notification::L1Message(notification))).await;
+            self.notify(L1Notification::L1Message(notification)).await;
         }
         Ok(())
     }
@@ -287,26 +300,49 @@ where
                 let blob_hashes = transaction.blob_versioned_hashes().map(|blobs| blobs.to_vec());
 
                 // feed all batch information to the batch input builder.
-                let batch_builder = BatchInputBuilder::default()
-                    .with_version(info.version())
-                    .with_batch_index(batch_index)
-                    .with_batch_hash(batch_hash)
-                    .with_block_number(block_number)
-                    .with_parent_batch_header(info.parent_batch_header())
-                    .with_skipped_l1_message_bitmap(info.skipped_l1_message_bitmap())
-                    .with_blob_hashes(blob_hashes);
+                let batch_builder = BatchInputBuilder::new(
+                    info.version(),
+                    batch_index,
+                    batch_hash,
+                    block_number,
+                    info.parent_batch_header(),
+                )
+                .with_chunks(info.chunks())
+                .with_skipped_l1_message_bitmap(info.skipped_l1_message_bitmap())
+                .with_blob_hashes(blob_hashes);
 
                 // if builder can build a batch input from data, notify via channel.
                 if let Some(batch_input) = batch_builder.try_build() {
-                    let _ =
-                        self.sender.send(Arc::new(L1Notification::BatchCommit(batch_input))).await;
+                    self.notify(L1Notification::BatchCommit(batch_input)).await;
                 }
             }
         }
         Ok(())
     }
 
-    // TODO: handle finalized log.
+    /// Handles the finalize batch events.
+    async fn handle_batch_finalization(&self, logs: &[Log]) -> L1WatcherResult<()> {
+        // filter finalize logs.
+        let finalize_tx_hashes =
+            logs.iter().map(|l| (l, l.block_number)).filter_map(|(log, bn)| {
+                try_decode_log::<FinalizeBatch>(&log.inner).map(|decoded| (decoded.data, bn))
+            });
+
+        for (decoded_log, maybe_block_number) in finalize_tx_hashes {
+            // fetch the commit transaction.
+            let block_number = maybe_block_number.ok_or(FilterLogError::MissingBlockNumber)?;
+
+            // send the finalization event in the channel.
+            let _ = self
+                .sender
+                .send(Arc::new(L1Notification::BatchFinalization {
+                    hash: decoded_log.batchHash,
+                    block_number,
+                }))
+                .await;
+        }
+        Ok(())
+    }
 
     /// Fetches the chain of unfinalized blocks up to and including the latest block, ensuring no
     /// gaps are present in the chain.
@@ -352,6 +388,13 @@ where
     /// Returns true if the [`L1Watcher`] is synced to the head of the L1.
     fn is_synced(&self) -> bool {
         self.current_block_number == self.l1_state.head
+    }
+
+    /// Send the notification in the channel.
+    async fn notify(&self, notification: L1Notification) {
+        let _ = self.sender.send(Arc::new(notification)).await.inspect_err(
+            |err| tracing::error!(target: "scroll::watcher", ?err, "failed to send notification"),
+        );
     }
 
     /// Updates the current block number, saturating at the head of the chain.
@@ -536,7 +579,7 @@ mod tests {
         let (mut watcher, _) = test_l1_watcher(vec![], vec![], finalized.clone(), latest);
 
         // When
-        watcher.handle_finalized_block(&finalized);
+        watcher.handle_finalized_block(&finalized).await;
 
         // Then
         assert_eq!(watcher.unfinalized_blocks.len(), 0);
@@ -552,7 +595,7 @@ mod tests {
         let (mut watcher, _) = test_l1_watcher(chain, vec![], finalized.clone(), latest);
 
         // When
-        watcher.handle_finalized_block(&finalized);
+        watcher.handle_finalized_block(&finalized).await;
 
         // Then
         assert_eq!(watcher.unfinalized_blocks.len(), 4);
@@ -568,7 +611,7 @@ mod tests {
         let (mut watcher, _) = test_l1_watcher(chain, vec![], finalized.clone(), latest);
 
         // When
-        watcher.handle_finalized_block(&finalized);
+        watcher.handle_finalized_block(&finalized).await;
 
         // Then
         assert_eq!(watcher.unfinalized_blocks.len(), 0);

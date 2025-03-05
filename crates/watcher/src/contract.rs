@@ -15,6 +15,8 @@ sol! {
 
     event CommitBatch(uint256 indexed batchIndex, bytes32 indexed batchHash);
 
+    event FinalizeBatch(uint256 indexed batchIndex, bytes32 indexed batchHash, bytes32 stateRoot, bytes32 withdrawRoot);
+
     // *********************FUNCTION*********************
     function commitBatch(
         uint8 version,
@@ -55,19 +57,19 @@ impl CommitBatchCall {
         };
         header.to_vec()
     }
-    pub(crate) fn chunks(&self) -> Vec<Vec<u8>> {
+    pub(crate) fn chunks(&self) -> Option<Vec<Vec<u8>>> {
         let chunks = match self {
             CommitBatchCall::CommitBatch(b) => &b.chunks,
             CommitBatchCall::CommitBatchWithBlobProof(b) => &b.chunks,
         };
-        chunks.iter().map(|c| c.to_vec()).collect()
+        Some(chunks.iter().map(|c| c.to_vec()).collect())
     }
-    pub(crate) fn skipped_l1_message_bitmap(&self) -> Vec<u8> {
+    pub(crate) fn skipped_l1_message_bitmap(&self) -> Option<Vec<u8>> {
         let bitmap = match self {
             CommitBatchCall::CommitBatch(b) => &b.skippedL1MessageBitmap,
             CommitBatchCall::CommitBatchWithBlobProof(b) => &b.skippedL1MessageBitmap,
         };
-        bitmap.to_vec()
+        Some(bitmap.to_vec())
     }
 }
 

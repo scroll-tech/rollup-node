@@ -1,4 +1,4 @@
-use alloy_primitives::B256;
+use alloy_primitives::{BlockNumber, B256};
 use derive_more;
 
 /// The input data for a batch.
@@ -42,18 +42,18 @@ pub struct BatchInputV2 {
 }
 
 /// A builder for the batch input. Determines the batch version based on the passed input.
-#[derive(Debug, Default)]
+#[derive(Debug)]
 pub struct BatchInputBuilder {
     /// The version of the batch input data.
-    version: Option<u8>,
+    version: u8,
     /// The index of the batch.
-    batch_index: Option<u64>,
+    batch_index: u64,
     /// The batch hash.
-    batch_hash: Option<B256>,
+    batch_hash: B256,
     /// The L1 block number at which the batch was committed.
-    block_number: Option<u64>,
+    block_number: u64,
     /// The parent batch header.
-    parent_batch_header: Option<Vec<u8>>,
+    parent_batch_header: Vec<u8>,
     /// The chunks in the batch.
     chunks: Option<Vec<Vec<u8>>>,
     /// The skipped L1 message bitmap.
@@ -63,45 +63,38 @@ pub struct BatchInputBuilder {
 }
 
 impl BatchInputBuilder {
-    /// Adds a version to the builder.
-    pub fn with_version(mut self, version: u8) -> Self {
-        self.version = Some(version);
-        self
-    }
-
-    /// Adds a batch index to the builder.
-    pub fn with_batch_index(mut self, batch_index: u64) -> Self {
-        self.batch_index = Some(batch_index);
-        self
-    }
-
-    /// Adds a batch hash to the builder.
-    pub fn with_batch_hash(mut self, batch_hash: B256) -> Self {
-        self.batch_hash = Some(batch_hash);
-        self
-    }
-
-    /// Adds a block number for the batch to the builder.
-    pub fn with_block_number(mut self, block_number: u64) -> Self {
-        self.block_number = Some(block_number);
-        self
-    }
-
-    /// Adds a parent batch header to the builder.
-    pub fn with_parent_batch_header(mut self, parent_batch_header: Vec<u8>) -> Self {
-        self.parent_batch_header = Some(parent_batch_header);
-        self
+    /// Returns a new instance of the builder.
+    pub fn new(
+        version: u8,
+        index: u64,
+        hash: B256,
+        block_number: BlockNumber,
+        parent_batch_header: Vec<u8>,
+    ) -> Self {
+        Self {
+            version,
+            batch_index: index,
+            batch_hash: hash,
+            block_number,
+            parent_batch_header,
+            chunks: None,
+            skipped_l1_message_bitmap: None,
+            blob_hashes: None,
+        }
     }
 
     /// Adds chunks to the builder.
-    pub fn with_chunks(mut self, chunks: Vec<Vec<u8>>) -> Self {
-        self.chunks = Some(chunks);
+    pub fn with_chunks(mut self, chunks: Option<Vec<Vec<u8>>>) -> Self {
+        self.chunks = chunks;
         self
     }
 
     /// Adds skipped l1 message bitmap to the builder.
-    pub fn with_skipped_l1_message_bitmap(mut self, skipped_l1_message_bitmap: Vec<u8>) -> Self {
-        self.skipped_l1_message_bitmap = Some(skipped_l1_message_bitmap);
+    pub fn with_skipped_l1_message_bitmap(
+        mut self,
+        skipped_l1_message_bitmap: Option<Vec<u8>>,
+    ) -> Self {
+        self.skipped_l1_message_bitmap = skipped_l1_message_bitmap;
         self
     }
 
@@ -114,11 +107,11 @@ impl BatchInputBuilder {
     /// Build the [`BatchInput`], returning [`None`] if fields haven't been correctly set.
     pub fn try_build(self) -> Option<BatchInput> {
         // handle fields required for all batch inputs.
-        let version = self.version?;
-        let batch_index = self.batch_index?;
-        let batch_hash = self.batch_hash?;
-        let block_number = self.block_number?;
-        let parent_batch_header = self.parent_batch_header?;
+        let version = self.version;
+        let batch_index = self.batch_index;
+        let batch_hash = self.batch_hash;
+        let block_number = self.block_number;
+        let parent_batch_header = self.parent_batch_header;
 
         match (self.chunks, self.skipped_l1_message_bitmap, self.blob_hashes) {
             (Some(chunks), Some(skipped_l1_message_bitmap), None) => Some(
