@@ -1,8 +1,11 @@
-use super::{BlockCommitment, Chunk};
+use super::{BlockContext, Chunk};
 use alloy_primitives::B256;
 
 mod input;
-pub use input::BatchInput;
+pub use input::{BatchInput, BatchInputV1, BatchInputV2};
+
+mod version;
+pub use version::BatchInputVersion;
 
 /// A batch is the unit of settlement to L1 for the scroll rollup.
 ///
@@ -23,7 +26,7 @@ pub struct Batch {
     /// The hash of the L1 message queue after the batch.
     pub post_l1_message_queue_hash: B256,
     /// The block commitments in the batch.
-    pub blocks: Vec<BlockCommitment>,
+    pub blocks: Vec<BlockContext>,
 }
 
 impl Batch {
@@ -35,7 +38,7 @@ impl Batch {
         chunks: Vec<Chunk>,
         prev_l1_message_queue_hash: B256,
         post_l1_message_queue_hash: B256,
-        blocks: Vec<BlockCommitment>,
+        blocks: Vec<BlockContext>,
     ) -> Self {
         Self {
             index,

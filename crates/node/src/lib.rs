@@ -260,6 +260,8 @@ where
             this.handle_l1_event(event);
         }
 
+        while let Poll::Ready(Some(event)) = this.pipeline.poll_next_unpin(cx) {}
+
         // Handle pending block imports.
         while let Poll::Ready(Some((block_info, outcome))) =
             this.pending_block_imports.poll_next_unpin(cx)

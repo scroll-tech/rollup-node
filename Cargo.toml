@@ -14,7 +14,8 @@ members = [
     "crates/scroll-wire",
     "crates/primitives", 
     "crates/l1", 
-    "crates/database", 
+    "crates/database/db",
+    "crates/database/migration", 
     "crates/indexer", 
     "crates/sequencer", 
     "crates/pipeline", 
@@ -118,6 +119,7 @@ alloy-primitives = { version = "0.8.15", default-features = false }
 alloy-rpc-types-engine = { version = "0.11.0", default-features = false }
 
 # scroll-alloy
+scroll-alloy-consensus = { git = "https://github.com/scroll-tech/reth.git", branch = "feat/add-deref-blanket-engine-api" }
 scroll-alloy-rpc-types-engine = { git = "https://github.com/scroll-tech/reth.git", branch = "feat/add-deref-blanket-engine-api" }
 scroll-alloy-provider = { git = "https://github.com/scroll-tech/reth.git", branch = "feat/add-deref-blanket-engine-api" }
 scroll-alloy-network = { git = "https://github.com/scroll-tech/reth.git", branch = "feat/add-deref-blanket-engine-api" }
@@ -142,6 +144,7 @@ reth-scroll-primitives = { git = "https://github.com/scroll-tech/reth.git", bran
 scroll-engine = { path = "crates/engine" }
 scroll-indexer = { path = "crates/indexer" }
 scroll-l1 = { path = "crates/l1" }
+scroll-migration = { path = "crates/database/migration" }
 scroll-network = { path = "crates/network" }
 scroll-pipeline = { path = "crates/pipeline"}
 scroll-primitives = { path = "crates/primitives" }
@@ -149,6 +152,7 @@ scroll-wire = { path = "crates/scroll-wire" }
 rollup-node-manager = { path = "crates/node" }
 
 # misc
+arbitrary = { version = "1.3" }
 eyre = "0.6"
 futures = { version = "0.3", default-features = false }
 secp256k1 = { version = "0.29", default-features = false }

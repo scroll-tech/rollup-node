@@ -12,7 +12,7 @@ alloy-chains.workspace = true
 alloy-rpc-types-engine.workspace = true
 
 # scroll-alloy
-scroll-alloy-consensus = { git = "https://github.com/scroll-tech/reth.git", branch = "feat/add-deref-blanket-engine-api" }
+scroll-alloy-consensus.workspace = true
 scroll-alloy-network = { git = "https://github.com/scroll-tech/reth.git", branch = "feat/add-deref-blanket-engine-api" }
 scroll-alloy-rpc-types-engine= { git = "https://github.com/scroll-tech/reth.git", branch = "feat/add-deref-blanket-engine-api" }
 scroll-alloy-provider.workspace = true

@@ -4,4 +4,4 @@ mod import;
 pub use import::BridgeBlockImport;
 
 mod network;
-pub use network::ScrollBridgeNetworkBuilder;
+// pub use network::ScrollBridgeNetworkBuilder;

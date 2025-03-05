@@ -4,7 +4,7 @@ use reth_scroll_primitives::ScrollTransactionSigned;
 
 /// A [`BlockCommitment`] is a single block commitment that is settled to L1.
 #[derive(Debug)]
-pub struct BlockCommitment {
+pub struct BlockContext {
     /// The header of the block commitment.
     pub header: Header,
     /// The transactions in the block commitment.
