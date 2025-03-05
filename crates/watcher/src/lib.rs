@@ -1,23 +1,28 @@
 //! L1 watcher for the Scroll Rollup Node.
 
-mod contracts;
+pub use constants::{
+    L1_MESSAGE_QUEUE_CONTRACT_ADDRESS, L1_WATCHER_LOG_FILTER, ROLLUP_CONTRACT_ADDRESS,
+};
+mod constants;
+mod contract;
+
+pub use error::{EthRequestError, FilterLogError, L1WatcherError};
 mod error;
+
 #[cfg(any(test, feature = "test-utils"))]
 /// Common test helpers
 pub mod test_utils;
 
-use crate::error::L1WatcherError;
-use std::{
-    collections::{BTreeMap, VecDeque},
-    sync::Arc,
-    time::Duration,
-};
+use crate::contract::{try_decode_commit_call, try_decode_log, CommitBatch, QueueTransaction};
+use std::{collections::VecDeque, sync::Arc, time::Duration};
 
 use alloy_network::Ethereum;
-use alloy_primitives::BlockNumber;
+use alloy_primitives::{BlockNumber, Bytes};
 use alloy_provider::{Network, Provider};
-use alloy_rpc_types_eth::{BlockNumberOrTag, BlockTransactionsKind, Filter, Log};
+use alloy_rpc_types_eth::{BlockNumberOrTag, BlockTransactionsKind, Log, TransactionTrait};
 use error::L1WatcherResult;
+use rollup_node_primitives::{BatchInput, BatchInputBuilder, L1MessageWithBlockNumber};
+use scroll_alloy_consensus::TxL1Message;
 use tokio::sync::mpsc;
 
 /// The block range used to fetch L1 logs.
@@ -59,8 +64,6 @@ pub struct L1Watcher<EP> {
     current_block_number: BlockNumber,
     /// The sender part of the channel for [`L1Notification`].
     sender: mpsc::Sender<Arc<L1Notification>>,
-    /// The log filter used to index L1 blocks.
-    filter: Filter,
 }
 
 /// The L1 notification type yielded by the [`L1Watcher`].
@@ -68,8 +71,10 @@ pub struct L1Watcher<EP> {
 pub enum L1Notification {
     /// A notification for a reorg of the L1 up to a given block number.
     Reorg(u64),
-    /// A notification of a new block of interest for the rollup node.
-    Block(Block),
+    /// A notification of a new batch being commited for the rollup.
+    BatchCommit(BatchInput),
+    /// A new [`L1Message`] has been added to the L1 message queue.
+    L1Message(L1MessageWithBlockNumber),
     /// A new block has been added to the L1.
     NewBlock(u64),
     /// A block has been finalized on the L1.
@@ -85,7 +90,6 @@ where
     pub async fn spawn(
         execution_provider: EP,
         start_block: BlockNumber,
-        filter: Filter,
     ) -> mpsc::Receiver<Arc<L1Notification>> {
         let (tx, rx) = mpsc::channel(LOGS_QUERY_BLOCK_RANGE as usize);
 
@@ -114,7 +118,6 @@ where
             current_block_number: start_block - 1,
             l1_state,
             sender: tx,
-            filter,
         };
         tokio::spawn(watcher.run());
 
@@ -123,7 +126,6 @@ where
 
     /// Main execution loop for the [`L1Watcher`].
     pub async fn run(mut self) {
-        let mut loop_interval;
         loop {
             // step the watcher.
             let _ = self
@@ -132,7 +134,8 @@ where
                 .inspect_err(|err| tracing::error!(target: "scroll::watcher", ?err));
 
             // update loop interval if needed.
-            loop_interval = if self.is_synced() { SLOW_SYNC_INTERVAL } else { FAST_SYNC_INTERVAL };
+            let loop_interval =
+                if self.is_synced() { SLOW_SYNC_INTERVAL } else { FAST_SYNC_INTERVAL };
 
             // sleep the appropriate amount of time.
             tokio::time::sleep(loop_interval).await;
@@ -151,6 +154,7 @@ where
 
         // index the next range of blocks.
         let logs = self.next_filtered_logs().await?;
+        self.handle_l1_messages(&logs).await?;
 
         // update the latest block the l1 watcher has indexed.
         self.update_current_block(&latest);
@@ -239,6 +243,71 @@ where
         Ok(())
     }
 
+    /// Filters the logs into L1 messages and sends them over the channel.
+    async fn handle_l1_messages(&self, logs: &[Log]) -> L1WatcherResult<()> {
+        let l1_messages =
+            logs.iter().map(|l| (&l.inner, l.block_number)).filter_map(|(log, bn)| {
+                try_decode_log::<QueueTransaction>(log)
+                    .map(|log| (Into::<TxL1Message>::into(log.data), bn))
+            });
+
+        for (msg, bn) in l1_messages {
+            let block_number = bn.ok_or(FilterLogError::MissingBlockNumber)?;
+            let notification = L1MessageWithBlockNumber::new(block_number, msg);
+            let _ = self.sender.send(Arc::new(L1Notification::L1Message(notification))).await;
+        }
+        Ok(())
+    }
+
+    /// Handles the batch commits events.
+    async fn handle_batch_commits(&self, logs: &[Log]) -> L1WatcherResult<()> {
+        // filter commit logs.
+        let commit_tx_hashes =
+            logs.iter().map(|l| (l, l.transaction_hash)).filter_map(|(log, tx_hash)| {
+                try_decode_log::<CommitBatch>(&log.inner)
+                    .map(|decoded| (log, decoded.data, tx_hash))
+            });
+
+        for (raw_log, decoded_log, maybe_tx_hash) in commit_tx_hashes {
+            // fetch the commit transaction.
+            let tx_hash = maybe_tx_hash.ok_or(FilterLogError::MissingTransactionHash)?;
+            let transaction = self
+                .execution_provider
+                .get_transaction_by_hash(tx_hash)
+                .await?
+                .ok_or(EthRequestError::MissingTransactionHash(tx_hash))?;
+
+            // decode the transaction's input into a commit batch call.
+            let commit_info = try_decode_commit_call(transaction.inner.input());
+            if let Some(info) = commit_info {
+                let batch_index: u64 = decoded_log.batchIndex.saturating_to();
+                let block_number =
+                    raw_log.block_number.ok_or(FilterLogError::MissingBlockNumber)?;
+                let batch_hash = decoded_log.batchHash;
+                let blob_hashes = transaction.blob_versioned_hashes().map(|blobs| blobs.to_vec());
+
+                // feed all batch information to the batch input builder.
+                let batch_builder = BatchInputBuilder::default()
+                    .with_version(info.version())
+                    .with_batch_index(batch_index)
+                    .with_batch_hash(batch_hash)
+                    .with_block_number(block_number)
+                    .with_parent_batch_header(info.parent_batch_header())
+                    .with_skipped_l1_message_bitmap(info.skipped_l1_message_bitmap())
+                    .with_blob_hashes(blob_hashes);
+
+                // if builder can build a batch input from data, notify via channel.
+                if let Some(batch_input) = batch_builder.try_build() {
+                    let _ =
+                        self.sender.send(Arc::new(L1Notification::BatchCommit(batch_input))).await;
+                }
+            }
+        }
+        Ok(())
+    }
+
+    // TODO: handle finalized log.
+
     /// Fetches the chain of unfinalized blocks up to and including the latest block, ensuring no
     /// gaps are present in the chain.
     async fn fetch_unfinalized_chain(
@@ -261,7 +330,7 @@ where
                 .execution_provider
                 .get_block((current_block.number - 1).into(), BlockTransactionsKind::Hashes)
                 .await?
-                .ok_or(L1WatcherError::MissingBlock(current_block.number - 1))?;
+                .ok_or(EthRequestError::MissingBlock(current_block.number - 1))?;
             chain.push(block.header.clone());
             current_block = block.header;
         };
@@ -320,7 +389,7 @@ where
     /// [`current_block`](field@WatcherSyncStatus::current_block) + [`LOGS_QUERY_BLOCK_RANGE`]\]
     async fn next_filtered_logs(&self) -> L1WatcherResult<Vec<Log>> {
         // set the block range for the query
-        let mut filter = self.filter.clone();
+        let mut filter = L1_WATCHER_LOG_FILTER.clone();
         filter = filter
             .from_block(self.current_block_number)
             .to_block(self.current_block_number + LOGS_QUERY_BLOCK_RANGE);
@@ -359,7 +428,6 @@ mod tests {
                 l1_state: L1State { head: 0, finalized: 0 },
                 current_block_number: 0,
                 sender: tx,
-                filter: Default::default(),
             },
             rx,
         )
@@ -462,7 +530,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_handle_finalized_empty() -> eyre::Result<()> {
+    async fn test_handle_finalized_empty_state() -> eyre::Result<()> {
         // Given
         let (finalized, latest, _) = test_chain(2);
         let (mut watcher, _) = test_l1_watcher(vec![], vec![], finalized.clone(), latest);
@@ -477,7 +545,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_handle_finalize_mid() -> eyre::Result<()> {
+    async fn test_handle_finalize_at_mid_state() -> eyre::Result<()> {
         // Given
         let (_, latest, chain) = test_chain(10);
         let finalized = chain[5].clone();
@@ -493,7 +561,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_handle_finalized_end() -> eyre::Result<()> {
+    async fn test_handle_finalized_at_end_state() -> eyre::Result<()> {
         // Given
         let (_, latest, chain) = test_chain(10);
         let finalized = latest.clone();
