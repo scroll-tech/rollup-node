@@ -3,15 +3,16 @@ use std::collections::HashMap;
 
 use alloy_eips::BlockNumberOrTag;
 use alloy_network::Ethereum;
-use alloy_primitives::BlockNumber;
-use alloy_provider::{Provider, RootProvider};
-use alloy_rpc_types_eth::{BlockId, BlockTransactionsKind};
+use alloy_primitives::{BlockNumber, TxHash, B256};
+use alloy_provider::{Provider, ProviderCall, RootProvider};
+use alloy_rpc_types_eth::{BlockId, BlockTransactionsKind, Transaction};
 use alloy_transport::{BoxTransport, TransportResult};
 
 /// A mock implementation of the [`Provider`] trait.
 #[derive(Debug)]
 pub struct MockProvider {
     blocks: HashMap<BlockNumber, Block>,
+    transactions: HashMap<B256, Transaction>,
     finalized_block: Block,
     latest_block: Block,
 }
@@ -21,11 +22,13 @@ impl MockProvider {
     /// block.
     pub fn new(
         blocks: impl Iterator<Item = Block>,
+        transactions: impl Iterator<Item = Transaction>,
         finalized_block: Block,
         latest_block: Block,
     ) -> Self {
         Self {
             blocks: blocks.map(|b| (b.header.number, b)).collect(),
+            transactions: transactions.map(|tx| (*tx.inner.tx_hash(), tx)).collect(),
             finalized_block,
             latest_block,
         }
@@ -52,5 +55,12 @@ impl Provider for MockProvider {
                 _ => unimplemented!("can only query by number, latest or finalized"),
             },
         })
+    }
+
+    fn get_transaction_by_hash(
+        &self,
+        hash: TxHash,
+    ) -> ProviderCall<BoxTransport, (TxHash,), Option<Transaction>> {
+        ProviderCall::Ready(Some(Ok(self.transactions.get(&hash).cloned())))
     }
 }

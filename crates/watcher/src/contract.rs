@@ -4,6 +4,7 @@ use scroll_alloy_consensus::TxL1Message;
 
 sol! {
     // *********************EVENTS*********************
+    #[cfg_attr(test, derive(arbitrary::Arbitrary))]
     event QueueTransaction(
         address indexed sender,
         address indexed target,
@@ -13,11 +14,14 @@ sol! {
         bytes data
     );
 
+    #[cfg_attr(test, derive(arbitrary::Arbitrary))]
     event CommitBatch(uint256 indexed batchIndex, bytes32 indexed batchHash);
 
+    #[cfg_attr(test, derive(arbitrary::Arbitrary))]
     event FinalizeBatch(uint256 indexed batchIndex, bytes32 indexed batchHash, bytes32 stateRoot, bytes32 withdrawRoot);
 
     // *********************FUNCTION*********************
+    #[cfg_attr(test, derive(arbitrary::Arbitrary))]
     function commitBatch(
         uint8 version,
         bytes calldata parentBatchHeader,

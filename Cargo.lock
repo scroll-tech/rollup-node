@@ -125,6 +125,7 @@ dependencies = [
  "auto_impl",
  "c-kzg",
  "derive_more 1.0.0",
+ "k256",
  "rand 0.8.5",
  "serde",
 ]
@@ -737,6 +738,7 @@ dependencies = [
  "alloy-rlp",
  "alloy-serde 0.9.2",
  "alloy-sol-types",
+ "arbitrary",
  "itertools 0.13.0",
  "serde",
  "serde_json",
@@ -8289,6 +8291,7 @@ dependencies = [
  "alloy-rpc-types-eth 0.9.2",
  "alloy-sol-types",
  "alloy-transport 0.9.2",
+ "arbitrary",
  "async-trait",
  "derive_more 2.0.1",
  "eyre",

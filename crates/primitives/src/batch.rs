@@ -139,7 +139,7 @@ impl BatchInputBuilder {
                 let blob_hash = blob.first().cloned()?;
                 Some(BatchInputV2 { batch_input_data, blob_hash }.into())
             }
-            (None, None, Some(blobs)) => {
+            (None, None, Some(_blobs)) => {
                 // TODO(greg): for now None but this will be used in Euclid.
                 None
             }

@@ -148,6 +148,7 @@ rollup-node-watcher = { path = "crates/watcher" }
 rollup-node-primitives = { path = "crates/primitives" }
 
 # misc
+arbitrary = "1.4"
 async-trait = "0.1"
 derive_more = "2.0"
 eyre = "0.6"

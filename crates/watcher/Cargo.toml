@@ -35,8 +35,10 @@ tokio = { workspace = true, features = ["full"] }
 tracing.workspace = true
 
 [dev-dependencies]
-alloy-consensus = { workspace = true, features = ["arbitrary"] }
+alloy-consensus = { workspace = true, features = ["arbitrary", "k256"] }
 alloy-eips.workspace = true
+alloy-rpc-types-eth = { workspace = true, features = ["arbitrary"] }
+arbitrary.workspace = true
 eyre.workspace = true
 rand = "0.9"
 

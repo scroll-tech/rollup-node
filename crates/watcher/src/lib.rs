@@ -19,7 +19,7 @@ use crate::contract::{
 use std::{collections::VecDeque, sync::Arc, time::Duration};
 
 use alloy_network::Ethereum;
-use alloy_primitives::{BlockNumber, Bytes, B256};
+use alloy_primitives::{BlockNumber, B256};
 use alloy_provider::{Network, Provider};
 use alloy_rpc_types_eth::{BlockNumberOrTag, BlockTransactionsKind, Log, TransactionTrait};
 use error::L1WatcherResult;
@@ -449,11 +449,14 @@ mod tests {
         private::arbitrary::{Arbitrary, Unstructured},
         Sealable,
     };
+    use alloy_sol_types::SolEvent;
     use rand::RngCore;
 
-    fn test_l1_watcher(
+    // Returns a L1Watcher along with the receiver end of the L1Notifications.
+    fn l1_watcher(
         unfinalized_blocks: Vec<Header>,
         provider_blocks: Vec<Header>,
+        transactions: Vec<alloy_rpc_types_eth::Transaction>,
         finalized: Header,
         latest: Header,
     ) -> (L1Watcher<MockProvider>, mpsc::Receiver<Arc<L1Notification>>) {
@@ -461,7 +464,8 @@ mod tests {
             provider_blocks.into_iter().map(|h| Block { header: h, ..Default::default() });
         let finalized = Block { header: finalized, ..Default::default() };
         let latest = Block { header: latest, ..Default::default() };
-        let provider = MockProvider::new(provider_blocks, finalized, latest);
+        let provider =
+            MockProvider::new(provider_blocks, transactions.into_iter(), finalized, latest);
 
         let (tx, rx) = mpsc::channel(LOGS_QUERY_BLOCK_RANGE as usize);
         (
@@ -476,26 +480,45 @@ mod tests {
         )
     }
 
+    // Returns an arbitrary instance of the passed type.
+    macro_rules! random {
+        ($typ: ty) => {{
+            let mut bytes = Box::new([0u8; size_of::<$typ>()]);
+            rand::rng().fill_bytes(bytes.as_mut_slice());
+            let mut u = Unstructured::new(bytes.as_slice());
+            <$typ>::arbitrary(&mut u).unwrap()
+        }};
+    }
+
+    // Returns a random header.
     fn random_header() -> Header {
-        let mut bytes = [0u8; 1000];
-        rand::rng().fill_bytes(bytes.as_mut_slice());
-        let mut u = Unstructured::new(&bytes);
-        let header = alloy_consensus::Header::arbitrary(&mut u).expect("arbitrary block");
+        let header = random!(alloy_consensus::Header);
         Header::from_consensus(header.seal_slow(), None, None)
     }
 
-    fn test_chain(len: usize) -> (Header, Header, Vec<Header>) {
+    // Returns a random transaction.
+    fn random_transaction() -> alloy_rpc_types_eth::Transaction {
+        let transaction = random!(alloy_consensus::Signed<alloy_consensus::TxEip1559>).into();
+        alloy_rpc_types_eth::Transaction {
+            inner: transaction,
+            block_hash: None,
+            block_number: None,
+            transaction_index: None,
+            effective_gas_price: None,
+            from: Default::default(),
+        }
+    }
+
+    // Returns a chain of random block of size `len`.
+    fn chain(len: usize) -> (Header, Header, Vec<Header>) {
         assert!(len >= 2, "len must be greater than or equal to 2");
 
         let mut headers = Vec::with_capacity(len);
-        let mut bytes = [0u8; 1000];
-        rand::rng().fill_bytes(bytes.as_mut_slice());
-        let mut u = Unstructured::new(&bytes);
 
-        let mut parent_hash = u.arbitrary().unwrap();
-        let mut number = u.arbitrary().unwrap();
+        let mut parent_hash = random!(B256);
+        let mut number = random!(u64);
         for _ in 0..len {
-            let mut header = alloy_consensus::Header::arbitrary(&mut u).expect("arbitrary header");
+            let mut header = random!(alloy_consensus::Header);
             header.parent_hash = parent_hash;
             header.number = number;
 
@@ -526,13 +549,14 @@ mod tests {
     #[tokio::test]
     async fn test_fetch_unfinalized_chain_no_reorg() -> eyre::Result<()> {
         // Given
-        let (finalized, latest, chain) = test_chain(21);
+        let (finalized, latest, chain) = chain(21);
         let unfinalized_blocks = chain[1..11].to_vec();
         let provider_blocks = chain[10..21].to_vec();
 
-        let (watcher, _) = test_l1_watcher(
+        let (watcher, _) = l1_watcher(
             unfinalized_blocks,
             provider_blocks.clone(),
+            vec![],
             finalized.clone(),
             latest.clone(),
         );
@@ -549,14 +573,15 @@ mod tests {
     #[tokio::test]
     async fn test_fetch_unfinalized_chain_reorg() -> eyre::Result<()> {
         // Given
-        let (finalized, _, chain) = test_chain(21);
+        let (finalized, _, chain) = chain(21);
         let unfinalized_blocks = chain[1..21].to_vec();
         let mut provider_blocks = fork(&chain[10], 10);
         let latest = provider_blocks[9].clone();
 
-        let (watcher, _) = test_l1_watcher(
+        let (watcher, _) = l1_watcher(
             unfinalized_blocks,
             provider_blocks.clone(),
+            vec![],
             finalized.clone(),
             latest.clone(),
         );
@@ -575,8 +600,8 @@ mod tests {
     #[tokio::test]
     async fn test_handle_finalized_empty_state() -> eyre::Result<()> {
         // Given
-        let (finalized, latest, _) = test_chain(2);
-        let (mut watcher, _) = test_l1_watcher(vec![], vec![], finalized.clone(), latest);
+        let (finalized, latest, _) = chain(2);
+        let (mut watcher, _) = l1_watcher(vec![], vec![], vec![], finalized.clone(), latest);
 
         // When
         watcher.handle_finalized_block(&finalized).await;
@@ -590,9 +615,9 @@ mod tests {
     #[tokio::test]
     async fn test_handle_finalize_at_mid_state() -> eyre::Result<()> {
         // Given
-        let (_, latest, chain) = test_chain(10);
+        let (_, latest, chain) = chain(10);
         let finalized = chain[5].clone();
-        let (mut watcher, _) = test_l1_watcher(chain, vec![], finalized.clone(), latest);
+        let (mut watcher, _) = l1_watcher(chain, vec![], vec![], finalized.clone(), latest);
 
         // When
         watcher.handle_finalized_block(&finalized).await;
@@ -606,9 +631,9 @@ mod tests {
     #[tokio::test]
     async fn test_handle_finalized_at_end_state() -> eyre::Result<()> {
         // Given
-        let (_, latest, chain) = test_chain(10);
+        let (_, latest, chain) = chain(10);
         let finalized = latest.clone();
-        let (mut watcher, _) = test_l1_watcher(chain, vec![], finalized.clone(), latest);
+        let (mut watcher, _) = l1_watcher(chain, vec![], vec![], finalized.clone(), latest);
 
         // When
         watcher.handle_finalized_block(&finalized).await;
@@ -622,8 +647,8 @@ mod tests {
     #[tokio::test]
     async fn test_handle_latest_block_match_unfinalized_tail() -> eyre::Result<()> {
         // Given
-        let (finalized, latest, chain) = test_chain(10);
-        let (mut watcher, _) = test_l1_watcher(chain, vec![], finalized.clone(), latest.clone());
+        let (finalized, latest, chain) = chain(10);
+        let (mut watcher, _) = l1_watcher(chain, vec![], vec![], finalized.clone(), latest.clone());
 
         // When
         watcher.handle_latest_block(&finalized, &latest).await?;
@@ -638,10 +663,10 @@ mod tests {
     #[tokio::test]
     async fn test_handle_latest_block_extend_unfinalized() -> eyre::Result<()> {
         // Given
-        let (finalized, latest, chain) = test_chain(10);
+        let (finalized, latest, chain) = chain(10);
         let unfinalized_chain = chain[..9].to_vec();
         let (mut watcher, _) =
-            test_l1_watcher(unfinalized_chain, vec![], finalized.clone(), latest.clone());
+            l1_watcher(unfinalized_chain, vec![], vec![], finalized.clone(), latest.clone());
 
         assert_eq!(watcher.unfinalized_blocks.len(), 9);
 
@@ -658,11 +683,16 @@ mod tests {
     #[tokio::test]
     async fn test_handle_latest_block_missing_unfinalized_blocks() -> eyre::Result<()> {
         // Given
-        let (finalized, latest, chain) = test_chain(10);
+        let (finalized, latest, chain) = chain(10);
         let unfinalized_chain = chain[..5].to_vec();
         let provider_blocks = chain[4..].to_vec();
-        let (mut watcher, mut receiver) =
-            test_l1_watcher(unfinalized_chain, provider_blocks, finalized.clone(), latest.clone());
+        let (mut watcher, mut receiver) = l1_watcher(
+            unfinalized_chain,
+            provider_blocks,
+            vec![],
+            finalized.clone(),
+            latest.clone(),
+        );
 
         // When
         watcher.handle_latest_block(&finalized, &latest).await?;
@@ -679,12 +709,12 @@ mod tests {
     #[tokio::test]
     async fn test_handle_latest_block_reorg() -> eyre::Result<()> {
         // Given
-        let (finalized, _, chain) = test_chain(10);
+        let (finalized, _, chain) = chain(10);
         let reorged = fork(&chain[5], 10);
         let latest = reorged[9].clone();
         let provider_blocks = reorged;
         let (mut watcher, mut receiver) =
-            test_l1_watcher(chain.clone(), provider_blocks, finalized.clone(), latest.clone());
+            l1_watcher(chain.clone(), provider_blocks, vec![], finalized.clone(), latest.clone());
 
         // When
         watcher.current_block_number = chain[9].number;
@@ -702,10 +732,64 @@ mod tests {
         Ok(())
     }
 
+    #[tokio::test]
+    async fn test_handle_l1_messages() -> eyre::Result<()> {
+        // Given
+        let (finalized, latest, chain) = chain(10);
+        let (watcher, mut receiver) =
+            l1_watcher(chain, vec![], vec![], finalized.clone(), latest.clone());
+
+        // build test logs.
+        let mut logs = (0..10).map(|_| random!(Log)).collect::<Vec<_>>();
+        let mut queue_transaction = random!(Log);
+        let mut inner_log = random!(alloy_primitives::Log);
+        inner_log.data = random!(QueueTransaction).encode_log_data();
+        queue_transaction.inner = inner_log;
+        queue_transaction.block_number = Some(random!(u64));
+        logs.push(queue_transaction);
+
+        // When
+        watcher.handle_l1_messages(&logs).await?;
+
+        // Then
+        let notification = receiver.recv().await.unwrap();
+        assert!(matches!(*notification, L1Notification::L1Message(_)));
+
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn test_handle_batch_commits() -> eyre::Result<()> {
+        // Given
+        let (finalized, latest, chain) = chain(10);
+        let mut tx = random_transaction();
+        tx.inner
+        let (watcher, mut receiver) =
+            l1_watcher(chain, vec![], vec![tx.clone()], finalized.clone(), latest.clone());
+
+        // build test logs.
+        let mut logs = (0..10).map(|_| random!(Log)).collect::<Vec<_>>();
+        let mut queue_transaction = random!(Log);
+        let mut inner_log = random!(alloy_primitives::Log);
+        inner_log.data = random!(CommitBatch).encode_log_data();
+        queue_transaction.inner = inner_log;
+        queue_transaction.transaction_hash = Some(*tx.inner.tx_hash());
+        logs.push(queue_transaction);
+
+        // When
+        watcher.handle_batch_commits(&logs).await?;
+
+        // Then
+        let notification = receiver.recv().await.unwrap();
+        assert!(matches!(*notification, L1Notification::BatchCommit(_)));
+
+        Ok(())
+    }
+
     //
     // #[tokio::test]
     // async fn test_handle_latest_block_not_empty_unfinalized() -> eyre::Result<()> {
-    //     let chain = test_chain(10);
+    //     let chain = chain(10);
     //     let (mut watcher, _) = test_l1_watcher(chain, VecDeque::from(vec![block.clone()]));
     //
     //     watcher.handle_latest_block().await?;
