@@ -619,27 +619,89 @@ mod tests {
         Ok(())
     }
 
-    //
-    // #[tokio::test]
-    // async fn test_handle_latest_block_match_tail() -> eyre::Result<()> {
-    //     let chain = test_chain(10);
-    //     let block = Block {
-    //         header: chain.back().unwrap().clone(),
-    //         uncles: vec![],
-    //         transactions: BlockTransactions::Hashes(vec![]),
-    //         withdrawals: None,
-    //     };
-    //     let (mut watcher, _) = test_l1_watcher(chain, VecDeque::from(vec![block.clone()]));
-    //
-    //     watcher.handle_latest_block().await?;
-    //     assert_eq!(watcher.unfinalized_blocks.len(), 10);
-    //     assert_eq!(watcher.unfinalized_blocks.pop_back().unwrap(), block.header);
-    //
-    //     assert_eq!(watcher.forkchoice_state.head.number, block.header.number);
-    //     assert_eq!(watcher.forkchoice_state.head.hash, block.header.hash);
-    //
-    //     Ok(())
-    // }
+    #[tokio::test]
+    async fn test_handle_latest_block_match_unfinalized_tail() -> eyre::Result<()> {
+        // Given
+        let (finalized, latest, chain) = test_chain(10);
+        let (mut watcher, _) = test_l1_watcher(chain, vec![], finalized.clone(), latest.clone());
+
+        // When
+        watcher.handle_latest_block(&finalized, &latest).await?;
+
+        // Then
+        assert_eq!(watcher.unfinalized_blocks.len(), 10);
+        assert_eq!(watcher.unfinalized_blocks.pop_back().unwrap(), latest);
+
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn test_handle_latest_block_extend_unfinalized() -> eyre::Result<()> {
+        // Given
+        let (finalized, latest, chain) = test_chain(10);
+        let unfinalized_chain = chain[..9].to_vec();
+        let (mut watcher, _) =
+            test_l1_watcher(unfinalized_chain, vec![], finalized.clone(), latest.clone());
+
+        assert_eq!(watcher.unfinalized_blocks.len(), 9);
+
+        // When
+        watcher.handle_latest_block(&finalized, &latest).await?;
+
+        // Then
+        assert_eq!(watcher.unfinalized_blocks.len(), 10);
+        assert_eq!(watcher.unfinalized_blocks.pop_back().unwrap(), latest);
+
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn test_handle_latest_block_missing_unfinalized_blocks() -> eyre::Result<()> {
+        // Given
+        let (finalized, latest, chain) = test_chain(10);
+        let unfinalized_chain = chain[..5].to_vec();
+        let provider_blocks = chain[4..].to_vec();
+        let (mut watcher, mut receiver) =
+            test_l1_watcher(unfinalized_chain, provider_blocks, finalized.clone(), latest.clone());
+
+        // When
+        watcher.handle_latest_block(&finalized, &latest).await?;
+
+        // Then
+        assert_eq!(watcher.unfinalized_blocks.len(), 10);
+        assert_eq!(watcher.unfinalized_blocks.pop_back().unwrap(), latest);
+        let notification = receiver.recv().await.unwrap();
+        assert!(matches!(*notification, L1Notification::NewBlock(_)));
+
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn test_handle_latest_block_reorg() -> eyre::Result<()> {
+        // Given
+        let (finalized, _, chain) = test_chain(10);
+        let reorged = fork(&chain[5], 10);
+        let latest = reorged[9].clone();
+        let provider_blocks = reorged;
+        let (mut watcher, mut receiver) =
+            test_l1_watcher(chain.clone(), provider_blocks, finalized.clone(), latest.clone());
+
+        // When
+        watcher.current_block_number = chain[9].number;
+        watcher.handle_latest_block(&finalized, &latest).await?;
+
+        // Then
+        assert_eq!(watcher.unfinalized_blocks.pop_back().unwrap(), latest);
+        assert_eq!(watcher.current_block_number, chain[5].number);
+
+        let notification = receiver.recv().await.unwrap();
+        assert!(matches!(*notification, L1Notification::Reorg(_)));
+        let notification = receiver.recv().await.unwrap();
+        assert!(matches!(*notification, L1Notification::NewBlock(_)));
+
+        Ok(())
+    }
+
     //
     // #[tokio::test]
     // async fn test_handle_latest_block_not_empty_unfinalized() -> eyre::Result<()> {
