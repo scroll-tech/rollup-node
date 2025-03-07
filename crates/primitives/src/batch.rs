@@ -5,7 +5,7 @@ use derive_more;
 ///
 /// This is used as input for the derivation pipeline. All data remains in its raw serialized form.
 /// The data is then deserialized, enriched and processed in the derivation pipeline.
-#[derive(Debug, derive_more::From)]
+#[derive(Debug, PartialEq, Eq, derive_more::From)]
 pub enum BatchInput {
     /// The input data for a batch.
     BatchInputDataV1(BatchInputV1),
@@ -14,7 +14,7 @@ pub enum BatchInput {
 }
 
 /// The input data for a batch.
-#[derive(Debug)]
+#[derive(Debug, PartialEq, Eq)]
 pub struct BatchInputV1 {
     /// The version of the batch input data.
     pub version: u8,
@@ -33,7 +33,7 @@ pub struct BatchInputV1 {
 }
 
 /// The input data for a batch including the L1 blob hash.
-#[derive(Debug)]
+#[derive(Debug, PartialEq, Eq)]
 pub struct BatchInputV2 {
     /// The base input data for the batch.
     pub batch_input_data: BatchInputV1,

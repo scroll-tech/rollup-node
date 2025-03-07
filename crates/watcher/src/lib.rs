@@ -69,7 +69,7 @@ pub struct L1Watcher<EP> {
 }
 
 /// The L1 notification type yielded by the [`L1Watcher`].
-#[derive(Debug)]
+#[derive(Debug, PartialEq, Eq)]
 pub enum L1Notification {
     /// A notification for a reorg of the L1 up to a given block number.
     Reorg(u64),
@@ -178,6 +178,7 @@ where
     /// Handle the finalized block:
     ///   - Update state and notify channel about finalization.
     ///   - Drain finalized blocks from state.
+    #[tracing::instrument(target = "scroll::watcher", skip_all, fields(finalized = ?finalized.number))]
     async fn handle_finalized_block(&mut self, finalized: &Header) {
         // update the state and notify on channel.
         if self.l1_state.finalized < finalized.number {
@@ -187,12 +188,14 @@ where
 
         // shortcircuit.
         if self.unfinalized_blocks.is_empty() {
+            tracing::trace!(target: "scroll::watcher", "no unfinalized blocks");
             return
         }
 
         let tail_block = self.unfinalized_blocks.back().expect("tail exists");
         if tail_block.number < finalized.number {
             // drain all, the finalized block is past the tail.
+            tracing::trace!(target: "scroll::watcher", tail = ?tail_block.number, finalized = ?finalized.number, "draining all unfinalized blocks");
             let _ = self.unfinalized_blocks.drain(0..);
             return
         }
@@ -202,6 +205,7 @@ where
 
         // drain all blocks up to and including the finalized block.
         if let Some(position) = finalized_block_position {
+            tracing::trace!(target: "scroll::watcher", "draining range {:?}", 0..=position);
             self.unfinalized_blocks.drain(0..=position);
         }
     }
@@ -211,6 +215,7 @@ where
     ///   - Add to unfinalized blocks if it extends the chain.
     ///   - Fetch chain of unfinalized blocks and emit potential reorg otherwise.
     ///   - Finally, update state and notify channel about latest block.
+    #[tracing::instrument(target = "scroll::watcher", skip_all, fields(latest = ?finalized.number))]
     async fn handle_latest_block(
         &mut self,
         finalized: &Header,
@@ -222,6 +227,7 @@ where
             return Ok(())
         } else if tail.map_or(false, |h| h.hash == latest.parent_hash) {
             // latest block extends the tip.
+            tracing::trace!(target: "scroll::watcher", number = ?latest.number, hash = ?latest.hash, "block extends chain");
             self.unfinalized_blocks.push_back(latest.clone());
         } else {
             // chain reorged or need to backfill.
@@ -235,6 +241,7 @@ where
                 .map(|(old, _)| old.number - 1);
 
             if let Some(number) = reorg_block_number {
+                tracing::debug!(?number, "reorg");
                 // reset the current block number to the reorged block number if
                 // we have indexed passed the reorg.
                 if number < self.current_block_number {
@@ -250,6 +257,7 @@ where
         }
 
         // Update the state and notify on the channel.
+        tracing::trace!(target: "scroll::watcher", number = ?latest.number, hash = ?latest.hash, "new block");
         self.l1_state.head = latest.number;
         self.notify(L1Notification::NewBlock(latest.number)).await;
 
@@ -346,6 +354,7 @@ where
 
     /// Fetches the chain of unfinalized blocks up to and including the latest block, ensuring no
     /// gaps are present in the chain.
+    #[tracing::instrument(target = "scroll::watcher", skip_all)]
     async fn fetch_unfinalized_chain(
         &self,
         finalized: &Header,
@@ -354,7 +363,8 @@ where
         let mut current_block = latest.clone();
         let mut chain = vec![current_block.clone()];
 
-        // loop until we find a block contained in the chain or connected to finalized.
+        // loop until we find a block contained in the chain, connected to finalized or latest is
+        // finalized.
         let mut chain = loop {
             if self.unfinalized_blocks.contains(&current_block) ||
                 current_block.parent_hash == finalized.hash
@@ -362,6 +372,7 @@ where
                 break chain;
             }
 
+            tracing::trace!(target: "scroll::watcher", number = ?(current_block.number - 1), "fetching block");
             let block = self
                 .execution_provider
                 .get_block((current_block.number - 1).into(), BlockTransactionsKind::Hashes)
@@ -444,13 +455,13 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{contract::commitBatchCall, test_utils::MockProvider};
-    use alloy_primitives::{
-        private::arbitrary::{Arbitrary, Unstructured},
-        Bytes, Sealable,
+    use crate::{
+        contract::commitBatchCall,
+        test_utils::{arbitrary::ArbitraryTxBuilder, chain::chain_from, provider::MockProvider},
     };
+    use alloy_consensus::TxType;
     use alloy_sol_types::{SolCall, SolEvent};
-    use rand::RngCore;
+    use arbitrary::Arbitrary;
 
     // Returns a L1Watcher along with the receiver end of the L1Notifications.
     fn l1_watcher(
@@ -464,8 +475,12 @@ mod tests {
             provider_blocks.into_iter().map(|h| Block { header: h, ..Default::default() });
         let finalized = Block { header: finalized, ..Default::default() };
         let latest = Block { header: latest, ..Default::default() };
-        let provider =
-            MockProvider::new(provider_blocks, transactions.into_iter(), finalized, latest);
+        let provider = MockProvider::new(
+            provider_blocks,
+            transactions.into_iter(),
+            vec![finalized],
+            vec![latest],
+        );
 
         let (tx, rx) = mpsc::channel(LOGS_QUERY_BLOCK_RANGE as usize);
         (
@@ -480,76 +495,22 @@ mod tests {
         )
     }
 
-    // Returns an arbitrary instance of the passed type.
-    macro_rules! random {
-        ($typ: ty) => {{
-            let mut bytes = Box::new([0u8; size_of::<$typ>()]);
-            rand::rng().fill_bytes(bytes.as_mut_slice());
-            let mut u = Unstructured::new(bytes.as_slice());
-            <$typ>::arbitrary(&mut u).unwrap()
-        }};
-    }
-
-    // Returns a random header.
-    fn random_header() -> Header {
-        let header = random!(alloy_consensus::Header);
-        Header::from_consensus(header.seal_slow(), None, None)
-    }
-
-    // Returns a random transaction.
-    fn random_transaction(input: Bytes) -> alloy_rpc_types_eth::Transaction {
-        let mut transaction = random!(alloy_consensus::Signed<alloy_consensus::TxEip1559>).into();
-        match transaction {
-            alloy_consensus::TxEnvelope::Eip1559(ref mut tx) => tx.tx_mut().input = input,
-            _ => unreachable!(),
-        };
-        alloy_rpc_types_eth::Transaction {
-            inner: transaction,
-            block_hash: None,
-            block_number: None,
-            transaction_index: None,
-            effective_gas_price: None,
-            from: Default::default(),
-        }
-    }
-
-    // Returns a chain of random block of size `len`.
+    // Returns a chain of random headers of size `len`.
     fn chain(len: usize) -> (Header, Header, Vec<Header>) {
-        assert!(len >= 2, "len must be greater than or equal to 2");
-
-        let mut headers = Vec::with_capacity(len);
-
-        let mut parent_hash = random!(B256);
-        let mut number = random!(u64);
-        for _ in 0..len {
-            let mut header = random!(alloy_consensus::Header);
-            header.parent_hash = parent_hash;
-            header.number = number;
-
-            let header = Header::from_consensus(header.seal_slow(), None, None);
-            parent_hash = header.hash;
-            number += 1;
-            headers.push(header);
+        if len < 2 {
+            panic!("chain should have a minimal length of two");
         }
-        (headers.first().unwrap().clone(), headers.last().unwrap().clone(), headers)
-    }
 
-    // Returns a chain of random block of size `len`, starting at the provided header.
-
-    fn chain_from(header: &Header, len: usize) -> Vec<Header> {
-        let mut blocks = Vec::with_capacity(len);
-        blocks.push(header.clone());
-
-        let next_header = |header: &Header| {
-            let mut next = random_header();
-            next.parent_hash = header.hash;
-            next.number = header.number + 1;
-            next
-        };
-        for i in 0..len - 1 {
-            blocks.push(next_header(&blocks[i]));
+        let mut chain = Vec::with_capacity(len);
+        chain.push(random!(Header));
+        for i in 1..len {
+            let mut next = random!(Header);
+            next.number = chain[i - 1].number + 1;
+            next.parent_hash = chain[i - 1].hash;
+            chain.push(next);
         }
-        blocks
+
+        (chain.first().unwrap().clone(), chain.last().unwrap().clone(), chain)
     }
 
     #[tokio::test]
@@ -557,11 +518,10 @@ mod tests {
         // Given
         let (finalized, latest, chain) = chain(21);
         let unfinalized_blocks = chain[1..11].to_vec();
-        let provider_blocks = chain[10..21].to_vec();
 
         let (watcher, _) = l1_watcher(
             unfinalized_blocks,
-            provider_blocks.clone(),
+            chain.clone(),
             vec![],
             finalized.clone(),
             latest.clone(),
@@ -691,14 +651,8 @@ mod tests {
         // Given
         let (finalized, latest, chain) = chain(10);
         let unfinalized_chain = chain[..5].to_vec();
-        let provider_blocks = chain[4..].to_vec();
-        let (mut watcher, mut receiver) = l1_watcher(
-            unfinalized_chain,
-            provider_blocks,
-            vec![],
-            finalized.clone(),
-            latest.clone(),
-        );
+        let (mut watcher, mut receiver) =
+            l1_watcher(unfinalized_chain, chain, vec![], finalized.clone(), latest.clone());
 
         // When
         watcher.handle_latest_block(&finalized, &latest).await?;
@@ -718,9 +672,8 @@ mod tests {
         let (finalized, _, chain) = chain(10);
         let reorged = chain_from(&chain[5], 10);
         let latest = reorged[9].clone();
-        let provider_blocks = reorged;
         let (mut watcher, mut receiver) =
-            l1_watcher(chain.clone(), provider_blocks, vec![], finalized.clone(), latest.clone());
+            l1_watcher(chain.clone(), reorged, vec![], finalized.clone(), latest.clone());
 
         // When
         watcher.current_block_number = chain[9].number;
@@ -768,7 +721,10 @@ mod tests {
     async fn test_handle_batch_commits() -> eyre::Result<()> {
         // Given
         let (finalized, latest, chain) = chain(10);
-        let tx = random_transaction(random!(commitBatchCall).abi_encode().into());
+        let tx = ArbitraryTxBuilder::new()
+            .with_ty(TxType::Eip1559)
+            .with_input(random!(commitBatchCall).abi_encode().into())
+            .build();
         let (watcher, mut receiver) =
             l1_watcher(chain, vec![], vec![tx.clone()], finalized.clone(), latest.clone());
 

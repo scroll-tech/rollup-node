@@ -1,7 +1,7 @@
 use scroll_alloy_consensus::TxL1Message;
 
 /// A L1 message that is part of the L1 message queue.
-#[derive(Debug)]
+#[derive(Debug, PartialEq, Eq)]
 pub struct L1MessageWithBlockNumber {
     /// The L1 block number at which the L1 message was generated.
     pub block_number: u64,
