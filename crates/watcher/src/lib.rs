@@ -444,12 +444,12 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::test_utils::MockProvider;
+    use crate::{contract::commitBatchCall, test_utils::MockProvider};
     use alloy_primitives::{
         private::arbitrary::{Arbitrary, Unstructured},
-        Sealable,
+        Bytes, Sealable,
     };
-    use alloy_sol_types::SolEvent;
+    use alloy_sol_types::{SolCall, SolEvent};
     use rand::RngCore;
 
     // Returns a L1Watcher along with the receiver end of the L1Notifications.
@@ -497,8 +497,12 @@ mod tests {
     }
 
     // Returns a random transaction.
-    fn random_transaction() -> alloy_rpc_types_eth::Transaction {
-        let transaction = random!(alloy_consensus::Signed<alloy_consensus::TxEip1559>).into();
+    fn random_transaction(input: Bytes) -> alloy_rpc_types_eth::Transaction {
+        let mut transaction = random!(alloy_consensus::Signed<alloy_consensus::TxEip1559>).into();
+        match transaction {
+            alloy_consensus::TxEnvelope::Eip1559(ref mut tx) => tx.tx_mut().input = input,
+            _ => unreachable!(),
+        };
         alloy_rpc_types_eth::Transaction {
             inner: transaction,
             block_hash: None,
@@ -530,7 +534,9 @@ mod tests {
         (headers.first().unwrap().clone(), headers.last().unwrap().clone(), headers)
     }
 
-    fn fork(header: &Header, len: usize) -> Vec<Header> {
+    // Returns a chain of random block of size `len`, starting at the provided header.
+
+    fn chain_from(header: &Header, len: usize) -> Vec<Header> {
         let mut blocks = Vec::with_capacity(len);
         blocks.push(header.clone());
 
@@ -575,7 +581,7 @@ mod tests {
         // Given
         let (finalized, _, chain) = chain(21);
         let unfinalized_blocks = chain[1..21].to_vec();
-        let mut provider_blocks = fork(&chain[10], 10);
+        let mut provider_blocks = chain_from(&chain[10], 10);
         let latest = provider_blocks[9].clone();
 
         let (watcher, _) = l1_watcher(
@@ -710,7 +716,7 @@ mod tests {
     async fn test_handle_latest_block_reorg() -> eyre::Result<()> {
         // Given
         let (finalized, _, chain) = chain(10);
-        let reorged = fork(&chain[5], 10);
+        let reorged = chain_from(&chain[5], 10);
         let latest = reorged[9].clone();
         let provider_blocks = reorged;
         let (mut watcher, mut receiver) =
@@ -762,19 +768,19 @@ mod tests {
     async fn test_handle_batch_commits() -> eyre::Result<()> {
         // Given
         let (finalized, latest, chain) = chain(10);
-        let mut tx = random_transaction();
-        tx.inner
+        let tx = random_transaction(random!(commitBatchCall).abi_encode().into());
         let (watcher, mut receiver) =
             l1_watcher(chain, vec![], vec![tx.clone()], finalized.clone(), latest.clone());
 
         // build test logs.
         let mut logs = (0..10).map(|_| random!(Log)).collect::<Vec<_>>();
-        let mut queue_transaction = random!(Log);
+        let mut batch_commit = random!(Log);
         let mut inner_log = random!(alloy_primitives::Log);
         inner_log.data = random!(CommitBatch).encode_log_data();
-        queue_transaction.inner = inner_log;
-        queue_transaction.transaction_hash = Some(*tx.inner.tx_hash());
-        logs.push(queue_transaction);
+        batch_commit.inner = inner_log;
+        batch_commit.transaction_hash = Some(*tx.inner.tx_hash());
+        batch_commit.block_number = Some(random!(u64));
+        logs.push(batch_commit);
 
         // When
         watcher.handle_batch_commits(&logs).await?;
@@ -786,64 +792,29 @@ mod tests {
         Ok(())
     }
 
-    //
-    // #[tokio::test]
-    // async fn test_handle_latest_block_not_empty_unfinalized() -> eyre::Result<()> {
-    //     let chain = chain(10);
-    //     let (mut watcher, _) = test_l1_watcher(chain, VecDeque::from(vec![block.clone()]));
-    //
-    //     watcher.handle_latest_block().await?;
-    //     assert_eq!(watcher.unfinalized_blocks.len(), 11);
-    //     assert_eq!(watcher.unfinalized_blocks.pop_back().unwrap(), block.header);
-    //
-    //     assert_eq!(watcher.forkchoice_state.head.number, block.header.number);
-    //     assert_eq!(watcher.forkchoice_state.head.hash, block.header.hash);
-    //
-    //     Ok(())
-    // }
-    //
-    // #[tokio::test]
-    // async fn test_handle_latest_block_reorg_mid() -> eyre::Result<()> {
-    //     let chain, _ = test_chain(10);
-    //     let block = Block {
-    //         header: chain.get(5).unwrap().clone(),
-    //         uncles: vec![],
-    //         transactions: BlockTransactions::Hashes(vec![]),
-    //         withdrawals: None,
-    //     };
-    //     let (mut watcher, _) = test_l1_watcher(chain, VecDeque::from(vec![block.clone()]));
-    //
-    //     watcher.handle_latest_block().await?;
-    //     assert_eq!(watcher.unfinalized_blocks.len(), 6);
-    //     assert_eq!(watcher.unfinalized_blocks.pop_back().unwrap(), block.header);
-    //
-    //     assert_eq!(watcher.forkchoice_state.head.number, block.header.number);
-    //     assert_eq!(watcher.forkchoice_state.head.hash, block.header.hash);
-    //
-    //     Ok(())
-    // }
-    //
-    // #[tokio::test]
-    // async fn test_handle_latest_block_reorg_all() -> eyre::Result<()> {
-    //     let (chain, _) = test_chain(10);
-    //     let block = random_block();
-    //     let (mut watcher, mut notifications) =
-    //         test_l1_watcher(chain.clone(), VecDeque::from(vec![block.clone()]));
-    //
-    //     watcher.handle_latest_block().await?;
-    //     assert_eq!(watcher.unfinalized_blocks.len(), 1);
-    //     assert_eq!(watcher.unfinalized_blocks.pop_back().unwrap(), block.header);
-    //
-    //     assert_eq!(watcher.forkchoice_state.head.number, block.header.number);
-    //     assert_eq!(watcher.forkchoice_state.head.hash, block.header.hash);
-    //
-    //     let reorg = notifications.recv().await.unwrap();
-    //     if let L1Notification::Reorg(reorg) = reorg.as_ref() {
-    //         assert_eq!(reorg, &BTreeMap::from_iter(chain.into_iter().map(|b| (b.number, b))));
-    //     } else {
-    //         panic!("Expected reorg notification");
-    //     }
-    //
-    //     Ok(())
-    // }
+    #[tokio::test]
+    async fn test_handle_finalize_commits() -> eyre::Result<()> {
+        // Given
+        let (finalized, latest, chain) = chain(10);
+        let (watcher, mut receiver) =
+            l1_watcher(chain, vec![], vec![], finalized.clone(), latest.clone());
+
+        // build test logs.
+        let mut logs = (0..10).map(|_| random!(Log)).collect::<Vec<_>>();
+        let mut finalize_commit = random!(Log);
+        let mut inner_log = random!(alloy_primitives::Log);
+        inner_log.data = random!(FinalizeBatch).encode_log_data();
+        finalize_commit.inner = inner_log;
+        finalize_commit.block_number = Some(random!(u64));
+        logs.push(finalize_commit);
+
+        // When
+        watcher.handle_batch_finalization(&logs).await?;
+
+        // Then
+        let notification = receiver.recv().await.unwrap();
+        assert!(matches!(*notification, L1Notification::BatchFinalization { .. }));
+
+        Ok(())
+    }
 }
