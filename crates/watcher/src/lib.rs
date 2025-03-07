@@ -36,6 +36,10 @@ pub const MAX_UNFINALIZED_BLOCK_COUNT: usize = 96;
 /// The main loop interval when L1 watcher is syncing to the tip of the L1.
 pub const FAST_SYNC_INTERVAL: Duration = Duration::from_millis(100);
 /// The main loop interval when L1 watcher is synced to the tip of the L1.
+#[cfg(any(test, feature = "test-utils"))]
+pub const SLOW_SYNC_INTERVAL: Duration = Duration::from_millis(1);
+/// The main loop interval when L1 watcher is synced to the tip of the L1.
+#[cfg(not(any(test, feature = "test-utils")))]
 pub const SLOW_SYNC_INTERVAL: Duration = Duration::from_secs(2);
 
 /// The Ethereum L1 block response.
@@ -367,7 +371,8 @@ where
         // finalized.
         let mut chain = loop {
             if self.unfinalized_blocks.contains(&current_block) ||
-                current_block.parent_hash == finalized.hash
+                current_block.parent_hash == finalized.hash ||
+                current_block.hash == finalized.hash
             {
                 break chain;
             }
