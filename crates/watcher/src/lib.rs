@@ -182,7 +182,11 @@ where
     /// Handle the finalized block:
     ///   - Update state and notify channel about finalization.
     ///   - Drain finalized blocks from state.
-    #[tracing::instrument(target = "scroll::watcher", skip_all, fields(finalized = ?finalized.number))]
+    #[tracing::instrument(
+        target = "scroll::watcher",
+        skip_all,
+        fields(curr_finalized = ?self.l1_state.finalized, new_finalized = ?finalized.number)
+    )]
     async fn handle_finalized_block(&mut self, finalized: &Header) {
         // update the state and notify on channel.
         if self.l1_state.finalized < finalized.number {
@@ -219,7 +223,7 @@ where
     ///   - Add to unfinalized blocks if it extends the chain.
     ///   - Fetch chain of unfinalized blocks and emit potential reorg otherwise.
     ///   - Finally, update state and notify channel about latest block.
-    #[tracing::instrument(target = "scroll::watcher", skip_all, fields(latest = ?finalized.number))]
+    #[tracing::instrument(target = "scroll::watcher", skip_all, fields(latest = ?latest.number))]
     async fn handle_latest_block(
         &mut self,
         finalized: &Header,
@@ -235,6 +239,7 @@ where
             self.unfinalized_blocks.push_back(latest.clone());
         } else {
             // chain reorged or need to backfill.
+            tracing::trace!(target: "scroll::watcher", number = ?latest.number, hash = ?latest.hash, "gap or reorg");
             let chain = self.fetch_unfinalized_chain(finalized, latest).await?;
 
             let reorg_block_number = self
@@ -269,6 +274,7 @@ where
     }
 
     /// Filters the logs into L1 messages and sends them over the channel.
+    #[tracing::instrument(skip_all)]
     async fn handle_l1_messages(&self, logs: &[Log]) -> L1WatcherResult<()> {
         let l1_messages =
             logs.iter().map(|l| (&l.inner, l.block_number)).filter_map(|(log, bn)| {
@@ -278,6 +284,8 @@ where
 
         for (msg, bn) in l1_messages {
             let block_number = bn.ok_or(FilterLogError::MissingBlockNumber)?;
+            tracing::trace!(target: "scroll::watcher", l1_message = ?msg, ?block_number);
+
             let notification = L1MessageWithBlockNumber::new(block_number, msg);
             self.notify(L1Notification::L1Message(notification)).await;
         }
@@ -285,15 +293,16 @@ where
     }
 
     /// Handles the batch commits events.
+    #[tracing::instrument(skip_all)]
     async fn handle_batch_commits(&self, logs: &[Log]) -> L1WatcherResult<()> {
         // filter commit logs.
-        let commit_tx_hashes =
+        let commit_logs_with_tx =
             logs.iter().map(|l| (l, l.transaction_hash)).filter_map(|(log, tx_hash)| {
                 try_decode_log::<CommitBatch>(&log.inner)
                     .map(|decoded| (log, decoded.data, tx_hash))
             });
 
-        for (raw_log, decoded_log, maybe_tx_hash) in commit_tx_hashes {
+        for (raw_log, decoded_log, maybe_tx_hash) in commit_logs_with_tx {
             // fetch the commit transaction.
             let tx_hash = maybe_tx_hash.ok_or(FilterLogError::MissingTransactionHash)?;
             let transaction = self
@@ -310,6 +319,7 @@ where
                     raw_log.block_number.ok_or(FilterLogError::MissingBlockNumber)?;
                 let batch_hash = decoded_log.batchHash;
                 let blob_hashes = transaction.blob_versioned_hashes().map(|blobs| blobs.to_vec());
+                tracing::trace!(target: "scroll::watcher", commit_batch = ?decoded_log, ?block_number);
 
                 // feed all batch information to the batch input builder.
                 let batch_builder = BatchInputBuilder::new(
@@ -333,6 +343,7 @@ where
     }
 
     /// Handles the finalize batch events.
+    #[tracing::instrument(skip_all)]
     async fn handle_batch_finalization(&self, logs: &[Log]) -> L1WatcherResult<()> {
         // filter finalize logs.
         let finalize_tx_hashes =
@@ -343,6 +354,7 @@ where
         for (decoded_log, maybe_block_number) in finalize_tx_hashes {
             // fetch the commit transaction.
             let block_number = maybe_block_number.ok_or(FilterLogError::MissingBlockNumber)?;
+            tracing::trace!(target: "scroll::watcher", finalized_batch = ?decoded_log, ?block_number);
 
             // send the finalization event in the channel.
             let _ = self
@@ -462,7 +474,7 @@ mod tests {
     use super::*;
     use crate::{
         contract::commitBatchCall,
-        test_utils::{arbitrary::ArbitraryTxBuilder, chain::chain_from, provider::MockProvider},
+        test_utils::{arbitrary::ArbitraryTxBuilder, provider::MockProvider},
     };
     use alloy_consensus::TxType;
     use alloy_sol_types::{SolCall, SolEvent};
@@ -516,6 +528,26 @@ mod tests {
         }
 
         (chain.first().unwrap().clone(), chain.last().unwrap().clone(), chain)
+    }
+
+    // Returns a chain of random block of size `len`, starting at the provided header.
+    fn chain_from(header: &Header, len: usize) -> Vec<Header> {
+        if len < 2 {
+            panic!("fork should have a minimal length of two");
+        }
+        let mut blocks = Vec::with_capacity(len);
+        blocks.push(header.clone());
+
+        let next_header = |header: &Header| {
+            let mut next = random!(Header);
+            next.parent_hash = header.hash;
+            next.number = header.number + 1;
+            next
+        };
+        for i in 0..len - 1 {
+            blocks.push(next_header(&blocks[i]));
+        }
+        blocks
     }
 
     #[tokio::test]

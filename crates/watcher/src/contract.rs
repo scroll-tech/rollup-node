@@ -15,9 +15,11 @@ sol! {
     );
 
     #[cfg_attr(test, derive(arbitrary::Arbitrary))]
+    #[derive(Debug)]
     event CommitBatch(uint256 indexed batchIndex, bytes32 indexed batchHash);
 
     #[cfg_attr(test, derive(arbitrary::Arbitrary))]
+    #[derive(Debug)]
     event FinalizeBatch(uint256 indexed batchIndex, bytes32 indexed batchHash, bytes32 stateRoot, bytes32 withdrawRoot);
 
     // *********************FUNCTION*********************

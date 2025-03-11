@@ -5,9 +5,7 @@ use alloy_rpc_types_eth::Header;
 use arbitrary::Arbitrary;
 use rand::Rng;
 use rollup_node_watcher::{
-    random,
-    test_utils::{chain::chain_from, provider::MockProvider},
-    Block, L1Notification, L1Watcher,
+    random, test_utils::provider::MockProvider, Block, L1Notification, L1Watcher,
 };
 use tracing::{subscriber::set_global_default, Level};
 
@@ -33,15 +31,15 @@ fn generate_chain_with_reorgs(len: usize, fork_cycle: usize, max_fork_depth: usi
     let mut tip = random!(Header);
     while blocks.len() < len {
         let mut acc = vec![tip];
-        for i in 1..fork_cycle {
+        for i in 1..fork_cycle + 1 {
             acc.push(next_header(&acc[i - 1]));
         }
 
-        let mut fork = chain_from(&acc.last().unwrap(), rng.random_range(2..max_fork_depth));
-        tip = fork.last().unwrap().clone();
+        let depth = rng.random_range(2..max_fork_depth);
+        let reorg = &acc[acc.len() - 1 - depth];
+        tip = next_header(reorg);
 
         blocks.append(&mut acc);
-        blocks.append(&mut fork);
 
         acc.clear();
     }
@@ -52,46 +50,55 @@ fn generate_chain_with_reorgs(len: usize, fork_cycle: usize, max_fork_depth: usi
 async fn test_reorg_detection() -> eyre::Result<()> {
     // Given
     setup();
-    let blocks = generate_chain_with_reorgs(1000, 100, 10);
-
-    // every 30 blocks, skip 5 blocks in latest, creating a gap and forcing the l1 watcher to
-    // resync.
-    let latest_blocks = blocks
-        .iter()
-        .cloned()
-        .filter(|b| {
-            let rem = b.header.number % 30;
-            rem < 5
-        })
-        .collect::<Vec<_>>();
+    let blocks = generate_chain_with_reorgs(1000, 10, 5);
+    let latest_blocks = blocks.clone();
 
     // finalized blocks should be 64 blocks late.
-    let finalized_blocks = std::iter::repeat(latest_blocks.first().clone())
+    let mut finalized_blocks = std::iter::repeat(latest_blocks.first().clone())
         .filter_map(|b| b.cloned())
-        .take(64)
+        .take(20)
         .chain(latest_blocks.iter().cloned())
         .collect::<Vec<_>>();
+    finalized_blocks.sort_unstable_by(|a, b| a.header.number.cmp(&b.header.number));
 
     let start = latest_blocks.first().unwrap().header.number;
     let mock_provider = MockProvider::new(
         blocks.clone().into_iter(),
         std::iter::empty(),
-        finalized_blocks,
+        finalized_blocks.clone(),
         latest_blocks.clone(),
     );
 
     // spawn the watcher and verify received notifications are consistent.
     let mut l1_watcher = L1Watcher::spawn(mock_provider, start).await;
 
-    let current_number = latest_blocks.first().unwrap().header.number;
-    let current_hash = latest_blocks.first().unwrap().header.hash;
+    let mut latest_number = latest_blocks.first().unwrap().header.number;
+    let mut finalized_number = finalized_blocks.first().unwrap().header.number;
 
-    for block in &latest_blocks[1..] {
-        let notification = l1_watcher.recv().await.unwrap();
-        // this is a reorg
-        if current_number <= block.header.number {
-            assert_eq!(notification.as_ref(), &L1Notification::Reorg(block.header.number))
+    for (latest, finalized) in latest_blocks[1..].iter().zip(finalized_blocks[1..].iter()) {
+        // check finalized first.
+        if finalized_number < finalized.header.number {
+            let notification = l1_watcher.recv().await.unwrap();
+            assert_eq!(notification.as_ref(), &L1Notification::Finalized(finalized.header.number));
         }
+
+        // check latest for reorg or new block.
+        if latest_number == latest.header.number {
+            continue
+        } else if latest_number > latest.header.number {
+            // reorg
+            let notification = l1_watcher.recv().await.unwrap();
+            assert!(matches!(notification.as_ref(), L1Notification::Reorg(_)));
+            let notification = l1_watcher.recv().await.unwrap();
+            assert_eq!(notification.as_ref(), &L1Notification::NewBlock(latest.header.number));
+        } else {
+            let notification = l1_watcher.recv().await.unwrap();
+            assert_eq!(notification.as_ref(), &L1Notification::NewBlock(latest.header.number));
+        }
+
+        // update finalized and latest.
+        finalized_number = finalized.header.number;
+        latest_number = latest.header.number;
     }
 
     Ok(())

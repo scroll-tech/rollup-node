@@ -24,15 +24,13 @@ impl MockProvider {
     pub fn new(
         blocks: impl Iterator<Item = Block>,
         transactions: impl Iterator<Item = Transaction>,
-        mut finalized_blocks: Vec<Block>,
-        mut latest_blocks: Vec<Block>,
+        finalized_blocks: Vec<Block>,
+        latest_blocks: Vec<Block>,
     ) -> Self {
         let mut b = HashMap::new();
         for block in blocks {
             b.entry(block.header.number).or_insert(Vec::new()).push(block);
         }
-        finalized_blocks.sort_by(|a, b| a.header.number.cmp(&b.header.number));
-        latest_blocks.sort_by(|a, b| a.header.number.cmp(&b.header.number));
         Self {
             blocks: Arc::new(Mutex::new(b)),
             transactions: transactions.map(|tx| (*tx.inner.tx_hash(), tx)).collect(),
@@ -58,17 +56,23 @@ impl Provider for MockProvider {
             BlockId::Number(number_or_tag) => match number_or_tag {
                 BlockNumberOrTag::Latest => {
                     let mut blocks = self.latest_blocks.lock().await;
-                    let val = if blocks.len() > 1 { blocks.drain(..1).next() } else { None };
+                    let val = if blocks.len() > 0 { blocks.drain(..1).next() } else { None };
                     val.ok_or(RpcError::NullResp).map(Some)
                 }
                 BlockNumberOrTag::Finalized => {
                     let mut blocks = self.finalized_blocks.lock().await;
-                    let val = if blocks.len() > 1 { blocks.drain(..1).next() } else { None };
+                    let val = if blocks.len() > 0 { blocks.drain(..1).next() } else { None };
                     val.ok_or(RpcError::NullResp).map(Some)
                 }
                 BlockNumberOrTag::Number(number) => {
                     let mut blocks = self.blocks.lock().await;
-                    Ok(blocks.get_mut(&number).and_then(|blocks| blocks.drain(..1).next()))
+                    Ok(blocks.get_mut(&number).and_then(|blocks| {
+                        if blocks.len() > 1 {
+                            blocks.drain(..1).next()
+                        } else {
+                            blocks.first().cloned()
+                        }
+                    }))
                 }
                 _ => unimplemented!("can only query by number, latest or finalized"),
             },

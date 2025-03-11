@@ -8295,6 +8295,7 @@ dependencies = [
  "async-trait",
  "derive_more 2.0.1",
  "eyre",
+ "itertools 0.14.0",
  "rand 0.9.0",
  "rollup-node-primitives",
  "scroll-alloy-consensus 1.1.5",

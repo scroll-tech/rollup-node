@@ -1,7 +1,6 @@
-use crate::{block_info::BlockInfo, payload::matching_payloads};
-
 use super::error::EngineDriverError;
-use crate::ExecutionPayloadProvider;
+use crate::{payload::matching_payloads, ExecutionPayloadProvider};
+
 use alloy_rpc_types_engine::{
     ExecutionPayload, ExecutionPayloadV1, ForkchoiceState, ForkchoiceUpdated, PayloadId,
     PayloadStatusEnum,
@@ -9,6 +8,7 @@ use alloy_rpc_types_engine::{
 use eyre::Result;
 use reth_payload_primitives::PayloadTypes;
 use reth_scroll_engine_primitives::ScrollEngineTypes;
+use rollup_node_primitives::BlockInfo;
 use scroll_alloy_provider::ScrollEngineApi;
 
 use tokio::time::Duration;
@@ -77,11 +77,11 @@ where
         // Convert the payload to the V1 format.
         let execution_payload = execution_payload.into_v1();
 
-        // Issue the new payload to the EN.
-        let payload_status = self.new_payload(execution_payload).await?;
-
         // Invoke the FCU with the new state.
         let fcu = self.forkchoice_updated(fcs, None).await?;
+
+        // Issue the new payload to the EN.
+        let payload_status = self.new_payload(execution_payload).await?;
 
         // We should never have a case where the fork choice is syncing as we have already validated
         // the payload and provided it to the EN.
@@ -101,7 +101,8 @@ where
     ///   - If the execution payload matches the attributes:
     ///     - Sets the current fork choice for the EL via `engine_forkchoiceUpdatedV1`, advancing
     ///       the safe head by one.
-    #[instrument(skip_all, level = "trace", fields(safe_block_info = ?safe_block_info, fcs = ?fcs, payload_attributes = ?payload_attributes))]
+    // #[instrument(skip_all, level = "trace", fields(head = %self.unsafe_block_info.hash, safe =
+    // %self.safe_block_info.hash, finalized = %self.safe_block_info.hash))]
     pub async fn handle_payload_attributes(
         &mut self,
         safe_block_info: BlockInfo,
@@ -174,7 +175,7 @@ where
         match &response.status {
             PayloadStatusEnum::Invalid { validation_error } => {
                 error!(target: "scroll::engine::driver", ?validation_error, "execution payload is invalid");
-                return Err(EngineDriverError::InvalidExecutionPayload)
+                return Err(EngineDriverError::InvalidExecutionPayload);
             }
             PayloadStatusEnum::Syncing => {
                 debug!(target: "scroll::engine::driver", "execution client is syncing");
@@ -207,7 +208,7 @@ where
         match &forkchoice_updated.payload_status.status {
             PayloadStatusEnum::Invalid { validation_error } => {
                 error!(target: "scroll::engine::driver", ?validation_error, "failed to issue forkchoice");
-                return Err(EngineDriverError::InvalidFcu)
+                return Err(EngineDriverError::InvalidFcu);
             }
             PayloadStatusEnum::Syncing => {
                 debug!(target: "scroll::engine::driver", "head has been seen before, but not part of the chain");

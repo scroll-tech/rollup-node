@@ -43,6 +43,7 @@ alloy-rpc-types-eth = { workspace = true, features = ["arbitrary"] }
 arbitrary.workspace = true
 eyre.workspace = true
 rand = "0.9"
+itertools = "0.14.0"
 tracing-subscriber = "0.3"
 
 [features]
