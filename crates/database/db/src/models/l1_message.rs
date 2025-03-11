@@ -3,6 +3,9 @@ use scroll_alloy_consensus::TxL1Message;
 use scroll_primitives::L1Message;
 use sea_orm::{entity::prelude::*, ActiveValue};
 
+// TODO: Consider introducing the running L1 message queue hash such that we can fetch L1 messages
+// based on the queue hash.
+
 /// A database model that represents a L1 message.
 #[derive(Clone, Debug, PartialEq, Eq, DeriveEntityModel)]
 #[sea_orm(table_name = "l1_message")]

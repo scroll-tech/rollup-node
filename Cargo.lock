@@ -5524,6 +5524,9 @@ dependencies = [
 [[package]]
 name = "provider"
 version = "0.0.1"
+dependencies = [
+ "scroll-primitives",
+]
 
 [[package]]
 name = "ptr_meta"
@@ -9136,6 +9139,8 @@ version = "0.0.1"
 dependencies = [
  "alloy-primitives",
  "arbitrary",
+ "async-trait",
+ "futures",
  "rand 0.8.5",
  "scroll-alloy-consensus",
  "scroll-migration",
@@ -9177,8 +9182,12 @@ dependencies = [
 name = "scroll-indexer"
 version = "0.0.1"
 dependencies = [
+ "arbitrary",
+ "rand 0.8.5",
+ "scroll-db",
  "scroll-l1",
  "scroll-primitives",
+ "tokio",
 ]
 
 [[package]]

@@ -6,6 +6,9 @@ rust-version.workspace = true
 license.workspace = true
 exclude.workspace = true
 
+[lints]
+workspace = true
+
 [dependencies]
 # alloy
 alloy-primitives.workspace = true
@@ -14,9 +17,12 @@ alloy-primitives.workspace = true
 scroll-alloy-consensus.workspace = true
 
 # scroll
+scroll-migration = { workspace = true, optional = true }
 scroll-primitives.workspace = true
 
 # misc
+async-trait.workspace = true
+futures.workspace = true
 sea-orm = { version = "1.1.0", features = ["sqlx-sqlite", "runtime-tokio-native-tls", "macros"] }
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
@@ -28,8 +34,8 @@ scroll-migration.workspace = true
 scroll-primitives = { workspace = true, features = ["arbitrary"] }
 
 # misc
-arbitrary = { workspace = true }
-rand = { version = "0.8", features = ["std"] }
+arbitrary.workspace = true 
+rand.workspace = true
 
-[lints]
-workspace = true
+[features]
+test-utils = ["dep:scroll-migration"]

@@ -14,6 +14,14 @@ pub enum BatchInput {
 }
 
 impl BatchInput {
+    /// Sets the block number of the batch.
+    pub fn set_block_number(&mut self, block_number: u64) {
+        match self {
+            BatchInput::BatchInputV1(data) => data.block_number = block_number,
+            BatchInput::BatchInputV2(data) => data.batch_input_data.block_number = block_number,
+        }
+    }
+
     /// Returns the version of the batch input data.
     pub fn version(&self) -> BatchInputVersion {
         match self {

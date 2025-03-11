@@ -141,6 +141,7 @@ reth-scroll-node = { git = "https://github.com/scroll-tech/reth.git", branch = "
 reth-scroll-primitives = { git = "https://github.com/scroll-tech/reth.git", branch = "feat/add-deref-blanket-engine-api", default-features = false }
 
 # rollup node
+scroll-db = { path = "crates/database/db" }
 scroll-engine = { path = "crates/engine" }
 scroll-indexer = { path = "crates/indexer" }
 scroll-l1 = { path = "crates/l1" }
@@ -153,8 +154,10 @@ rollup-node-manager = { path = "crates/node" }
 
 # misc
 arbitrary = { version = "1.3" }
+async-trait = "0.1.68"
 eyre = "0.6"
 futures = { version = "0.3", default-features = false }
+rand = { version = "0.8", features = ["std"] }
 secp256k1 = { version = "0.29", default-features = false }
 serde = { version = "1.0", default-features = false }
 tokio = { version = "1.39", default-features = false }

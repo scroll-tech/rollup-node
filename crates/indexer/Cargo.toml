@@ -6,10 +6,21 @@ rust-version.workspace = true
 license.workspace = true
 exclude.workspace = true
 
+[lints]
+workspace = true
+
 [dependencies]
 # rollup-node
+scroll-db.workspace = true
 scroll-l1.workspace = true
 scroll-primitives.workspace = true
 
-[lints]
-workspace = true
+[dev-dependencies]
+# rollup-node
+scroll-db = { workspace = true, features = ["test-utils"] }
+scroll-primitives = { workspace = true, features = ["arbitrary"] }
+
+# misc
+arbitrary.workspace = true
+rand.workspace = true
+tokio.workspace = true
