@@ -59,7 +59,8 @@ pub struct L1State {
 #[derive(Debug)]
 pub struct L1Watcher<EP> {
     /// The L1 execution node provider. The provider should implement some backoff strategy using
-    /// [`alloy_transport::layers::RetryBackoffLayer`] in the client in order to avoid excessive
+    /// [`alloy_transport::layers::RetryBackoffLayer`] as well as some caching strategy using
+    /// [`alloy_provider::layers::CacheProvider`] in the client in order to avoid excessive
     /// queries on the RPC provider.
     execution_provider: EP,
     /// The buffered unfinalized chain of blocks. Used to detect reorgs of the L1.

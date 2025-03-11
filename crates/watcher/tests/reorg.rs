@@ -56,7 +56,7 @@ async fn test_reorg_detection() -> eyre::Result<()> {
     // finalized blocks should be 64 blocks late.
     let mut finalized_blocks = std::iter::repeat(latest_blocks.first().clone())
         .filter_map(|b| b.cloned())
-        .take(20)
+        .take(64)
         .chain(latest_blocks.iter().cloned())
         .collect::<Vec<_>>();
     finalized_blocks.sort_unstable_by(|a, b| a.header.number.cmp(&b.header.number));
@@ -91,6 +91,76 @@ async fn test_reorg_detection() -> eyre::Result<()> {
             assert!(matches!(notification.as_ref(), L1Notification::Reorg(_)));
             let notification = l1_watcher.recv().await.unwrap();
             assert_eq!(notification.as_ref(), &L1Notification::NewBlock(latest.header.number));
+        } else {
+            let notification = l1_watcher.recv().await.unwrap();
+            assert_eq!(notification.as_ref(), &L1Notification::NewBlock(latest.header.number));
+        }
+
+        // update finalized and latest.
+        finalized_number = finalized.header.number;
+        latest_number = latest.header.number;
+    }
+
+    Ok(())
+}
+
+#[tokio::test]
+async fn test_gap() -> eyre::Result<()> {
+    // Given
+    setup();
+    let mut blocks = vec![random!(Header)];
+    for i in 1..1000 {
+        let mut next = random!(Header);
+        let prev = &blocks[i - 1];
+        next.number = prev.number + 1;
+        next.parent_hash = prev.hash;
+        blocks.push(next);
+    }
+    let blocks =
+        blocks.into_iter().map(|h| Block { header: h, ..Default::default() }).collect::<Vec<_>>();
+
+    // add a gap every 20 blocks.
+    let latest_blocks = blocks
+        .iter()
+        .cloned()
+        .filter(|b| {
+            let rem = b.header.number % 20;
+            rem > 5
+        })
+        .collect::<Vec<_>>();
+
+    // finalized blocks should be 64 blocks late.
+    let mut finalized_blocks = std::iter::repeat(blocks.first().clone())
+        .filter_map(|b| b.cloned())
+        .take(64)
+        .chain(blocks.iter().cloned())
+        .collect::<Vec<_>>();
+    finalized_blocks.sort_unstable_by(|a, b| a.header.number.cmp(&b.header.number));
+
+    let start = latest_blocks.first().unwrap().header.number;
+    let mock_provider = MockProvider::new(
+        blocks.clone().into_iter(),
+        std::iter::empty(),
+        finalized_blocks.clone(),
+        latest_blocks.clone(),
+    );
+
+    // spawn the watcher and verify received notifications are consistent.
+    let mut l1_watcher = L1Watcher::spawn(mock_provider, start).await;
+
+    let mut latest_number = latest_blocks.first().unwrap().header.number;
+    let mut finalized_number = finalized_blocks.first().unwrap().header.number;
+
+    for (latest, finalized) in latest_blocks[1..].iter().zip(finalized_blocks[1..].iter()) {
+        // check finalized first.
+        if finalized_number < finalized.header.number {
+            let notification = l1_watcher.recv().await.unwrap();
+            assert_eq!(notification.as_ref(), &L1Notification::Finalized(finalized.header.number));
+        }
+
+        // check latest for reorg or new block.
+        if latest_number == latest.header.number {
+            continue
         } else {
             let notification = l1_watcher.recv().await.unwrap();
             assert_eq!(notification.as_ref(), &L1Notification::NewBlock(latest.header.number));
