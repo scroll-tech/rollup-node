@@ -63,7 +63,8 @@ reth-rpc-server-types = { git = "https://github.com/scroll-tech/reth.git" }
 reth-tasks.workspace = true
 reth-tracing = { git = "https://github.com/scroll-tech/reth.git" }
 
-#  misc
+# misc
+futures.workspace = true
 serde_json = { version = "1.0.94", default-features = false, features = ["alloc"] }
 tokio = { workspace = true, features = ["full"] }
 
