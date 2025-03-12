@@ -17,7 +17,7 @@ alloy-primitives = { workspace = true, features = [
 alloy-rlp = { version = "0.3.10", default-features = false }
 
 # reth
-reth-eth-wire = { git = "https://github.com/scroll-tech/reth.git", branch = "feat/add-deref-blanket-engine-api" }
+reth-eth-wire = { git = "https://github.com/scroll-tech/reth.git" }
 reth-network.workspace = true
 reth-network-api.workspace = true
 reth-primitives.workspace = true
