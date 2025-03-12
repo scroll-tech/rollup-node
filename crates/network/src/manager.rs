@@ -124,7 +124,11 @@ impl NetworkManager {
         match event {
             ScrollWireEvent::NewBlock { peer_id, block, signature } => {
                 trace!(target: "scroll::network::manager", peer_id = ?peer_id, block = ?block.hash_slow(), signature = ?signature, "Received new block");
-                NetworkManagerEvent::NewBlock(NewBlockWithPeer { peer_id, block, signature })
+                NetworkManagerEvent::NewBlock(NewBlockWithPeer {
+                    peer_id,
+                    block: *block,
+                    signature,
+                })
             }
             // Only `NewBlock` events are expected from the scroll-wire protocol.
             _ => {

@@ -85,7 +85,7 @@ impl Stream for ScrollWireConnection {
                     if let Ok(signature) = Signature::from_compact(&new_block.signature[..]) {
                         this.events
                             .send(ScrollWireEvent::NewBlock {
-                                block: new_block.block,
+                                block: Box::new(new_block.block),
                                 signature,
                                 peer_id: this.peer_id,
                             })

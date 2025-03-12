@@ -1,1 +1,2 @@
-pub struct BatchCodec;
+#[allow(dead_code)]
+struct BatchCodec;

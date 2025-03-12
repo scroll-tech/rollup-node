@@ -145,26 +145,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "alloy-contract"
-version = "0.11.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ee6180fb232becdea70fad57c63b6967f01f74ab9595671b870f504116dd29de"
-dependencies = [
- "alloy-dyn-abi",
- "alloy-json-abi",
- "alloy-network",
- "alloy-network-primitives",
- "alloy-primitives",
- "alloy-provider",
- "alloy-rpc-types-eth",
- "alloy-sol-types",
- "alloy-transport",
- "futures",
- "futures-util",
- "thiserror 2.0.11",
-]
-
-[[package]]
 name = "alloy-dyn-abi"
 version = "0.8.21"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -8425,7 +8405,10 @@ dependencies = [
  "scroll-alloy-provider",
  "scroll-alloy-rpc-types-engine",
  "scroll-engine",
+ "scroll-indexer",
+ "scroll-l1",
  "scroll-network",
+ "scroll-pipeline",
  "scroll-wire",
  "secp256k1",
  "serde_json",
@@ -8472,7 +8455,6 @@ dependencies = [
 name = "scroll-l1"
 version = "0.0.1"
 dependencies = [
- "alloy-contract",
  "alloy-primitives",
  "alloy-sol-types",
  "futures",

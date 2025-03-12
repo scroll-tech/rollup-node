@@ -12,12 +12,14 @@ use scroll_primitives::L1Message;
 pub struct Sequencer<EC, P> {
     // TODO: Replace with appropriate buffer type that is reorg aware.
     /// A transaction queue for L1 messages.
+    #[allow(dead_code)]
     tx_queue: VecDeque<L1Message>,
     // TODO: Move to a rollup node manager.
     /// The interval at which the sequencer creates new [`ScrollBlock`]s.
     block_interval: Interval,
-    /// The [`EngineDriver`] that the sequencer uses to interact with the EngineAPI of the
+    /// The [`EngineDriver`] that the sequencer uses to interact with the `EngineAPI` of the
     /// execution client.
+    #[allow(dead_code)]
     engine: Arc<EngineDriver<EC, P>>,
 }
 
@@ -56,7 +58,7 @@ impl<EC: Unpin, P: Unpin> Stream for Sequencer<EC, P> {
     ) -> std::task::Poll<Option<Self::Item>> {
         let this = self.get_mut();
 
-        if let std::task::Poll::Ready(_) = this.block_interval.poll_tick(cx) {
+        if this.block_interval.poll_tick(cx).is_ready() {
             let block = this.new_block();
             std::task::Poll::Ready(Some(block))
         } else {

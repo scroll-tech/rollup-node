@@ -28,7 +28,7 @@ pub struct Batch {
 
 impl Batch {
     /// Creates a new [`Batch`] instance.
-    pub fn new(
+    pub const fn new(
         index: u64,
         total_l1_messages_popped_before: u64,
         parent_hash: B256,

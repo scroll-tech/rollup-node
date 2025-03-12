@@ -9,7 +9,6 @@ exclude.workspace = true
 [dependencies]
 # alloy
 alloy-sol-types = { version = "0.8.20", features = ["json"] }
-alloy-contract = { version = "0.11.1", default-features = false }
 alloy-primitives.workspace = true
 
 # rollup-node

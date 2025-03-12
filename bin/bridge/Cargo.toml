@@ -41,6 +41,9 @@ reth-scroll-primitives = { workspace = true }
 scroll-wire.workspace = true
 scroll-network.workspace = true
 scroll-engine = { workspace = true, features = ["test-utils"] }
+scroll-l1.workspace = true
+scroll-indexer.workspace = true
+scroll-pipeline.workspace = true
 
 # rollup-node
 rollup-node-manager.workspace = true

@@ -1,3 +1,4 @@
-pub enum CodecError {
+#[allow(dead_code)]
+enum CodecError {
     Error,
 }

@@ -65,6 +65,7 @@ type PendingBlockImportFuture =
 #[derive(Debug)]
 pub struct RollupNodeManager<C, EC, P> {
     /// The configuration of the rollup node.
+    #[allow(dead_code)]
     config: Config,
     /// The network manager that manages the scroll p2p network.
     network: NetworkManager,
@@ -75,8 +76,10 @@ pub struct RollupNodeManager<C, EC, P> {
     /// The L1 watcher for observing events from the L1.
     l1_watcher: L1Watcher,
     /// The indexer for indexing rollup node data.
+    #[allow(dead_code)]
     indexer: Indexer,
     /// The pipeline that derives the scroll chain from L1 events.
+    #[allow(dead_code)]
     pipeline: Pipeline,
     /// The receiver for new blocks received from the network (used to bridge from eth-wire).
     new_block_rx: UnboundedReceiverStream<NewBlockWithPeer>,
@@ -95,6 +98,7 @@ where
     P: ExecutionPayloadProvider + Unpin + Send + Sync + 'static,
 {
     /// Create a new [`RollupNodeManager`] instance.
+    #[allow(clippy::too_many_arguments)]
     pub fn new(
         config: Config,
         network: NetworkManager,
@@ -220,7 +224,7 @@ where
     }
 
     /// Handles an L1 event from the L1 watcher.
-    fn handle_l1_event(&mut self, _event: L1Event) {
+    fn handle_l1_event(&self, _event: L1Event) {
         todo!()
     }
 

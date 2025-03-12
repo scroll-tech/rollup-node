@@ -6,10 +6,13 @@ use reth_rpc_builder::config::RethRpcServerConfig;
 use reth_scroll_chainspec::ScrollChainSpec;
 use reth_scroll_primitives::ScrollPrimitives;
 use reth_transaction_pool::{PoolTransaction, TransactionPool};
-use rollup_node_manager::{PoAConsensus, RollupNodeManager};
+use rollup_node_manager::{Config, PoAConsensus, RollupNodeManager};
 use scroll_alloy_provider::ScrollAuthEngineApiProvider;
 use scroll_engine::{test_utils::NoopExecutionPayloadProvider, EngineDriver, ForkchoiceState};
+use scroll_indexer::Indexer;
+use scroll_l1::L1Watcher;
 use scroll_network::NetworkManager as ScrollNetworkManager;
+use scroll_pipeline::Pipeline;
 use scroll_wire::{ProtocolHandler, ScrollWireConfig};
 use tracing::info;
 
@@ -64,6 +67,7 @@ where
         let consensus = PoAConsensus::new(vec![]);
         let payload_provider = NoopExecutionPayloadProvider;
 
+        // Create the engine driver.
         let auth_port = ctx.config().rpc.auth_port;
         let auth_secret = ctx.config().rpc.auth_jwt_secret(ctx.config().datadir().jwt())?;
 
@@ -73,13 +77,23 @@ where
         );
         let engine = EngineDriver::new(engine_api, payload_provider);
 
+        // TODO: Provide this via config file.
+        // Create the node config.
+        let is_sequencer = false;
+        let block_time = 2;
+        let config = Config::new(is_sequencer, block_time);
+
         let rollup_node_manager = RollupNodeManager::new(
+            config,
             scroll_network_manager,
             engine,
+            consensus,
+            L1Watcher,
+            Indexer,
+            Pipeline,
             ForkchoiceState::genesis(
                 ctx.config().chain.chain.try_into().expect("must be a named chain"),
             ),
-            consensus,
             new_block_rx,
         );
 

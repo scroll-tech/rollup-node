@@ -14,25 +14,25 @@ impl Indexer {
         match event {
             L1Event::CommitBatch(batch_input) => self.handle_batch_input(batch_input).await,
             L1Event::Reorg(block_number) => self.handle_reorg(block_number).await,
-            L1Event::NewBlock(block_number) => todo!(),
+            L1Event::NewBlock(_block_number) => todo!(),
             L1Event::Finalized(block_number) => self.handle_finalized(block_number).await,
             L1Event::L1Message(l1_message) => self.handle_l1_message(l1_message).await,
         }
     }
 
-    async fn handle_reorg(&mut self, _block_number: u64) {
+    async fn handle_reorg(&self, _block_number: u64) {
         todo!()
     }
 
-    async fn handle_finalized(&mut self, _block_number: u64) {
+    async fn handle_finalized(&self, _block_number: u64) {
         todo!()
     }
 
-    async fn handle_l1_message(&mut self, _l1_message: Arc<L1Message>) {
+    async fn handle_l1_message(&self, _l1_message: Arc<L1Message>) {
         todo!()
     }
 
-    async fn handle_batch_input(&mut self, _batch_input: Arc<BatchInput>) {
+    async fn handle_batch_input(&self, _batch_input: Arc<BatchInput>) {
         todo!()
     }
 }

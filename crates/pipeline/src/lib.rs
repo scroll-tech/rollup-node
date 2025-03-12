@@ -5,15 +5,10 @@ use scroll_alloy_rpc_types_engine::ScrollPayloadAttributes;
 use scroll_primitives::BatchInput;
 
 /// A pipeline for processing batch inputs and producing scroll payloads.
-#[derive(Debug)]
+#[derive(Debug, Default)]
 pub struct Pipeline;
 
 impl Pipeline {
-    /// Creates a new [`Pipeline`] instance.
-    pub fn new() -> Self {
-        Pipeline
-    }
-
     /// Handles a batch input.
     pub fn handle_batch_input(&mut self, _batch_input: BatchInput) {
         // Handle the batch input.
@@ -21,7 +16,7 @@ impl Pipeline {
     }
 
     /// Gets the next scroll payload.
-    pub fn next(&mut self) -> Option<ScrollPayloadAttributes> {
+    pub fn next_attributes(&mut self) -> Option<ScrollPayloadAttributes> {
         // Get the next scroll payload.
         todo!()
     }
@@ -32,9 +27,9 @@ impl Stream for Pipeline {
 
     fn poll_next(
         self: std::pin::Pin<&mut Self>,
-        cx: &mut std::task::Context<'_>,
+        _cx: &mut std::task::Context<'_>,
     ) -> std::task::Poll<Option<Self::Item>> {
-        let this = self.get_mut();
+        let _this = self.get_mut();
 
         todo!()
     }

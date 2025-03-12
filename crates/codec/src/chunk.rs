@@ -1,1 +1,2 @@
-pub struct ChunkCodec;
+#[allow(dead_code)]
+struct ChunkCodec;

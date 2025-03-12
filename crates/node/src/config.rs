@@ -9,17 +9,17 @@ pub struct Config {
 
 impl Config {
     /// Creates a new configuration.
-    pub fn new(is_sequencer: bool, block_time: u64) -> Self {
+    pub const fn new(is_sequencer: bool, block_time: u64) -> Self {
         Self { is_sequencer, block_time }
     }
 
     /// Returns a boolean representing if the node is a sequencer.
-    pub fn is_sequencer(&self) -> bool {
+    pub const fn is_sequencer(&self) -> bool {
         self.is_sequencer
     }
 
     /// Returns the block time in milliseconds.
-    pub fn block_time(&self) -> u64 {
+    pub const fn block_time(&self) -> u64 {
         self.block_time
     }
 }
