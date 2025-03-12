@@ -17,9 +17,8 @@ fn setup() {
 // Generate a set blocks that will be fed to the l1 watcher.
 // Every fork_cycle blocks, generates a small reorg.
 fn generate_chain_with_reorgs(len: usize, fork_cycle: usize, max_fork_depth: usize) -> Vec<Block> {
-    if fork_cycle < 1 {
-        panic!("fork cycle should be bigger than 1");
-    }
+    assert!(fork_cycle >= 1, "fork cycle should be bigger than 1");
+
     let mut blocks = Vec::with_capacity(len);
     let mut rng = rand::rng();
     let next_header = |prev: &Header| {
@@ -54,7 +53,7 @@ async fn test_reorg_detection() -> eyre::Result<()> {
     let latest_blocks = blocks.clone();
 
     // finalized blocks should be 64 blocks late.
-    let mut finalized_blocks = std::iter::repeat(latest_blocks.first().clone())
+    let mut finalized_blocks = std::iter::repeat(latest_blocks.first())
         .filter_map(|b| b.cloned())
         .take(64)
         .chain(latest_blocks.iter().cloned())
@@ -82,10 +81,12 @@ async fn test_reorg_detection() -> eyre::Result<()> {
             assert_eq!(notification.as_ref(), &L1Notification::Finalized(finalized.header.number));
         }
 
-        // check latest for reorg or new block.
         if latest_number == latest.header.number {
             continue
-        } else if latest_number > latest.header.number {
+        }
+
+        // check latest for reorg or new block.
+        if latest_number > latest.header.number {
             // reorg
             let notification = l1_watcher.recv().await.unwrap();
             assert!(matches!(notification.as_ref(), L1Notification::Reorg(_)));
@@ -122,15 +123,15 @@ async fn test_gap() -> eyre::Result<()> {
     // add a gap every 20 blocks.
     let latest_blocks = blocks
         .iter()
-        .cloned()
         .filter(|b| {
             let rem = b.header.number % 20;
             rem > 5
         })
+        .cloned()
         .collect::<Vec<_>>();
 
     // finalized blocks should be 64 blocks late.
-    let mut finalized_blocks = std::iter::repeat(blocks.first().clone())
+    let mut finalized_blocks = std::iter::repeat(blocks.first())
         .filter_map(|b| b.cloned())
         .take(64)
         .chain(blocks.iter().cloned())
@@ -158,13 +159,12 @@ async fn test_gap() -> eyre::Result<()> {
             assert_eq!(notification.as_ref(), &L1Notification::Finalized(finalized.header.number));
         }
 
-        // check latest for reorg or new block.
         if latest_number == latest.header.number {
             continue
-        } else {
-            let notification = l1_watcher.recv().await.unwrap();
-            assert_eq!(notification.as_ref(), &L1Notification::NewBlock(latest.header.number));
         }
+
+        let notification = l1_watcher.recv().await.unwrap();
+        assert_eq!(notification.as_ref(), &L1Notification::NewBlock(latest.header.number));
 
         // update finalized and latest.
         finalized_number = finalized.header.number;

@@ -63,7 +63,7 @@ where
     /// Handles an execution payload:
     ///   - Sends the payload to the EL via `engine_newPayloadV1`.
     ///   - Sets the current fork choice for the EL via `engine_forkchoiceUpdatedV1`.
-    #[instrument(skip_all, level = "trace", 
+    #[instrument(skip_all, level = "trace",
     fields(
         payload_block_hash = %execution_payload.block_hash(),
         payload_block_num = %execution_payload.block_number(),

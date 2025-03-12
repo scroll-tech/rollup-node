@@ -13,7 +13,7 @@ pub const L1_MESSAGE_QUEUE_CONTRACT_ADDRESS: Address =
     address!("0x0d7E906BD9cAFa154b048cFa766Cc1E54E39AF9B");
 
 /// The [`Filter`] used by the [`crate::L1Watcher`] to index events relevant to the rollup node.
-pub const L1_WATCHER_LOG_FILTER: LazyLock<Filter> = LazyLock::new(|| {
+pub static L1_WATCHER_LOG_FILTER: LazyLock<Filter> = LazyLock::new(|| {
     Filter::new()
         .address(vec![ROLLUP_CONTRACT_ADDRESS, L1_MESSAGE_QUEUE_CONTRACT_ADDRESS])
         .event_signature(vec![QueueTransaction::SIGNATURE_HASH, CommitBatch::SIGNATURE_HASH])

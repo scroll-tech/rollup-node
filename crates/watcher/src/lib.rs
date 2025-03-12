@@ -99,7 +99,7 @@ impl<EP> L1Watcher<EP>
 where
     EP: Provider + 'static,
 {
-    /// Spawn a new [`L1Watcher`], starting at start_block. The watcher will iterate the L1,
+    /// Spawn a new [`L1Watcher`], starting at `start_block`. The watcher will iterate the L1,
     /// returning [`L1Notification`] in the returned channel.
     pub async fn spawn(
         execution_provider: EP,
@@ -126,7 +126,7 @@ where
             finalized: fetch_block_number(BlockNumberOrTag::Finalized).await,
         };
 
-        let watcher = L1Watcher {
+        let watcher = Self {
             execution_provider,
             unfinalized_blocks: VecDeque::with_capacity(MAX_UNFINALIZED_BLOCK_COUNT),
             current_block_number: start_block - 1,
@@ -232,9 +232,9 @@ where
     ) -> L1WatcherResult<()> {
         let tail = self.unfinalized_blocks.back();
 
-        if tail.map_or(false, |h| h.hash == latest.hash) {
+        if tail.is_some_and(|h| h.hash == latest.hash) {
             return Ok(())
-        } else if tail.map_or(false, |h| h.hash == latest.parent_hash) {
+        } else if tail.is_some_and(|h| h.hash == latest.parent_hash) {
             // latest block extends the tip.
             tracing::trace!(target: "scroll::watcher", number = ?latest.number, hash = ?latest.hash, "block extends chain");
             self.unfinalized_blocks.push_back(latest.clone());
@@ -415,7 +415,7 @@ where
     }
 
     /// Returns true if the [`L1Watcher`] is synced to the head of the L1.
-    fn is_synced(&self) -> bool {
+    const fn is_synced(&self) -> bool {
         self.current_block_number == self.l1_state.head
     }
 
@@ -515,9 +515,7 @@ mod tests {
 
     // Returns a chain of random headers of size `len`.
     fn chain(len: usize) -> (Header, Header, Vec<Header>) {
-        if len < 2 {
-            panic!("chain should have a minimal length of two");
-        }
+        assert!(len >= 2, "chain should have a minimal length of two");
 
         let mut chain = Vec::with_capacity(len);
         chain.push(random!(Header));
@@ -533,9 +531,8 @@ mod tests {
 
     // Returns a chain of random block of size `len`, starting at the provided header.
     fn chain_from(header: &Header, len: usize) -> Vec<Header> {
-        if len < 2 {
-            panic!("fork should have a minimal length of two");
-        }
+        assert!(len >= 2, "fork should have a minimal length of two");
+
         let mut blocks = Vec::with_capacity(len);
         blocks.push(header.clone());
 
@@ -759,7 +756,7 @@ mod tests {
     async fn test_handle_batch_commits() -> eyre::Result<()> {
         // Given
         let (finalized, latest, chain) = chain(10);
-        let tx = ArbitraryTxBuilder::new()
+        let tx = ArbitraryTxBuilder::default()
             .with_ty(TxType::Eip1559)
             .with_input(random!(commitBatchCall).abi_encode().into())
             .build();

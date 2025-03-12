@@ -24,9 +24,8 @@ pub struct ArbitraryTxBuilder {
     tx: Transaction,
 }
 
-impl ArbitraryTxBuilder {
-    /// Creates a random builder for a transaction.
-    pub fn new() -> Self {
+impl Default for ArbitraryTxBuilder {
+    fn default() -> Self {
         let envelope = random!(TxEnvelope);
         Self {
             tx: Transaction {
@@ -39,7 +38,9 @@ impl ArbitraryTxBuilder {
             },
         }
     }
+}
 
+impl ArbitraryTxBuilder {
     /// Modifies the type of the random transaction.
     pub fn with_ty(mut self, ty: TxType) -> Self {
         match ty {

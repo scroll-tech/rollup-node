@@ -5,7 +5,7 @@ use alloy_network::Ethereum;
 use alloy_primitives::{BlockNumber, TxHash, B256};
 use alloy_provider::{Provider, ProviderCall, RootProvider};
 use alloy_rpc_types_eth::{BlockId, BlockTransactionsKind, Filter, Log, Transaction};
-use alloy_transport::{BoxTransport, TransportResult};
+use alloy_transport::TransportResult;
 use std::{collections::HashMap, sync::Arc};
 use tokio::sync::Mutex;
 
@@ -42,7 +42,7 @@ impl MockProvider {
 
 #[async_trait::async_trait]
 impl Provider for MockProvider {
-    fn root(&self) -> &RootProvider<BoxTransport, Ethereum> {
+    fn root(&self) -> &RootProvider<Ethereum> {
         unreachable!("unused calls")
     }
 
@@ -56,12 +56,12 @@ impl Provider for MockProvider {
             BlockId::Number(number_or_tag) => match number_or_tag {
                 BlockNumberOrTag::Latest => {
                     let mut blocks = self.latest_blocks.lock().await;
-                    let val = if blocks.len() > 0 { blocks.drain(..1).next() } else { None };
+                    let val = if blocks.is_empty() { None } else { blocks.drain(..1).next() };
                     val.ok_or(RpcError::NullResp).map(Some)
                 }
                 BlockNumberOrTag::Finalized => {
                     let mut blocks = self.finalized_blocks.lock().await;
-                    let val = if blocks.len() > 0 { blocks.drain(..1).next() } else { None };
+                    let val = if blocks.is_empty() { None } else { blocks.drain(..1).next() };
                     val.ok_or(RpcError::NullResp).map(Some)
                 }
                 BlockNumberOrTag::Number(number) => {
@@ -79,14 +79,14 @@ impl Provider for MockProvider {
         }
     }
 
+    async fn get_logs(&self, _filter: &Filter) -> TransportResult<Vec<Log>> {
+        Ok(vec![])
+    }
+
     fn get_transaction_by_hash(
         &self,
         hash: TxHash,
-    ) -> ProviderCall<BoxTransport, (TxHash,), Option<Transaction>> {
+    ) -> ProviderCall<(TxHash,), Option<Transaction>> {
         ProviderCall::Ready(Some(Ok(self.transactions.get(&hash).cloned())))
-    }
-
-    async fn get_logs(&self, _filter: &Filter) -> TransportResult<Vec<Log>> {
-        Ok(vec![])
     }
 }

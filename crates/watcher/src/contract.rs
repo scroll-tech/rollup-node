@@ -50,30 +50,30 @@ pub(super) enum CommitBatchCall {
 }
 
 impl CommitBatchCall {
-    pub(crate) fn version(&self) -> u8 {
+    pub(crate) const fn version(&self) -> u8 {
         match self {
-            CommitBatchCall::CommitBatch(b) => b.version,
-            CommitBatchCall::CommitBatchWithBlobProof(b) => b.version,
+            Self::CommitBatch(b) => b.version,
+            Self::CommitBatchWithBlobProof(b) => b.version,
         }
     }
     pub(crate) fn parent_batch_header(&self) -> Vec<u8> {
         let header = match self {
-            CommitBatchCall::CommitBatch(b) => &b.parentBatchHeader,
-            CommitBatchCall::CommitBatchWithBlobProof(b) => &b.parentBatchHeader,
+            Self::CommitBatch(b) => &b.parentBatchHeader,
+            Self::CommitBatchWithBlobProof(b) => &b.parentBatchHeader,
         };
         header.to_vec()
     }
     pub(crate) fn chunks(&self) -> Option<Vec<Vec<u8>>> {
         let chunks = match self {
-            CommitBatchCall::CommitBatch(b) => &b.chunks,
-            CommitBatchCall::CommitBatchWithBlobProof(b) => &b.chunks,
+            Self::CommitBatch(b) => &b.chunks,
+            Self::CommitBatchWithBlobProof(b) => &b.chunks,
         };
         Some(chunks.iter().map(|c| c.to_vec()).collect())
     }
     pub(crate) fn skipped_l1_message_bitmap(&self) -> Option<Vec<u8>> {
         let bitmap = match self {
-            CommitBatchCall::CommitBatch(b) => &b.skippedL1MessageBitmap,
-            CommitBatchCall::CommitBatchWithBlobProof(b) => &b.skippedL1MessageBitmap,
+            Self::CommitBatch(b) => &b.skippedL1MessageBitmap,
+            Self::CommitBatchWithBlobProof(b) => &b.skippedL1MessageBitmap,
         };
         Some(bitmap.to_vec())
     }
@@ -99,7 +99,7 @@ pub(super) fn try_decode_commit_call(calldata: &Bytes) -> Option<CommitBatchCall
 
 impl From<QueueTransaction> for TxL1Message {
     fn from(value: QueueTransaction) -> Self {
-        TxL1Message {
+        Self {
             queue_index: value.queueIndex,
             gas_limit: value.gasLimit.saturating_to(),
             to: value.target,

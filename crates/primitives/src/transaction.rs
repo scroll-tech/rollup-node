@@ -11,7 +11,7 @@ pub struct L1MessageWithBlockNumber {
 
 impl L1MessageWithBlockNumber {
     /// Returns a new [`L1MessageWithBlockNumber`].
-    pub fn new(block_number: u64, transaction: TxL1Message) -> Self {
+    pub const fn new(block_number: u64, transaction: TxL1Message) -> Self {
         Self { block_number, transaction }
     }
 }

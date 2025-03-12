@@ -12,7 +12,7 @@ pub struct BlockInfo {
 
 impl BlockInfo {
     /// Returns a new instance of [`BlockInfo`].
-    pub fn new(number: u64, hash: B256) -> Self {
+    pub const fn new(number: u64, hash: B256) -> Self {
         Self { number, hash }
     }
 }

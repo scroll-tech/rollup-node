@@ -1,5 +1,4 @@
 use alloy_primitives::{BlockNumber, B256};
-use derive_more;
 
 /// The input data for a batch.
 ///
@@ -64,7 +63,7 @@ pub struct BatchInputBuilder {
 
 impl BatchInputBuilder {
     /// Returns a new instance of the builder.
-    pub fn new(
+    pub const fn new(
         version: u8,
         index: u64,
         hash: B256,
@@ -136,7 +135,7 @@ impl BatchInputBuilder {
                     chunks,
                     skipped_l1_message_bitmap,
                 };
-                let blob_hash = blob.first().cloned()?;
+                let blob_hash = blob.first().copied()?;
                 Some(BatchInputV2 { batch_input_data, blob_hash }.into())
             }
             (None, None, Some(_blobs)) => {
