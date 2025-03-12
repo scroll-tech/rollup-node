@@ -473,8 +473,10 @@ where
 mod tests {
     use super::*;
 
-    use crate::test_utils::{arbitrary::ArbitraryTxBuilder, provider::MockProvider};
-    use alloy_consensus::TxType;
+    use crate::test_utils::provider::MockProvider;
+    use alloy_consensus::{transaction::Recovered, Signed, TxEip1559};
+    use alloy_primitives::Address;
+    use alloy_rpc_types_eth::Transaction;
     use alloy_sol_types::{SolCall, SolEvent};
     use arbitrary::Arbitrary;
     use scroll_l1::abi::calls::commitBatchCall;
@@ -754,10 +756,19 @@ mod tests {
     async fn test_handle_batch_commits() -> eyre::Result<()> {
         // Given
         let (finalized, latest, chain) = chain(10);
-        let tx = ArbitraryTxBuilder::default()
-            .with_ty(TxType::Eip1559)
-            .with_input(random!(commitBatchCall).abi_encode().into())
-            .build();
+
+        // prepare the commit batch call transaction.
+        let mut inner = random!(Signed<TxEip1559>);
+        inner.tx_mut().input = random!(commitBatchCall).abi_encode().into();
+        let recovered = Recovered::new_unchecked(inner.into(), random!(Address));
+        let tx = Transaction {
+            inner: recovered,
+            block_hash: None,
+            block_number: None,
+            transaction_index: None,
+            effective_gas_price: None,
+        };
+
         let (watcher, mut receiver) =
             l1_watcher(chain, vec![], vec![tx.clone()], finalized.clone(), latest.clone());
 

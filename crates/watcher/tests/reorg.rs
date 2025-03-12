@@ -11,7 +11,7 @@ use tracing::{subscriber::set_global_default, Level};
 
 fn setup() {
     let sub = tracing_subscriber::FmtSubscriber::builder().with_max_level(Level::TRACE).finish();
-    set_global_default(sub).expect("failed to set subscriber");
+    let _ = set_global_default(sub);
 }
 
 // Generate a set blocks that will be fed to the l1 watcher.
