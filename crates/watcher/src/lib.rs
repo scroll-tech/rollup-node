@@ -4,7 +4,6 @@ pub use constants::{
     L1_MESSAGE_QUEUE_CONTRACT_ADDRESS, L1_WATCHER_LOG_FILTER, ROLLUP_CONTRACT_ADDRESS,
 };
 mod constants;
-mod contract;
 
 pub use error::{EthRequestError, FilterLogError, L1WatcherError};
 mod error;
@@ -13,9 +12,6 @@ mod error;
 /// Common test helpers
 pub mod test_utils;
 
-use crate::contract::{
-    try_decode_commit_call, try_decode_log, CommitBatch, FinalizeBatch, QueueTransaction,
-};
 use std::{collections::VecDeque, sync::Arc, time::Duration};
 
 use alloy_network::Ethereum;
@@ -25,6 +21,10 @@ use alloy_rpc_types_eth::{BlockNumberOrTag, Log, TransactionTrait};
 use error::L1WatcherResult;
 use rollup_node_primitives::{BatchInput, BatchInputBuilder, L1MessageWithBlockNumber};
 use scroll_alloy_consensus::TxL1Message;
+use scroll_l1::abi::{
+    calls::CommitBatchCall,
+    logs::{try_decode_log, CommitBatch, FinalizeBatch, QueueTransaction},
+};
 use tokio::sync::mpsc;
 
 /// The block range used to fetch L1 logs.
@@ -312,7 +312,7 @@ where
                 .ok_or(EthRequestError::MissingTransactionHash(tx_hash))?;
 
             // decode the transaction's input into a commit batch call.
-            let commit_info = try_decode_commit_call(transaction.inner.input());
+            let commit_info = CommitBatchCall::try_decode(transaction.inner.input());
             if let Some(info) = commit_info {
                 let batch_index: u64 = decoded_log.batchIndex.saturating_to();
                 let block_number =
@@ -472,12 +472,12 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{contract::commitBatchCall, test_utils::arbitrary::ArbitraryTxBuilder};
 
-    use crate::test_utils::provider::MockProvider;
+    use crate::test_utils::{arbitrary::ArbitraryTxBuilder, provider::MockProvider};
     use alloy_consensus::TxType;
     use alloy_sol_types::{SolCall, SolEvent};
     use arbitrary::Arbitrary;
+    use scroll_l1::abi::calls::commitBatchCall;
 
     // Returns a L1Watcher along with the receiver end of the L1Notifications.
     fn l1_watcher(

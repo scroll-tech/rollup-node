@@ -9,11 +9,12 @@ exclude = [".github/"]
 members = [
     "bin/bridge",
     "crates/engine",
+    "crates/l1",
     "crates/node",
     "crates/network",
+    "crates/primitives",
     "crates/scroll-wire",
     "crates/watcher",
-    "crates/primitives",
 ]
 
 resolver = "2"
@@ -117,6 +118,7 @@ alloy-primitives = { version = "0.8.20", default-features = false }
 alloy-provider = { version = "0.12.2", default-features = false }
 alloy-rpc-types-engine = { version = "0.12.2", default-features = false }
 alloy-rpc-types-eth = { version = "0.12.2", default-features = false }
+alloy-sol-types = { version = "0.8.20", default-features = false }
 alloy-transport = { version = "0.12.2", default-features = false }
 
 # scroll-alloy
@@ -144,6 +146,7 @@ rollup-node-manager = { path = "crates/node" }
 rollup-node-primitives = { path = "crates/primitives" }
 rollup-node-watcher = { path = "crates/watcher" }
 scroll-engine = { path = "crates/engine" }
+scroll-l1 = { path = "crates/l1" }
 scroll-network = { path = "crates/network" }
 scroll-wire = { path = "crates/scroll-wire" }
 

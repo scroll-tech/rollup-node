@@ -8356,6 +8356,7 @@ dependencies = [
  "rand 0.9.0",
  "rollup-node-primitives",
  "scroll-alloy-consensus",
+ "scroll-l1",
  "thiserror 2.0.12",
  "tokio",
  "tracing",
@@ -8811,6 +8812,17 @@ dependencies = [
  "scroll-alloy-rpc-types-engine",
  "tokio",
  "tracing",
+]
+
+[[package]]
+name = "scroll-l1"
+version = "0.0.1"
+dependencies = [
+ "alloy-primitives",
+ "alloy-sol-types",
+ "arbitrary",
+ "derive_more 2.0.1",
+ "scroll-alloy-consensus",
 ]
 
 [[package]]

@@ -1,0 +1,26 @@
+[package]
+name = "scroll-l1"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+exclude.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+# alloy
+alloy-primitives.workspace = true
+alloy-sol-types.workspace = true
+
+# scroll alloy
+scroll-alloy-consensus.workspace = true
+
+# misc
+arbitrary = { workspace = true, optional = true }
+derive_more.workspace = true
+
+[features]
+test-utils = ["arbitrary"]
+
