@@ -8,9 +8,7 @@ exclude.workspace = true
 
 [dependencies]
 # alloy
-alloy-primitives = { workspace = true, features = [
-    "map-foldhash",
-] }
+alloy-primitives = { workspace = true, features = ["map-foldhash"] }
 
 # reth
 reth-eth-wire-types.workspace = true
@@ -36,13 +34,13 @@ tracing.workspace = true
 
 [features]
 serde = [
-	"alloy-primitives/serde",
-	"parking_lot/serde",
-	"reth-eth-wire-types/serde",
-	"reth-network/serde",
-	"reth-network-api/serde",
-	"reth-network-types/serde",
-	"reth-scroll-primitives/serde",
-	"scroll-wire/serde",
-	"secp256k1/serde"
+    "alloy-primitives/serde",
+    "parking_lot/serde",
+    "reth-eth-wire-types/serde",
+    "reth-network/serde",
+    "reth-network-api/serde",
+    "reth-network-types/serde",
+    "reth-scroll-primitives/serde",
+    "scroll-wire/serde",
+    "secp256k1/serde",
 ]

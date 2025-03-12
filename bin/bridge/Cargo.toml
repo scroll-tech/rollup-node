@@ -18,6 +18,7 @@ scroll-alloy-provider.workspace = true
 
 # reth
 reth-cli-util = { git = "https://github.com/scroll-tech/reth.git" }
+# keep this import as it is needed for correct compilation.
 reth-engine-local = { git = "https://github.com/scroll-tech/reth.git", features = ["scroll-alloy-traits"] }
 reth-eth-wire-types.workspace = true
 reth-network.workspace = true

@@ -21,7 +21,7 @@ use std::{collections::VecDeque, sync::Arc, time::Duration};
 use alloy_network::Ethereum;
 use alloy_primitives::{BlockNumber, B256};
 use alloy_provider::{Network, Provider};
-use alloy_rpc_types_eth::{BlockNumberOrTag, BlockTransactionsKind, Log, TransactionTrait};
+use alloy_rpc_types_eth::{BlockNumberOrTag, Log, TransactionTrait};
 use error::L1WatcherResult;
 use rollup_node_primitives::{BatchInput, BatchInputBuilder, L1MessageWithBlockNumber};
 use scroll_alloy_consensus::TxL1Message;
@@ -109,8 +109,7 @@ where
 
         let fetch_block_number = async |tag: BlockNumberOrTag| {
             let block = loop {
-                match execution_provider.get_block(tag.into(), BlockTransactionsKind::Hashes).await
-                {
+                match execution_provider.get_block(tag.into()).await {
                     Err(err) => {
                         tracing::error!(target: "scroll::watcher", ?err, "failed to fetch {tag} block")
                     }
@@ -159,11 +158,11 @@ where
     /// A step of work for the [`L1Watcher`].
     pub async fn step(&mut self) -> L1WatcherResult<()> {
         // handle the finalized block.
-        let finalized = self.finalized_block(false).await?;
+        let finalized = self.finalized_block().await?;
         self.handle_finalized_block(&finalized.header).await;
 
         // handle the latest block.
-        let latest = self.latest_block(false).await?;
+        let latest = self.latest_block().await?;
         self.handle_latest_block(&finalized.header, &latest.header).await?;
 
         // index the next range of blocks.
@@ -393,7 +392,7 @@ where
             tracing::trace!(target: "scroll::watcher", number = ?(current_block.number - 1), "fetching block");
             let block = self
                 .execution_provider
-                .get_block((current_block.number - 1).into(), BlockTransactionsKind::Hashes)
+                .get_block((current_block.number - 1).into())
                 .await?
                 .ok_or(EthRequestError::MissingBlock(current_block.number - 1))?;
             chain.push(block.header.clone());
@@ -438,19 +437,19 @@ where
     }
 
     /// Returns the latest L1 block.
-    async fn latest_block(&self, full: bool) -> L1WatcherResult<Block> {
+    async fn latest_block(&self) -> L1WatcherResult<Block> {
         Ok(self
             .execution_provider
-            .get_block(BlockNumberOrTag::Latest.into(), full.into())
+            .get_block(BlockNumberOrTag::Latest.into())
             .await?
             .expect("latest block should always exist"))
     }
 
     /// Returns the finalized L1 block.
-    async fn finalized_block(&self, full: bool) -> L1WatcherResult<Block> {
+    async fn finalized_block(&self) -> L1WatcherResult<Block> {
         Ok(self
             .execution_provider
-            .get_block(BlockNumberOrTag::Finalized.into(), full.into())
+            .get_block(BlockNumberOrTag::Finalized.into())
             .await?
             .expect("finalized block should always exist"))
     }
@@ -473,10 +472,9 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{
-        contract::commitBatchCall,
-        test_utils::{arbitrary::ArbitraryTxBuilder, provider::MockProvider},
-    };
+    use crate::{contract::commitBatchCall, test_utils::arbitrary::ArbitraryTxBuilder};
+
+    use crate::test_utils::provider::MockProvider;
     use alloy_consensus::TxType;
     use alloy_sol_types::{SolCall, SolEvent};
     use arbitrary::Arbitrary;

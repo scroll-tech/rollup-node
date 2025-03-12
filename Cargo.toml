@@ -109,15 +109,15 @@ large_enum_variant = "allow"
 [workspace.dependencies]
 # alloy
 alloy-chains = { version = "0.1.32", default-features = false }
-alloy-consensus = { version = "0.11.1", default-features = false }
-alloy-eips = { version = "0.11.1", default-features = false }
-alloy-json-rpc = { version = "0.11.1", default-features = false }
-alloy-network = { version = "0.11.1", default-features = false }
+alloy-consensus = { version = "0.12.2", default-features = false }
+alloy-eips = { version = "0.12.2", default-features = false }
+alloy-json-rpc = { version = "0.12.2", default-features = false }
+alloy-network = { version = "0.12.2", default-features = false }
 alloy-primitives = { version = "0.8.20", default-features = false }
-alloy-provider = { version = "0.11.1", default-features = false }
-alloy-rpc-types-engine = { version = "0.11.1", default-features = false }
-alloy-rpc-types-eth = { version = "0.11.1", default-features = false }
-alloy-transport = { version = "0.11.1", default-features = false }
+alloy-provider = { version = "0.12.2", default-features = false }
+alloy-rpc-types-engine = { version = "0.12.2", default-features = false }
+alloy-rpc-types-eth = { version = "0.12.2", default-features = false }
+alloy-transport = { version = "0.12.2", default-features = false }
 
 # scroll-alloy
 scroll-alloy-consensus = { git = "https://github.com/scroll-tech/reth.git" }
@@ -140,12 +140,12 @@ reth-scroll-node = { git = "https://github.com/scroll-tech/reth.git", default-fe
 reth-scroll-primitives = { git = "https://github.com/scroll-tech/reth.git", default-features = false }
 
 # rollup node
+rollup-node-manager = { path = "crates/node" }
+rollup-node-primitives = { path = "crates/primitives" }
+rollup-node-watcher = { path = "crates/watcher" }
 scroll-engine = { path = "crates/engine" }
 scroll-network = { path = "crates/network" }
 scroll-wire = { path = "crates/scroll-wire" }
-rollup-node-manager = { path = "crates/node" }
-rollup-node-watcher = { path = "crates/watcher" }
-rollup-node-primitives = { path = "crates/primitives" }
 
 # misc
 arbitrary = "1.4"
@@ -160,19 +160,17 @@ tokio-stream = { version = "0.1", default-features = false }
 tracing = "0.1.0"
 
 [patch.crates-io]
-alloy-evm = { git = "https://github.com/alloy-rs/evm", rev = "beb6832" }
+revm = { git = "https://github.com/bluealloy/revm", rev = "19a5f3b" }
+revm-bytecode = { git = "https://github.com/bluealloy/revm", rev = "19a5f3b" }
+revm-database = { git = "https://github.com/bluealloy/revm", rev = "19a5f3b" }
+revm-state = { git = "https://github.com/bluealloy/revm", rev = "19a5f3b" }
+revm-primitives = { git = "https://github.com/bluealloy/revm", rev = "19a5f3b" }
+revm-interpreter = { git = "https://github.com/bluealloy/revm", rev = "19a5f3b" }
+revm-inspector = { git = "https://github.com/bluealloy/revm", rev = "19a5f3b" }
+revm-context = { git = "https://github.com/bluealloy/revm", rev = "19a5f3b" }
+revm-context-interface = { git = "https://github.com/bluealloy/revm", rev = "19a5f3b" }
+revm-database-interface = { git = "https://github.com/bluealloy/revm", rev = "19a5f3b" }
+revm-specification = { git = "https://github.com/bluealloy/revm", rev = "19a5f3b" }
+op-revm = { git = "https://github.com/bluealloy/revm", rev = "19a5f3b" }
 
-revm = { git = "https://github.com/bluealloy/revm", rev = "a8a9893b" }
-revm-bytecode = { git = "https://github.com/bluealloy/revm", rev = "a8a9893b" }
-revm-database = { git = "https://github.com/bluealloy/revm", rev = "a8a9893b" }
-revm-state = { git = "https://github.com/bluealloy/revm", rev = "a8a9893b" }
-revm-primitives = { git = "https://github.com/bluealloy/revm", rev = "a8a9893b" }
-revm-interpreter = { git = "https://github.com/bluealloy/revm", rev = "a8a9893b" }
-revm-inspector = { git = "https://github.com/bluealloy/revm", rev = "a8a9893b" }
-revm-context = { git = "https://github.com/bluealloy/revm", rev = "a8a9893b" }
-revm-context-interface = { git = "https://github.com/bluealloy/revm", rev = "a8a9893b" }
-revm-database-interface = { git = "https://github.com/bluealloy/revm", rev = "a8a9893b" }
-revm-specification = { git = "https://github.com/bluealloy/revm", rev = "a8a9893b" }
-revm-optimism = { git = "https://github.com/bluealloy/revm", rev = "a8a9893b" }
-
-revm-inspectors = { git = "https://github.com/paradigmxyz/revm-inspectors", rev = "8900c2b" }
+revm-inspectors = { git = "https://github.com/paradigmxyz/revm-inspectors", rev = "9219073" }

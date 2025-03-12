@@ -43,8 +43,16 @@ alloy-rpc-types-eth = { workspace = true, features = ["arbitrary"] }
 arbitrary.workspace = true
 eyre.workspace = true
 rand = "0.9"
-itertools = "0.14.0"
 tracing-subscriber = "0.3"
 
 [features]
-test-utils = ["alloy-eips", "arbitrary", "rand", "alloy-consensus/arbitrary"]
+test-utils = ["arbitrary", "alloy-eips", "rand"]
+arbitrary = [
+    "dep:arbitrary",
+    "alloy-consensus/arbitrary",
+    "alloy-eips/arbitrary",
+    "alloy-primitives/arbitrary",
+    "alloy-rpc-types-eth/arbitrary",
+    "alloy-sol-types/arbitrary",
+    "scroll-alloy-consensus/arbitrary",
+]

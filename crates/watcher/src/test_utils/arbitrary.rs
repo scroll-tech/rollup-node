@@ -1,8 +1,8 @@
 use alloy_consensus::{
-    Signed, TxEip1559, TxEip2930, TxEip4844, TxEip4844Variant, TxEip7702, TxEnvelope, TxLegacy,
-    TxType,
+    transaction::Recovered, Signed, TxEip1559, TxEip2930, TxEip4844, TxEip4844Variant, TxEip7702,
+    TxEnvelope, TxLegacy, TxType,
 };
-use alloy_primitives::{Address, Bytes};
+use alloy_primitives::Bytes;
 use alloy_rpc_types_eth::Transaction;
 use arbitrary::Arbitrary;
 
@@ -26,15 +26,14 @@ pub struct ArbitraryTxBuilder {
 
 impl Default for ArbitraryTxBuilder {
     fn default() -> Self {
-        let envelope = random!(TxEnvelope);
+        let recovered = random!(Recovered<TxEnvelope>);
         Self {
             tx: Transaction {
-                inner: envelope,
+                inner: recovered,
                 block_hash: None,
                 block_number: None,
                 transaction_index: None,
                 effective_gas_price: None,
-                from: random!(Address),
             },
         }
     }
@@ -44,18 +43,18 @@ impl ArbitraryTxBuilder {
     /// Modifies the type of the random transaction.
     pub fn with_ty(mut self, ty: TxType) -> Self {
         match ty {
-            TxType::Legacy => self.tx.inner = random!(Signed<TxLegacy>).into(),
-            TxType::Eip2930 => self.tx.inner = random!(Signed<TxEip2930>).into(),
-            TxType::Eip1559 => self.tx.inner = random!(Signed<TxEip1559>).into(),
-            TxType::Eip4844 => self.tx.inner = random!(Signed<TxEip4844>).into(),
-            TxType::Eip7702 => self.tx.inner = random!(Signed<TxEip7702>).into(),
+            TxType::Legacy => *self.tx.inner.inner_mut() = random!(Signed<TxLegacy>).into(),
+            TxType::Eip2930 => *self.tx.inner.inner_mut() = random!(Signed<TxEip2930>).into(),
+            TxType::Eip1559 => *self.tx.inner.inner_mut() = random!(Signed<TxEip1559>).into(),
+            TxType::Eip4844 => *self.tx.inner.inner_mut() = random!(Signed<TxEip4844>).into(),
+            TxType::Eip7702 => *self.tx.inner.inner_mut() = random!(Signed<TxEip7702>).into(),
         }
         self
     }
 
     /// Modifies the input of the random transaction.
     pub fn with_input(mut self, input: Bytes) -> Self {
-        match self.tx.inner {
+        match self.tx.inner.inner_mut() {
             TxEnvelope::Legacy(ref mut tx) => tx.tx_mut().input = input,
             TxEnvelope::Eip2930(ref mut tx) => tx.tx_mut().input = input,
             TxEnvelope::Eip1559(ref mut tx) => tx.tx_mut().input = input,
