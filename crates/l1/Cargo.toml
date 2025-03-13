@@ -22,5 +22,4 @@ arbitrary = { workspace = true, optional = true }
 derive_more.workspace = true
 
 [features]
-test-utils = ["arbitrary"]
-
+test-utils = ["dep:arbitrary"]

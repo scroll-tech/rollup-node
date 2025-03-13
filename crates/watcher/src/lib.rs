@@ -87,7 +87,7 @@ pub enum L1Notification {
         /// The block number the batch was finalized at.
         block_number: BlockNumber,
     },
-    /// A new [`L1Message`] has been added to the L1 message queue.
+    /// A new `L1Message` has been added to the L1 message queue.
     L1Message(L1MessageWithBlockNumber),
     /// A new block has been added to the L1.
     NewBlock(u64),
@@ -454,10 +454,9 @@ where
             .expect("finalized block should always exist"))
     }
 
-    /// Returns the next range of logs, using the filter provider in
-    /// [`L1Watcher`](field@L1Watcher::filter), for the block range in
-    /// \[[`current_block`](field@WatcherSyncStatus::current_block);
-    /// [`current_block`](field@WatcherSyncStatus::current_block) + [`LOGS_QUERY_BLOCK_RANGE`]\]
+    /// Returns the next range of logs, filtering using [`L1_WATCHER_LOG_FILTER`],
+    /// for the block range in \[[`current_block`](field@L1Watcher::current_block);
+    /// [`current_block`](field@L1Watcher::current_block) + [`LOGS_QUERY_BLOCK_RANGE`]\]
     async fn next_filtered_logs(&self) -> L1WatcherResult<Vec<Log>> {
         // set the block range for the query
         let mut filter = L1_WATCHER_LOG_FILTER.clone();
