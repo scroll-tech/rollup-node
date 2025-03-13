@@ -1,0 +1,30 @@
+[package]
+name = "rollup-node-indexer"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+exclude.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+# alloy
+alloy-primitives.workspace = true
+
+# rollup-node
+scroll-db.workspace = true
+rollup-node-primitives.workspace = true
+rollup-node-watcher.workspace = true
+
+[dev-dependencies]
+# rollup-node
+scroll-db = { workspace = true, features = ["test-utils"] }
+rollup-node-primitives = { workspace = true, features = ["arbitrary"] }
+
+# misc
+arbitrary.workspace = true
+futures.workspace = true
+rand.workspace = true
+tokio.workspace = true

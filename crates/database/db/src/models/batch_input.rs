@@ -18,6 +18,7 @@ pub struct Model {
     chunks: Chunks,
     skipped_l1_message_bitmap: Vec<u8>,
     blob_hash: Vec<u8>,
+    finalized_block_number: Option<i64>,
 }
 
 /// The relation for the batch input model.
@@ -58,6 +59,7 @@ impl From<BatchInputPrimitive> for ActiveModel {
                 chunks: ActiveValue::Set(Chunks(batch_input.chunks)),
                 skipped_l1_message_bitmap: ActiveValue::Set(batch_input.skipped_l1_message_bitmap),
                 blob_hash: ActiveValue::Set(vec![]),
+                finalized_block_number: ActiveValue::Unchanged(None),
             },
             BatchInputPrimitive::BatchInputDataV2(batch_input) => Self {
                 index: ActiveValue::Set(
@@ -85,6 +87,7 @@ impl From<BatchInputPrimitive> for ActiveModel {
                     batch_input.batch_input_data.skipped_l1_message_bitmap,
                 ),
                 blob_hash: ActiveValue::Set(batch_input.blob_hash.to_vec()),
+                finalized_block_number: ActiveValue::Unchanged(None),
             },
         }
     }

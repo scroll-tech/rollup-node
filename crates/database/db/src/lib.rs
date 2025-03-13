@@ -6,5 +6,7 @@ pub use models::*;
 mod db;
 pub use db::Database;
 
-#[cfg(test)]
+#[cfg(feature = "test-utils")]
 pub mod test_utils;
+
+pub use sea_orm::DbErr;

@@ -29,6 +29,7 @@ impl MigrationTrait for Migration {
                     .col(var_binary(BatchInput::SkippedL1MessageBitmap, HASH_LENGTH))
                     // TODO: Set the blob hash as nullable
                     .col(binary_len(BatchInput::BlobHash, HASH_LENGTH))
+                    .col(boolean_null(BatchInput::FinalizedBlockNumber))
                     .to_owned(),
             )
             .await
@@ -51,5 +52,6 @@ enum BatchInput {
     Chunks,
     SkippedL1MessageBitmap,
     BlobHash,
+    FinalizedBlockNumber,
     // TODO: Do we need the blob proof?
 }

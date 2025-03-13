@@ -8968,6 +8968,20 @@ dependencies = [
 ]
 
 [[package]]
+name = "rollup-node-indexer"
+version = "0.0.1"
+dependencies = [
+ "alloy-primitives",
+ "arbitrary",
+ "futures",
+ "rand 0.9.0",
+ "rollup-node-primitives",
+ "rollup-node-watcher",
+ "scroll-db",
+ "tokio",
+]
+
+[[package]]
 name = "rollup-node-manager"
 version = "0.0.1"
 dependencies = [
@@ -9504,6 +9518,7 @@ dependencies = [
  "serde",
  "serde_json",
  "tokio",
+ "tracing",
 ]
 
 [[package]]

@@ -1,9 +1,10 @@
 use super::models;
+use alloy_primitives::B256;
 use futures::{Stream, StreamExt};
 use rollup_node_primitives::{BatchInput, L1MessageWithBlockNumber};
 use sea_orm::{
     ActiveModelTrait, ColumnTrait, ConnectionTrait, Database as SeaOrmDatabase, DatabaseConnection,
-    DatabaseTransaction, DbErr, EntityTrait, QueryFilter, TransactionTrait,
+    DatabaseTransaction, DbErr, EntityTrait, QueryFilter, Set, TransactionTrait,
 };
 
 /// The [`Database`] struct is responsible for interacting with the database.
@@ -37,6 +38,35 @@ impl Database {
     ) -> Result<models::batch_input::Model, DbErr> {
         let batch_input: models::batch_input::ActiveModel = batch_input.into();
         batch_input.insert(conn).await
+    }
+
+    /// Finalize a [`BatchInput`] in the database and set the finalized block number to the provided
+    /// block number.
+    pub async fn finalize_batch_input<C: ConnectionTrait>(
+        &self,
+        conn: &C,
+        batch_hash: B256,
+        block_number: u64,
+    ) -> Result<(), DbErr> {
+        if let Some(batch) = models::batch_input::Entity::find()
+            .filter(models::batch_input::Column::Hash.eq(batch_hash.to_vec())) // Filter by batch_hash
+            .one(conn)
+            .await?
+        // Retrieve single row
+        {
+            let mut batch: models::batch_input::ActiveModel = batch.into();
+            batch.finalized_block_number = Set(Some(block_number as i64));
+            batch.update(conn).await?; // Update only this field
+        } else {
+            tracing::warn!(
+                target: "scroll::db",
+                batch_hash = ?batch_hash,
+                block_number,
+                "Batch not found in DB when trying to finalize."
+            );
+        }
+
+        Ok(())
     }
 
     /// Get a [`BatchInput`] from the database by its batch index.

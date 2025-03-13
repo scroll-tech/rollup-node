@@ -28,6 +28,14 @@ impl BatchInput {
             BatchInput::BatchInputDataV2(data) => data.batch_input_data.batch_index,
         }
     }
+
+    /// Sets the block number of the batch.
+    pub fn set_block_number(&mut self, block_number: BlockNumber) {
+        match self {
+            BatchInput::BatchInputDataV1(data) => data.block_number = block_number,
+            BatchInput::BatchInputDataV2(data) => data.batch_input_data.block_number = block_number,
+        }
+    }
 }
 
 /// The input data for a batch.
@@ -171,7 +179,7 @@ mod arbitrary_impl {
 
     impl arbitrary::Arbitrary<'_> for BatchInput {
         fn arbitrary(u: &mut arbitrary::Unstructured<'_>) -> arbitrary::Result<Self> {
-            let version = u.arbitrary::<u8>()? % 8;
+            let version = u.arbitrary::<u8>()? % 2;
             match version {
                 0 => Ok(BatchInput::BatchInputDataV1(u.arbitrary()?)),
                 1 => Ok(BatchInput::BatchInputDataV2(u.arbitrary()?)),
@@ -182,7 +190,7 @@ mod arbitrary_impl {
 
     impl arbitrary::Arbitrary<'_> for BatchInputV1 {
         fn arbitrary(u: &mut arbitrary::Unstructured<'_>) -> arbitrary::Result<Self> {
-            let version = 0;
+            let version = u.arbitrary::<u8>()? % 8;
             let batch_index = u.arbitrary::<u32>()? as u64;
             let batch_hash = u.arbitrary::<B256>()?;
             let block_number = u.arbitrary::<u32>()? as u64;
