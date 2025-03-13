@@ -32,7 +32,7 @@ scroll-alloy-consensus.workspace = true
 arbitrary = { workspace = true, optional = true }
 async-trait.workspace = true
 derive_more = { workspace = true, features = ["from"] }
-rand = { version = "0.9", optional = true }
+rand = { workspace = true, optional = true }
 thiserror.workspace = true
 tokio = { workspace = true, features = ["full"] }
 tracing.workspace = true
@@ -43,7 +43,7 @@ alloy-eips.workspace = true
 alloy-rpc-types-eth = { workspace = true, features = ["arbitrary"] }
 arbitrary.workspace = true
 eyre.workspace = true
-rand = "0.9"
+rand.workspace = true
 scroll-l1 = { workspace = true, features = ["test-utils"] }
 tracing-subscriber = "0.3"
 

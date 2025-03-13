@@ -9494,7 +9494,9 @@ version = "0.0.1"
 dependencies = [
  "alloy-primitives",
  "arbitrary",
- "rand 0.8.5",
+ "async-trait",
+ "futures",
+ "rand 0.9.0",
  "rollup-node-primitives",
  "scroll-alloy-consensus",
  "scroll-migration",
