@@ -78,7 +78,7 @@ pub struct L1Watcher<EP> {
 pub enum L1Notification {
     /// A notification for a reorg of the L1 up to a given block number.
     Reorg(u64),
-    /// A new batch has been commited on the L1 rollup contract.
+    /// A new batch has been committed on the L1 rollup contract.
     BatchCommit(BatchInput),
     /// A new batch has been finalized on the L1 rollup contract.
     BatchFinalization {
@@ -202,9 +202,9 @@ where
 
         let tail_block = self.unfinalized_blocks.back().expect("tail exists");
         if tail_block.number < finalized.number {
-            // drain all, the finalized block is past the tail.
+            // clear, the finalized block is past the tail.
             tracing::trace!(target: "scroll::watcher", tail = ?tail_block.number, finalized = ?finalized.number, "draining all unfinalized blocks");
-            let _ = self.unfinalized_blocks.drain(0..);
+            self.unfinalized_blocks.clear();
             return
         }
 
