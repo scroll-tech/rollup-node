@@ -25,7 +25,7 @@ impl Database {
         &self.connection
     }
 
-    /// Creates a new transaction against the provided database.
+    /// Creates a new transaction against the database.
     pub async fn tx(&self) -> Result<DatabaseTransaction, DbErr> {
         self.connection.begin().await
     }
@@ -129,6 +129,7 @@ mod test {
     use super::*;
     use crate::test_utils::setup_test_db;
     use arbitrary::{Arbitrary, Unstructured};
+    use futures::StreamExt;
     use rand::Rng;
     use rollup_node_primitives::{BatchInputV1, BatchInputV2};
 
@@ -187,5 +188,67 @@ mod test {
         let l1_message_from_db =
             db.get_l1_message(l1_message.transaction.queue_index).await.unwrap().unwrap();
         assert_eq!(l1_message, l1_message_from_db);
+    }
+
+    #[tokio::test]
+    async fn test_database_tx() {
+        // Setup the test database.
+        let db = setup_test_db().await;
+
+        // Generate unstructured bytes.
+        let mut bytes = [0u8; 2048];
+        rand::rng().fill(bytes.as_mut_slice());
+        let mut u = Unstructured::new(&bytes);
+
+        // Generate 2 random L1Messages.
+        let l1_message_1 = L1MessageWithBlockNumber::arbitrary(&mut u).unwrap();
+        let l1_message_2 = L1MessageWithBlockNumber::arbitrary(&mut u).unwrap();
+
+        // Insert the L1Messages into the database in a transaction.
+        let tx = db.tx().await.unwrap();
+        db.insert_l1_message(&tx, l1_message_1.clone()).await.unwrap();
+        db.insert_l1_message(&tx, l1_message_2.clone()).await.unwrap();
+        tx.commit().await.unwrap();
+
+        // Check that the L1Messages are in the database.
+        let l1_message_1_from_db =
+            db.get_l1_message(l1_message_1.transaction.queue_index).await.unwrap().unwrap();
+        assert_eq!(l1_message_1, l1_message_1_from_db);
+        let l1_message_2_from_db =
+            db.get_l1_message(l1_message_2.transaction.queue_index).await.unwrap().unwrap();
+        assert_eq!(l1_message_2, l1_message_2_from_db);
+    }
+
+    #[tokio::test]
+    async fn test_database_iterator() {
+        // Setup the test database.
+        let db = setup_test_db().await;
+
+        // Generate unstructured bytes.
+        let mut bytes = [0u8; 2048];
+        rand::rng().fill(bytes.as_mut_slice());
+        let mut u = Unstructured::new(&bytes);
+
+        // Generate 2 random L1Messages.
+        let l1_message_1 = L1MessageWithBlockNumber::arbitrary(&mut u).unwrap();
+        let l1_message_2 = L1MessageWithBlockNumber::arbitrary(&mut u).unwrap();
+
+        // Insert the L1Messages into the database.
+        db.insert_l1_message(db.connection(), l1_message_1.clone()).await.unwrap();
+        db.insert_l1_message(db.connection(), l1_message_2.clone()).await.unwrap();
+
+        // collect the L1Messages
+        let l1_messages = {
+            let mut l1_message_stream = db.get_l1_messages().await.unwrap();
+            let mut l1_messages = vec![];
+            while let Some(l1_message) = l1_message_stream.next_entry().await {
+                l1_messages.push(l1_message.unwrap());
+            }
+            l1_messages
+        };
+
+        // Apply the assertions.
+        assert!(l1_messages.contains(&l1_message_1));
+        assert!(l1_messages.contains(&l1_message_2));
     }
 }
