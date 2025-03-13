@@ -1,0 +1,35 @@
+[package]
+name = "scroll-db"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+exclude.workspace = true
+
+[dependencies]
+# alloy
+alloy-primitives.workspace = true
+
+# scroll-alloy
+scroll-alloy-consensus.workspace = true
+
+# scroll
+rollup-node-primitives.workspace = true
+
+# misc
+sea-orm = { version = "1.1.0", features = ["sqlx-sqlite", "runtime-tokio-native-tls", "macros"] }
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+tokio = { workspace = true, features = ["macros", "sync"] }
+
+[dev-dependencies]
+# scroll
+scroll-migration.workspace = true
+rollup-node-primitives = { workspace = true, features = ["arbitrary"] }
+
+# misc
+arbitrary = { workspace = true }
+rand = { version = "0.8", features = ["std"] }
+
+[lints]
+workspace = true

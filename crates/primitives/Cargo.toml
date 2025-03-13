@@ -18,4 +18,8 @@ alloy-rpc-types-engine.workspace = true
 scroll-alloy-consensus.workspace = true
 
 # misc
+arbitrary = { workspace = true, optional = true }
 derive_more = { workspace = true, features = ["from"] }
+
+[features]
+arbitrary = ["dep:arbitrary"]

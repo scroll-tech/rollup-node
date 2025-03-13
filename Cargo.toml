@@ -8,6 +8,8 @@ exclude = [".github/"]
 [workspace]
 members = [
     "bin/bridge",
+    "crates/database/db",
+    "crates/database/migration",
     "crates/engine",
     "crates/l1",
     "crates/node",
@@ -149,6 +151,7 @@ scroll-engine = { path = "crates/engine" }
 scroll-l1 = { path = "crates/l1" }
 scroll-network = { path = "crates/network" }
 scroll-wire = { path = "crates/scroll-wire" }
+scroll-migration = { path = "crates/database/migration" }
 
 # misc
 arbitrary = "1.4"
