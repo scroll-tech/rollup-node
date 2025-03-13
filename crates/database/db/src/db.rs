@@ -1,6 +1,5 @@
-use crate::DatabaseEntryStream;
-
 use super::models;
+use futures::{Stream, StreamExt};
 use rollup_node_primitives::{BatchInput, L1MessageWithBlockNumber};
 use sea_orm::{
     ActiveModelTrait, ColumnTrait, ConnectionTrait, Database as SeaOrmDatabase, DatabaseConnection,
@@ -70,11 +69,11 @@ impl Database {
     /// Get an iterator over all [`BatchInput`]s in the database.
     pub async fn get_batch_inputs(
         &self,
-    ) -> Result<
-        impl DatabaseEntryStream<models::batch_input::Model, StreamItem = BatchInput> + '_,
-        DbErr,
-    > {
-        models::batch_input::Entity::find().stream(&self.connection).await
+    ) -> Result<impl Stream<Item = Result<BatchInput, DbErr>> + use<'_>, DbErr> {
+        Ok(models::batch_input::Entity::find()
+            .stream(&self.connection)
+            .await?
+            .map(|res| res.map(Into::into)))
     }
 
     /// Insert an [`L1MessageWithBlockNumber`] into the database.
@@ -116,11 +115,11 @@ impl Database {
     /// Gets an iterator over all [`L1Message`]s in the database.
     pub async fn get_l1_messages(
         &self,
-    ) -> Result<
-        impl DatabaseEntryStream<models::l1_message::Model, StreamItem = L1MessageWithBlockNumber> + '_,
-        DbErr,
-    > {
-        models::l1_message::Entity::find().stream(&self.connection).await
+    ) -> Result<impl Stream<Item = Result<L1MessageWithBlockNumber, DbErr>> + use<'_>, DbErr> {
+        Ok(models::l1_message::Entity::find()
+            .stream(&self.connection)
+            .await?
+            .map(|res| res.map(Into::into)))
     }
 }
 
@@ -238,14 +237,8 @@ mod test {
         db.insert_l1_message(db.connection(), l1_message_2.clone()).await.unwrap();
 
         // collect the L1Messages
-        let l1_messages = {
-            let mut l1_message_stream = db.get_l1_messages().await.unwrap();
-            let mut l1_messages = vec![];
-            while let Some(l1_message) = l1_message_stream.next_entry().await {
-                l1_messages.push(l1_message.unwrap());
-            }
-            l1_messages
-        };
+        let l1_messages =
+            db.get_l1_messages().await.unwrap().map(|res| res.unwrap()).collect::<Vec<_>>().await;
 
         // Apply the assertions.
         assert!(l1_messages.contains(&l1_message_1));
