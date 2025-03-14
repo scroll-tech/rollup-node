@@ -13,12 +13,21 @@ workspace = true
 # alloy
 alloy-primitives.workspace = true
 
+# reth
+reth-tokio-util.workspace = true
+
 # rollup-node
 scroll-db.workspace = true
 rollup-node-primitives.workspace = true
 rollup-node-watcher.workspace = true
 
+# misc
+tokio.workspace = true
+tracing.workspace = true
+
 [dev-dependencies]
+alloy-primitives = { workspace = true, features = ["arbitrary"]}
+
 # rollup-node
 scroll-db = { workspace = true, features = ["test-utils"] }
 rollup-node-primitives = { workspace = true, features = ["arbitrary"] }

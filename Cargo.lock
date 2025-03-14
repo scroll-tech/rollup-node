@@ -8975,10 +8975,12 @@ dependencies = [
  "arbitrary",
  "futures",
  "rand 0.9.0",
+ "reth-tokio-util",
  "rollup-node-primitives",
  "rollup-node-watcher",
  "scroll-db",
  "tokio",
+ "tracing",
 ]
 
 [[package]]
