@@ -18,8 +18,10 @@ alloy-sol-types.workspace = true
 scroll-alloy-consensus.workspace = true
 
 # misc
-arbitrary = { workspace = true, optional = true }
+arbitrary = { workspace = true, optional = true, features = ["derive"] }
 derive_more.workspace = true
 
 [features]
-test-utils = ["dep:arbitrary"]
+default = ["std"]
+std = ["alloy-primitives/std", "scroll-alloy-consensus/std", "alloy-sol-types/std", "derive_more/std"]
+test-utils = ["dep:arbitrary", "alloy-primitives/arbitrary"]

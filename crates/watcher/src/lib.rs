@@ -455,8 +455,8 @@ where
     }
 
     /// Returns the next range of logs, filtering using [`L1_WATCHER_LOG_FILTER`],
-    /// for the block range in \[[`current_block`](field@L1Watcher::current_block);
-    /// [`current_block`](field@L1Watcher::current_block) + [`LOGS_QUERY_BLOCK_RANGE`]\]
+    /// for the block range in \[[`current_block`](field@L1Watcher::current_block_number);
+    /// [`current_block`](field@L1Watcher::current_block_number) + [`LOGS_QUERY_BLOCK_RANGE`]\]
     async fn next_filtered_logs(&self) -> L1WatcherResult<Vec<Log>> {
         // set the block range for the query
         let mut filter = L1_WATCHER_LOG_FILTER.clone();

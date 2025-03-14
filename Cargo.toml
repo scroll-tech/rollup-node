@@ -122,8 +122,8 @@ alloy-sol-types = { version = "0.8.20", default-features = false }
 alloy-transport = { version = "0.12.2", default-features = false }
 
 # scroll-alloy
-scroll-alloy-consensus = { git = "https://github.com/scroll-tech/reth.git" }
-scroll-alloy-provider = { git = "https://github.com/scroll-tech/reth.git" }
+scroll-alloy-consensus = { git = "https://github.com/scroll-tech/reth.git", default-features = false }
+scroll-alloy-provider = { git = "https://github.com/scroll-tech/reth.git", default-features = false }
 scroll-alloy-network = { git = "https://github.com/scroll-tech/reth.git", default-features = false }
 
 # reth
@@ -151,9 +151,9 @@ scroll-network = { path = "crates/network" }
 scroll-wire = { path = "crates/scroll-wire" }
 
 # misc
-arbitrary = "1.4"
+arbitrary = { version = "1.4", default-features = false }
 async-trait = "0.1"
-derive_more = "2.0"
+derive_more = { version = "2.0", default-features = false }
 eyre = "0.6"
 futures = { version = "0.3", default-features = false }
 secp256k1 = { version = "0.29", default-features = false }
