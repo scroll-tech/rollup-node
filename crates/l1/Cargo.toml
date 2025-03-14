@@ -24,4 +24,4 @@ derive_more.workspace = true
 [features]
 default = ["std"]
 std = ["alloy-primitives/std", "scroll-alloy-consensus/std", "alloy-sol-types/std", "derive_more/std"]
-test-utils = ["dep:arbitrary", "alloy-primitives/arbitrary"]
+test-utils = ["std", "dep:arbitrary", "alloy-primitives/arbitrary"]
