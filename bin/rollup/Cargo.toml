@@ -1,5 +1,5 @@
 [package]
-name = "scroll-bridge"
+name = "rollup-node"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -9,6 +9,7 @@ exclude.workspace = true
 [dependencies]
 # alloy
 alloy-chains.workspace = true
+alloy-provider.workspace = true
 alloy-rpc-types-engine.workspace = true
 
 # scroll-alloy
@@ -41,9 +42,13 @@ reth-scroll-primitives = { workspace = true }
 scroll-wire.workspace = true
 scroll-network.workspace = true
 scroll-engine = { workspace = true, features = ["test-utils"] }
+scroll-db = { workspace = true }
+scroll-migration.workspace = true
 
 # rollup-node
 rollup-node-manager.workspace = true
+rollup-node-indexer.workspace = true
+rollup-node-watcher.workspace = true
 
 # misc
 clap = { version = "4", features = ["derive", "env"] }

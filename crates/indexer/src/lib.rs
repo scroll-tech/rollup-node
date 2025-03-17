@@ -14,14 +14,14 @@ mod handle;
 use handle::IndexerCommand;
 pub use handle::IndexerHandle;
 
-/// The indexer is responsible for indexing data relevant to the L1.
+/// The indexer is responsible for indexing data relevant to the rollup node.
 #[derive(Debug)]
 pub struct Indexer {
     /// A reference to the database used to persist the indexed data.
     database: Arc<Database>,
     /// A channel to receive commands to index data.
     cmd_rx: mpsc::UnboundedReceiver<IndexerCommand>,
-    /// An event sender for sending events to subscribers of the rollup node manager.
+    /// An event sender for sending events to subscribers of the indexer.
     event_sender: Option<EventSender<IndexerEvent>>,
 }
 

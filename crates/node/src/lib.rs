@@ -6,6 +6,8 @@ use alloy_rpc_types_engine::{
 };
 use futures::{stream::FuturesOrdered, StreamExt};
 use reth_tokio_util::{EventSender, EventStream};
+use rollup_node_indexer::IndexerHandle;
+use rollup_node_watcher::L1Notification;
 use scroll_alloy_network::Scroll as ScrollNetwork;
 use scroll_alloy_provider::ScrollEngineApi;
 use scroll_engine::{EngineDriver, EngineDriverError, ExecutionPayloadProvider, ForkchoiceState};
@@ -20,8 +22,8 @@ use std::{
     sync::Arc,
     task::{Context, Poll},
 };
-use tokio::sync::mpsc::UnboundedReceiver;
-use tokio_stream::wrappers::UnboundedReceiverStream;
+use tokio::sync::mpsc::{Receiver, UnboundedReceiver};
+use tokio_stream::wrappers::{ReceiverStream, UnboundedReceiverStream};
 use tracing::{error, trace};
 
 mod event;
@@ -58,10 +60,14 @@ pub struct RollupNodeManager<C, EC, P> {
     network: NetworkManager,
     ///  The engine driver used to communicate with the engine.
     engine: Arc<EngineDriver<EC, P>>,
+    /// A receiver for [`L1Notification`]s from the [`L1Watcher`].
+    l1_notification_rx: ReceiverStream<Arc<L1Notification>>,
+    /// A handle to the indexer.
+    indexer: IndexerHandle,
     /// The consensus algorithm used by the rollup node.
     consensus: C,
     /// The receiver for new blocks received from the network (used to bridge from eth-wire).
-    new_block_rx: UnboundedReceiverStream<NewBlockWithPeer>,
+    new_block_rx: Option<UnboundedReceiverStream<NewBlockWithPeer>>,
     /// The forkchoice state of the rollup node.
     forkchoice_state: ForkchoiceState,
     /// A collection of pending block imports.
@@ -80,15 +86,19 @@ where
     pub fn new(
         network: NetworkManager,
         engine: EngineDriver<EC, P>,
+        l1_notification_rx: Receiver<Arc<L1Notification>>,
+        indexer: IndexerHandle,
         forkchoice_state: ForkchoiceState,
         consensus: C,
-        new_block_rx: UnboundedReceiver<NewBlockWithPeer>,
+        new_block_rx: Option<UnboundedReceiver<NewBlockWithPeer>>,
     ) -> Self {
         Self {
             network,
             engine: Arc::new(engine),
+            l1_notification_rx: l1_notification_rx.into(),
+            indexer,
             consensus,
-            new_block_rx: new_block_rx.into(),
+            new_block_rx: new_block_rx.map(Into::into),
             forkchoice_state,
             pending_block_imports: FuturesOrdered::new(),
             event_sender: None,
@@ -211,6 +221,11 @@ where
             self.network.handle().block_import_outcome(outcome);
         }
     }
+
+    /// Handles an [`L1Notification`] from the L1 watcher.
+    fn handle_l1_notification(&self, notification: L1Notification) {
+        self.indexer.index_l1_notification(notification);
+    }
 }
 
 impl<C, EC, P> Future for RollupNodeManager<C, EC, P>
@@ -231,8 +246,15 @@ where
             this.handle_block_import_outcome(block_info, outcome);
         }
 
+        // Drain all L1 notifications.
+        while let Poll::Ready(Some(event)) = this.l1_notification_rx.poll_next_unpin(cx) {
+            this.handle_l1_notification((*event).clone());
+        }
+
         // Handle blocks received from the eth-wire protocol.
-        while let Poll::Ready(Some(block)) = this.new_block_rx.poll_next_unpin(cx) {
+        while let Some(Poll::Ready(Some(block))) =
+            this.new_block_rx.as_mut().map(|new_block_rx| new_block_rx.poll_next_unpin(cx))
+        {
             this.handle_new_block(block, cx);
         }
 

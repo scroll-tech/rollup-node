@@ -29,7 +29,7 @@ use tokio::sync::mpsc;
 
 /// The block range used to fetch L1 logs.
 /// TODO(greg): evaluate the performance using various block ranges.
-pub const LOGS_QUERY_BLOCK_RANGE: u64 = 1000;
+pub const LOGS_QUERY_BLOCK_RANGE: u64 = 10000;
 /// The maximum count of unfinalized blocks we can have in Ethereum.
 pub const MAX_UNFINALIZED_BLOCK_COUNT: usize = 96;
 
@@ -74,7 +74,7 @@ pub struct L1Watcher<EP> {
 }
 
 /// The L1 notification type yielded by the [`L1Watcher`].
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum L1Notification {
     /// A notification for a reorg of the L1 up to a given block number.
     Reorg(u64),
@@ -147,11 +147,9 @@ where
                 .inspect_err(|err| tracing::error!(target: "scroll::watcher", ?err));
 
             // update loop interval if needed.
-            let loop_interval =
-                if self.is_synced() { SLOW_SYNC_INTERVAL } else { FAST_SYNC_INTERVAL };
-
-            // sleep the appropriate amount of time.
-            tokio::time::sleep(loop_interval).await;
+            if self.is_synced() {
+                tokio::time::sleep(SLOW_SYNC_INTERVAL).await;
+            };
         }
     }
 

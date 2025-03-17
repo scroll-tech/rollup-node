@@ -8968,6 +8968,57 @@ dependencies = [
 ]
 
 [[package]]
+name = "rollup-node"
+version = "0.0.1"
+dependencies = [
+ "alloy-chains",
+ "alloy-primitives",
+ "alloy-provider",
+ "alloy-rpc-types-engine",
+ "clap",
+ "eyre",
+ "futures",
+ "reth-cli-util",
+ "reth-e2e-test-utils",
+ "reth-engine-local",
+ "reth-eth-wire-types",
+ "reth-network",
+ "reth-network-peers",
+ "reth-node-api",
+ "reth-node-builder",
+ "reth-node-core",
+ "reth-node-types",
+ "reth-payload-builder",
+ "reth-primitives",
+ "reth-provider",
+ "reth-rpc-builder",
+ "reth-rpc-server-types",
+ "reth-scroll-chainspec",
+ "reth-scroll-cli",
+ "reth-scroll-engine-primitives",
+ "reth-scroll-node",
+ "reth-scroll-primitives",
+ "reth-tasks",
+ "reth-tracing",
+ "reth-transaction-pool",
+ "rollup-node-indexer",
+ "rollup-node-manager",
+ "rollup-node-watcher",
+ "scroll-alloy-consensus",
+ "scroll-alloy-provider",
+ "scroll-alloy-rpc-types-engine",
+ "scroll-db",
+ "scroll-engine",
+ "scroll-migration",
+ "scroll-network",
+ "scroll-wire",
+ "secp256k1 0.29.1",
+ "serde_json",
+ "tokio",
+ "tracing",
+]
+
+[[package]]
 name = "rollup-node-indexer"
 version = "0.0.1"
 dependencies = [
@@ -8992,7 +9043,9 @@ dependencies = [
  "futures",
  "reth-scroll-primitives",
  "reth-tokio-util",
+ "rollup-node-indexer",
  "rollup-node-primitives",
+ "rollup-node-watcher",
  "scroll-alloy-network",
  "scroll-alloy-provider",
  "scroll-engine",
@@ -9459,52 +9512,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "scroll-bridge"
-version = "0.0.1"
-dependencies = [
- "alloy-chains",
- "alloy-primitives",
- "alloy-rpc-types-engine",
- "clap",
- "eyre",
- "futures",
- "reth-cli-util",
- "reth-e2e-test-utils",
- "reth-engine-local",
- "reth-eth-wire-types",
- "reth-network",
- "reth-network-peers",
- "reth-node-api",
- "reth-node-builder",
- "reth-node-core",
- "reth-node-types",
- "reth-payload-builder",
- "reth-primitives",
- "reth-provider",
- "reth-rpc-builder",
- "reth-rpc-server-types",
- "reth-scroll-chainspec",
- "reth-scroll-cli",
- "reth-scroll-engine-primitives",
- "reth-scroll-node",
- "reth-scroll-primitives",
- "reth-tasks",
- "reth-tracing",
- "reth-transaction-pool",
- "rollup-node-manager",
- "scroll-alloy-consensus",
- "scroll-alloy-provider",
- "scroll-alloy-rpc-types-engine",
- "scroll-engine",
- "scroll-network",
- "scroll-wire",
- "secp256k1 0.29.1",
- "serde_json",
- "tokio",
- "tracing",
-]
-
-[[package]]
 name = "scroll-db"
 version = "0.0.1"
 dependencies = [
@@ -9565,6 +9572,7 @@ version = "0.1.0"
 dependencies = [
  "async-std",
  "sea-orm-migration",
+ "tracing",
 ]
 
 [[package]]

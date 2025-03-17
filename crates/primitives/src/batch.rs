@@ -29,6 +29,14 @@ impl BatchInput {
         }
     }
 
+    /// Returns the hash of the batch.
+    pub fn batch_hash(&self) -> &B256 {
+        match self {
+            BatchInput::BatchInputDataV1(data) => &data.batch_hash,
+            BatchInput::BatchInputDataV2(data) => &data.batch_input_data.batch_hash,
+        }
+    }
+
     /// Sets the block number of the batch.
     pub fn set_block_number(&mut self, block_number: BlockNumber) {
         match self {
