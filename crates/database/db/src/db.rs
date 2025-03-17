@@ -1,9 +1,10 @@
 use super::models;
+use alloy_primitives::B256;
 use futures::{Stream, StreamExt};
 use rollup_node_primitives::{BatchInput, L1MessageWithBlockNumber};
 use sea_orm::{
     ActiveModelTrait, ColumnTrait, ConnectionTrait, Database as SeaOrmDatabase, DatabaseConnection,
-    DatabaseTransaction, DbErr, EntityTrait, QueryFilter, TransactionTrait,
+    DatabaseTransaction, DbErr, EntityTrait, QueryFilter, Set, TransactionTrait,
 };
 
 /// The [`Database`] struct is responsible for interacting with the database.
@@ -35,8 +36,38 @@ impl Database {
         conn: &C,
         batch_input: BatchInput,
     ) -> Result<models::batch_input::Model, DbErr> {
+        tracing::trace!(target: "scroll::db", batch_hash = ?batch_input.batch_hash(), batch_index = batch_input.batch_index(), "Inserting batch input into database.");
         let batch_input: models::batch_input::ActiveModel = batch_input.into();
         batch_input.insert(conn).await
+    }
+
+    /// Finalize a [`BatchInput`] in the database and set the finalized block number to the provided
+    /// block number.
+    pub async fn finalize_batch_input<C: ConnectionTrait>(
+        &self,
+        conn: &C,
+        batch_hash: B256,
+        block_number: u64,
+    ) -> Result<(), DbErr> {
+        if let Some(batch) = models::batch_input::Entity::find()
+            .filter(models::batch_input::Column::Hash.eq(batch_hash.to_vec()))
+            .one(conn)
+            .await?
+        {
+            tracing::trace!(target: "scroll::db", batch_hash = ?batch_hash, block_number, "Finalizing batch input in database.");
+            let mut batch: models::batch_input::ActiveModel = batch.into();
+            batch.finalized_block_number = Set(Some(block_number as i64));
+            batch.update(conn).await?;
+        } else {
+            tracing::error!(
+                target: "scroll::db",
+                batch_hash = ?batch_hash,
+                block_number,
+                "Batch not found in DB when trying to finalize."
+            );
+        }
+
+        Ok(())
     }
 
     /// Get a [`BatchInput`] from the database by its batch index.
@@ -59,6 +90,7 @@ impl Database {
         conn: &C,
         block_number: u64,
     ) -> Result<(), DbErr> {
+        tracing::trace!(target: "scroll::db", block_number, "Deleting batch inputs greater than block number.");
         models::batch_input::Entity::delete_many()
             .filter(models::batch_input::Column::BlockNumber.gt(block_number as i64))
             .exec(conn)
@@ -82,6 +114,7 @@ impl Database {
         conn: &C,
         l1_message: L1MessageWithBlockNumber,
     ) -> Result<(), DbErr> {
+        tracing::trace!(target: "scroll::db", queue_index = l1_message.transaction.queue_index, "Inserting L1 message into database.");
         let l1_message: models::l1_message::ActiveModel = l1_message.into();
         l1_message.insert(conn).await?;
         Ok(())
@@ -94,6 +127,7 @@ impl Database {
         conn: &C,
         block_number: u64,
     ) -> Result<(), DbErr> {
+        tracing::trace!(target: "scroll::db", block_number, "Deleting L1 messages greater than block number.");
         models::l1_message::Entity::delete_many()
             .filter(models::l1_message::Column::BlockNumber.gt(block_number as i64))
             .exec(conn)

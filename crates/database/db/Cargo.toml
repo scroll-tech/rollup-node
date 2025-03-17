@@ -27,6 +27,7 @@ sea-orm = { version = "1.1.0", features = ["sqlx-sqlite", "runtime-tokio-native-
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 tokio = { workspace = true, features = ["macros", "sync"] }
+tracing.workspace = true
 
 [dev-dependencies]
 # scroll
