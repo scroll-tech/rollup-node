@@ -7,11 +7,11 @@ exclude = [".github/"]
 
 [workspace]
 members = [
-    "bin/bridge", 
+    "bin/bridge",
     "crates/engine",
     "crates/node",
     "crates/network",
-    "crates/scroll-wire"
+    "crates/scroll-wire",
 ]
 
 resolver = "2"
@@ -106,29 +106,28 @@ too_long_first_doc_paragraph = "allow"
 [workspace.dependencies]
 # alloy
 alloy-chains = { version = "0.1.32", default-features = false }
-alloy-eips = { version = "0.9.2", default-features = false }
-alloy-primitives = { version = "0.8.15", default-features = false }
-alloy-rpc-types-engine = { version = "0.11.0", default-features = false }
+alloy-eips = { version = "0.12.2", default-features = false }
+alloy-primitives = { version = "0.8.20", default-features = false }
+alloy-rpc-types-engine = { version = "0.12.2", default-features = false }
 
 # scroll-alloy
-scroll-alloy-provider = { git = "https://github.com/scroll-tech/reth.git", branch = "feat/add-deref-blanket-engine-api" }
-scroll-alloy-network = { git = "https://github.com/scroll-tech/reth.git", branch = "feat/add-deref-blanket-engine-api" }
+scroll-alloy-provider = { git = "https://github.com/scroll-tech/reth.git" }
+scroll-alloy-network = { git = "https://github.com/scroll-tech/reth.git" }
 
 # reth
-reth-eth-wire-types = { git = "https://github.com/scroll-tech/reth.git", branch = "feat/add-deref-blanket-engine-api" }
-reth-network = { git = "https://github.com/scroll-tech/reth.git", branch = "feat/add-deref-blanket-engine-api", default-features = false }
-reth-network-api = { git = "https://github.com/scroll-tech/reth.git", branch = "feat/add-deref-blanket-engine-api", default-features = false }
-reth-network-peers = { git = "https://github.com/scroll-tech/reth.git", branch = "feat/add-deref-blanket-engine-api", default-features = false }
-reth-primitives = { git = "https://github.com/scroll-tech/reth.git", branch = "feat/add-deref-blanket-engine-api", default-features = false }
-reth-provider = { git = "https://github.com/scroll-tech/reth.git", branch = "feat/add-deref-blanket-engine-api", default-features = false }
-reth-rpc-api = { git = "https://github.com/scroll-tech/reth.git", branch = "feat/add-deref-blanket-engine-api", default-features = false, features = ["client"] }
-reth-tasks = { git = "https://github.com/scroll-tech/reth.git", branch = "feat/add-deref-blanket-engine-api" }
+reth-eth-wire-types = { git = "https://github.com/scroll-tech/reth.git" }
+reth-network = { git = "https://github.com/scroll-tech/reth.git", default-features = false }
+reth-network-api = { git = "https://github.com/scroll-tech/reth.git", default-features = false }
+reth-network-peers = { git = "https://github.com/scroll-tech/reth.git", default-features = false }
+reth-primitives = { git = "https://github.com/scroll-tech/reth.git", default-features = false }
+reth-provider = { git = "https://github.com/scroll-tech/reth.git", default-features = false }
+reth-tasks = { git = "https://github.com/scroll-tech/reth.git" }
 
 # reth-scroll
-reth-scroll-chainspec = { git = "https://github.com/scroll-tech/reth.git", branch = "feat/add-deref-blanket-engine-api", default-features = false }
-reth-scroll-engine-primitives = { git = "https://github.com/scroll-tech/reth.git", branch = "feat/add-deref-blanket-engine-api", default-features = false }
-reth-scroll-node = { git = "https://github.com/scroll-tech/reth.git", branch = "feat/add-deref-blanket-engine-api", default-features = false }
-reth-scroll-primitives = { git = "https://github.com/scroll-tech/reth.git", branch = "feat/add-deref-blanket-engine-api", default-features = false }
+reth-scroll-chainspec = { git = "https://github.com/scroll-tech/reth.git", default-features = false }
+reth-scroll-engine-primitives = { git = "https://github.com/scroll-tech/reth.git", default-features = false }
+reth-scroll-node = { git = "https://github.com/scroll-tech/reth.git", default-features = false }
+reth-scroll-primitives = { git = "https://github.com/scroll-tech/reth.git", default-features = false }
 
 # rollup node
 scroll-engine = { path = "crates/engine" }
@@ -140,17 +139,22 @@ rollup-node-manager = { path = "crates/node" }
 eyre = "0.6"
 futures = { version = "0.3", default-features = false }
 secp256k1 = { version = "0.29", default-features = false }
-serde = { version = "1.0", default-features = false }
 tokio = { version = "1.39", default-features = false }
 tokio-stream = { version = "0.1", default-features = false }
 tracing = "0.1.0"
 
 [patch.crates-io]
-revm = { git = "https://github.com/scroll-tech/revm.git", branch = "scroll-evm-executor/reth/v55" }
-revm-primitives = { git = "https://github.com/scroll-tech/revm.git", branch = "scroll-evm-executor/reth/v55" }
-revm-interpreter = { git = "https://github.com/scroll-tech/revm.git", branch = "scroll-evm-executor/reth/v55" }
+revm = { git = "https://github.com/bluealloy/revm", rev = "19a5f3b" }
+revm-bytecode = { git = "https://github.com/bluealloy/revm", rev = "19a5f3b" }
+revm-database = { git = "https://github.com/bluealloy/revm", rev = "19a5f3b" }
+revm-state = { git = "https://github.com/bluealloy/revm", rev = "19a5f3b" }
+revm-primitives = { git = "https://github.com/bluealloy/revm", rev = "19a5f3b" }
+revm-interpreter = { git = "https://github.com/bluealloy/revm", rev = "19a5f3b" }
+revm-inspector = { git = "https://github.com/bluealloy/revm", rev = "19a5f3b" }
+revm-context = { git = "https://github.com/bluealloy/revm", rev = "19a5f3b" }
+revm-context-interface = { git = "https://github.com/bluealloy/revm", rev = "19a5f3b" }
+revm-database-interface = { git = "https://github.com/bluealloy/revm", rev = "19a5f3b" }
+revm-specification = { git = "https://github.com/bluealloy/revm", rev = "19a5f3b" }
+op-revm = { git = "https://github.com/bluealloy/revm", rev = "19a5f3b" }
 
-ff = { git = "https://github.com/scroll-tech/ff", branch = "feat/sp1" }
-
-alloy-eip2930 = { git = "https://github.com/scroll-tech/alloy-eips", branch = "v0.3.2" }
-
+revm-inspectors = { git = "https://github.com/paradigmxyz/revm-inspectors", rev = "9219073" }

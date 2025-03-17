@@ -11,36 +11,30 @@ workspace = true
 
 [dependencies]
 # alloy
-alloy-primitives = { workspace = true, features = [
-    "map-foldhash",
-] }
+alloy-primitives = { workspace = true, features = ["map-foldhash"] }
 alloy-rlp = { version = "0.3.10", default-features = false }
 
 # reth
-reth-eth-wire = { git = "https://github.com/scroll-tech/reth.git", branch = "feat/add-deref-blanket-engine-api" }
+reth-eth-wire = { git = "https://github.com/scroll-tech/reth.git" }
 reth-network.workspace = true
 reth-network-api.workspace = true
-reth-primitives.workspace = true
 
 # scroll
 reth-scroll-primitives = { workspace = true, features = ["serde"] }
 
 # misc
 futures.workspace = true
-secp256k1 = { workspace = true, features = [
-    "global-context",
-    "recovery",
-] }
+secp256k1 = { workspace = true, features = ["global-context", "recovery"] }
 tokio = { workspace = true, features = ["full"] }
 tokio-stream.workspace = true
 tracing.workspace = true
 
 [features]
 serde = [
-	"alloy-primitives/serde",
-	"reth-eth-wire/serde",
-	"reth-network/serde",
-	"reth-network-api/serde",
-	"reth-scroll-primitives/serde",
-	"secp256k1/serde"
+    "alloy-primitives/serde",
+    "reth-eth-wire/serde",
+    "reth-network/serde",
+    "reth-network-api/serde",
+    "reth-scroll-primitives/serde",
+    "secp256k1/serde",
 ]
