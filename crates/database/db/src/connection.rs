@@ -1,5 +1,5 @@
 /// The [`DatabaseConnectionProvider`] trait provides a way to get a connection to the database.
-/// This will be implemented by the [`Database`] and [`DatabaseTransaction`] types.
+/// This is implemented by the [`crate::Database`] and [`crate::DatabaseTransaction`] types.
 pub trait DatabaseConnectionProvider {
     /// Returns a reference to the database connection that implements the `ConnectionTrait` and
     /// `StreamTrait` traits.

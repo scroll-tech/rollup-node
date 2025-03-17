@@ -7,15 +7,11 @@ use sea_orm::{
 
 /// The [`Database`] struct is responsible for interacting with the database.
 ///
-/// The [`Database`] type wraps a generic DB and provides methods for
-/// interacting with the database. The DB abstracts the underlying
-/// database connection and provides a high-level API for interacting with the database. We have
-/// implemented support for [`Database<DatabaseConnection>`] and [`Database<DatabaseTransaction>`].
-/// The [`Database`] struct provides methods for inserting and querying [`BatchInput`]s and
-/// [`L1MessageWithBlockNumber`]s from the database. Atomic transaction support is provided by the
-/// [`Database::tx`] method, which returns a [`Database`] instance with support for
-/// [`Database::commit`] and [`Database::rollback`] that can be used to execute multiple database
-/// operations in a single transaction.
+/// The [`Database`] type wraps a [`sea_orm::DatabaseConnection`]. We implement
+/// [`DatabaseConnectionProvider`] for [`Database`] such that it can be used to perform the
+/// operations defined in [`crate::DatabaseOperations`]. Atomic operations can be performed using
+/// the [`Database::tx`] method which returns a [`DatabaseTransaction`] that also implements the
+/// [`DatabaseConnectionProvider`] trait and also the [`crate::DatabaseOperations`] trait.
 #[derive(Debug)]
 pub struct Database {
     /// The underlying database connection.

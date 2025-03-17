@@ -12,7 +12,7 @@ pub struct DatabaseTransaction {
 impl DatabaseTransaction {
     /// Creates a new [`DatabaseTransaction`] instance associated with the provided database
     /// transaction.
-    pub fn new(tx: sea_orm::DatabaseTransaction) -> Self {
+    pub const fn new(tx: sea_orm::DatabaseTransaction) -> Self {
         Self { tx }
     }
 }
