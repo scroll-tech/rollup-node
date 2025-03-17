@@ -1,3 +1,5 @@
+use std::vec::Vec;
+
 use alloy_primitives::Bytes;
 use alloy_sol_types::{sol, SolCall};
 

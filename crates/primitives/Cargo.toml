@@ -22,4 +22,6 @@ arbitrary = { workspace = true, optional = true }
 derive_more = { workspace = true, features = ["from"] }
 
 [features]
+default = ["std"]
+std = ["alloy-primitives/std", "alloy-rpc-types-engine/std", "scroll-alloy-consensus/std", "derive_more/std"]
 arbitrary = ["dep:arbitrary"]
