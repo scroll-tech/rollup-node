@@ -32,7 +32,9 @@ impl DatabaseTransaction {
 }
 
 impl DatabaseConnectionProvider for DatabaseTransaction {
-    fn get_connection(&self) -> &(impl sea_orm::ConnectionTrait + sea_orm::StreamTrait) {
+    type Connection = sea_orm::DatabaseTransaction;
+
+    fn get_connection(&self) -> &Self::Connection {
         &self.tx
     }
 }

@@ -1,9 +1,7 @@
 use super::{transaction::DatabaseTransaction, DatabaseConnectionProvider};
 use crate::error::DatabaseError;
 
-use sea_orm::{
-    ConnectionTrait, Database as SeaOrmDatabase, DatabaseConnection, StreamTrait, TransactionTrait,
-};
+use sea_orm::{Database as SeaOrmDatabase, DatabaseConnection, TransactionTrait};
 
 /// The [`Database`] struct is responsible for interacting with the database.
 ///
@@ -32,7 +30,9 @@ impl Database {
 }
 
 impl DatabaseConnectionProvider for Database {
-    fn get_connection(&self) -> &(impl ConnectionTrait + StreamTrait) {
+    type Connection = DatabaseConnection;
+
+    fn get_connection(&self) -> &Self::Connection {
         &self.connection
     }
 }
