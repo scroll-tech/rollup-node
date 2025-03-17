@@ -21,7 +21,7 @@ impl Database {
     }
 
     /// Returns a reference to the underlying database connection.
-    pub fn connection(&self) -> &DatabaseConnection {
+    pub const fn connection(&self) -> &DatabaseConnection {
         &self.connection
     }
 

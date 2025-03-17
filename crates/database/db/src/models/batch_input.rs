@@ -50,7 +50,7 @@ impl From<BatchInputPrimitive> for ActiveModel {
                     batch_input.batch_index.try_into().expect("index should fit in i64"),
                 ),
                 version: ActiveValue::Set(1),
-                codec_version: ActiveValue::Set(batch_input.version as u8),
+                codec_version: ActiveValue::Set(batch_input.version),
                 hash: ActiveValue::Set(batch_input.batch_hash.to_vec()),
                 block_number: ActiveValue::Set(
                     batch_input.block_number.try_into().expect("block number should fit in i64"),
@@ -70,7 +70,7 @@ impl From<BatchInputPrimitive> for ActiveModel {
                         .expect("index should fit in i64"),
                 ),
                 version: ActiveValue::Set(2),
-                codec_version: ActiveValue::Set(batch_input.batch_input_data.version as u8),
+                codec_version: ActiveValue::Set(batch_input.batch_input_data.version),
                 hash: ActiveValue::Set(batch_input.batch_input_data.batch_hash.to_vec()),
                 block_number: ActiveValue::Set(
                     batch_input
@@ -97,12 +97,9 @@ impl From<Model> for BatchInputPrimitive {
     fn from(value: Model) -> Self {
         let chunks = value.chunks.0;
         if value.version == 1 {
-            BatchInputPrimitive::BatchInputDataV1(BatchInputV1 {
+            Self::BatchInputDataV1(BatchInputV1 {
                 batch_index: value.index.try_into().expect("data persisted in database is valid"),
-                version: value
-                    .codec_version
-                    .try_into()
-                    .expect("data persisted in database is valid"),
+                version: value.codec_version,
                 batch_hash: value
                     .hash
                     .as_slice()
@@ -117,16 +114,13 @@ impl From<Model> for BatchInputPrimitive {
                 skipped_l1_message_bitmap: value.skipped_l1_message_bitmap,
             })
         } else {
-            BatchInputPrimitive::BatchInputDataV2(BatchInputV2 {
+            Self::BatchInputDataV2(BatchInputV2 {
                 batch_input_data: BatchInputV1 {
                     batch_index: value
                         .index
                         .try_into()
                         .expect("data persisted in database is valid"),
-                    version: value
-                        .codec_version
-                        .try_into()
-                        .expect("data persisted in database is valid"),
+                    version: value.codec_version,
                     batch_hash: value
                         .hash
                         .as_slice()
