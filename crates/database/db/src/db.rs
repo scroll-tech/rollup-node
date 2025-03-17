@@ -1,63 +1,89 @@
+use crate::error::DatabaseError;
+
 use super::models;
 use alloy_primitives::B256;
 use futures::{Stream, StreamExt};
 use rollup_node_primitives::{BatchInput, L1MessageWithBlockNumber};
 use sea_orm::{
     ActiveModelTrait, ColumnTrait, ConnectionTrait, Database as SeaOrmDatabase, DatabaseConnection,
-    DatabaseTransaction, DbErr, EntityTrait, QueryFilter, Set, TransactionTrait,
+    DatabaseTransaction, DbErr, EntityTrait, QueryFilter, Set, StreamTrait, TransactionTrait,
 };
 
 /// The [`Database`] struct is responsible for interacting with the database.
+///
+/// The [`Database`] type wraps a generic DB and provides methods for
+/// interacting with the database. The DB abstracts the underlying
+/// database connection and provides a high-level API for interacting with the database. We have
+/// implemented support for [`Database<DatabaseConnection>`] and [`Database<DatabaseTransaction>`].
+/// The [`Database`] struct provides methods for inserting and querying [`BatchInput`]s and
+/// [`L1MessageWithBlockNumber`]s from the database. Atomic transaction support is provided by the
+/// [`Database::tx`] method, which returns a [`Database`] instance with support for
+/// [`Database::commit`] and [`Database::rollback`] that can be used to execute multiple database
+/// operations in a single transaction.
 #[derive(Debug)]
-pub struct Database {
-    pub(crate) connection: DatabaseConnection,
+pub struct Database<DB> {
+    /// The underlying database connection.
+    pub(crate) connection: DB,
 }
 
-impl Database {
+impl Database<DatabaseConnection> {
     /// Creates a new [`Database`] instance associated with the provided database URL.
-    pub async fn new(database_url: &str) -> Result<Self, DbErr> {
+    pub async fn new(database_url: &str) -> Result<Self, DatabaseError> {
         let connection = SeaOrmDatabase::connect(database_url).await?;
         Ok(Self { connection })
     }
 
-    /// Returns a reference to the underlying database connection.
-    pub const fn connection(&self) -> &DatabaseConnection {
-        &self.connection
+    /// Creates a new [`DatabaseTransaction`] which can be used for atomic operations.
+    pub async fn tx(&self) -> Result<Database<DatabaseTransaction>, DatabaseError> {
+        Ok(Database::<DatabaseTransaction> { connection: self.connection.begin().await? })
+    }
+}
+
+impl Database<DatabaseTransaction> {
+    /// Commits the transaction.
+    pub async fn commit(self) -> Result<(), DatabaseError> {
+        self.connection.commit().await?;
+        Ok(())
     }
 
-    /// Creates a new transaction against the database.
-    pub async fn tx(&self) -> Result<DatabaseTransaction, DbErr> {
-        self.connection.begin().await
+    /// Rolls back the transaction.
+    pub async fn rollback(self) -> Result<(), DatabaseError> {
+        self.connection.rollback().await?;
+        Ok(())
     }
+}
 
-    /// Insert a [`BatchInput`] into the database.
-    pub async fn insert_batch_input<C: ConnectionTrait>(
+impl<DB: ConnectionTrait + StreamTrait> Database<DB> {
+    /// Insert a [`BatchInput`] into the database and returns the batch input model
+    /// ([`models::batch_input::Model`]).
+    pub async fn insert_batch_input(
         &self,
-        conn: &C,
         batch_input: BatchInput,
-    ) -> Result<models::batch_input::Model, DbErr> {
+    ) -> Result<models::batch_input::Model, DatabaseError> {
         tracing::trace!(target: "scroll::db", batch_hash = ?batch_input.batch_hash(), batch_index = batch_input.batch_index(), "Inserting batch input into database.");
         let batch_input: models::batch_input::ActiveModel = batch_input.into();
-        batch_input.insert(conn).await
+        Ok(batch_input.insert(&self.connection).await?)
     }
 
-    /// Finalize a [`BatchInput`] in the database and set the finalized block number to the provided
-    /// block number.
-    pub async fn finalize_batch_input<C: ConnectionTrait>(
+    /// Finalize a [`BatchInput`] with the provided `batch_hash` in the database and set the
+    /// finalized block number to the provided block number.
+    ///
+    /// Errors if the [`BatchInput`] associated with the provided `batch_hash` is not found in the
+    /// database, this method logs and returns an error.
+    pub async fn finalize_batch_input(
         &self,
-        conn: &C,
         batch_hash: B256,
         block_number: u64,
-    ) -> Result<(), DbErr> {
+    ) -> Result<(), DatabaseError> {
         if let Some(batch) = models::batch_input::Entity::find()
             .filter(models::batch_input::Column::Hash.eq(batch_hash.to_vec()))
-            .one(conn)
+            .one(&self.connection)
             .await?
         {
             tracing::trace!(target: "scroll::db", batch_hash = ?batch_hash, block_number, "Finalizing batch input in database.");
             let mut batch: models::batch_input::ActiveModel = batch.into();
             batch.finalized_block_number = Set(Some(block_number as i64));
-            batch.update(conn).await?;
+            batch.update(&self.connection).await?;
         } else {
             tracing::error!(
                 target: "scroll::db",
@@ -65,43 +91,39 @@ impl Database {
                 block_number,
                 "Batch not found in DB when trying to finalize."
             );
+            return Err(DatabaseError::BatchNotFound(batch_hash));
         }
 
         Ok(())
     }
 
     /// Get a [`BatchInput`] from the database by its batch index.
-    pub async fn get_batch_input_by_batch_index<C: ConnectionTrait>(
+    pub async fn get_batch_input_by_batch_index(
         &self,
-        conn: &C,
         batch_index: u64,
-    ) -> Result<Option<BatchInput>, DbErr> {
-        models::batch_input::Entity::find_by_id(
+    ) -> Result<Option<BatchInput>, DatabaseError> {
+        Ok(models::batch_input::Entity::find_by_id(
             TryInto::<i64>::try_into(batch_index).expect("index should fit in i64"),
         )
-        .one(conn)
+        .one(&self.connection)
         .await
-        .map(|x| x.map(Into::into))
+        .map(|x| x.map(Into::into))?)
     }
 
     /// Delete all [`BatchInput`]s with a block number greater than the provided block number.
-    pub async fn delete_batch_inputs_gt<C: ConnectionTrait>(
-        &self,
-        conn: &C,
-        block_number: u64,
-    ) -> Result<(), DbErr> {
+    pub async fn delete_batch_inputs_gt(&self, block_number: u64) -> Result<(), DatabaseError> {
         tracing::trace!(target: "scroll::db", block_number, "Deleting batch inputs greater than block number.");
-        models::batch_input::Entity::delete_many()
+        Ok(models::batch_input::Entity::delete_many()
             .filter(models::batch_input::Column::BlockNumber.gt(block_number as i64))
-            .exec(conn)
+            .exec(&self.connection)
             .await
-            .map(|_| ())
+            .map(|_| ())?)
     }
 
     /// Get an iterator over all [`BatchInput`]s in the database.
-    pub async fn get_batch_inputs(
-        &self,
-    ) -> Result<impl Stream<Item = Result<BatchInput, DbErr>> + use<'_>, DbErr> {
+    pub async fn get_batch_inputs<'a>(
+        &'a self,
+    ) -> Result<impl Stream<Item = Result<BatchInput, DbErr>> + 'a, DbErr> {
         Ok(models::batch_input::Entity::find()
             .stream(&self.connection)
             .await?
@@ -109,47 +131,43 @@ impl Database {
     }
 
     /// Insert an [`L1MessageWithBlockNumber`] into the database.
-    pub async fn insert_l1_message<C: ConnectionTrait>(
+    pub async fn insert_l1_message(
         &self,
-        conn: &C,
         l1_message: L1MessageWithBlockNumber,
-    ) -> Result<(), DbErr> {
+    ) -> Result<(), DatabaseError> {
         tracing::trace!(target: "scroll::db", queue_index = l1_message.transaction.queue_index, "Inserting L1 message into database.");
         let l1_message: models::l1_message::ActiveModel = l1_message.into();
-        l1_message.insert(conn).await?;
+        l1_message.insert(&self.connection).await?;
         Ok(())
     }
 
     /// Delete all [`L1MessageWithBlockNumber`]s with a block number greater than the provided block
     /// number.
-    pub async fn delete_l1_messages_gt<C: ConnectionTrait>(
-        &self,
-        conn: &C,
-        block_number: u64,
-    ) -> Result<(), DbErr> {
+    pub async fn delete_l1_messages_gt(&self, block_number: u64) -> Result<(), DatabaseError> {
         tracing::trace!(target: "scroll::db", block_number, "Deleting L1 messages greater than block number.");
-        models::l1_message::Entity::delete_many()
+        Ok(models::l1_message::Entity::delete_many()
             .filter(models::l1_message::Column::BlockNumber.gt(block_number as i64))
-            .exec(conn)
+            .exec(&self.connection)
             .await
-            .map(|_| ())
+            .map(|_| ())?)
     }
 
     /// Get a [`L1Message`] from the database by its message queue index.
     pub async fn get_l1_message(
         &self,
         queue_index: u64,
-    ) -> Result<Option<L1MessageWithBlockNumber>, DbErr> {
-        models::l1_message::Entity::find_by_id(queue_index as i64)
+    ) -> Result<Option<L1MessageWithBlockNumber>, DatabaseError> {
+        Ok(models::l1_message::Entity::find_by_id(queue_index as i64)
             .one(&self.connection)
             .await
-            .map(|x| x.map(Into::into))
+            .map(|x| x.map(Into::into))?)
     }
 
     /// Gets an iterator over all [`L1Message`]s in the database.
-    pub async fn get_l1_messages(
-        &self,
-    ) -> Result<impl Stream<Item = Result<L1MessageWithBlockNumber, DbErr>> + use<'_>, DbErr> {
+    pub async fn get_l1_messages<'a>(
+        &'a self,
+    ) -> Result<impl Stream<Item = Result<L1MessageWithBlockNumber, DbErr>> + 'a, DatabaseError>
+    {
         Ok(models::l1_message::Entity::find()
             .stream(&self.connection)
             .await?
@@ -181,12 +199,9 @@ mod test {
         let batch_input = BatchInput::BatchInputDataV1(batch_input_v1);
 
         // Round trip the BatchInput through the database.
-        db.insert_batch_input(db.connection(), batch_input.clone()).await.unwrap();
-        let batch_input_from_db = db
-            .get_batch_input_by_batch_index(db.connection(), batch_input.batch_index())
-            .await
-            .unwrap()
-            .unwrap();
+        db.insert_batch_input(batch_input.clone()).await.unwrap();
+        let batch_input_from_db =
+            db.get_batch_input_by_batch_index(batch_input.batch_index()).await.unwrap().unwrap();
         assert_eq!(batch_input, batch_input_from_db);
 
         // Generate a random BatchInputV2.
@@ -194,12 +209,9 @@ mod test {
         let batch_input = BatchInput::BatchInputDataV2(batch_input_v2);
 
         // Round trip the BatchInput through the database.
-        db.insert_batch_input(db.connection(), batch_input.clone()).await.unwrap();
-        let batch_input_from_db = db
-            .get_batch_input_by_batch_index(db.connection(), batch_input.batch_index())
-            .await
-            .unwrap()
-            .unwrap();
+        db.insert_batch_input(batch_input.clone()).await.unwrap();
+        let batch_input_from_db =
+            db.get_batch_input_by_batch_index(batch_input.batch_index()).await.unwrap().unwrap();
         assert_eq!(batch_input, batch_input_from_db);
     }
 
@@ -217,7 +229,7 @@ mod test {
         let l1_message = L1MessageWithBlockNumber::arbitrary(&mut u).unwrap();
 
         // Round trip the L1Message through the database.
-        db.insert_l1_message(db.connection(), l1_message.clone()).await.unwrap();
+        db.insert_l1_message(l1_message.clone()).await.unwrap();
         let l1_message_from_db =
             db.get_l1_message(l1_message.transaction.queue_index).await.unwrap().unwrap();
         assert_eq!(l1_message, l1_message_from_db);
@@ -239,8 +251,8 @@ mod test {
 
         // Insert the L1Messages into the database in a transaction.
         let tx = db.tx().await.unwrap();
-        db.insert_l1_message(&tx, l1_message_1.clone()).await.unwrap();
-        db.insert_l1_message(&tx, l1_message_2.clone()).await.unwrap();
+        tx.insert_l1_message(l1_message_1.clone()).await.unwrap();
+        tx.insert_l1_message(l1_message_2.clone()).await.unwrap();
         tx.commit().await.unwrap();
 
         // Check that the L1Messages are in the database.
@@ -267,8 +279,8 @@ mod test {
         let l1_message_2 = L1MessageWithBlockNumber::arbitrary(&mut u).unwrap();
 
         // Insert the L1Messages into the database.
-        db.insert_l1_message(db.connection(), l1_message_1.clone()).await.unwrap();
-        db.insert_l1_message(db.connection(), l1_message_2.clone()).await.unwrap();
+        db.insert_l1_message(l1_message_1.clone()).await.unwrap();
+        db.insert_l1_message(l1_message_2.clone()).await.unwrap();
 
         // collect the L1Messages
         let l1_messages =
