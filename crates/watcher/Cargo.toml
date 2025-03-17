@@ -57,4 +57,5 @@ arbitrary = [
     "alloy-rpc-types-eth/arbitrary",
     "scroll-alloy-consensus/arbitrary",
     "alloy-sol-types/arbitrary",
+    "rollup-node-primitives/arbitrary",
 ]
