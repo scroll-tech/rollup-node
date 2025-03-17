@@ -1,5 +1,8 @@
 use alloy_primitives::{BlockNumber, B256};
 
+#[cfg(not(feature = "std"))]
+use alloc::vec::Vec;
+
 /// The input data for a batch.
 ///
 /// This is used as input for the derivation pipeline. All data remains in its raw serialized form.

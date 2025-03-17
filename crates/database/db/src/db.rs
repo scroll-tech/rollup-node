@@ -152,7 +152,7 @@ impl<DB: ConnectionTrait + StreamTrait> Database<DB> {
             .map(|_| ())?)
     }
 
-    /// Get a [`L1Message`] from the database by its message queue index.
+    /// Get a [`L1MessageWithBlockNumber`] from the database by its message queue index.
     pub async fn get_l1_message(
         &self,
         queue_index: u64,
@@ -163,7 +163,7 @@ impl<DB: ConnectionTrait + StreamTrait> Database<DB> {
             .map(|x| x.map(Into::into))?)
     }
 
-    /// Gets an iterator over all [`L1Message`]s in the database.
+    /// Gets an iterator over all [`L1MessageWithBlockNumber`]s in the database.
     pub async fn get_l1_messages<'a>(
         &'a self,
     ) -> Result<impl Stream<Item = Result<L1MessageWithBlockNumber, DbErr>> + 'a, DatabaseError>
