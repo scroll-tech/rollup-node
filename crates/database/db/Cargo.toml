@@ -35,7 +35,7 @@ scroll-migration.workspace = true
 rollup-node-primitives = { workspace = true, features = ["arbitrary"] }
 
 # misc
-arbitrary.workspace = true 
+arbitrary.workspace = true
 rand.workspace = true
 
 [features]
