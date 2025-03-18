@@ -20,7 +20,7 @@ impl BatchInput {
     pub const fn version(&self) -> u8 {
         match self {
             Self::BatchInputDataV1(data) => data.version,
-            Self::BatchInputDataV2(data) => data.batch_input_data.version,
+            Self::BatchInputDataV2(data) => data.batch_input_base.version,
         }
     }
 
@@ -28,7 +28,7 @@ impl BatchInput {
     pub const fn batch_index(&self) -> u64 {
         match self {
             Self::BatchInputDataV1(data) => data.batch_index,
-            Self::BatchInputDataV2(data) => data.batch_input_data.batch_index,
+            Self::BatchInputDataV2(data) => data.batch_input_base.batch_index,
         }
     }
 
@@ -36,7 +36,7 @@ impl BatchInput {
     pub const fn batch_hash(&self) -> &B256 {
         match self {
             Self::BatchInputDataV1(data) => &data.batch_hash,
-            Self::BatchInputDataV2(data) => &data.batch_input_data.batch_hash,
+            Self::BatchInputDataV2(data) => &data.batch_input_base.batch_hash,
         }
     }
 
@@ -44,7 +44,7 @@ impl BatchInput {
     pub fn set_block_number(&mut self, block_number: BlockNumber) {
         match self {
             Self::BatchInputDataV1(data) => data.block_number = block_number,
-            Self::BatchInputDataV2(data) => data.batch_input_data.block_number = block_number,
+            Self::BatchInputDataV2(data) => data.batch_input_base.block_number = block_number,
         }
     }
 }
@@ -72,7 +72,7 @@ pub struct BatchInputV1 {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct BatchInputV2 {
     /// The base input data for the batch.
-    pub batch_input_data: BatchInputV1,
+    pub batch_input_base: BatchInputV1,
     /// The L1 blob hash associated with the batch.
     pub blob_hash: B256,
 }
@@ -173,7 +173,7 @@ impl BatchInputBuilder {
                     skipped_l1_message_bitmap,
                 };
                 let blob_hash = blob.first().copied()?;
-                Some(BatchInputV2 { batch_input_data, blob_hash }.into())
+                Some(BatchInputV2 { batch_input_base: batch_input_data, blob_hash }.into())
             }
             (None, None, Some(_blobs)) => {
                 // TODO(greg): for now None but this will be used in Euclid.
@@ -223,7 +223,7 @@ mod arbitrary_impl {
 
     impl arbitrary::Arbitrary<'_> for BatchInputV2 {
         fn arbitrary(u: &mut arbitrary::Unstructured<'_>) -> arbitrary::Result<Self> {
-            Ok(Self { batch_input_data: u.arbitrary()?, blob_hash: u.arbitrary()? })
+            Ok(Self { batch_input_base: u.arbitrary()?, blob_hash: u.arbitrary()? })
         }
     }
 }
