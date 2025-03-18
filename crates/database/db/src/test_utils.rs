@@ -9,6 +9,5 @@ pub async fn setup_test_db() -> Database {
     let database_url = "sqlite::memory:";
     let connection = sea_orm::Database::connect(database_url).await.unwrap();
     Migrator::up(&connection, None).await.unwrap();
-    let db = Database { connection };
-    db
+    connection.into()
 }

@@ -1,5 +1,8 @@
 use alloy_primitives::{BlockNumber, B256};
 
+#[cfg(not(feature = "std"))]
+use alloc::vec::Vec;
+
 /// The input data for a batch.
 ///
 /// This is used as input for the derivation pipeline. All data remains in its raw serialized form.
@@ -14,26 +17,34 @@ pub enum BatchInput {
 
 impl BatchInput {
     /// Returns the coded (protocol) version of the batch input.
-    pub fn version(&self) -> u8 {
+    pub const fn version(&self) -> u8 {
         match self {
-            BatchInput::BatchInputDataV1(data) => data.version,
-            BatchInput::BatchInputDataV2(data) => data.batch_input_data.version,
+            Self::BatchInputDataV1(data) => data.version,
+            Self::BatchInputDataV2(data) => data.batch_input_base.version,
         }
     }
 
     /// Returns the index of the batch.
-    pub fn batch_index(&self) -> u64 {
+    pub const fn batch_index(&self) -> u64 {
         match self {
-            BatchInput::BatchInputDataV1(data) => data.batch_index,
-            BatchInput::BatchInputDataV2(data) => data.batch_input_data.batch_index,
+            Self::BatchInputDataV1(data) => data.batch_index,
+            Self::BatchInputDataV2(data) => data.batch_input_base.batch_index,
+        }
+    }
+
+    /// Returns the hash of the batch.
+    pub const fn batch_hash(&self) -> &B256 {
+        match self {
+            Self::BatchInputDataV1(data) => &data.batch_hash,
+            Self::BatchInputDataV2(data) => &data.batch_input_base.batch_hash,
         }
     }
 
     /// Sets the block number of the batch.
     pub fn set_block_number(&mut self, block_number: BlockNumber) {
         match self {
-            BatchInput::BatchInputDataV1(data) => data.block_number = block_number,
-            BatchInput::BatchInputDataV2(data) => data.batch_input_data.block_number = block_number,
+            Self::BatchInputDataV1(data) => data.block_number = block_number,
+            Self::BatchInputDataV2(data) => data.batch_input_base.block_number = block_number,
         }
     }
 }
@@ -61,7 +72,7 @@ pub struct BatchInputV1 {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct BatchInputV2 {
     /// The base input data for the batch.
-    pub batch_input_data: BatchInputV1,
+    pub batch_input_base: BatchInputV1,
     /// The L1 blob hash associated with the batch.
     pub blob_hash: B256,
 }
@@ -162,7 +173,7 @@ impl BatchInputBuilder {
                     skipped_l1_message_bitmap,
                 };
                 let blob_hash = blob.first().copied()?;
-                Some(BatchInputV2 { batch_input_data, blob_hash }.into())
+                Some(BatchInputV2 { batch_input_base: batch_input_data, blob_hash }.into())
             }
             (None, None, Some(_blobs)) => {
                 // TODO(greg): for now None but this will be used in Euclid.
@@ -181,8 +192,8 @@ mod arbitrary_impl {
         fn arbitrary(u: &mut arbitrary::Unstructured<'_>) -> arbitrary::Result<Self> {
             let version = u.arbitrary::<u8>()? % 2;
             match version {
-                0 => Ok(BatchInput::BatchInputDataV1(u.arbitrary()?)),
-                1 => Ok(BatchInput::BatchInputDataV2(u.arbitrary()?)),
+                0 => Ok(Self::BatchInputDataV1(u.arbitrary()?)),
+                1 => Ok(Self::BatchInputDataV2(u.arbitrary()?)),
                 _ => unreachable!(),
             }
         }
@@ -198,7 +209,7 @@ mod arbitrary_impl {
             let chunks = u.arbitrary::<Vec<Vec<u8>>>()?;
             let skipped_l1_message_bitmap = u.arbitrary::<Vec<u8>>()?;
 
-            Ok(BatchInputV1 {
+            Ok(Self {
                 version,
                 batch_index,
                 batch_hash,
@@ -212,7 +223,7 @@ mod arbitrary_impl {
 
     impl arbitrary::Arbitrary<'_> for BatchInputV2 {
         fn arbitrary(u: &mut arbitrary::Unstructured<'_>) -> arbitrary::Result<Self> {
-            Ok(BatchInputV2 { batch_input_data: u.arbitrary()?, blob_hash: u.arbitrary()? })
+            Ok(Self { batch_input_base: u.arbitrary()?, blob_hash: u.arbitrary()? })
         }
     }
 }

@@ -23,6 +23,18 @@ clippy:
 	--all-features \
 	-- -D warnings
 
+.PHONY: clippy-fix
+clippy-fix:
+	cargo +nightly clippy \
+	--workspace \
+	--lib \
+	--examples \
+	--tests \
+	--benches \
+	--all-features \
+	--fix \
+	-- -D warnings
+
 .PHONY: udeps
 udeps:
 	cargo +nightly udeps --workspace --lib --examples --tests --benches --all-features --locked

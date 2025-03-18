@@ -3,12 +3,15 @@ use alloy_primitives::B256;
 use reth_tokio_util::{EventSender, EventStream};
 use rollup_node_primitives::{BatchInput, L1MessageWithBlockNumber};
 use rollup_node_watcher::L1Notification;
-use scroll_db::{Database, DbErr};
+use scroll_db::{Database, DatabaseOperations};
 use std::sync::Arc;
 use tokio::sync::mpsc;
 
 mod event;
 pub use event::IndexerEvent;
+
+mod error;
+use error::IndexerError;
 
 mod handle;
 use handle::IndexerCommand;
@@ -62,7 +65,7 @@ impl Indexer {
     }
 
     /// Handles an event from the L1.
-    pub async fn handle_l1_event(&self, event: L1Notification) -> Result<(), DbErr> {
+    pub async fn handle_l1_event(&self, event: L1Notification) -> Result<(), IndexerError> {
         let result = match event {
             L1Notification::Reorg(block_number) => self.handle_reorg(block_number).await,
             L1Notification::NewBlock(_block_number) | L1Notification::Finalized(_block_number) => {
@@ -84,13 +87,13 @@ impl Indexer {
 
     /// Handles a reorganization event by deleting all indexed data which is greater than the
     /// provided block number.
-    async fn handle_reorg(&self, block_number: u64) -> Result<(), DbErr> {
+    async fn handle_reorg(&self, block_number: u64) -> Result<(), IndexerError> {
         // create a database transaction so this operation is atomic
         let txn = self.database.tx().await?;
 
         // delete batch inputs and l1 messages
-        self.database.delete_batch_inputs_gt(&txn, block_number).await?;
-        self.database.delete_l1_messages_gt(&txn, block_number).await?;
+        txn.delete_batch_inputs_gt(block_number).await?;
+        txn.delete_l1_messages_gt(block_number).await?;
 
         // commit the transaction
         txn.commit().await?;
@@ -98,13 +101,16 @@ impl Indexer {
     }
 
     /// Handles an L1 message by inserting it into the database.
-    async fn handle_l1_message(&self, l1_message: L1MessageWithBlockNumber) -> Result<(), DbErr> {
-        self.database.insert_l1_message(self.database.connection(), l1_message).await.map(|_| ())
+    async fn handle_l1_message(
+        &self,
+        l1_message: L1MessageWithBlockNumber,
+    ) -> Result<(), IndexerError> {
+        Ok(self.database.insert_l1_message(l1_message).await.map(|_| ())?)
     }
 
     /// Handles a batch input by inserting it into the database.
-    async fn handle_batch_input(&self, batch_input: BatchInput) -> Result<(), DbErr> {
-        self.database.insert_batch_input(self.database.connection(), batch_input).await.map(|_| ())
+    async fn handle_batch_input(&self, batch_input: BatchInput) -> Result<(), IndexerError> {
+        Ok(self.database.insert_batch_input(batch_input).await.map(|_| ())?)
     }
 
     /// Handles a batch finalization event by updating the batch input in the database.
@@ -112,10 +118,8 @@ impl Indexer {
         &self,
         batch_hash: B256,
         block_number: u64,
-    ) -> Result<(), DbErr> {
-        self.database
-            .finalize_batch_input(self.database.connection(), batch_hash, block_number)
-            .await
+    ) -> Result<(), IndexerError> {
+        Ok(self.database.finalize_batch_input(batch_hash, block_number).await?)
     }
 }
 
@@ -149,11 +153,8 @@ mod test {
 
         let _ = event_stream.next().await;
 
-        let batch_input_result = db
-            .get_batch_input_by_batch_index(db.connection(), batch_input.batch_index())
-            .await
-            .unwrap()
-            .unwrap();
+        let batch_input_result =
+            db.get_batch_input_by_batch_index(batch_input.batch_index()).await.unwrap().unwrap();
 
         assert_eq!(batch_input, batch_input_result);
     }
