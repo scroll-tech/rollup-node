@@ -8,15 +8,12 @@ use sea_orm::{ActiveModelTrait, ColumnTrait, DbErr, EntityTrait, QueryFilter, Se
 /// The [`DatabaseOperations`] trait provides methods for interacting with the database.
 #[async_trait::async_trait]
 pub trait DatabaseOperations: DatabaseConnectionProvider {
-    /// Insert a [`BatchInput`] into the database and returns the batch input model
-    /// ([`models::batch_input::Model`]).
-    async fn insert_batch_input(
-        &self,
-        batch_input: BatchInput,
-    ) -> Result<models::batch_input::Model, DatabaseError> {
+    /// Insert a [`BatchInput`] into the database.
+    async fn insert_batch_input(&self, batch_input: BatchInput) -> Result<(), DatabaseError> {
         tracing::trace!(target: "scroll::db", batch_hash = ?batch_input.batch_hash(), batch_index = batch_input.batch_index(), "Inserting batch input into database.");
         let batch_input: models::batch_input::ActiveModel = batch_input.into();
-        Ok(batch_input.insert(self.get_connection()).await?)
+        batch_input.insert(self.get_connection()).await?;
+        Ok(())
     }
 
     /// Finalize a [`BatchInput`] with the provided `batch_hash` in the database and set the
