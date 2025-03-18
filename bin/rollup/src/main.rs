@@ -8,14 +8,14 @@ fn main() {
     use reth_scroll_cli::{Cli, ScrollChainSpecParser};
     use reth_scroll_node::{ScrollAddOns, ScrollNode};
     reth_cli_util::sigsegv_handler::install();
-    use rollup_node::ScrollBridgeNodeArgs;
+    use rollup_node::ScrollRollupNodeArgs;
 
     // Enable backtraces unless a RUST_BACKTRACE value has already been explicitly provided.
     if std::env::var_os("RUST_BACKTRACE").is_none() {
         std::env::set_var("RUST_BACKTRACE", "1");
     }
 
-    if let Err(err) = Cli::<ScrollChainSpecParser, ScrollBridgeNodeArgs>::parse()
+    if let Err(err) = Cli::<ScrollChainSpecParser, ScrollRollupNodeArgs>::parse()
         .run::<_, _, ScrollNode>(|builder, scroll_bridge_node_args| async move {
             let engine_tree_config = TreeConfig::default()
                 .with_persistence_threshold(builder.config().engine.persistence_threshold)

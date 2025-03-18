@@ -19,17 +19,17 @@ use scroll_wire::{ProtocolHandler, ScrollWireConfig};
 use std::{path::PathBuf, sync::Arc};
 use tracing::info;
 
-use crate::ScrollBridgeNodeArgs;
+use crate::ScrollRollupNodeArgs;
 
 /// The network builder for the eth-wire to scroll-wire bridge.
 #[derive(Debug)]
 pub struct ScrollRollupNetworkBuilder {
-    config: ScrollBridgeNodeArgs,
+    config: ScrollRollupNodeArgs,
 }
 
 impl ScrollRollupNetworkBuilder {
     /// Returns a new [`ScrollRollupNetworkBuilder`] instance with the provided config.
-    pub fn new(config: ScrollBridgeNodeArgs) -> Self {
+    pub fn new(config: ScrollRollupNodeArgs) -> Self {
         Self { config }
     }
 }
@@ -93,7 +93,7 @@ where
 
         let engine_api = ScrollAuthEngineApiProvider::new(
             auth_secret,
-            format!("http://localhost:{auth_port}").parse()?,
+            self.config.engine_api_url.unwrap_or(format!("http://localhost:{auth_port}").parse()?),
         );
         let engine = EngineDriver::new(engine_api, payload_provider);
 
@@ -115,10 +115,11 @@ where
         let indexer = Indexer::spawn(db.clone());
 
         // Spawn the L1Watcher
-        let l1_rpc = ProviderBuilder::new().on_http(
-            "https://eth-mainnet.g.alchemy.com/v2/_JqpVl1eGmQwkZ666pMpQTKJnsoblTtJ".parse()?,
-        );
-        let l1_notification_rx = L1Watcher::spawn(l1_rpc, 20035952).await;
+        let l1_notification_rx = if let Some(l1_rpc_url) = self.config.l1_rpc_url {
+            Some(L1Watcher::spawn(ProviderBuilder::new().on_http(l1_rpc_url), 20035952).await)
+        } else {
+            None
+        };
 
         // Spawn the rollup node manager
         let rollup_node_manager = RollupNodeManager::new(

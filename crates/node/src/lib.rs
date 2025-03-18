@@ -61,7 +61,7 @@ pub struct RollupNodeManager<C, EC, P> {
     ///  The engine driver used to communicate with the engine.
     engine: Arc<EngineDriver<EC, P>>,
     /// A receiver for [`L1Notification`]s from the [`rollup_node_watcher::L1Watcher`].
-    l1_notification_rx: ReceiverStream<Arc<L1Notification>>,
+    l1_notification_rx: Option<ReceiverStream<Arc<L1Notification>>>,
     /// A handle to the indexer.
     indexer: IndexerHandle,
     /// The consensus algorithm used by the rollup node.
@@ -86,7 +86,7 @@ where
     pub fn new(
         network: NetworkManager,
         engine: EngineDriver<EC, P>,
-        l1_notification_rx: Receiver<Arc<L1Notification>>,
+        l1_notification_rx: Option<Receiver<Arc<L1Notification>>>,
         indexer: IndexerHandle,
         forkchoice_state: ForkchoiceState,
         consensus: C,
@@ -95,7 +95,7 @@ where
         Self {
             network,
             engine: Arc::new(engine),
-            l1_notification_rx: l1_notification_rx.into(),
+            l1_notification_rx: l1_notification_rx.map(Into::into),
             indexer,
             consensus,
             new_block_rx: new_block_rx.map(Into::into),
@@ -247,7 +247,9 @@ where
         }
 
         // Drain all L1 notifications.
-        while let Poll::Ready(Some(event)) = this.l1_notification_rx.poll_next_unpin(cx) {
+        while let Some(Poll::Ready(Some(event))) =
+            this.l1_notification_rx.as_mut().map(|x| x.poll_next_unpin(cx))
+        {
             this.handle_l1_notification((*event).clone());
         }
 

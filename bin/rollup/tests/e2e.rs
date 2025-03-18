@@ -14,7 +14,7 @@ use reth_scroll_chainspec::ScrollChainSpec;
 use reth_scroll_engine_primitives::ScrollPayloadBuilderAttributes;
 use reth_scroll_node::{ScrollNetworkPrimitives, ScrollNode};
 use reth_tasks::TaskManager;
-use rollup_node::ScrollBridgeNodeArgs;
+use rollup_node::ScrollRollupNodeArgs;
 use scroll_alloy_rpc_types_engine::ScrollPayloadAttributes;
 use scroll_network::{NewBlockWithPeer, SCROLL_MAINNET};
 use scroll_wire::ScrollWireConfig;
@@ -132,10 +132,12 @@ pub async fn build_bridge_node(
 
     // Create the node for a bridge node that will bridge messages from the eth-wire protocol
     // to the scroll-wire protocol.
-    let node_args = ScrollBridgeNodeArgs {
+    let node_args = ScrollRollupNodeArgs {
         enable_eth_scroll_wire_bridge: true,
         enable_scroll_wire: true,
         database_path: Some(PathBuf::from("sqlite::memory:")),
+        l1_rpc_url: None,
+        engine_api_url: None,
     };
     let node = ScrollNode;
     let NodeHandle { node, node_exit_future: _ } = NodeBuilder::new(node_config.clone())
