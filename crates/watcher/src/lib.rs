@@ -78,7 +78,7 @@ pub struct L1Watcher<EP> {
 pub enum L1Notification {
     /// A notification for a reorg of the L1 up to a given block number.
     Reorg(u64),
-    /// A new batch has been commited on the L1 rollup contract.
+    /// A new batch has been committed on the L1 rollup contract.
     BatchCommit(BatchInput),
     /// A new batch has been finalized on the L1 rollup contract.
     BatchFinalization {
@@ -87,7 +87,7 @@ pub enum L1Notification {
         /// The block number the batch was finalized at.
         block_number: BlockNumber,
     },
-    /// A new [`L1Message`] has been added to the L1 message queue.
+    /// A new `L1Message` has been added to the L1 message queue.
     L1Message(L1MessageWithBlockNumber),
     /// A new block has been added to the L1.
     NewBlock(u64),
@@ -200,9 +200,9 @@ where
 
         let tail_block = self.unfinalized_blocks.back().expect("tail exists");
         if tail_block.number < finalized.number {
-            // drain all, the finalized block is past the tail.
+            // clear, the finalized block is past the tail.
             tracing::trace!(target: "scroll::watcher", tail = ?tail_block.number, finalized = ?finalized.number, "draining all unfinalized blocks");
-            let _ = self.unfinalized_blocks.drain(0..);
+            self.unfinalized_blocks.clear();
             return
         }
 
@@ -452,10 +452,9 @@ where
             .expect("finalized block should always exist"))
     }
 
-    /// Returns the next range of logs, using the filter provider in
-    /// [`L1Watcher`](field@L1Watcher::filter), for the block range in
-    /// \[[`current_block`](field@WatcherSyncStatus::current_block);
-    /// [`current_block`](field@WatcherSyncStatus::current_block) + [`LOGS_QUERY_BLOCK_RANGE`]\]
+    /// Returns the next range of logs, filtering using [`L1_WATCHER_LOG_FILTER`],
+    /// for the block range in \[[`current_block`](field@L1Watcher::current_block_number);
+    /// [`current_block`](field@L1Watcher::current_block_number) + [`LOGS_QUERY_BLOCK_RANGE`]\]
     async fn next_filtered_logs(&self) -> L1WatcherResult<Vec<Log>> {
         // set the block range for the query
         let mut filter = L1_WATCHER_LOG_FILTER.clone();

@@ -26,6 +26,7 @@ futures.workspace = true
 sea-orm = { version = "1.1.0", features = ["sqlx-sqlite", "runtime-tokio-native-tls", "macros"] }
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
+thiserror.workspace = true
 tokio = { workspace = true, features = ["macros", "sync"] }
 tracing.workspace = true
 
@@ -35,7 +36,7 @@ scroll-migration.workspace = true
 rollup-node-primitives = { workspace = true, features = ["arbitrary"] }
 
 # misc
-arbitrary.workspace = true 
+arbitrary.workspace = true
 rand.workspace = true
 
 [features]

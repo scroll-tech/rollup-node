@@ -48,7 +48,7 @@ scroll-l1 = { workspace = true, features = ["test-utils"] }
 tracing-subscriber = "0.3"
 
 [features]
-test-utils = ["arbitrary", "alloy-eips", "rand"]
+test-utils = ["arbitrary", "alloy-eips", "rand", "scroll-l1/test-utils"]
 arbitrary = [
     "dep:arbitrary",
     "alloy-consensus/arbitrary",
@@ -56,4 +56,6 @@ arbitrary = [
     "alloy-primitives/arbitrary",
     "alloy-rpc-types-eth/arbitrary",
     "scroll-alloy-consensus/arbitrary",
+    "alloy-sol-types/arbitrary",
+    "rollup-node-primitives/arbitrary",
 ]

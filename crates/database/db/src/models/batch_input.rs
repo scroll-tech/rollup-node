@@ -44,51 +44,27 @@ impl Deref for Chunks {
 
 impl From<BatchInputPrimitive> for ActiveModel {
     fn from(batch_input: BatchInputPrimitive) -> Self {
-        match batch_input {
-            BatchInputPrimitive::BatchInputDataV1(batch_input) => Self {
-                index: ActiveValue::Set(
-                    batch_input.batch_index.try_into().expect("index should fit in i64"),
-                ),
-                version: ActiveValue::Set(1),
-                codec_version: ActiveValue::Set(batch_input.version as u8),
-                hash: ActiveValue::Set(batch_input.batch_hash.to_vec()),
-                block_number: ActiveValue::Set(
-                    batch_input.block_number.try_into().expect("block number should fit in i64"),
-                ),
-                parent_batch_header: ActiveValue::Set(batch_input.parent_batch_header),
-                chunks: ActiveValue::Set(Chunks(batch_input.chunks)),
-                skipped_l1_message_bitmap: ActiveValue::Set(batch_input.skipped_l1_message_bitmap),
-                blob_hash: ActiveValue::Set(vec![]),
-                finalized_block_number: ActiveValue::Unchanged(None),
-            },
-            BatchInputPrimitive::BatchInputDataV2(batch_input) => Self {
-                index: ActiveValue::Set(
-                    batch_input
-                        .batch_input_data
-                        .batch_index
-                        .try_into()
-                        .expect("index should fit in i64"),
-                ),
-                version: ActiveValue::Set(2),
-                codec_version: ActiveValue::Set(batch_input.batch_input_data.version as u8),
-                hash: ActiveValue::Set(batch_input.batch_input_data.batch_hash.to_vec()),
-                block_number: ActiveValue::Set(
-                    batch_input
-                        .batch_input_data
-                        .block_number
-                        .try_into()
-                        .expect("block number should fit in i64"),
-                ),
-                parent_batch_header: ActiveValue::Set(
-                    batch_input.batch_input_data.parent_batch_header,
-                ),
-                chunks: ActiveValue::Set(Chunks(batch_input.batch_input_data.chunks)),
-                skipped_l1_message_bitmap: ActiveValue::Set(
-                    batch_input.batch_input_data.skipped_l1_message_bitmap,
-                ),
-                blob_hash: ActiveValue::Set(batch_input.blob_hash.to_vec()),
-                finalized_block_number: ActiveValue::Unchanged(None),
-            },
+        let (version, batch_input_v1, blob_hash) = match batch_input {
+            BatchInputPrimitive::BatchInputDataV1(batch_input) => (1, batch_input, vec![]),
+            BatchInputPrimitive::BatchInputDataV2(batch_input) => {
+                (2, batch_input.batch_input_base, batch_input.blob_hash.to_vec())
+            }
+        };
+        Self {
+            index: ActiveValue::Set(
+                batch_input_v1.batch_index.try_into().expect("index should fit in i64"),
+            ),
+            version: ActiveValue::Set(version),
+            codec_version: ActiveValue::Set(batch_input_v1.version),
+            hash: ActiveValue::Set(batch_input_v1.batch_hash.to_vec()),
+            block_number: ActiveValue::Set(
+                batch_input_v1.block_number.try_into().expect("block number should fit in i64"),
+            ),
+            parent_batch_header: ActiveValue::Set(batch_input_v1.parent_batch_header),
+            chunks: ActiveValue::Set(Chunks(batch_input_v1.chunks)),
+            skipped_l1_message_bitmap: ActiveValue::Set(batch_input_v1.skipped_l1_message_bitmap),
+            blob_hash: ActiveValue::Set(blob_hash),
+            finalized_block_number: ActiveValue::Unchanged(None),
         }
     }
 }
@@ -96,50 +72,28 @@ impl From<BatchInputPrimitive> for ActiveModel {
 impl From<Model> for BatchInputPrimitive {
     fn from(value: Model) -> Self {
         let chunks = value.chunks.0;
+        let batch_input_v1 = BatchInputV1 {
+            version: value.codec_version,
+            batch_index: value.index.try_into().expect("data persisted in database is valid"),
+            batch_hash: value
+                .hash
+                .as_slice()
+                .try_into()
+                .expect("data persisted in database is valid"),
+            block_number: value
+                .block_number
+                .try_into()
+                .expect("data persisted in database is valid"),
+            parent_batch_header: value.parent_batch_header,
+            chunks,
+            skipped_l1_message_bitmap: value.skipped_l1_message_bitmap,
+        };
+
         if value.version == 1 {
-            BatchInputPrimitive::BatchInputDataV1(BatchInputV1 {
-                batch_index: value.index.try_into().expect("data persisted in database is valid"),
-                version: value
-                    .codec_version
-                    .try_into()
-                    .expect("data persisted in database is valid"),
-                batch_hash: value
-                    .hash
-                    .as_slice()
-                    .try_into()
-                    .expect("data persisted in database is valid"),
-                block_number: value
-                    .block_number
-                    .try_into()
-                    .expect("data persisted in database is valid"),
-                parent_batch_header: value.parent_batch_header,
-                chunks,
-                skipped_l1_message_bitmap: value.skipped_l1_message_bitmap,
-            })
+            Self::BatchInputDataV1(batch_input_v1)
         } else {
-            BatchInputPrimitive::BatchInputDataV2(BatchInputV2 {
-                batch_input_data: BatchInputV1 {
-                    batch_index: value
-                        .index
-                        .try_into()
-                        .expect("data persisted in database is valid"),
-                    version: value
-                        .codec_version
-                        .try_into()
-                        .expect("data persisted in database is valid"),
-                    batch_hash: value
-                        .hash
-                        .as_slice()
-                        .try_into()
-                        .expect("data persisted in database is valid"),
-                    block_number: value
-                        .block_number
-                        .try_into()
-                        .expect("data persisted in database is valid"),
-                    parent_batch_header: value.parent_batch_header,
-                    chunks,
-                    skipped_l1_message_bitmap: value.skipped_l1_message_bitmap,
-                },
+            Self::BatchInputDataV2(BatchInputV2 {
+                batch_input_base: batch_input_v1,
                 blob_hash: value
                     .blob_hash
                     .as_slice()

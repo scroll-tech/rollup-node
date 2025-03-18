@@ -54,6 +54,7 @@ arbitrary = [
     "reth-scroll-primitives/arbitrary",
     "scroll-alloy-rpc-types-engine/arbitrary",
     "alloy-chains/arbitrary",
+    "rollup-node-primitives/arbitrary",
 ]
 test-utils = [
     "arbitrary",
