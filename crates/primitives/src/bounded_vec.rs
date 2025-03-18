@@ -1,7 +1,10 @@
 //! A bounded vector implementation.
 
 use core::ops::{Deref, RangeBounds};
-use std::collections::{vec_deque::Drain, VecDeque};
+use std::{
+    collections::{vec_deque::Drain, VecDeque},
+    vec::Vec,
+};
 
 /// A bounded vec implementation using [`VecDeque`]. The structure will overwrite the oldest data
 /// that was pushed in when it reaches capacity.
@@ -60,13 +63,14 @@ impl<T> Extend<T> for BoundedVec<T> {
 
         // if size hint returns an upper bound, skip values until whole iterator can fit in the
         // bounded vec.
-        let mut iter = if let (_, Some(upper_bound)) = iter.size_hint() {
+        let iter = if let (_, Some(upper_bound)) = iter.size_hint() {
             iter.skip(upper_bound.saturating_sub(self.data.capacity()))
         } else {
+            #[allow(clippy::iter_skip_zero)]
             iter.skip(0)
         };
 
-        while let Some(elem) = iter.next() {
+        for elem in iter {
             self.push(elem)
         }
     }
