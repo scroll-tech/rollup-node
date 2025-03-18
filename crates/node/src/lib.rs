@@ -60,7 +60,7 @@ pub struct RollupNodeManager<C, EC, P> {
     network: NetworkManager,
     ///  The engine driver used to communicate with the engine.
     engine: Arc<EngineDriver<EC, P>>,
-    /// A receiver for [`L1Notification`]s from the [`L1Watcher`].
+    /// A receiver for [`L1Notification`]s from the [`rollup_node_watcher::L1Watcher`].
     l1_notification_rx: ReceiverStream<Arc<L1Notification>>,
     /// A handle to the indexer.
     indexer: IndexerHandle,

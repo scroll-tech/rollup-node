@@ -84,6 +84,10 @@ test-utils = [
     "scroll-engine/test-utils",
     "reth-payload-builder/test-utils",
     "reth-payload-builder/test-utils",
+    "rollup-node-watcher/test-utils",
+    "scroll-db/test-utils",
+    "rollup-node-watcher/test-utils",
+    "scroll-db/test-utils",
 ]
 serde = [
     "alloy-primitives/serde",

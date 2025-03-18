@@ -12,7 +12,7 @@ use rollup_node_indexer::Indexer;
 use rollup_node_manager::{PoAConsensus, RollupNodeManager};
 use rollup_node_watcher::L1Watcher;
 use scroll_alloy_provider::ScrollAuthEngineApiProvider;
-use scroll_db::Database;
+use scroll_db::{Database, DatabaseConnectionProvider};
 use scroll_engine::{test_utils::NoopExecutionPayloadProvider, EngineDriver, ForkchoiceState};
 use scroll_network::NetworkManager as ScrollNetworkManager;
 use scroll_wire::{ProtocolHandler, ScrollWireConfig};
@@ -106,7 +106,7 @@ where
         let db = Database::new(database_path.to_str().unwrap()).await?;
 
         // Run the database migrations
-        migration::Migrator::up(db.connection(), None).await?;
+        migration::Migrator::up(db.get_connection(), None).await?;
 
         // Wrap the database in an Arc
         let db = Arc::new(db);
