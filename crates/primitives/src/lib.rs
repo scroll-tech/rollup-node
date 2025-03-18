@@ -10,5 +10,8 @@ mod block;
 pub use batch::{BatchInput, BatchInputBuilder, BatchInputV1, BatchInputV2};
 mod batch;
 
+pub use bounded_vec::BoundedVec;
+mod bounded_vec;
+
 pub use transaction::L1MessageWithBlockNumber;
 mod transaction;
