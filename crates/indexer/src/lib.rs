@@ -32,7 +32,7 @@ impl Indexer {
     /// Creates a new indexer with the given database and returns the [`IndexerHandle`] .
     pub fn spawn(database: Arc<Database>) -> IndexerHandle {
         let (cmd_tx, cmd_rx) = mpsc::unbounded_channel();
-        let indexer = Indexer { database, cmd_rx, event_sender: None };
+        let indexer = Self { database, cmd_rx, event_sender: None };
         tokio::spawn(indexer.run());
         IndexerHandle::new(cmd_tx)
     }
@@ -45,7 +45,7 @@ impl Indexer {
         let (cmd_tx, cmd_rx) = mpsc::unbounded_channel();
         let event_sender = EventSender::new(2000);
         let event_listener = event_sender.new_listener();
-        let indexer = Indexer { database, cmd_rx, event_sender: Some(event_sender) };
+        let indexer = Self { database, cmd_rx, event_sender: Some(event_sender) };
         tokio::spawn(indexer.run());
         (IndexerHandle::new(cmd_tx), event_listener)
     }

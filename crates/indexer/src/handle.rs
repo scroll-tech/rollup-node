@@ -17,7 +17,7 @@ pub struct IndexerHandle {
 
 impl IndexerHandle {
     /// Creates a new indexer handle with the given command sender.
-    pub fn new(cmd_tx: UnboundedSender<IndexerCommand>) -> Self {
+    pub const fn new(cmd_tx: UnboundedSender<IndexerCommand>) -> Self {
         Self { cmd_tx }
     }
 
