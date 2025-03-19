@@ -6,12 +6,13 @@ use rollup_node_watcher::L1Notification;
 use scroll_db::{Database, DatabaseOperations};
 use std::{
     collections::VecDeque,
-    fmt,
-    future::Future,
     pin::Pin,
     sync::Arc,
     task::{Context, Poll},
 };
+
+mod action;
+use action::IndexerFuture;
 
 mod event;
 pub use event::IndexerEvent;
@@ -19,34 +20,13 @@ pub use event::IndexerEvent;
 mod error;
 use error::IndexerError;
 
-/// A future that resolves to a tuple of the block info and the block import outcome.
-type PendingIndexerFuture =
-    Pin<Box<dyn Future<Output = Result<IndexerEvent, IndexerError>> + Send>>;
-
-enum IndexerAction {
-    HandleReorg(PendingIndexerFuture),
-    HandleBatchCommit(PendingIndexerFuture),
-    HandleBatchFinalization(PendingIndexerFuture),
-    HandleL1Message(PendingIndexerFuture),
-}
-
 /// The indexer is responsible for indexing data relevant to the L1.
+#[derive(Debug)]
 pub struct Indexer {
     /// A reference to the database used to persist the indexed data.
     database: Arc<Database>,
     /// A queue of pending futures.
-    pending_futures: VecDeque<IndexerAction>,
-}
-
-impl IndexerAction {
-    fn poll(&mut self, cx: &mut Context<'_>) -> Poll<Result<IndexerEvent, IndexerError>> {
-        match self {
-            Self::HandleReorg(fut) |
-            Self::HandleBatchCommit(fut) |
-            Self::HandleBatchFinalization(fut) |
-            Self::HandleL1Message(fut) => fut.as_mut().poll(cx),
-        }
-    }
+    pending_futures: VecDeque<IndexerFuture>,
 }
 
 impl Indexer {
@@ -59,19 +39,19 @@ impl Indexer {
     pub fn handle_l1_notification(&mut self, event: L1Notification) {
         let fut =
             match event {
-                L1Notification::Reorg(block_number) => IndexerAction::HandleReorg(Box::pin(
+                L1Notification::Reorg(block_number) => IndexerFuture::HandleReorg(Box::pin(
                     Self::handle_reorg(self.database.clone(), block_number),
                 )),
                 L1Notification::NewBlock(_block_number) |
                 L1Notification::Finalized(_block_number) => return,
-                L1Notification::BatchCommit(batch_input) => IndexerAction::HandleBatchCommit(
+                L1Notification::BatchCommit(batch_input) => IndexerFuture::HandleBatchCommit(
                     Box::pin(Self::handle_batch_commit(self.database.clone(), batch_input)),
                 ),
-                L1Notification::L1Message(l1_message) => IndexerAction::HandleL1Message(Box::pin(
+                L1Notification::L1Message(l1_message) => IndexerFuture::HandleL1Message(Box::pin(
                     Self::handle_l1_message(self.database.clone(), l1_message),
                 )),
                 L1Notification::BatchFinalization { hash, block_number } => {
-                    IndexerAction::HandleBatchFinalization(Box::pin(
+                    IndexerFuture::HandleBatchFinalization(Box::pin(
                         Self::handle_batch_finalization(self.database.clone(), hash, block_number),
                     ))
                 }
@@ -124,7 +104,7 @@ impl Indexer {
         batch_hash: B256,
         block_number: u64,
     ) -> Result<IndexerEvent, IndexerError> {
-        let event = IndexerEvent::BatchFinalizationIndexed(block_number);
+        let event = IndexerEvent::BatchFinalizationIndexed(batch_hash);
         database.finalize_batch_input(batch_hash, block_number).await?;
         Ok(event)
     }
@@ -146,16 +126,6 @@ impl Stream for Indexer {
         }
 
         Poll::Pending
-    }
-}
-
-impl fmt::Debug for Indexer {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.debug_struct("Indexer")
-            .field("database", &"Arc<Database>") // Hide actual DB details
-            .field("cmd_rx", &"mpsc::UnboundedReceiver<IndexerCommand>") // Hide channel details
-            .field("pending_futures_len", &self.pending_futures.len()) // Only print the queue length
-            .finish()
     }
 }
 
