@@ -6,7 +6,7 @@ use alloy_rpc_types_engine::{
 };
 use futures::{stream::FuturesOrdered, StreamExt};
 use reth_tokio_util::{EventSender, EventStream};
-use rollup_node_indexer::IndexerHandle;
+use rollup_node_indexer::Indexer;
 use rollup_node_watcher::L1Notification;
 use scroll_alloy_network::Scroll as ScrollNetwork;
 use scroll_alloy_provider::ScrollEngineApi;
@@ -62,8 +62,8 @@ pub struct RollupNodeManager<C, EC, P> {
     engine: Arc<EngineDriver<EC, P>>,
     /// A receiver for [`L1Notification`]s from the [`rollup_node_watcher::L1Watcher`].
     l1_notification_rx: Option<ReceiverStream<Arc<L1Notification>>>,
-    /// A handle to the indexer.
-    indexer: IndexerHandle,
+    /// An indexer used to index data for the rollup node.
+    indexer: Indexer,
     /// The consensus algorithm used by the rollup node.
     consensus: C,
     /// The receiver for new blocks received from the network (used to bridge from eth-wire).
@@ -87,7 +87,7 @@ where
         network: NetworkManager,
         engine: EngineDriver<EC, P>,
         l1_notification_rx: Option<Receiver<Arc<L1Notification>>>,
-        indexer: IndexerHandle,
+        indexer: Indexer,
         forkchoice_state: ForkchoiceState,
         consensus: C,
         new_block_rx: Option<UnboundedReceiver<NewBlockWithPeer>>,
@@ -223,8 +223,8 @@ where
     }
 
     /// Handles an [`L1Notification`] from the L1 watcher.
-    fn handle_l1_notification(&self, notification: L1Notification) {
-        self.indexer.index_l1_notification(notification);
+    fn handle_l1_notification(&mut self, notification: L1Notification) {
+        self.indexer.handle_l1_notification(notification);
     }
 }
 
@@ -251,6 +251,11 @@ where
             this.l1_notification_rx.as_mut().map(|x| x.poll_next_unpin(cx))
         {
             this.handle_l1_notification((*event).clone());
+        }
+
+        // Drain all Indexer events
+        while let Poll::Ready(Some(event)) = this.indexer.poll_next_unpin(cx) {
+            tracing::trace!(target: "scroll::node::manager", "Received indexer event: {:?}", event);
         }
 
         // Handle blocks received from the eth-wire protocol.

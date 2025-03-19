@@ -112,7 +112,7 @@ where
         let db = Arc::new(db);
 
         // Spawn the indexer
-        let indexer = Indexer::spawn(db.clone());
+        let indexer = Indexer::new(db.clone());
 
         // Spawn the L1Watcher
         let l1_notification_rx = if let Some(l1_rpc_url) = self.config.l1_rpc_url {
