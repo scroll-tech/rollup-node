@@ -1,11 +1,17 @@
 //! A library responsible for indexing data relevant to the L1.
 use alloy_primitives::B256;
-use reth_tokio_util::{EventSender, EventStream};
+use futures::Stream;
 use rollup_node_primitives::{BatchInput, L1MessageWithBlockNumber};
 use rollup_node_watcher::L1Notification;
 use scroll_db::{Database, DatabaseOperations};
-use std::sync::Arc;
-use tokio::sync::mpsc;
+use std::{
+    collections::VecDeque,
+    fmt,
+    future::Future,
+    pin::Pin,
+    sync::Arc,
+    task::{Context, Poll},
+};
 
 mod event;
 pub use event::IndexerEvent;
@@ -13,83 +19,75 @@ pub use event::IndexerEvent;
 mod error;
 use error::IndexerError;
 
-mod handle;
-use handle::IndexerCommand;
-pub use handle::IndexerHandle;
+/// A future that resolves to a tuple of the block info and the block import outcome.
+type PendingIndexerFuture =
+    Pin<Box<dyn Future<Output = Result<IndexerEvent, IndexerError>> + Send>>;
 
 /// The indexer is responsible for indexing data relevant to the L1.
-#[derive(Debug)]
 pub struct Indexer {
     /// A reference to the database used to persist the indexed data.
     database: Arc<Database>,
-    /// A channel to receive commands to index data.
-    cmd_rx: mpsc::UnboundedReceiver<IndexerCommand>,
-    /// An event sender for sending events to subscribers of the rollup node manager.
-    event_sender: Option<EventSender<IndexerEvent>>,
+    /// A queue of pending futures.
+    pending_futures: VecDeque<IndexerAction>,
+}
+
+enum IndexerAction {
+    HandleReorg(PendingIndexerFuture),
+    HandleBatchCommit(PendingIndexerFuture),
+    HandleBatchFinalization(PendingIndexerFuture),
+    HandleL1Message(PendingIndexerFuture),
+}
+
+impl IndexerAction {
+    fn poll(&mut self, cx: &mut Context<'_>) -> Poll<Result<IndexerEvent, IndexerError>> {
+        match self {
+            IndexerAction::HandleReorg(fut) => fut.as_mut().poll(cx),
+            IndexerAction::HandleBatchCommit(fut) => fut.as_mut().poll(cx),
+            IndexerAction::HandleBatchFinalization(fut) => fut.as_mut().poll(cx),
+            IndexerAction::HandleL1Message(fut) => fut.as_mut().poll(cx),
+        }
+    }
 }
 
 impl Indexer {
-    /// Creates a new indexer with the given database and returns the [`IndexerHandle`] .
-    pub fn spawn(database: Arc<Database>) -> IndexerHandle {
-        let (cmd_tx, cmd_rx) = mpsc::unbounded_channel();
-        let indexer = Self { database, cmd_rx, event_sender: None };
-        tokio::spawn(indexer.run());
-        IndexerHandle::new(cmd_tx)
-    }
-
-    /// Creates a new indexer with the given database and returns an [`IndexerHandle`] and
-    /// [`EventStream<IndexerEvent>`].
-    pub fn spawn_with_event_stream(
-        database: Arc<Database>,
-    ) -> (IndexerHandle, EventStream<IndexerEvent>) {
-        let (cmd_tx, cmd_rx) = mpsc::unbounded_channel();
-        let event_sender = EventSender::new(2000);
-        let event_listener = event_sender.new_listener();
-        let indexer = Self { database, cmd_rx, event_sender: Some(event_sender) };
-        tokio::spawn(indexer.run());
-        (IndexerHandle::new(cmd_tx), event_listener)
-    }
-
-    /// The main loop of the indexer.
-    async fn run(mut self) {
-        loop {
-            if let Some(IndexerCommand::IndexL1Notification(event)) = self.cmd_rx.recv().await {
-                if let Err(err) = self.handle_l1_event(event).await {
-                    tracing::error!(target: "rollup_node_indexer", "error handling L1 event {:?}", err);
-                }
-            } else {
-                tracing::trace!(target: "rollup_node_indexer", "indexer command channel closed - shutting down");
-                break;
-            }
-        }
+    /// Creates a new indexer with the given [`Database`].
+    pub fn new(database: Arc<Database>) -> Self {
+        Self { database, pending_futures: Default::default() }
     }
 
     /// Handles an event from the L1.
-    pub async fn handle_l1_event(&self, event: L1Notification) -> Result<(), IndexerError> {
-        let result = match event {
-            L1Notification::Reorg(block_number) => self.handle_reorg(block_number).await,
-            L1Notification::NewBlock(_block_number) | L1Notification::Finalized(_block_number) => {
-                Ok(())
-            }
-            L1Notification::BatchCommit(batch_input) => self.handle_batch_input(batch_input).await,
-            L1Notification::L1Message(l1_message) => self.handle_l1_message(l1_message).await,
-            L1Notification::BatchFinalization { hash, block_number } => {
-                self.handle_batch_finalization(hash, block_number).await
-            }
-        };
+    pub fn handle_l1_notification(&mut self, event: L1Notification) {
+        let fut =
+            match event {
+                L1Notification::Reorg(block_number) => IndexerAction::HandleReorg(Box::pin(
+                    Self::handle_reorg(self.database.clone(), block_number),
+                )),
+                L1Notification::NewBlock(_block_number) |
+                L1Notification::Finalized(_block_number) => return,
+                L1Notification::BatchCommit(batch_input) => IndexerAction::HandleBatchCommit(
+                    Box::pin(Self::handle_batch_commit(self.database.clone(), batch_input)),
+                ),
+                L1Notification::L1Message(l1_message) => IndexerAction::HandleL1Message(Box::pin(
+                    Self::handle_l1_message(self.database.clone(), l1_message),
+                )),
+                L1Notification::BatchFinalization { hash, block_number } => {
+                    IndexerAction::HandleBatchFinalization(Box::pin(
+                        Self::handle_batch_finalization(self.database.clone(), hash, block_number),
+                    ))
+                }
+            };
 
-        if let Some(event_sender) = &self.event_sender {
-            event_sender.notify(IndexerEvent::L1NotificationIndexed);
-        }
-
-        result
+        self.pending_futures.push_back(fut);
     }
 
     /// Handles a reorganization event by deleting all indexed data which is greater than the
     /// provided block number.
-    async fn handle_reorg(&self, block_number: u64) -> Result<(), IndexerError> {
+    async fn handle_reorg(
+        database: Arc<Database>,
+        block_number: u64,
+    ) -> Result<IndexerEvent, IndexerError> {
         // create a database transaction so this operation is atomic
-        let txn = self.database.tx().await?;
+        let txn = database.tx().await?;
 
         // delete batch inputs and l1 messages
         txn.delete_batch_inputs_gt(block_number).await?;
@@ -97,29 +95,66 @@ impl Indexer {
 
         // commit the transaction
         txn.commit().await?;
-        Ok(())
+        Ok(IndexerEvent::ReorgIndexed(block_number))
     }
 
     /// Handles an L1 message by inserting it into the database.
     async fn handle_l1_message(
-        &self,
+        database: Arc<Database>,
         l1_message: L1MessageWithBlockNumber,
-    ) -> Result<(), IndexerError> {
-        Ok(self.database.insert_l1_message(l1_message).await.map(|_| ())?)
+    ) -> Result<IndexerEvent, IndexerError> {
+        let event = IndexerEvent::L1MessageIndexed(l1_message.transaction.queue_index);
+        let _ = database.insert_l1_message(l1_message).await?;
+        Ok(event)
     }
 
     /// Handles a batch input by inserting it into the database.
-    async fn handle_batch_input(&self, batch_input: BatchInput) -> Result<(), IndexerError> {
-        Ok(self.database.insert_batch_input(batch_input).await.map(|_| ())?)
+    async fn handle_batch_commit(
+        database: Arc<Database>,
+        batch_input: BatchInput,
+    ) -> Result<IndexerEvent, IndexerError> {
+        let event = IndexerEvent::BatchCommitIndexed(batch_input.batch_index());
+        let _ = database.insert_batch_input(batch_input).await?;
+        Ok(event)
     }
 
     /// Handles a batch finalization event by updating the batch input in the database.
     async fn handle_batch_finalization(
-        &self,
+        database: Arc<Database>,
         batch_hash: B256,
         block_number: u64,
-    ) -> Result<(), IndexerError> {
-        Ok(self.database.finalize_batch_input(batch_hash, block_number).await?)
+    ) -> Result<IndexerEvent, IndexerError> {
+        let event = IndexerEvent::BatchFinalizationIndexed(block_number);
+        let _ = database.finalize_batch_input(batch_hash, block_number).await?;
+        Ok(event)
+    }
+}
+
+impl Stream for Indexer {
+    type Item = Result<IndexerEvent, IndexerError>;
+
+    fn poll_next(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
+        // Remove and poll the next future in the queue
+        while let Some(mut action) = self.pending_futures.pop_front() {
+            match action.poll(cx) {
+                Poll::Ready(result) => return Poll::Ready(Some(result)),
+                Poll::Pending => {
+                    self.pending_futures.push_front(action);
+                    return Poll::Pending;
+                }
+            }
+        }
+
+        Poll::Pending
+    }
+}
+impl fmt::Debug for Indexer {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("Indexer")
+            .field("database", &"Arc<Database>") // Hide actual DB details
+            .field("cmd_rx", &"mpsc::UnboundedReceiver<IndexerCommand>") // Hide channel details
+            .field("pending_futures_len", &self.pending_futures.len()) // Only print the queue length
+            .finish()
     }
 }
 
@@ -132,16 +167,15 @@ mod test {
     use rollup_node_primitives::BatchInput;
     use scroll_db::test_utils::setup_test_db;
 
-    async fn setup_test_indexer() -> (IndexerHandle, EventStream<IndexerEvent>, Arc<Database>) {
+    async fn setup_test_indexer() -> (Indexer, Arc<Database>) {
         let db = Arc::new(setup_test_db().await);
-        let (handle, event_stream) = Indexer::spawn_with_event_stream(db.clone());
-        (handle, event_stream, db)
+        (Indexer::new(db.clone()), db)
     }
 
     #[tokio::test]
     async fn test_handle_commit_batch() {
         // Instantiate indexer and db
-        let (handle, mut event_stream, db) = setup_test_indexer().await;
+        let (mut indexer, db) = setup_test_indexer().await;
 
         // Generate unstructured bytes.
         let mut bytes = [0u8; 1024];
@@ -149,9 +183,9 @@ mod test {
         let mut u = Unstructured::new(&bytes);
 
         let batch_input = BatchInput::arbitrary(&mut u).unwrap();
-        handle.index_l1_notification(L1Notification::BatchCommit(batch_input.clone()));
+        indexer.handle_l1_notification(L1Notification::BatchCommit(batch_input.clone()));
 
-        let _ = event_stream.next().await;
+        let _ = indexer.next().await;
 
         let batch_input_result =
             db.get_batch_input_by_batch_index(batch_input.batch_index()).await.unwrap().unwrap();
@@ -162,7 +196,7 @@ mod test {
     #[tokio::test]
     async fn test_handle_l1_message() {
         // Instantiate indexer and db
-        let (handle, mut event_stream, db) = setup_test_indexer().await;
+        let (mut indexer, db) = setup_test_indexer().await;
 
         // Generate unstructured bytes.
         let mut bytes = [0u8; 1024];
@@ -170,9 +204,9 @@ mod test {
         let mut u = Unstructured::new(&bytes);
 
         let l1_message = L1MessageWithBlockNumber::arbitrary(&mut u).unwrap();
-        handle.index_l1_notification(L1Notification::L1Message(l1_message.clone()));
+        indexer.handle_l1_notification(L1Notification::L1Message(l1_message.clone()));
 
-        let _ = event_stream.next().await;
+        let _ = indexer.next().await;
 
         let l1_message_result =
             db.get_l1_message(l1_message.transaction.queue_index).await.unwrap().unwrap();
@@ -183,7 +217,7 @@ mod test {
     #[tokio::test]
     async fn test_handle_reorg() {
         // Instantiate indexer and db
-        let (handle, mut event_stream, db) = setup_test_indexer().await;
+        let (mut indexer, db) = setup_test_indexer().await;
 
         // Generate unstructured bytes.
         let mut bytes = [0u8; 1024];
@@ -204,9 +238,9 @@ mod test {
         let batch_input_block_30 = batch_input_block_30;
 
         // Index batch inputs
-        handle.index_l1_notification(L1Notification::BatchCommit(batch_input_block_1.clone()));
-        handle.index_l1_notification(L1Notification::BatchCommit(batch_input_block_20.clone()));
-        handle.index_l1_notification(L1Notification::BatchCommit(batch_input_block_30.clone()));
+        indexer.handle_l1_notification(L1Notification::BatchCommit(batch_input_block_1.clone()));
+        indexer.handle_l1_notification(L1Notification::BatchCommit(batch_input_block_20.clone()));
+        indexer.handle_l1_notification(L1Notification::BatchCommit(batch_input_block_30.clone()));
 
         // Generate 3 random L1 messages and set their block numbers
         let mut l1_message_block_1 = L1MessageWithBlockNumber::arbitrary(&mut u).unwrap();
@@ -222,15 +256,15 @@ mod test {
         let l1_message_block_30 = l1_message_block_30;
 
         // Index L1 messages
-        handle.index_l1_notification(L1Notification::L1Message(l1_message_block_1.clone()));
-        handle.index_l1_notification(L1Notification::L1Message(l1_message_block_20.clone()));
-        handle.index_l1_notification(L1Notification::L1Message(l1_message_block_30.clone()));
+        indexer.handle_l1_notification(L1Notification::L1Message(l1_message_block_1.clone()));
+        indexer.handle_l1_notification(L1Notification::L1Message(l1_message_block_20.clone()));
+        indexer.handle_l1_notification(L1Notification::L1Message(l1_message_block_30.clone()));
 
         // Reorg at block 20
-        handle.index_l1_notification(L1Notification::Reorg(20));
+        indexer.handle_l1_notification(L1Notification::Reorg(20));
 
         for _ in 0..7 {
-            event_stream.next().await;
+            indexer.next().await;
         }
 
         // Check that the batch input at block 30 is deleted
