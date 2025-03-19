@@ -1,6 +1,12 @@
 /// An event emitted by the indexer.
 #[derive(Debug, Clone, Copy)]
 pub enum IndexerEvent {
-    /// An event indicating that an `L1Notification` has been indexed.
-    L1NotificationIndexed,
+    /// A `BatchCommit` event has been indexed returning the batch index.
+    BatchCommitIndexed(u64),
+    /// A `BatchFinalization` event has been indexed returning the batch index.
+    BatchFinalizationIndexed(u64),
+    /// A `L1Message` event has been indexed returning the message queue index.
+    L1MessageIndexed(u64),
+    /// A `Reorg` event has been indexed returning the reorg block number.
+    ReorgIndexed(u64),
 }
