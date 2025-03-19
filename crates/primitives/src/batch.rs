@@ -1,3 +1,5 @@
+use std::vec::Vec;
+
 use alloy_primitives::{BlockNumber, B256};
 
 /// The input data for a batch.
