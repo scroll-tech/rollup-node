@@ -1,7 +1,6 @@
-use alloy_primitives::{BlockNumber, B256};
+use std::vec::Vec;
 
-#[cfg(not(feature = "std"))]
-use alloc::vec::Vec;
+use alloy_primitives::{BlockNumber, B256};
 
 /// The input data for a batch.
 ///
