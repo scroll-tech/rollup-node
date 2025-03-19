@@ -6,12 +6,13 @@ use rollup_node_watcher::L1Notification;
 use scroll_db::{Database, DatabaseOperations};
 use std::{
     collections::VecDeque,
-    fmt,
-    future::Future,
     pin::Pin,
     sync::Arc,
     task::{Context, Poll},
 };
+
+mod action;
+use action::IndexerAction;
 
 mod event;
 pub use event::IndexerEvent;
@@ -19,34 +20,13 @@ pub use event::IndexerEvent;
 mod error;
 use error::IndexerError;
 
-/// A future that resolves to a tuple of the block info and the block import outcome.
-type PendingIndexerFuture =
-    Pin<Box<dyn Future<Output = Result<IndexerEvent, IndexerError>> + Send>>;
-
-enum IndexerAction {
-    HandleReorg(PendingIndexerFuture),
-    HandleBatchCommit(PendingIndexerFuture),
-    HandleBatchFinalization(PendingIndexerFuture),
-    HandleL1Message(PendingIndexerFuture),
-}
-
 /// The indexer is responsible for indexing data relevant to the L1.
+#[derive(Debug)]
 pub struct Indexer {
     /// A reference to the database used to persist the indexed data.
     database: Arc<Database>,
     /// A queue of pending futures.
     pending_futures: VecDeque<IndexerAction>,
-}
-
-impl IndexerAction {
-    fn poll(&mut self, cx: &mut Context<'_>) -> Poll<Result<IndexerEvent, IndexerError>> {
-        match self {
-            Self::HandleReorg(fut) |
-            Self::HandleBatchCommit(fut) |
-            Self::HandleBatchFinalization(fut) |
-            Self::HandleL1Message(fut) => fut.as_mut().poll(cx),
-        }
-    }
 }
 
 impl Indexer {
@@ -146,16 +126,6 @@ impl Stream for Indexer {
         }
 
         Poll::Pending
-    }
-}
-
-impl fmt::Debug for Indexer {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.debug_struct("Indexer")
-            .field("database", &"Arc<Database>") // Hide actual DB details
-            .field("cmd_rx", &"mpsc::UnboundedReceiver<IndexerCommand>") // Hide channel details
-            .field("pending_futures_len", &self.pending_futures.len()) // Only print the queue length
-            .finish()
     }
 }
 
