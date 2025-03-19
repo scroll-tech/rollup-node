@@ -12,7 +12,7 @@ use std::{
 };
 
 mod action;
-use action::IndexerAction;
+use action::IndexerFuture;
 
 mod event;
 pub use event::IndexerEvent;
@@ -26,7 +26,7 @@ pub struct Indexer {
     /// A reference to the database used to persist the indexed data.
     database: Arc<Database>,
     /// A queue of pending futures.
-    pending_futures: VecDeque<IndexerAction>,
+    pending_futures: VecDeque<IndexerFuture>,
 }
 
 impl Indexer {
@@ -39,19 +39,19 @@ impl Indexer {
     pub fn handle_l1_notification(&mut self, event: L1Notification) {
         let fut =
             match event {
-                L1Notification::Reorg(block_number) => IndexerAction::HandleReorg(Box::pin(
+                L1Notification::Reorg(block_number) => IndexerFuture::HandleReorg(Box::pin(
                     Self::handle_reorg(self.database.clone(), block_number),
                 )),
                 L1Notification::NewBlock(_block_number) |
                 L1Notification::Finalized(_block_number) => return,
-                L1Notification::BatchCommit(batch_input) => IndexerAction::HandleBatchCommit(
+                L1Notification::BatchCommit(batch_input) => IndexerFuture::HandleBatchCommit(
                     Box::pin(Self::handle_batch_commit(self.database.clone(), batch_input)),
                 ),
-                L1Notification::L1Message(l1_message) => IndexerAction::HandleL1Message(Box::pin(
+                L1Notification::L1Message(l1_message) => IndexerFuture::HandleL1Message(Box::pin(
                     Self::handle_l1_message(self.database.clone(), l1_message),
                 )),
                 L1Notification::BatchFinalization { hash, block_number } => {
-                    IndexerAction::HandleBatchFinalization(Box::pin(
+                    IndexerFuture::HandleBatchFinalization(Box::pin(
                         Self::handle_batch_finalization(self.database.clone(), hash, block_number),
                     ))
                 }
@@ -104,7 +104,7 @@ impl Indexer {
         batch_hash: B256,
         block_number: u64,
     ) -> Result<IndexerEvent, IndexerError> {
-        let event = IndexerEvent::BatchFinalizationIndexed(block_number);
+        let event = IndexerEvent::BatchFinalizationIndexed(batch_hash);
         database.finalize_batch_input(batch_hash, block_number).await?;
         Ok(event)
     }

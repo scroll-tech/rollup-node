@@ -6,18 +6,19 @@ use std::{
     task::{Context, Poll},
 };
 
-/// A future that resolves to a tuple of the block info and the block import outcome.
+/// A future that resolves to a `Result<IndexerEvent, IndexerError>`.
 type PendingIndexerFuture =
     Pin<Box<dyn Future<Output = Result<IndexerEvent, IndexerError>> + Send>>;
 
-pub(super) enum IndexerAction {
+/// A type that represents a future that is being executed by the indexer.
+pub(super) enum IndexerFuture {
     HandleReorg(PendingIndexerFuture),
     HandleBatchCommit(PendingIndexerFuture),
     HandleBatchFinalization(PendingIndexerFuture),
     HandleL1Message(PendingIndexerFuture),
 }
 
-impl IndexerAction {
+impl IndexerFuture {
     /// Polls the future to completion.
     pub(super) fn poll(
         &mut self,
@@ -32,7 +33,9 @@ impl IndexerAction {
     }
 }
 
-impl fmt::Debug for IndexerAction {
+// We implement the Debug trait for IndexerFuture to provide a human-readable representation of the
+// enum variants.
+impl fmt::Debug for IndexerFuture {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::HandleReorg(_) => write!(f, "HandleReorg"),
