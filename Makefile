@@ -2,6 +2,16 @@
 fmt:
 	cargo +nightly fmt
 
+.PHONY: lint-toml
+lint-toml: ensure-dprint
+	dprint fmt
+
+ensure-dprint:
+	@if ! command -v dprint &> /dev/null; then \
+		echo "dprint not found. Please install it by running the command `cargo install --locked dprint` or refer to the following link for more information: https://github.com/dprint/dprint" \
+		exit 1; \
+    fi
+
 .PHONY: clippy
 clippy:
 	cargo +nightly clippy \
@@ -38,7 +48,7 @@ ensure-zepter:
     fi
 
 .PHONY: lint
-lint: fmt clippy udeps codespell zepter
+lint: fmt lint-toml clippy udeps codespell zepter
 
 .PHONY: test
 test:

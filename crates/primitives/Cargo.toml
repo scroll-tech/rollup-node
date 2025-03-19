@@ -1,0 +1,25 @@
+[package]
+name = "rollup-node-primitives"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+exclude.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+# alloy
+alloy-primitives.workspace = true
+alloy-rpc-types-engine.workspace = true
+
+# scroll
+scroll-alloy-consensus.workspace = true
+
+# misc
+derive_more = { workspace = true, features = ["from"] }
+
+[features]
+default = ["std"]
+std = ["alloy-primitives/std", "alloy-rpc-types-engine/std", "scroll-alloy-consensus/std", "derive_more/std"]

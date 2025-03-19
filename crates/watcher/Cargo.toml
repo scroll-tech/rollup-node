@@ -1,0 +1,60 @@
+[package]
+name = "rollup-node-watcher"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+exclude.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+# alloy
+alloy-consensus.workspace = true
+alloy-eips = { workspace = true, optional = true }
+alloy-json-rpc.workspace = true
+alloy-network.workspace = true
+alloy-primitives.workspace = true
+alloy-provider.workspace = true
+alloy-rpc-types-eth.workspace = true
+alloy-sol-types.workspace = true
+alloy-transport.workspace = true
+
+# rollup
+rollup-node-primitives.workspace = true
+scroll-l1.workspace = true
+
+# scroll
+scroll-alloy-consensus.workspace = true
+
+# misc
+arbitrary = { workspace = true, optional = true }
+async-trait.workspace = true
+derive_more = { workspace = true, features = ["from"] }
+rand = { version = "0.9", optional = true }
+thiserror.workspace = true
+tokio = { workspace = true, features = ["full"] }
+tracing.workspace = true
+
+[dev-dependencies]
+alloy-consensus = { workspace = true, features = ["arbitrary", "k256"] }
+alloy-eips.workspace = true
+alloy-rpc-types-eth = { workspace = true, features = ["arbitrary"] }
+arbitrary.workspace = true
+eyre.workspace = true
+rand = "0.9"
+scroll-l1 = { workspace = true, features = ["test-utils"] }
+tracing-subscriber = "0.3"
+
+[features]
+test-utils = ["arbitrary", "alloy-eips", "rand", "scroll-l1/test-utils"]
+arbitrary = [
+    "dep:arbitrary",
+    "alloy-consensus/arbitrary",
+    "alloy-eips/arbitrary",
+    "alloy-primitives/arbitrary",
+    "alloy-rpc-types-eth/arbitrary",
+    "scroll-alloy-consensus/arbitrary",
+    "alloy-sol-types/arbitrary",
+]
