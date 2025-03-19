@@ -8,6 +8,8 @@ exclude = [".github/"]
 [workspace]
 members = [
     "bin/bridge",
+    "crates/database/db",
+    "crates/database/migration",
     "crates/engine",
     "crates/l1",
     "crates/node",
@@ -149,6 +151,7 @@ scroll-engine = { path = "crates/engine" }
 scroll-l1 = { path = "crates/l1" }
 scroll-network = { path = "crates/network" }
 scroll-wire = { path = "crates/scroll-wire" }
+scroll-migration = { path = "crates/database/migration" }
 
 # misc
 arbitrary = { version = "1.4", default-features = false }
@@ -156,6 +159,7 @@ async-trait = "0.1"
 derive_more = { version = "2.0", default-features = false }
 eyre = "0.6"
 futures = { version = "0.3", default-features = false }
+rand = { version = "0.9" }
 secp256k1 = { version = "0.29", default-features = false }
 thiserror = "2.0"
 tokio = { version = "1.39", default-features = false }
