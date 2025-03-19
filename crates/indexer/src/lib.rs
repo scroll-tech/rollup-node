@@ -23,6 +23,13 @@ use error::IndexerError;
 type PendingIndexerFuture =
     Pin<Box<dyn Future<Output = Result<IndexerEvent, IndexerError>> + Send>>;
 
+enum IndexerAction {
+    HandleReorg(PendingIndexerFuture),
+    HandleBatchCommit(PendingIndexerFuture),
+    HandleBatchFinalization(PendingIndexerFuture),
+    HandleL1Message(PendingIndexerFuture),
+}
+
 /// The indexer is responsible for indexing data relevant to the L1.
 pub struct Indexer {
     /// A reference to the database used to persist the indexed data.
@@ -31,20 +38,13 @@ pub struct Indexer {
     pending_futures: VecDeque<IndexerAction>,
 }
 
-enum IndexerAction {
-    HandleReorg(PendingIndexerFuture),
-    HandleBatchCommit(PendingIndexerFuture),
-    HandleBatchFinalization(PendingIndexerFuture),
-    HandleL1Message(PendingIndexerFuture),
-}
-
 impl IndexerAction {
     fn poll(&mut self, cx: &mut Context<'_>) -> Poll<Result<IndexerEvent, IndexerError>> {
         match self {
-            IndexerAction::HandleReorg(fut) => fut.as_mut().poll(cx),
-            IndexerAction::HandleBatchCommit(fut) => fut.as_mut().poll(cx),
-            IndexerAction::HandleBatchFinalization(fut) => fut.as_mut().poll(cx),
-            IndexerAction::HandleL1Message(fut) => fut.as_mut().poll(cx),
+            Self::HandleReorg(fut) |
+            Self::HandleBatchCommit(fut) |
+            Self::HandleBatchFinalization(fut) |
+            Self::HandleL1Message(fut) => fut.as_mut().poll(cx),
         }
     }
 }
@@ -104,7 +104,7 @@ impl Indexer {
         l1_message: L1MessageWithBlockNumber,
     ) -> Result<IndexerEvent, IndexerError> {
         let event = IndexerEvent::L1MessageIndexed(l1_message.transaction.queue_index);
-        let _ = database.insert_l1_message(l1_message).await?;
+        database.insert_l1_message(l1_message).await?;
         Ok(event)
     }
 
@@ -114,7 +114,7 @@ impl Indexer {
         batch_input: BatchInput,
     ) -> Result<IndexerEvent, IndexerError> {
         let event = IndexerEvent::BatchCommitIndexed(batch_input.batch_index());
-        let _ = database.insert_batch_input(batch_input).await?;
+        database.insert_batch_input(batch_input).await?;
         Ok(event)
     }
 
@@ -125,7 +125,7 @@ impl Indexer {
         block_number: u64,
     ) -> Result<IndexerEvent, IndexerError> {
         let event = IndexerEvent::BatchFinalizationIndexed(block_number);
-        let _ = database.finalize_batch_input(batch_hash, block_number).await?;
+        database.finalize_batch_input(batch_hash, block_number).await?;
         Ok(event)
     }
 }
@@ -135,7 +135,7 @@ impl Stream for Indexer {
 
     fn poll_next(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
         // Remove and poll the next future in the queue
-        while let Some(mut action) = self.pending_futures.pop_front() {
+        if let Some(mut action) = self.pending_futures.pop_front() {
             match action.poll(cx) {
                 Poll::Ready(result) => return Poll::Ready(Some(result)),
                 Poll::Pending => {
@@ -148,6 +148,7 @@ impl Stream for Indexer {
         Poll::Pending
     }
 }
+
 impl fmt::Debug for Indexer {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("Indexer")
