@@ -45,6 +45,17 @@ fn init_decompression(ctx: &mut DCtx, buf: &mut [u8]) -> Result<(), DecodingErro
         .map(|_| ())
 }
 
+// TODO(greg): this currently doesn't work because it needs to have a buffering mechanism as used in
+// `zstd` with io::BufReader. Otherwise the call to decompress will try to read ALL of the
+// input_buffer, but won't we able to fill more than dst.len() bytes in the output_buffer. So we
+// should have a way to read some bytes, from the buffer, call decompress_stream advance the buffer
+// and continue looping. Similar to the BufReader behaviour, once the internal buffer is empty, it
+// should pull more data from the src.
+// One easy solution to all this could be to find a BufReader implementation which is no_std.
+// relevant issues/repos:
+// - https://github.com/rust-lang/rust/issues/48331
+// - https://github.com/rust-embedded/embedded-hal/pull/627
+// - https://github.com/rust-embedded/embedded-hal/tree/master/embedded-io
 fn decompress_loop(
     ctx: &mut DCtx,
     src: &mut &[u8],
