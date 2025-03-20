@@ -3,15 +3,12 @@
 pub(crate) use block_context::BlockContextV0;
 mod block_context;
 
-use crate::{
-    L2Block,
-    decoding::{abi::commitBatchCall, transaction::Transaction},
-    error::DecodingError,
-};
+use crate::{L2Block, decoding::transaction::Transaction, error::DecodingError};
 use std::vec::Vec;
 
 use alloy_primitives::bytes::Buf;
 use alloy_sol_types::SolCall;
+use scroll_l1::abi::calls::commitBatchCall;
 
 /// Decodes the input calldata into a [`Vec<L2Block>`].
 pub fn decode_v0(calldata: &[u8]) -> Result<Vec<L2Block>, DecodingError> {
@@ -22,7 +19,7 @@ pub fn decode_v0(calldata: &[u8]) -> Result<Vec<L2Block>, DecodingError> {
     let mut l2_blocks: Vec<L2Block> = Vec::new();
 
     // iterate the chunks
-    for chunk in call._chunks {
+    for chunk in call.chunks {
         let buf = &mut chunk.as_ref();
 
         // get the block count

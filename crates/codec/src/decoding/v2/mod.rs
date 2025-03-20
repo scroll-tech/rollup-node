@@ -2,10 +2,7 @@ pub mod zstd;
 
 use crate::{
     L2Block, check_buf_len,
-    decoding::{
-        abi::commitBatchCall, blob::BlobSliceIter, v1::decode_v1_chunk,
-        v2::zstd::decompress_blob_data,
-    },
+    decoding::{blob::BlobSliceIter, v1::decode_v1_chunk, v2::zstd::decompress_blob_data},
     error::DecodingError,
     from_be_bytes_slice_and_advance_buf,
 };
@@ -13,6 +10,7 @@ use std::vec::Vec;
 
 use alloy_primitives::bytes::Buf;
 use alloy_sol_types::SolCall;
+use scroll_l1::abi::calls::commitBatchCall;
 
 /// The max amount of chunks per batch for V2 codec.
 /// <https://github.com/scroll-tech/da-codec/blob/main/encoding/codecv2.go#L25>
@@ -38,12 +36,12 @@ pub fn decode_v2(calldata: &[u8], blob: &[u8]) -> Result<Vec<L2Block>, DecodingE
 
     // check the chunk count is correct in debug.
     let chunk_count = from_be_bytes_slice_and_advance_buf!(u16, buf);
-    debug_assert_eq!(call._chunks.len(), chunk_count as usize, "mismatched chunk count");
+    debug_assert_eq!(call.chunks.len(), chunk_count as usize, "mismatched chunk count");
 
     // clone buf and move pass chunk information.
     buf.advance(TRANSACTION_DATA_BLOB_INDEX_OFFSET);
 
-    decode_v1_chunk(call._chunks, buf)
+    decode_v1_chunk(call.chunks, buf)
 }
 
 #[cfg(test)]

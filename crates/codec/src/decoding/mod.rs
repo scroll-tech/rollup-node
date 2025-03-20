@@ -1,8 +1,5 @@
 //! Decoding implementations for the commit data.
 
-/// Contracts abi.
-pub mod abi;
-
 /// Blob related helpers.
 pub mod blob;
 

@@ -10,6 +10,9 @@ alloy-primitives.workspace = true
 alloy-rlp = { version = "0.3", default-features = false }
 alloy-sol-types = { version = "0.8", default-features = false }
 
+# scroll
+scroll-l1.workspace = true
+
 # misc
 derive_more = { version = "2.0", default-features = false }
 eyre = { workspace = true, optional = true }
