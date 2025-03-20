@@ -22,7 +22,7 @@ pub fn decode_v4(calldata: &[u8], blob: &[u8]) -> Result<Vec<L2Block>, DecodingE
     let mut heap_blob = BlobSliceIter::from_blob_slice(blob).copied().collect::<Vec<_>>();
 
     // check for compression.
-    let is_compressed = *heap_blob.get(0).ok_or(DecodingError::EOF)?;
+    let is_compressed = *heap_blob.first().ok_or(DecodingError::Eof)?;
     debug_assert!(is_compressed == 1 || is_compressed == 0, "incorrect compressed byte flag");
 
     let buf = if is_compressed == 1 {
@@ -41,7 +41,7 @@ pub fn decode_v4(calldata: &[u8], blob: &[u8]) -> Result<Vec<L2Block>, DecodingE
     // clone buf and move pass chunk information.
     buf.advance(super::v2::TRANSACTION_DATA_BLOB_INDEX_OFFSET);
 
-    Ok(decode_v1_chunk(call._chunks, buf)?)
+    decode_v1_chunk(call._chunks, buf)
 }
 
 #[cfg(all(test, feature = "std"))]

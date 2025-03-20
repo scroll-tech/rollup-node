@@ -37,7 +37,7 @@ pub fn decode_v7(blob: &[u8]) -> Result<(Vec<L2Block>, B256, B256), DecodingErro
     // get payload body.
     let buf = &mut (heap_blob
         .get(BLOB_ENVELOPE_V7_OFFSET_PAYLOAD..blob_payload_size + BLOB_ENVELOPE_V7_OFFSET_PAYLOAD)
-        .ok_or(DecodingError::EOF)?);
+        .ok_or(DecodingError::Eof)?);
 
     // uncompress if necessary.
     let buf = if is_compressed == 1 {
@@ -74,7 +74,7 @@ pub(crate) fn decode_v7_payload(blob: &[u8]) -> Result<(Vec<L2Block>, B256, B256
 
     // for each block, decode into a block context
     for _ in 0..blocks_count {
-        let context = BlockContextV7::try_from_buf(buf).ok_or(DecodingError::EOF)?;
+        let context = BlockContextV7::try_from_buf(buf).ok_or(DecodingError::Eof)?;
         block_contexts.push(context);
     }
 
@@ -83,7 +83,7 @@ pub(crate) fn decode_v7_payload(blob: &[u8]) -> Result<(Vec<L2Block>, B256, B256
         let transactions_count = context.transactions_count();
         let mut transactions = Vec::with_capacity(transactions_count);
         for _ in 0..transactions_count {
-            let tx = Transaction::try_from_buf(buf).ok_or(DecodingError::EOF)?;
+            let tx = Transaction::try_from_buf(buf).ok_or(DecodingError::Eof)?;
             transactions.push(tx.0);
         }
         l2_blocks

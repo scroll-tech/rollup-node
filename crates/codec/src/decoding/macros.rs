@@ -12,12 +12,12 @@ macro_rules! from_be_bytes_slice_and_advance_buf {
     }};
 }
 
-/// Check the buffer input to have the required length. Returns an EOF error otherwise.
+/// Check the buffer input to have the required length. Returns an Eof error otherwise.
 #[macro_export]
 macro_rules! check_buf_len {
     ($buf: expr, $len: expr) => {{
         if $buf.len() < $len {
-            return Err($crate::error::DecodingError::EOF)
+            return Err($crate::error::DecodingError::Eof)
         }
     }};
 }

@@ -120,7 +120,7 @@ jobs:
             exclude: scroll-engine,scroll-wire,scroll-bridge,scroll-network,rollup-node-manager
           - type: riscv
             target: riscv32imac-unknown-none-elf
-            exclude: scroll-engine,scroll-wire,scroll-bridge,scroll-network,rollup-node-manager
+            exclude: scroll-engine,scroll-wire,scroll-bridge,scroll-network,rollup-node-manager,scroll-codec
     steps:
       - uses: actions/checkout@v4
       - uses: rui314/setup-mold@v1

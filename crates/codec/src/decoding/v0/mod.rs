@@ -26,7 +26,7 @@ pub fn decode_v0(calldata: &[u8]) -> Result<Vec<L2Block>, DecodingError> {
         let buf = &mut chunk.as_ref();
 
         // get the block count
-        let blocks_count = buf.first().copied().ok_or(DecodingError::EOF)? as usize;
+        let blocks_count = buf.first().copied().ok_or(DecodingError::Eof)? as usize;
         buf.advance(1);
 
         let mut block_contexts: Vec<BlockContextV0> = Vec::with_capacity(blocks_count);
@@ -34,7 +34,7 @@ pub fn decode_v0(calldata: &[u8]) -> Result<Vec<L2Block>, DecodingError> {
 
         // for each block, decode into a block context
         for _ in 0..blocks_count {
-            let context = BlockContextV0::try_from_buf(buf).ok_or(DecodingError::EOF)?;
+            let context = BlockContextV0::try_from_buf(buf).ok_or(DecodingError::Eof)?;
             block_contexts.push(context);
         }
 
@@ -45,7 +45,7 @@ pub fn decode_v0(calldata: &[u8]) -> Result<Vec<L2Block>, DecodingError> {
             for _ in 0..transactions_count {
                 // skip the 4 bytes representing the transaction length.
                 buf.advance(4);
-                let tx = Transaction::try_from_buf(buf).ok_or(DecodingError::EOF)?;
+                let tx = Transaction::try_from_buf(buf).ok_or(DecodingError::Eof)?;
                 transactions.push(tx.0);
             }
             l2_blocks.push(L2Block::new(transactions, context.into()))

@@ -43,7 +43,7 @@ pub fn decode_v2(calldata: &[u8], blob: &[u8]) -> Result<Vec<L2Block>, DecodingE
     // clone buf and move pass chunk information.
     buf.advance(TRANSACTION_DATA_BLOB_INDEX_OFFSET);
 
-    Ok(decode_v1_chunk(call._chunks, buf)?)
+    decode_v1_chunk(call._chunks, buf)
 }
 
 #[cfg(all(test, feature = "std"))]

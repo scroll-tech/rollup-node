@@ -20,7 +20,7 @@ pub enum DecodingError {
     #[error("invalid calldata format")]
     InvalidCalldataFormat,
     #[error("end of file")]
-    EOF,
+    Eof,
     #[error("decoding error occurred: {0}")]
     Other(Box<dyn std::error::Error + Send + Sync + 'static>),
 }

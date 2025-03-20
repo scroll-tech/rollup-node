@@ -42,7 +42,7 @@ pub fn decode_v1(calldata: &[u8], blob: &[u8]) -> Result<Vec<L2Block>, DecodingE
     // move pass chunk information.
     buf.advance(TRANSACTION_DATA_BLOB_INDEX_OFFSET);
 
-    Ok(decode_v1_chunk(call._chunks, buf)?)
+    decode_v1_chunk(call._chunks, buf)
 }
 
 /// Decode the provided chunks and blob data into [`L2Block`].
@@ -58,7 +58,7 @@ pub(crate) fn decode_v1_chunk(
         let buf = &mut chunk.as_ref();
 
         // get the block count
-        let blocks_count = buf.first().copied().ok_or(DecodingError::EOF)? as usize;
+        let blocks_count = buf.first().copied().ok_or(DecodingError::Eof)? as usize;
         buf.advance(1);
 
         let mut block_contexts: Vec<BlockContextV1> = Vec::with_capacity(blocks_count);
@@ -66,7 +66,7 @@ pub(crate) fn decode_v1_chunk(
 
         // for each block, decode into a block context
         for _ in 0..blocks_count {
-            let context = BlockContextV1::try_from_buf(buf).ok_or(DecodingError::EOF)?;
+            let context = BlockContextV1::try_from_buf(buf).ok_or(DecodingError::Eof)?;
             block_contexts.push(context);
         }
 
@@ -76,7 +76,7 @@ pub(crate) fn decode_v1_chunk(
             let transactions_count = context.transactions_count();
             let mut transactions = Vec::with_capacity(transactions_count);
             for _ in 0..transactions_count {
-                let tx = Transaction::try_from_buf(blob).ok_or(DecodingError::EOF)?;
+                let tx = Transaction::try_from_buf(blob).ok_or(DecodingError::Eof)?;
                 transactions.push(tx.0);
             }
 
@@ -84,7 +84,7 @@ pub(crate) fn decode_v1_chunk(
         }
     }
 
-    Ok(l2_blocks.into())
+    Ok(l2_blocks)
 }
 
 #[cfg(all(test, feature = "std"))]
