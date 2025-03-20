@@ -23,4 +23,4 @@ zstd = "0.13"
 eyre.workspace = true
 
 [features]
-test-utils = ["dep:eyre"]
+test-utils = ["dep:eyre", "scroll-l1/test-utils"]
