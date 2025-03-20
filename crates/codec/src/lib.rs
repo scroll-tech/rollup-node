@@ -28,22 +28,23 @@ pub enum Codec {
     /// V1 variant of the codec.
     /// <https://github.com/scroll-tech/scroll-contracts/blob/81f0db72ca5335e0dddfaa99cb415e3d1cee895f/src/libraries/codec/ChunkCodecV1.sol>
     V1,
-    /// V2 variant of the codec.
+    /// V2 variant of the codec. Similar to V1 with additional zstd encoding of the data.
     V2,
-    /// V3 variant of the codec.
+    /// V3 variant of the codec. Similar to V2 in regard to decoding.
     V3,
-    /// V4 variant of the codec.
+    /// V4 variant of the codec. Data can either be plain as in V1 or zstd encoded as in V2.
     V4,
-    /// V5 variant of the codec.
+    /// V5 variant of the codec. Similar to V4 in regard to decoding.
     V5,
-    /// V6 variant of the codec.
+    /// V6 variant of the codec. Similar to V4 in regard to decoding.
     V6,
-    /// V7 variant of the codec.
+    /// V7 variant of the codec. All data of interest is moved from the calldata to the blob.
+    /// <https://github.com/scroll-tech/da-codec/blob/main/encoding/codecv7_types.go#L33>
     V7,
 }
 
 impl Codec {
-    /// Decodes the input data and returns [`Comig`]
+    /// Decodes the input data and returns the decoded [`CommitPayload`].
     pub fn decode<T: CommitDataSource>(input: T) -> Result<CommitPayload, CodecError> {
         let calldata = input.calldata();
         let version = calldata.first().ok_or(DecodingError::MissingCodecVersion)?;

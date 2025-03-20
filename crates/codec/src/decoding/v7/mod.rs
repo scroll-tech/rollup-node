@@ -22,7 +22,7 @@ pub fn decode_v7(blob: &[u8]) -> Result<(Vec<L2Block>, B256, B256), DecodingErro
     let buf = &mut (&*heap_blob);
 
     // check buf len.
-    check_buf_len!(buf, 1 + 4 + 1);
+    check_buf_len!(buf, 1 + 3 + 1);
 
     // check version.
     let version = from_be_bytes_slice_and_advance_buf!(u8, buf);
@@ -57,7 +57,7 @@ pub(crate) fn decode_v7_payload(blob: &[u8]) -> Result<(Vec<L2Block>, B256, B256
     let buf = &mut (&*blob);
 
     // check buf len.
-    check_buf_len!(buf, 64 + 8 + 8);
+    check_buf_len!(buf, 64 + 8 + 2);
 
     // extract L1 messages queue hashes.
     let prev_message_queue_hash = B256::from_slice(&buf[0..32]);

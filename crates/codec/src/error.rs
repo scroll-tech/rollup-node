@@ -1,7 +1,5 @@
-use thiserror::Error;
-
 /// An error occurring during the codec process.
-#[derive(Debug, Error)]
+#[derive(Debug, thiserror::Error)]
 pub enum CodecError {
     /// An error occurring at the decoding state.
     #[error(transparent)]
@@ -9,14 +7,14 @@ pub enum CodecError {
 }
 
 /// An error occurring during the decoding.
-#[derive(Debug, Error)]
+#[derive(Debug, thiserror::Error)]
 pub enum DecodingError {
     #[error("missing codec version in input")]
     MissingCodecVersion,
-    #[error("missing blob at index")]
-    MissingBlob,
     #[error("unsupported codec version {0}")]
     UnsupportedCodecVersion(u8),
+    #[error("missing blob from data source")]
+    MissingBlob,
     #[error("invalid calldata format")]
     InvalidCalldataFormat,
     #[error("end of file")]
