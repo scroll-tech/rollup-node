@@ -1,0 +1,25 @@
+[package]
+name = "scroll-codec"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+# alloy
+alloy-eips.workspace = true
+alloy-primitives.workspace = true
+alloy-rlp = { version = "0.3", default-features = false }
+alloy-sol-types = { version = "0.8", default-features = false }
+
+# misc
+derive_more = { version = "2.0", default-features = false }
+eyre = { workspace = true, optional = true }
+thiserror = { version = "2.0", default-features = false }
+zstd-safe = { version = "7.2.3", default-features = false }
+
+[dev-dependencies]
+eyre.workspace = true
+
+[features]
+default = ["std"]
+std = ["alloy-eips/std", "alloy-primitives/std", "alloy-sol-types/std", "derive_more/std", "thiserror/std"]
+test-utils = ["std", "dep:eyre"]

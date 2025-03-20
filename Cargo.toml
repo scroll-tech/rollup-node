@@ -7,11 +7,12 @@ exclude = [".github/"]
 
 [workspace]
 members = [
-    "bin/bridge", 
+    "bin/bridge",
+    "crates/codec",
     "crates/engine",
     "crates/node",
     "crates/network",
-    "crates/scroll-wire"
+    "crates/scroll-wire",
 ]
 
 resolver = "2"
@@ -131,6 +132,7 @@ reth-scroll-node = { git = "https://github.com/scroll-tech/reth.git", branch = "
 reth-scroll-primitives = { git = "https://github.com/scroll-tech/reth.git", branch = "feat/add-deref-blanket-engine-api", default-features = false }
 
 # rollup node
+scroll-codec = { path = "crates/codec" }
 scroll-engine = { path = "crates/engine" }
 scroll-network = { path = "crates/network" }
 scroll-wire = { path = "crates/scroll-wire" }
@@ -153,4 +155,3 @@ revm-interpreter = { git = "https://github.com/scroll-tech/revm.git", branch = "
 ff = { git = "https://github.com/scroll-tech/ff", branch = "feat/sp1" }
 
 alloy-eip2930 = { git = "https://github.com/scroll-tech/alloy-eips", branch = "v0.3.2" }
-
