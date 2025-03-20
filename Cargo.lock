@@ -8427,7 +8427,7 @@ dependencies = [
  "derive_more 2.0.1",
  "eyre",
  "thiserror 2.0.11",
- "zstd-safe",
+ "zstd",
 ]
 
 [[package]]

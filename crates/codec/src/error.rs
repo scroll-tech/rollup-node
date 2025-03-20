@@ -19,8 +19,6 @@ pub enum DecodingError {
     UnsupportedCodecVersion(u8),
     #[error("invalid calldata format")]
     InvalidCalldataFormat,
-    #[error("decompression step failed: {0}")]
-    DecompressionFailed(&'static str),
     #[error("end of file")]
     EOF,
     #[error("decoding error occurred: {0}")]

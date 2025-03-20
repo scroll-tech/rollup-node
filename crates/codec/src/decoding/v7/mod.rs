@@ -2,7 +2,7 @@ pub(crate) use block_context::BlockContextV7;
 mod block_context;
 
 use crate::{
-    L2Block,
+    L2Block, check_buf_len,
     decoding::{blob::BlobSliceIter, transaction::Transaction, v2::zstd::decompress_blob_data},
     error::DecodingError,
     from_be_bytes_slice_and_advance_buf,
@@ -21,6 +21,9 @@ pub fn decode_v7(blob: &[u8]) -> Result<(Vec<L2Block>, B256, B256), DecodingErro
     let mut heap_blob = BlobSliceIter::from_blob_slice(blob).copied().collect::<Vec<_>>();
     let buf = &mut (&*heap_blob);
 
+    // check buf len.
+    check_buf_len!(buf, 1 + 4 + 1);
+
     // check version.
     let version = from_be_bytes_slice_and_advance_buf!(u8, buf);
     debug_assert!(version == 7, "incorrect blob version");
@@ -38,7 +41,7 @@ pub fn decode_v7(blob: &[u8]) -> Result<(Vec<L2Block>, B256, B256), DecodingErro
 
     // uncompress if necessary.
     let buf = if is_compressed == 1 {
-        heap_blob = decompress_blob_data(buf)?;
+        heap_blob = decompress_blob_data(buf);
         &mut heap_blob.as_slice()
     } else {
         buf
@@ -52,6 +55,9 @@ pub fn decode_v7(blob: &[u8]) -> Result<(Vec<L2Block>, B256, B256), DecodingErro
 /// blocks, the previous L1 message hash queue and the post L1 message hash queue.
 pub(crate) fn decode_v7_payload(blob: &[u8]) -> Result<(Vec<L2Block>, B256, B256), DecodingError> {
     let buf = &mut (&*blob);
+
+    // check buf len.
+    check_buf_len!(buf, 64 + 8 + 8);
 
     // extract L1 messages queue hashes.
     let prev_message_queue_hash = B256::from_slice(&buf[0..32]);

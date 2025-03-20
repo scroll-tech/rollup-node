@@ -1,5 +1,5 @@
 use crate::{
-    L2Block,
+    L2Block, check_buf_len,
     decoding::{
         abi::commitBatchWithBlobProofCall, blob::BlobSliceIter, v1::decode_v1_chunk,
         v2::zstd::decompress_blob_data,
@@ -26,11 +26,13 @@ pub fn decode_v4(calldata: &[u8], blob: &[u8]) -> Result<Vec<L2Block>, DecodingE
     debug_assert!(is_compressed == 1 || is_compressed == 0, "incorrect compressed byte flag");
 
     let buf = if is_compressed == 1 {
-        heap_blob = decompress_blob_data(&heap_blob[1..])?;
+        heap_blob = decompress_blob_data(&heap_blob[1..]);
         &mut heap_blob.as_slice()
     } else {
         &mut (&heap_blob[1..])
     };
+
+    check_buf_len!(buf, 2 + super::v2::TRANSACTION_DATA_BLOB_INDEX_OFFSET);
 
     // check the chunk count is correct in debug.
     let chunk_count = from_be_bytes_slice_and_advance_buf!(u16, buf);

@@ -14,7 +14,7 @@ alloy-sol-types = { version = "0.8", default-features = false }
 derive_more = { version = "2.0", default-features = false }
 eyre = { workspace = true, optional = true }
 thiserror = { version = "2.0", default-features = false }
-zstd-safe = { version = "7.2.3", default-features = false }
+zstd = "0.13"
 
 [dev-dependencies]
 eyre.workspace = true

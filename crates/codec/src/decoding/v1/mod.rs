@@ -1,5 +1,5 @@
 use crate::{
-    L2Block,
+    L2Block, check_buf_len,
     decoding::{
         abi::commitBatchCall, blob::BlobSliceIter, transaction::Transaction, v0::BlockContextV0,
     },
@@ -31,6 +31,9 @@ pub fn decode_v1(calldata: &[u8], blob: &[u8]) -> Result<Vec<L2Block>, DecodingE
     // get blob iterator and collect, skipping unused bytes.
     let heap_blob = BlobSliceIter::from_blob_slice(blob).copied().collect::<Vec<_>>();
     let buf = &mut (heap_blob.as_slice());
+
+    // check buf len.
+    check_buf_len!(buf, 2 + TRANSACTION_DATA_BLOB_INDEX_OFFSET);
 
     // check the chunk count is correct in debug.
     let chunk_count = from_be_bytes_slice_and_advance_buf!(u16, buf);
