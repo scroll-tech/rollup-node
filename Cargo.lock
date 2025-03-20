@@ -9504,6 +9504,21 @@ dependencies = [
 ]
 
 [[package]]
+name = "scroll-codec"
+version = "0.1.0"
+dependencies = [
+ "alloy-eips",
+ "alloy-primitives",
+ "alloy-rlp",
+ "alloy-sol-types",
+ "derive_more 2.0.1",
+ "eyre",
+ "scroll-l1",
+ "thiserror 2.0.12",
+ "zstd",
+]
+
+[[package]]
 name = "scroll-db"
 version = "0.0.1"
 dependencies = [
