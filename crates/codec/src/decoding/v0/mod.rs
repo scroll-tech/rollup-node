@@ -55,7 +55,7 @@ pub fn decode_v0(calldata: &[u8]) -> Result<Vec<L2Block>, DecodingError> {
     Ok(l2_blocks)
 }
 
-#[cfg(all(test, feature = "std"))]
+#[cfg(test)]
 mod tests {
     use super::*;
 

@@ -29,7 +29,7 @@ impl<'a> Iterator for BlobSliceIter<'a> {
     }
 }
 
-#[cfg(all(test, feature = "std"))]
+#[cfg(test)]
 mod tests {
     use super::*;
     use crate::decoding::test_utils::read_to_bytes;

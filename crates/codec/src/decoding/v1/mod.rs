@@ -87,7 +87,7 @@ pub(crate) fn decode_v1_chunk(
     Ok(l2_blocks)
 }
 
-#[cfg(all(test, feature = "std"))]
+#[cfg(test)]
 mod tests {
     use super::*;
     use crate::{BlockContext, decoding::test_utils::read_to_bytes};

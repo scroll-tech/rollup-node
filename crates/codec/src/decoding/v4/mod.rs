@@ -44,7 +44,7 @@ pub fn decode_v4(calldata: &[u8], blob: &[u8]) -> Result<Vec<L2Block>, DecodingE
     decode_v1_chunk(call._chunks, buf)
 }
 
-#[cfg(all(test, feature = "std"))]
+#[cfg(test)]
 mod tests {
     use super::*;
     use crate::{BlockContext, decoding::test_utils::read_to_bytes};

@@ -20,6 +20,4 @@ zstd = "0.13"
 eyre.workspace = true
 
 [features]
-default = ["std"]
-std = ["alloy-eips/std", "alloy-primitives/std", "alloy-sol-types/std", "derive_more/std", "thiserror/std"]
-test-utils = ["std", "dep:eyre"]
+test-utils = ["dep:eyre"]

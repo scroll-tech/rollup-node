@@ -93,7 +93,7 @@ pub(crate) fn decode_v7_payload(blob: &[u8]) -> Result<(Vec<L2Block>, B256, B256
     Ok((l2_blocks, prev_message_queue_hash, post_message_queue_hash))
 }
 
-#[cfg(all(test, feature = "std"))]
+#[cfg(test)]
 mod tests {
     use super::*;
     use crate::{BlockContext, decoding::test_utils::read_to_bytes};
