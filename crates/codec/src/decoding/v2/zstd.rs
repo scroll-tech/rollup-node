@@ -2,7 +2,6 @@
 
 use std::io::Read;
 
-use alloy_eips::eip4844::USABLE_BYTES_PER_BLOB;
 use zstd::Decoder;
 
 /// The ZSTD magic number for zstd compressed data header.
