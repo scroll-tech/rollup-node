@@ -1,7 +1,7 @@
-use crate::BlockInfo;
 use alloy_chains::NamedChain;
 use alloy_rpc_types_engine::ForkchoiceState as AlloyForkchoiceState;
 use reth_scroll_chainspec::{SCROLL_MAINNET_GENESIS_HASH, SCROLL_SEPOLIA_GENESIS_HASH};
+use rollup_node_primitives::BlockInfo;
 
 /// The fork choice state.
 ///

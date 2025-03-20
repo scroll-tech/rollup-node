@@ -1,7 +1,6 @@
-use crate::{block_info::BlockInfo, payload::matching_payloads};
-
 use super::error::EngineDriverError;
-use crate::ExecutionPayloadProvider;
+use crate::{payload::matching_payloads, ExecutionPayloadProvider};
+
 use alloy_rpc_types_engine::{
     ExecutionPayload, ExecutionPayloadV1, ForkchoiceState, ForkchoiceUpdated, PayloadId,
     PayloadStatusEnum,
@@ -9,6 +8,7 @@ use alloy_rpc_types_engine::{
 use eyre::Result;
 use reth_payload_primitives::PayloadTypes;
 use reth_scroll_engine_primitives::ScrollEngineTypes;
+use rollup_node_primitives::BlockInfo;
 use scroll_alloy_provider::ScrollEngineApi;
 
 use tokio::time::Duration;
@@ -63,12 +63,13 @@ where
     /// Handles an execution payload:
     ///   - Sends the payload to the EL via `engine_newPayloadV1`.
     ///   - Sets the current fork choice for the EL via `engine_forkchoiceUpdatedV1`.
-    #[instrument(skip_all, level = "trace", 
-    fields(
-        payload_block_hash = %execution_payload.block_hash(),
-        payload_block_num = %execution_payload.block_number(),
-        fcs = ?fcs
-    ))]
+    #[instrument(skip_all, level = "trace",
+        fields(
+            payload_block_hash = %execution_payload.block_hash(),
+            payload_block_num = %execution_payload.block_number(),
+            fcs = ?fcs
+        )
+    )]
     pub async fn handle_execution_payload(
         &self,
         execution_payload: ExecutionPayload,
@@ -101,7 +102,13 @@ where
     ///   - If the execution payload matches the attributes:
     ///     - Sets the current fork choice for the EL via `engine_forkchoiceUpdatedV1`, advancing
     ///       the safe head by one.
-    #[instrument(skip_all, level = "trace", fields(safe_block_info = ?safe_block_info, fcs = ?fcs, payload_attributes = ?payload_attributes))]
+    #[instrument(skip_all, level = "trace",
+        fields(
+             safe_block_info = ?safe_block_info,
+             fcs = ?fcs,
+             payload_attributes = ?payload_attributes
+        )
+    )]
     pub async fn handle_payload_attributes(
         &mut self,
         safe_block_info: BlockInfo,
