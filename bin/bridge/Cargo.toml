@@ -13,7 +13,7 @@ alloy-rpc-types-engine.workspace = true
 
 # scroll-alloy
 scroll-alloy-consensus.workspace = true
-scroll-alloy-rpc-types-engine = { git = "https://github.com/scroll-tech/reth.git" }
+scroll-alloy-rpc-types-engine.workspace = true
 scroll-alloy-provider.workspace = true
 
 # reth

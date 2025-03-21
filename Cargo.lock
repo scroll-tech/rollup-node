@@ -9511,6 +9511,7 @@ dependencies = [
  "alloy-primitives",
  "alloy-rlp",
  "alloy-sol-types",
+ "bytes",
  "derive_more 2.0.1",
  "eyre",
  "scroll-l1",
@@ -9536,6 +9537,21 @@ dependencies = [
  "thiserror 2.0.12",
  "tokio",
  "tracing",
+]
+
+[[package]]
+name = "scroll-derivation-pipeline"
+version = "0.0.1"
+dependencies = [
+ "alloy-primitives",
+ "alloy-rpc-types-engine",
+ "eyre",
+ "rollup-node-primitives",
+ "scroll-alloy-consensus",
+ "scroll-alloy-rpc-types-engine",
+ "scroll-codec",
+ "scroll-l1",
+ "thiserror 2.0.12",
 ]
 
 [[package]]
