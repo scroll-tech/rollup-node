@@ -103,7 +103,7 @@ mod tests {
     #[test]
     fn test_should_decode_v7_uncompressed() -> eyre::Result<()> {
         // <https://sepolia.etherscan.io/tx/0x6dca39d9f34790c4d6a86e84638cee69681a84e8d95d684e9a85d0a629ed26c5>
-        let blob = read_to_bytes("./src/testdata/blob_v7_uncompressed.bin")?;
+        let blob = read_to_bytes("./testdata/blob_v7_uncompressed.bin")?;
         let blocks = decode_v7(&blob)?.0;
 
         assert_eq!(blocks.len(), 4);
@@ -159,6 +159,7 @@ mod tests {
                 timestamp: 1742309682,
                 base_fee: U256::from(40842015),
                 gas_limit: 10000000,
+                num_transactions: 14,
                 num_l1_messages: 0,
             },
         };
@@ -171,7 +172,7 @@ mod tests {
     #[test]
     fn test_should_decode_v7_compressed() -> eyre::Result<()> {
         // <https://sepolia.etherscan.io/tx/0x6dca39d9f34790c4d6a86e84638cee69681a84e8d95d684e9a85d0a629ed26c5>
-        let blob = read_to_bytes("./src/testdata/blob_v7_compressed.bin")?;
+        let blob = read_to_bytes("./testdata/blob_v7_compressed.bin")?;
         let blocks = decode_v7(&blob)?.0;
 
         assert_eq!(blocks.len(), 4);
@@ -227,6 +228,7 @@ mod tests {
                 timestamp: 1742309682,
                 base_fee: U256::from(40842015),
                 gas_limit: 10000000,
+                num_transactions: 14,
                 num_l1_messages: 0,
             },
         };

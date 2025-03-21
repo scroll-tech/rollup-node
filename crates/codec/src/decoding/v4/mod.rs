@@ -7,14 +7,13 @@ use crate::{
 use std::vec::Vec;
 
 use alloy_primitives::bytes::Buf;
-use alloy_sol_types::SolCall;
-use scroll_l1::abi::calls::commitBatchWithBlobProofCall;
+use scroll_l1::abi::calls::CommitBatchCall;
 
 /// Decodes the input calldata and blob into a [`Vec<L2Block>`].
 pub fn decode_v4(calldata: &[u8], blob: &[u8]) -> Result<Vec<L2Block>, DecodingError> {
     // abi decode into a commit batch call
-    let call = commitBatchWithBlobProofCall::abi_decode(calldata, true)
-        .map_err(|_| DecodingError::InvalidCalldataFormat)?;
+    let call = CommitBatchCall::try_decode(calldata).ok_or(DecodingError::InvalidCalldataFormat)?;
+    let chunks = call.chunks().ok_or(DecodingError::MissingChunkData)?;
 
     // get blob iterator and collect, skipping unused bytes.
     let mut heap_blob = BlobSliceIter::from_blob_slice(blob).copied().collect::<Vec<_>>();
@@ -34,12 +33,12 @@ pub fn decode_v4(calldata: &[u8], blob: &[u8]) -> Result<Vec<L2Block>, DecodingE
 
     // check the chunk count is correct in debug.
     let chunk_count = from_be_bytes_slice_and_advance_buf!(u16, buf);
-    debug_assert_eq!(call.chunks.len(), chunk_count as usize, "mismatched chunk count");
+    debug_assert_eq!(chunks.len(), chunk_count as usize, "mismatched chunk count");
 
     // clone buf and move pass chunk information.
     buf.advance(super::v2::TRANSACTION_DATA_BLOB_INDEX_OFFSET);
 
-    decode_v1_chunk(call.chunks, buf)
+    decode_v1_chunk(chunks, buf)
 }
 
 #[cfg(test)]
@@ -52,8 +51,8 @@ mod tests {
     #[test]
     fn test_should_decode_v4_uncompressed() -> eyre::Result<()> {
         // <https://etherscan.io/tx/0x27d73eef6f0de411f8db966f0def9f28c312a0ae5cfb1ac09ec23f8fa18b005b>
-        let commit_calldata = read_to_bytes("./src/testdata/calldata_v4_uncompressed.bin")?;
-        let blob = read_to_bytes("./src/testdata/blob_v4_uncompressed.bin")?;
+        let commit_calldata = read_to_bytes("./testdata/calldata_v4_uncompressed.bin")?;
+        let blob = read_to_bytes("./testdata/blob_v4_uncompressed.bin")?;
         let blocks = decode_v4(&commit_calldata, &blob)?;
 
         assert_eq!(blocks.len(), 12);
@@ -97,6 +96,7 @@ mod tests {
                 timestamp: 1716108620,
                 base_fee: U256::ZERO,
                 gas_limit: 10000000,
+                num_transactions: 10,
                 num_l1_messages: 0,
             },
         };
@@ -109,8 +109,8 @@ mod tests {
     #[test]
     fn test_should_decode_v4_compressed() -> eyre::Result<()> {
         // <https://etherscan.io/tx/0xee0afe29207fe23626387bc8eb209ab751c1fee9c18e3d6ec7a5edbcb5a4fed4>
-        let commit_calldata = read_to_bytes("./src/testdata/calldata_v4_compressed.bin")?;
-        let blob = read_to_bytes("./src/testdata/blob_v4_compressed.bin")?;
+        let commit_calldata = read_to_bytes("./testdata/calldata_v4_compressed.bin")?;
+        let blob = read_to_bytes("./testdata/blob_v4_compressed.bin")?;
         let blocks = decode_v4(&commit_calldata, &blob)?;
 
         assert_eq!(blocks.len(), 47);
@@ -166,6 +166,7 @@ mod tests {
                 timestamp: 1725455077,
                 base_fee: U256::from(46226864),
                 gas_limit: 10000000,
+                num_transactions: 14,
                 num_l1_messages: 0,
             },
         };

@@ -9,9 +9,8 @@ use crate::{
 };
 use std::vec::Vec;
 
-use alloy_primitives::{Bytes, bytes::Buf};
-use alloy_sol_types::SolCall;
-use scroll_l1::abi::calls::commitBatchCall;
+use alloy_primitives::bytes::Buf;
+use scroll_l1::abi::calls::CommitBatchCall;
 
 /// The max amount of chunks per batch for V1 codec.
 /// <https://github.com/scroll-tech/da-codec/blob/main/encoding/codecv0.go#L18>
@@ -27,8 +26,9 @@ pub(crate) type BlockContextV1 = BlockContextV0;
 /// Decodes the input calldata and blob into a [`Vec<L2Block>`].
 pub fn decode_v1(calldata: &[u8], blob: &[u8]) -> Result<Vec<L2Block>, DecodingError> {
     // abi decode into a commit batch call
-    let call = commitBatchCall::abi_decode(calldata, true)
-        .map_err(|_| DecodingError::InvalidCalldataFormat)?;
+    let call = CommitBatchCall::try_decode(calldata).ok_or(DecodingError::InvalidCalldataFormat)?;
+
+    let chunks = call.chunks().ok_or(DecodingError::MissingChunkData)?;
 
     // get blob iterator and collect, skipping unused bytes.
     let heap_blob = BlobSliceIter::from_blob_slice(blob).copied().collect::<Vec<_>>();
@@ -39,17 +39,17 @@ pub fn decode_v1(calldata: &[u8], blob: &[u8]) -> Result<Vec<L2Block>, DecodingE
 
     // check the chunk count is correct in debug.
     let chunk_count = from_be_bytes_slice_and_advance_buf!(u16, buf);
-    debug_assert_eq!(call.chunks.len(), chunk_count as usize, "mismatched chunk count");
+    debug_assert_eq!(chunks.len(), chunk_count as usize, "mismatched chunk count");
 
     // move pass chunk information.
     buf.advance(TRANSACTION_DATA_BLOB_INDEX_OFFSET);
 
-    decode_v1_chunk(call.chunks, buf)
+    decode_v1_chunk(chunks, buf)
 }
 
 /// Decode the provided chunks and blob data into [`L2Block`].
 pub(crate) fn decode_v1_chunk(
-    chunks: Vec<Bytes>,
+    chunks: Vec<&[u8]>,
     blob: &[u8],
 ) -> Result<Vec<L2Block>, DecodingError> {
     let mut l2_blocks: Vec<L2Block> = Vec::new();
@@ -57,7 +57,7 @@ pub(crate) fn decode_v1_chunk(
 
     // iterate the chunks
     for chunk in chunks {
-        let buf = &mut chunk.as_ref();
+        let buf: &mut &[u8] = &mut chunk.as_ref();
 
         // get the block count
         let blocks_count = buf.first().copied().ok_or(DecodingError::Eof)? as usize;
@@ -99,8 +99,8 @@ mod tests {
     #[test]
     fn test_should_decode_v1() -> eyre::Result<()> {
         // <https://etherscan.io/tx/0x27d73eef6f0de411f8db966f0def9f28c312a0ae5cfb1ac09ec23f8fa18b005b>
-        let commit_calldata = read_to_bytes("./src/testdata/calldata_v1.bin")?;
-        let blob = read_to_bytes("./src/testdata/blob_v1.bin")?;
+        let commit_calldata = read_to_bytes("./testdata/calldata_v1.bin")?;
+        let blob = read_to_bytes("./testdata/blob_v1.bin")?;
         let blocks = decode_v1(&commit_calldata, &blob)?;
 
         assert_eq!(blocks.len(), 12);
@@ -144,6 +144,7 @@ mod tests {
                 timestamp: 1716108620,
                 base_fee: U256::ZERO,
                 gas_limit: 10000000,
+                num_transactions: 10,
                 num_l1_messages: 0,
             },
         };

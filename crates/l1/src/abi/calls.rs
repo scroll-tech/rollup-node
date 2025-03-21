@@ -1,6 +1,5 @@
 use std::vec::Vec;
 
-use alloy_primitives::Bytes;
 use alloy_sol_types::{sol, SolCall};
 
 sol! {
@@ -8,19 +7,19 @@ sol! {
     #[derive(Debug)]
     function commitBatch(
         uint8 version,
-        bytes calldata parentBatchHeader,
+        bytes calldata parent_batch_header,
         bytes[] memory chunks,
-        bytes calldata skippedL1MessageBitmap
+        bytes calldata skipped_l1_message_bitmap
     ) external;
 
     #[cfg_attr(feature = "test-utils", derive(arbitrary::Arbitrary))]
     #[derive(Debug)]
     function commitBatchWithBlobProof(
         uint8 version,
-        bytes calldata parentBatchHeader,
+        bytes calldata parent_batch_header,
         bytes[] memory chunks,
-        bytes calldata skippedL1MessageBitmap,
-        bytes calldata blobDataProof
+        bytes calldata skipped_l1_message_bitmap,
+        bytes calldata blob_data_proof
     ) external;
 }
 
@@ -35,7 +34,7 @@ pub enum CommitBatchCall {
 
 impl CommitBatchCall {
     /// Tries to decode the calldata into a [`CommitBatchCall`].
-    pub fn try_decode(calldata: &Bytes) -> Option<Self> {
+    pub fn try_decode(calldata: &[u8]) -> Option<Self> {
         match calldata.get(0..4).map(|sel| sel.try_into().expect("correct slice length")) {
             Some(commitBatchCall::SELECTOR) => {
                 commitBatchCall::abi_decode(calldata, true).map(Into::into).ok()
@@ -58,26 +57,26 @@ impl CommitBatchCall {
     /// Returns the parent batch header for the commit call.
     pub fn parent_batch_header(&self) -> Vec<u8> {
         let header = match self {
-            Self::CommitBatch(b) => &b.parentBatchHeader,
-            Self::CommitBatchWithBlobProof(b) => &b.parentBatchHeader,
+            Self::CommitBatch(b) => &b.parent_batch_header,
+            Self::CommitBatchWithBlobProof(b) => &b.parent_batch_header,
         };
         header.to_vec()
     }
 
     /// Returns the chunks for the commit call if any, returns None otherwise.
-    pub fn chunks(&self) -> Option<Vec<Vec<u8>>> {
+    pub fn chunks(&self) -> Option<Vec<&[u8]>> {
         let chunks = match self {
             Self::CommitBatch(b) => &b.chunks,
             Self::CommitBatchWithBlobProof(b) => &b.chunks,
         };
-        Some(chunks.iter().map(|c| c.to_vec()).collect())
+        Some(chunks.iter().map(|c| c.as_ref()).collect())
     }
 
     /// Returns the skipped L1 message bitmap for the commit call if any, returns None otherwise.
     pub fn skipped_l1_message_bitmap(&self) -> Option<Vec<u8>> {
         let bitmap = match self {
-            Self::CommitBatch(b) => &b.skippedL1MessageBitmap,
-            Self::CommitBatchWithBlobProof(b) => &b.skippedL1MessageBitmap,
+            Self::CommitBatch(b) => &b.skipped_l1_message_bitmap,
+            Self::CommitBatchWithBlobProof(b) => &b.skipped_l1_message_bitmap,
         };
         Some(bitmap.to_vec())
     }

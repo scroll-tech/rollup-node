@@ -47,6 +47,7 @@ impl From<BlockContextV0> for BlockContext {
             timestamp: value.timestamp,
             base_fee: value.base_fee,
             gas_limit: value.gas_limit,
+            num_transactions: value.num_transactions,
             num_l1_messages: value.num_l1_messages,
         }
     }

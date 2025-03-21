@@ -10,19 +10,17 @@ use crate::{L2Block, decoding::transaction::Transaction, error::DecodingError};
 use std::vec::Vec;
 
 use alloy_primitives::bytes::Buf;
-use alloy_sol_types::SolCall;
-use scroll_l1::abi::calls::commitBatchCall;
+use scroll_l1::abi::calls::CommitBatchCall;
 
 /// Decodes the input calldata into a [`Vec<L2Block>`].
 pub fn decode_v0(calldata: &[u8]) -> Result<Vec<L2Block>, DecodingError> {
     // abi decode into a commit batch call
-    let call = commitBatchCall::abi_decode(calldata, true)
-        .map_err(|_| DecodingError::InvalidCalldataFormat)?;
+    let call = CommitBatchCall::try_decode(calldata).ok_or(DecodingError::InvalidCalldataFormat)?;
 
     let mut l2_blocks: Vec<L2Block> = Vec::new();
 
     // iterate the chunks
-    for chunk in call.chunks {
+    for chunk in call.chunks().ok_or(DecodingError::MissingChunkData)? {
         let buf = &mut chunk.as_ref();
 
         // get the block count
@@ -65,7 +63,7 @@ mod tests {
     #[test]
     fn test_should_decode_v0() -> eyre::Result<()> {
         // <https://etherscan.io/tx/0x2c7bb77d6086befd9bdcf936479fd246d1065cbd2c6aff55b1d39a67aff965c1>
-        let commit_calldata = read_to_bytes("./src/testdata/calldata_v0.bin")?;
+        let commit_calldata = read_to_bytes("./testdata/calldata_v0.bin")?;
         let blocks = decode_v0(&commit_calldata)?;
 
         assert_eq!(blocks.len(), 28);
@@ -80,6 +78,7 @@ mod tests {
                 timestamp: 1696933798,
                 base_fee: U256::ZERO,
                 gas_limit: 10000000,
+                num_transactions: 1,
                 num_l1_messages: 0,
             },
         };

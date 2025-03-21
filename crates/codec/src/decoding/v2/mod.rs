@@ -9,8 +9,7 @@ use crate::{
 use std::vec::Vec;
 
 use alloy_primitives::bytes::Buf;
-use alloy_sol_types::SolCall;
-use scroll_l1::abi::calls::commitBatchCall;
+use scroll_l1::abi::calls::CommitBatchCall;
 
 /// The max amount of chunks per batch for V2 codec.
 /// <https://github.com/scroll-tech/da-codec/blob/main/encoding/codecv2.go#L25>
@@ -23,8 +22,8 @@ pub(crate) const TRANSACTION_DATA_BLOB_INDEX_OFFSET: usize = 4 * MAX_CHUNKS_PER_
 /// Decodes the input calldata and blob into a [`Vec<L2Block>`].
 pub fn decode_v2(calldata: &[u8], blob: &[u8]) -> Result<Vec<L2Block>, DecodingError> {
     // abi decode into a commit batch call
-    let call = commitBatchCall::abi_decode(calldata, true)
-        .map_err(|_| DecodingError::InvalidCalldataFormat)?;
+    let call = CommitBatchCall::try_decode(calldata).ok_or(DecodingError::InvalidCalldataFormat)?;
+    let chunks = call.chunks().ok_or(DecodingError::MissingChunkData)?;
 
     // get blob iterator and collect, skipping unused bytes.
     let compressed_heap_blob = BlobSliceIter::from_blob_slice(blob).copied().collect::<Vec<_>>();
@@ -36,12 +35,12 @@ pub fn decode_v2(calldata: &[u8], blob: &[u8]) -> Result<Vec<L2Block>, DecodingE
 
     // check the chunk count is correct in debug.
     let chunk_count = from_be_bytes_slice_and_advance_buf!(u16, buf);
-    debug_assert_eq!(call.chunks.len(), chunk_count as usize, "mismatched chunk count");
+    debug_assert_eq!(chunks.len(), chunk_count as usize, "mismatched chunk count");
 
     // clone buf and move pass chunk information.
     buf.advance(TRANSACTION_DATA_BLOB_INDEX_OFFSET);
 
-    decode_v1_chunk(call.chunks, buf)
+    decode_v1_chunk(chunks, buf)
 }
 
 #[cfg(test)]
@@ -54,8 +53,8 @@ mod tests {
     #[test]
     fn test_should_decode_v2() -> eyre::Result<()> {
         // <https://etherscan.io/tx/0x6e846b5666670b1b1c87faa54b760be8717c71b1e7e91d5f6c5f20d3d67ee5d8>
-        let commit_calldata = read_to_bytes("./src/testdata/calldata_v2.bin")?;
-        let blob = read_to_bytes("./src/testdata/blob_v2.bin")?;
+        let commit_calldata = read_to_bytes("./testdata/calldata_v2.bin")?;
+        let blob = read_to_bytes("./testdata/blob_v2.bin")?;
         let blocks = decode_v2(&commit_calldata, &blob)?;
 
         assert_eq!(blocks.len(), 47);
@@ -84,6 +83,7 @@ mod tests {
                 timestamp: 1720578497,
                 base_fee: U256::from(189757389),
                 gas_limit: 10000000,
+                num_transactions: 5,
                 num_l1_messages: 0,
             },
         };

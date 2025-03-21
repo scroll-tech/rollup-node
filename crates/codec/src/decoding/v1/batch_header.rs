@@ -11,21 +11,21 @@ use alloy_primitives::{
 #[derive(Debug, Default, Clone, PartialEq, Eq)]
 pub struct BatchHeaderV1 {
     /// The batch version.
-    version: u8,
+    pub version: u8,
     /// The index of the batch.
-    batch_index: u64,
+    pub batch_index: u64,
     /// Number of L1 messages popped in the batch.
-    l1_message_popped: u64,
+    pub l1_message_popped: u64,
     /// Number of total L1 messages popped after the batch.
-    total_l1_message_popped: u64,
+    pub total_l1_message_popped: u64,
     /// The data hash of the batch.
-    data_hash: B256,
+    pub data_hash: B256,
     /// The blob versioned hash for the batch.
-    blob_versioned_hash: B256,
+    pub blob_versioned_hash: B256,
     /// The parent batch hash.
-    parent_batch_hash: B256,
+    pub parent_batch_hash: B256,
     /// A bitmap to indicate which L1 messages are skipped in the batch.
-    skipped_l1_message_bitmap: Vec<U256>,
+    pub skipped_l1_message_bitmap: Vec<U256>,
     /// The hash of the header.
     hash: OnceLock<B256>,
 }
@@ -136,10 +136,10 @@ mod tests {
     #[test]
     fn test_should_decode_header() -> eyre::Result<()> {
         // <https://etherscan.io/tx/0x27d73eef6f0de411f8db966f0def9f28c312a0ae5cfb1ac09ec23f8fa18b005b>
-        let raw_commit_calldata = read_to_bytes("./src/testdata/calldata_v1.bin")?;
+        let raw_commit_calldata = read_to_bytes("./testdata/calldata_v1.bin")?;
         let commit_calldata = commitBatchCall::abi_decode(&raw_commit_calldata, true)?;
 
-        let mut raw_batch_header = &*commit_calldata.parentBatchHeader.to_vec();
+        let mut raw_batch_header = &*commit_calldata.parent_batch_header.to_vec();
         let header = BatchHeaderV1::try_from_buf(&mut raw_batch_header).unwrap();
 
         let expected = BatchHeaderV1::new(
