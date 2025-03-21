@@ -12,14 +12,14 @@ mod error;
 /// Common test helpers
 pub mod test_utils;
 
-use std::{collections::VecDeque, sync::Arc, time::Duration};
+use std::{sync::Arc, time::Duration};
 
 use alloy_network::Ethereum;
 use alloy_primitives::{BlockNumber, B256};
 use alloy_provider::{Network, Provider};
 use alloy_rpc_types_eth::{BlockNumberOrTag, Log, TransactionTrait};
 use error::L1WatcherResult;
-use rollup_node_primitives::{BatchInput, BatchInputBuilder, L1MessageWithBlockNumber};
+use rollup_node_primitives::{BatchInput, BatchInputBuilder, BoundedVec, L1MessageWithBlockNumber};
 use scroll_alloy_consensus::TxL1Message;
 use scroll_l1::abi::{
     calls::CommitBatchCall,
@@ -28,19 +28,23 @@ use scroll_l1::abi::{
 use tokio::sync::mpsc;
 
 /// The block range used to fetch L1 logs.
-/// TODO(greg): evaluate the performance using various block ranges.
-pub const LOGS_QUERY_BLOCK_RANGE: u64 = 10000;
+pub const LOGS_QUERY_BLOCK_RANGE: u64 = 1000;
 /// The maximum count of unfinalized blocks we can have in Ethereum.
 pub const MAX_UNFINALIZED_BLOCK_COUNT: usize = 96;
 
-/// The main loop interval when L1 watcher is syncing to the tip of the L1.
-pub const FAST_SYNC_INTERVAL: Duration = Duration::from_millis(100);
 /// The main loop interval when L1 watcher is synced to the tip of the L1.
 #[cfg(any(test, feature = "test-utils"))]
 pub const SLOW_SYNC_INTERVAL: Duration = Duration::from_millis(1);
 /// The main loop interval when L1 watcher is synced to the tip of the L1.
 #[cfg(not(any(test, feature = "test-utils")))]
 pub const SLOW_SYNC_INTERVAL: Duration = Duration::from_secs(2);
+
+/// The maximum amount of retained headers for reorg detection.
+#[cfg(any(test, feature = "test-utils"))]
+pub const HEADER_CAPACITY: usize = 100 * MAX_UNFINALIZED_BLOCK_COUNT;
+/// The maximum amount of retained headers for reorg detection.
+#[cfg(not(any(test, feature = "test-utils")))]
+pub const HEADER_CAPACITY: usize = 2 * MAX_UNFINALIZED_BLOCK_COUNT;
 
 /// The Ethereum L1 block response.
 pub type Block = <Ethereum as Network>::BlockResponse;
@@ -59,12 +63,13 @@ pub struct L1State {
 #[derive(Debug)]
 pub struct L1Watcher<EP> {
     /// The L1 execution node provider. The provider should implement some backoff strategy using
-    /// [`alloy_transport::layers::RetryBackoffLayer`] as well as some caching strategy using
-    /// [`alloy_provider::layers::CacheProvider`] in the client in order to avoid excessive
-    /// queries on the RPC provider.
+    /// [`alloy_transport::layers::RetryBackoffLayer`], some caching strategy using
+    /// [`alloy_provider::layers::CacheProvider`] and some rate limiting policy with
+    /// [`alloy_transport::layers::RateLimitRetryPolicy`] in the client/transport in order to avoid
+    /// excessive queries on the RPC provider.
     execution_provider: EP,
     /// The buffered unfinalized chain of blocks. Used to detect reorgs of the L1.
-    unfinalized_blocks: VecDeque<Header>,
+    unfinalized_blocks: BoundedVec<Header>,
     /// The L1 state info relevant to the rollup node.
     l1_state: L1State,
     /// The latest indexed block.
@@ -74,7 +79,7 @@ pub struct L1Watcher<EP> {
 }
 
 /// The L1 notification type yielded by the [`L1Watcher`].
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, PartialEq, Eq)]
 pub enum L1Notification {
     /// A notification for a reorg of the L1 up to a given block number.
     Reorg(u64),
@@ -127,7 +132,7 @@ where
 
         let watcher = Self {
             execution_provider,
-            unfinalized_blocks: VecDeque::with_capacity(MAX_UNFINALIZED_BLOCK_COUNT),
+            unfinalized_blocks: BoundedVec::new(HEADER_CAPACITY),
             current_block_number: start_block - 1,
             l1_state,
             sender: tx,
@@ -146,10 +151,10 @@ where
                 .await
                 .inspect_err(|err| tracing::error!(target: "scroll::watcher", ?err));
 
-            // update loop interval if needed.
+            // sleep if we are synced.
             if self.is_synced() {
                 tokio::time::sleep(SLOW_SYNC_INTERVAL).await;
-            };
+            }
         }
     }
 
@@ -198,7 +203,7 @@ where
             return
         }
 
-        let tail_block = self.unfinalized_blocks.back().expect("tail exists");
+        let tail_block = self.unfinalized_blocks.last().expect("tail exists");
         if tail_block.number < finalized.number {
             // clear, the finalized block is past the tail.
             tracing::trace!(target: "scroll::watcher", tail = ?tail_block.number, finalized = ?finalized.number, "draining all unfinalized blocks");
@@ -227,14 +232,14 @@ where
         finalized: &Header,
         latest: &Header,
     ) -> L1WatcherResult<()> {
-        let tail = self.unfinalized_blocks.back();
+        let tail = self.unfinalized_blocks.last();
 
         if tail.is_some_and(|h| h.hash == latest.hash) {
             return Ok(())
         } else if tail.is_some_and(|h| h.hash == latest.parent_hash) {
             // latest block extends the tip.
             tracing::trace!(target: "scroll::watcher", number = ?latest.number, hash = ?latest.hash, "block extends chain");
-            self.unfinalized_blocks.push_back(latest.clone());
+            self.unfinalized_blocks.push(latest.clone());
         } else {
             // chain reorged or need to backfill.
             tracing::trace!(target: "scroll::watcher", number = ?latest.number, hash = ?latest.hash, "gap or reorg");
@@ -247,6 +252,9 @@ where
                 .find(|(old, new)| old.hash != new.hash)
                 .map(|(old, _)| old.number - 1);
 
+            // set the unfinalized chain.
+            self.unfinalized_blocks = chain;
+
             if let Some(number) = reorg_block_number {
                 tracing::debug!(?number, "reorg");
                 // reset the current block number to the reorged block number if
@@ -258,9 +266,6 @@ where
                 // send the reorg block number on the channel.
                 self.notify(L1Notification::Reorg(number)).await;
             }
-
-            // set the unfinalized chain.
-            self.unfinalized_blocks = chain.into();
         }
 
         // Update the state and notify on the channel.
@@ -373,18 +378,19 @@ where
         &self,
         finalized: &Header,
         latest: &Header,
-    ) -> L1WatcherResult<Vec<Header>> {
+    ) -> L1WatcherResult<BoundedVec<Header>> {
         let mut current_block = latest.clone();
         let mut chain = vec![current_block.clone()];
 
         // loop until we find a block contained in the chain, connected to finalized or latest is
         // finalized.
-        let mut chain = loop {
-            if self.unfinalized_blocks.contains(&current_block) ||
+        let (split_position, mut chain) = loop {
+            let pos = self.unfinalized_blocks.iter().rposition(|h| h == &current_block);
+            if pos.is_some() ||
                 current_block.parent_hash == finalized.hash ||
                 current_block.hash == finalized.hash
             {
-                break chain;
+                break (pos, chain);
             }
 
             tracing::trace!(target: "scroll::watcher", number = ?(current_block.number - 1), "fetching block");
@@ -401,12 +407,10 @@ where
         chain.reverse();
 
         // combine with the available unfinalized blocks.
-        let head = chain.first().expect("at least one block");
-        let split_position =
-            self.unfinalized_blocks.iter().position(|h| h.hash == head.hash).unwrap_or(0);
-        let mut prefix = Vec::with_capacity(MAX_UNFINALIZED_BLOCK_COUNT);
+        let split_position = split_position.unwrap_or(0);
+        let mut prefix = BoundedVec::new(HEADER_CAPACITY);
         prefix.extend(self.unfinalized_blocks.iter().take(split_position).cloned());
-        prefix.append(&mut chain);
+        prefix.extend(chain.into_iter());
 
         Ok(prefix)
     }
@@ -653,7 +657,7 @@ mod tests {
 
         // Then
         assert_eq!(watcher.unfinalized_blocks.len(), 10);
-        assert_eq!(watcher.unfinalized_blocks.pop_back().unwrap(), latest);
+        assert_eq!(watcher.unfinalized_blocks.pop().unwrap(), latest);
 
         Ok(())
     }
@@ -673,7 +677,7 @@ mod tests {
 
         // Then
         assert_eq!(watcher.unfinalized_blocks.len(), 10);
-        assert_eq!(watcher.unfinalized_blocks.pop_back().unwrap(), latest);
+        assert_eq!(watcher.unfinalized_blocks.pop().unwrap(), latest);
 
         Ok(())
     }
@@ -691,7 +695,7 @@ mod tests {
 
         // Then
         assert_eq!(watcher.unfinalized_blocks.len(), 10);
-        assert_eq!(watcher.unfinalized_blocks.pop_back().unwrap(), latest);
+        assert_eq!(watcher.unfinalized_blocks.pop().unwrap(), latest);
         let notification = receiver.recv().await.unwrap();
         assert!(matches!(*notification, L1Notification::NewBlock(_)));
 
@@ -712,7 +716,7 @@ mod tests {
         watcher.handle_latest_block(&finalized, &latest).await?;
 
         // Then
-        assert_eq!(watcher.unfinalized_blocks.pop_back().unwrap(), latest);
+        assert_eq!(watcher.unfinalized_blocks.pop().unwrap(), latest);
         assert_eq!(watcher.current_block_number, chain[5].number);
 
         let notification = receiver.recv().await.unwrap();

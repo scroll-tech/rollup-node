@@ -1251,6 +1251,34 @@ dependencies = [
  "pin-utils",
  "slab",
  "wasm-bindgen-futures",
+ "syn 2.0.100",
+]
+
+[[package]]
+name = "async-std"
+version = "1.13.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "730294c1c08c2e0f85759590518f6333f0d5a0a766a27d519c1b244c3dfd8a24"
+dependencies = [
+ "async-attributes",
+ "async-channel 1.9.0",
+ "async-global-executor",
+ "async-io",
+ "async-lock",
+ "crossbeam-utils",
+ "futures-channel",
+ "futures-core",
+ "futures-io",
+ "futures-lite",
+ "gloo-timers 0.3.0",
+ "kv-log-macro",
+ "log",
+ "memchr",
+ "once_cell",
+ "pin-project-lite",
+ "pin-utils",
+ "slab",
+ "wasm-bindgen-futures",
 ]
 
 [[package]]
@@ -8968,12 +8996,29 @@ dependencies = [
 ]
 
 [[package]]
+name = "rollup-node-indexer"
+version = "0.0.1"
+dependencies = [
+ "alloy-primitives",
+ "arbitrary",
+ "futures",
+ "rand 0.9.0",
+ "rollup-node-primitives",
+ "rollup-node-watcher",
+ "scroll-db",
+ "thiserror 2.0.12",
+ "tokio",
+ "tracing",
+]
+
+[[package]]
 name = "rollup-node"
 version = "0.0.1"
 dependencies = [
  "alloy-chains",
  "alloy-primitives",
  "alloy-provider",
+ "alloy-eips",
  "alloy-rpc-types-engine",
  "clap",
  "eyre",
@@ -9047,6 +9092,7 @@ dependencies = [
  "rollup-node-indexer",
  "rollup-node-primitives",
  "rollup-node-watcher",
+ "rollup-node-primitives",
  "scroll-alloy-network",
  "scroll-alloy-provider",
  "scroll-engine",
@@ -9509,6 +9555,56 @@ dependencies = [
  "alloy-rpc-types-engine",
  "arbitrary",
  "serde",
+]
+
+[[package]]
+name = "scroll-db"
+version = "0.0.1"
+dependencies = [
+ "alloy-primitives",
+ "arbitrary",
+ "async-trait",
+ "futures",
+ "rand 0.9.0",
+ "rollup-node-primitives",
+ "reth-cli-util",
+ "reth-e2e-test-utils",
+ "reth-engine-local",
+ "reth-eth-wire-types",
+ "reth-network",
+ "reth-network-peers",
+ "reth-node-api",
+ "reth-node-builder",
+ "reth-node-core",
+ "reth-node-types",
+ "reth-payload-builder",
+ "reth-primitives",
+ "reth-provider",
+ "reth-rpc-builder",
+ "reth-rpc-server-types",
+ "reth-scroll-chainspec",
+ "reth-scroll-cli",
+ "reth-scroll-engine-primitives",
+ "reth-scroll-node",
+ "reth-scroll-primitives",
+ "reth-tasks",
+ "reth-tracing",
+ "reth-transaction-pool",
+ "rollup-node-manager",
+ "scroll-alloy-consensus",
+ "scroll-migration",
+ "sea-orm",
+ "serde",
+ "scroll-alloy-provider",
+ "scroll-alloy-rpc-types-engine",
+ "scroll-engine",
+ "scroll-network",
+ "scroll-wire",
+ "secp256k1 0.29.1",
+ "serde_json",
+ "thiserror 2.0.12",
+ "tokio",
+ "tracing",
 ]
 
 [[package]]
