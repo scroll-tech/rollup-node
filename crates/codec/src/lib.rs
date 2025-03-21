@@ -8,12 +8,12 @@ pub mod decoding;
 pub use error::CodecError;
 mod error;
 
+pub use payload::CommitPayload;
 pub mod payload;
 
 use crate::{
     decoding::{v0::decode_v0, v1::decode_v1, v2::decode_v2, v4::decode_v4, v7::decode_v7},
     error::DecodingError,
-    payload::CommitPayload,
 };
 
 use alloy_eips::eip4844::Blob;
@@ -45,7 +45,7 @@ pub enum Codec {
 
 impl Codec {
     /// Decodes the input data and returns the decoded [`CommitPayload`].
-    pub fn decode<T: CommitDataSource>(input: T) -> Result<CommitPayload, CodecError> {
+    pub fn decode<T: CommitDataSource>(input: &T) -> Result<CommitPayload, CodecError> {
         let calldata = input.calldata();
         let version = calldata.first().ok_or(DecodingError::MissingCodecVersion)?;
 

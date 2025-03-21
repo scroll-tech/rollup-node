@@ -6,9 +6,20 @@ macro_rules! from_be_bytes_slice_and_advance_buf {
         let mut arr = [0u8; ::std::mem::size_of::<$ty>()];
         let size = $size;
         let size_of = ::std::mem::size_of::<$ty>();
-        arr[size_of - size..].copy_from_slice(&$slice[0..size]);
+        arr[size_of - size..].copy_from_slice(&$slice[..size]);
         ::alloy_primitives::bytes::Buf::advance($slice, size);
         <$ty>::from_be_bytes(arr)
+    }};
+}
+
+/// Calls `from_slice` on the provided type using the passed in buffer and advances it.
+#[macro_export]
+macro_rules! from_slice_and_advance_buf {
+    ($ty:ty, $slice: expr) => {{
+        let size_of = ::std::mem::size_of::<$ty>();
+        let t = <$ty>::from_slice(&$slice[..size_of]);
+        ::alloy_primitives::bytes::Buf::advance($slice, size_of);
+        t
     }};
 }
 
