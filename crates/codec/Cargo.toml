@@ -14,7 +14,6 @@ alloy-sol-types = { version = "0.8", default-features = false }
 scroll-l1.workspace = true
 
 # misc
-bytes = "1.10.1"
 derive_more = { version = "2.0", default-features = false }
 eyre = { workspace = true, optional = true }
 thiserror = { version = "2.0", default-features = false }

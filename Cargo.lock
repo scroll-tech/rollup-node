@@ -9511,7 +9511,6 @@ dependencies = [
  "alloy-primitives",
  "alloy-rlp",
  "alloy-sol-types",
- "bytes",
  "derive_more 2.0.1",
  "eyre",
  "scroll-l1",

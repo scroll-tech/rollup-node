@@ -8,9 +8,10 @@ exclude = [".github/"]
 [workspace]
 members = [
     "bin/bridge",
+    "crates/codec",
     "crates/database/db",
     "crates/database/migration",
-    "crates/codec",
+    "crates/derivation-pipeline",
     "crates/engine",
     "crates/indexer",
     "crates/l1",
@@ -19,7 +20,6 @@ members = [
     "crates/primitives",
     "crates/scroll-wire",
     "crates/watcher",
-    "crates/derivation-pipeline",
 ]
 
 resolver = "2"
@@ -152,8 +152,8 @@ reth-scroll-primitives = { git = "https://github.com/scroll-tech/reth.git", defa
 rollup-node-manager = { path = "crates/node" }
 rollup-node-primitives = { path = "crates/primitives" }
 rollup-node-watcher = { path = "crates/watcher" }
-scroll-db = { path = "crates/database/db" }
 scroll-codec = { path = "crates/codec" }
+scroll-db = { path = "crates/database/db" }
 scroll-derivation-pipeline = { path = "crates/derivation-pipeline" }
 scroll-engine = { path = "crates/engine" }
 scroll-l1 = { path = "crates/l1" }

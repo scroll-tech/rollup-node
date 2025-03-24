@@ -332,7 +332,7 @@ where
                     block_number,
                     info.parent_batch_header(),
                 )
-                .with_chunks(info.chunks())
+                .with_chunks(info.chunks().map(|c| c.iter().map(|c| c.to_vec()).collect()))
                 .with_skipped_l1_message_bitmap(info.skipped_l1_message_bitmap())
                 .with_blob_hashes(blob_hashes);
 

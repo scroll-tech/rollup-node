@@ -1,0 +1,31 @@
+[package]
+name = "scroll-derivation-pipeline"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+exclude.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+# alloy
+alloy-primitives.workspace = true
+alloy-rpc-types-engine.workspace = true
+
+# scroll
+scroll-alloy-consensus.workspace = true
+scroll-alloy-rpc-types-engine.workspace = true
+
+# rollup node
+rollup-node-primitives.workspace = true
+scroll-codec.workspace = true
+scroll-l1.workspace = true
+
+# misc
+thiserror.workspace = true
+
+[dev-dependencies]
+eyre.workspace = true
+scroll-codec = { workspace = true, features = ["test-utils"] }
