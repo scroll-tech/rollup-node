@@ -14,29 +14,29 @@ alloy-rpc-types-engine.workspace = true
 
 # scroll-alloy
 scroll-alloy-consensus.workspace = true
-scroll-alloy-rpc-types-engine = { git = "https://github.com/scroll-tech/reth.git", branch = "chore-merge-upstream-90513dfe3" }
+scroll-alloy-rpc-types-engine = { git = "https://github.com/scroll-tech/reth.git" }
 scroll-alloy-provider.workspace = true
 
 # reth
-reth-cli-util = { git = "https://github.com/scroll-tech/reth.git", branch = "chore-merge-upstream-90513dfe3" }
+reth-cli-util = { git = "https://github.com/scroll-tech/reth.git" }
 # keep this import as it is needed for correct compilation.
-reth-engine-local = { git = "https://github.com/scroll-tech/reth.git", branch = "chore-merge-upstream-90513dfe3", features = ["scroll-alloy-traits"] }
+reth-engine-local = { git = "https://github.com/scroll-tech/reth.git", features = ["scroll-alloy-traits"] }
 reth-eth-wire-types.workspace = true
 reth-network.workspace = true
 reth-network-peers.workspace = true
-reth-node-api = { git = "https://github.com/scroll-tech/reth.git", branch = "chore-merge-upstream-90513dfe3" }
-reth-node-builder = { git = "https://github.com/scroll-tech/reth.git", branch = "chore-merge-upstream-90513dfe3", features = ["skip-state-root-validation"] }
-reth-node-core = { git = "https://github.com/scroll-tech/reth.git", branch = "chore-merge-upstream-90513dfe3" }
-reth-node-types = { git = "https://github.com/scroll-tech/reth.git", branch = "chore-merge-upstream-90513dfe3" }
+reth-node-api = { git = "https://github.com/scroll-tech/reth.git" }
+reth-node-builder = { git = "https://github.com/scroll-tech/reth.git", features = ["skip-state-root-validation"] }
+reth-node-core = { git = "https://github.com/scroll-tech/reth.git" }
+reth-node-types = { git = "https://github.com/scroll-tech/reth.git" }
 reth-primitives.workspace = true
 reth-provider = { workspace = true, features = ["skip-state-root-validation"] }
-reth-rpc-builder = { git = "https://github.com/scroll-tech/reth.git", branch = "chore-merge-upstream-90513dfe3" }
-reth-transaction-pool = { git = "https://github.com/scroll-tech/reth.git", branch = "chore-merge-upstream-90513dfe3" }
+reth-rpc-builder = { git = "https://github.com/scroll-tech/reth.git" }
+reth-transaction-pool = { git = "https://github.com/scroll-tech/reth.git" }
 
 # scroll
 reth-scroll-chainspec.workspace = true
-reth-scroll-cli = { git = "https://github.com/scroll-tech/reth.git", branch = "chore-merge-upstream-90513dfe3" }
-reth-scroll-engine-primitives = { git = "https://github.com/scroll-tech/reth.git", branch = "chore-merge-upstream-90513dfe3" }
+reth-scroll-cli = { git = "https://github.com/scroll-tech/reth.git" }
+reth-scroll-engine-primitives = { git = "https://github.com/scroll-tech/reth.git" }
 reth-scroll-node = { workspace = true, features = ["skip-state-root-validation"] }
 reth-scroll-primitives = { workspace = true }
 scroll-wire.workspace = true
@@ -64,11 +64,11 @@ alloy-primitives = { workspace = true, default-features = false, features = ["ma
 alloy-rpc-types-engine.workspace = true
 
 # reth
-reth-e2e-test-utils = { git = "https://github.com/scroll-tech/reth.git", branch = "chore-merge-upstream-90513dfe3" }
-reth-payload-builder = { git = "https://github.com/scroll-tech/reth.git", branch = "chore-merge-upstream-90513dfe3" }
-reth-rpc-server-types = { git = "https://github.com/scroll-tech/reth.git", branch = "chore-merge-upstream-90513dfe3" }
+reth-e2e-test-utils = { git = "https://github.com/scroll-tech/reth.git" }
+reth-payload-builder = { git = "https://github.com/scroll-tech/reth.git" }
+reth-rpc-server-types = { git = "https://github.com/scroll-tech/reth.git" }
 reth-tasks.workspace = true
-reth-tracing = { git = "https://github.com/scroll-tech/reth.git", branch = "chore-merge-upstream-90513dfe3" }
+reth-tracing = { git = "https://github.com/scroll-tech/reth.git" }
 
 # misc
 futures.workspace = true
@@ -107,6 +107,6 @@ serde = [
 ]
 
 [[bin]]
-name = "bridge"
+name = "rollup-node"
 path = "src/main.rs"
 required-features = ["serde"]
