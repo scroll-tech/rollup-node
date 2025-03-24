@@ -1,6 +1,8 @@
 use crate::{
-    L2Block, check_buf_len,
-    decoding::{blob::BlobSliceIter, v1::decode_v1_chunk, v2::zstd::decompress_blob_data},
+    check_buf_len,
+    decoding::{
+        batch::Batch, blob::BlobSliceIter, v1::decode_v1_chunk, v2::zstd::decompress_blob_data,
+    },
     error::DecodingError,
     from_be_bytes_slice_and_advance_buf,
 };
@@ -9,8 +11,8 @@ use std::vec::Vec;
 use alloy_primitives::bytes::Buf;
 use scroll_l1::abi::calls::CommitBatchCall;
 
-/// Decodes the input calldata and blob into a [`Vec<L2Block>`].
-pub fn decode_v4(calldata: &[u8], blob: &[u8]) -> Result<Vec<L2Block>, DecodingError> {
+/// Decodes the input calldata and blob into a [`Batch`].
+pub fn decode_v4(calldata: &[u8], blob: &[u8]) -> Result<Batch, DecodingError> {
     // abi decode into a commit batch call
     let call = CommitBatchCall::try_decode(calldata).ok_or(DecodingError::InvalidCalldataFormat)?;
     let chunks = call.chunks().ok_or(DecodingError::MissingChunkData)?;
@@ -38,13 +40,13 @@ pub fn decode_v4(calldata: &[u8], blob: &[u8]) -> Result<Vec<L2Block>, DecodingE
     // clone buf and move pass chunk information.
     buf.advance(super::v2::TRANSACTION_DATA_BLOB_INDEX_OFFSET);
 
-    decode_v1_chunk(chunks, buf)
+    decode_v1_chunk(call.version(), chunks, buf)
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{BlockContext, decoding::test_utils::read_to_bytes};
+    use crate::{BlockContext, L2Block, decoding::test_utils::read_to_bytes};
 
     use alloy_primitives::{U256, bytes};
 
@@ -55,9 +57,9 @@ mod tests {
         let blob = read_to_bytes("./testdata/blob_v4_uncompressed.bin")?;
         let blocks = decode_v4(&commit_calldata, &blob)?;
 
-        assert_eq!(blocks.len(), 12);
+        assert_eq!(blocks.data.l2_blocks().len(), 12);
 
-        let last_block = blocks.last().expect("should have 12 blocks");
+        let last_block = blocks.data.l2_blocks().last().expect("should have 12 blocks");
         let expected_block = L2Block {
             transactions: vec![
                 bytes!(
@@ -113,9 +115,9 @@ mod tests {
         let blob = read_to_bytes("./testdata/blob_v4_compressed.bin")?;
         let blocks = decode_v4(&commit_calldata, &blob)?;
 
-        assert_eq!(blocks.len(), 47);
+        assert_eq!(blocks.data.l2_blocks().len(), 47);
 
-        let last_block = blocks.last().expect("should have 47 blocks");
+        let last_block = blocks.data.l2_blocks().last().expect("should have 47 blocks");
         let expected_block = L2Block {
             transactions: vec![
                 bytes!(

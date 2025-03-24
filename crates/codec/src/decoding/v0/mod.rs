@@ -6,17 +6,22 @@ mod batch_header;
 pub(crate) use block_context::BlockContextV0;
 mod block_context;
 
-use crate::{L2Block, decoding::transaction::Transaction, error::DecodingError};
+use crate::{
+    L2Block,
+    decoding::{batch::Batch, transaction::Transaction},
+    error::DecodingError,
+};
 use std::vec::Vec;
 
 use alloy_primitives::bytes::Buf;
 use scroll_l1::abi::calls::CommitBatchCall;
 
 /// Decodes the input calldata into a [`Vec<L2Block>`].
-pub fn decode_v0(calldata: &[u8]) -> Result<Vec<L2Block>, DecodingError> {
+pub fn decode_v0(calldata: &[u8]) -> Result<Batch, DecodingError> {
     // abi decode into a commit batch call
     let call = CommitBatchCall::try_decode(calldata).ok_or(DecodingError::InvalidCalldataFormat)?;
 
+    let mut chunks_block_count = Vec::new();
     let mut l2_blocks: Vec<L2Block> = Vec::new();
 
     // iterate the chunks
@@ -25,6 +30,7 @@ pub fn decode_v0(calldata: &[u8]) -> Result<Vec<L2Block>, DecodingError> {
 
         // get the block count
         let blocks_count = buf.first().copied().ok_or(DecodingError::Eof)? as usize;
+        chunks_block_count.push(blocks_count);
         buf.advance(1);
 
         let mut block_contexts: Vec<BlockContextV0> = Vec::with_capacity(blocks_count);
@@ -50,7 +56,7 @@ pub fn decode_v0(calldata: &[u8]) -> Result<Vec<L2Block>, DecodingError> {
         }
     }
 
-    Ok(l2_blocks)
+    Ok(Batch::new(call.version(), Some(chunks_block_count), l2_blocks.into()))
 }
 
 #[cfg(test)]
@@ -66,9 +72,9 @@ mod tests {
         let commit_calldata = read_to_bytes("./testdata/calldata_v0.bin")?;
         let blocks = decode_v0(&commit_calldata)?;
 
-        assert_eq!(blocks.len(), 28);
+        assert_eq!(blocks.data.l2_blocks().len(), 28);
 
-        let last_block = blocks.last().expect("should have 28 blocks");
+        let last_block = blocks.data.l2_blocks().last().expect("should have 28 blocks");
         let expected_block = L2Block {
             transactions: vec![bytes!(
                 "f88c8202418417d7840082a4f294530000000000000000000000000000000000000280a4bede39b50000000000000000000000000000000000000000000000000000000156faa40283104ec3a01339778fe9b41ef708daaa24c455bf93a7b4689863553deb5a508d671556da71a03de900a02261954daee0fd5ed3009984417509f955875784688ae3228a0c5a55"

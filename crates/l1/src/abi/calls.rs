@@ -21,6 +21,14 @@ sol! {
         bytes calldata skipped_l1_message_bitmap,
         bytes calldata blob_data_proof
     ) external;
+
+    #[cfg_attr(feature = "test-utils", derive(arbitrary::Arbitrary))]
+    #[derive(Debug)]
+    function commitBatches(
+        uint8 version,
+        bytes32 parent_batch_hash,
+        bytes32 last_batch_hash
+    ) external;
 }
 
 /// A call to commit a batch on the L1 Scroll Rollup contract.
@@ -30,6 +38,8 @@ pub enum CommitBatchCall {
     CommitBatch(commitBatchCall),
     /// A call to commit the batch with a blob proof.
     CommitBatchWithBlobProof(commitBatchWithBlobProofCall),
+    /// A call to commit the multiple batches.
+    CommitBatches(commitBatchesCall),
 }
 
 impl CommitBatchCall {
@@ -42,6 +52,9 @@ impl CommitBatchCall {
             Some(commitBatchWithBlobProofCall::SELECTOR) => {
                 commitBatchWithBlobProofCall::abi_decode(calldata, true).map(Into::into).ok()
             }
+            Some(commitBatchesCall::SELECTOR) => {
+                commitBatchesCall::abi_decode(calldata, true).map(Into::into).ok()
+            }
             Some(_) | None => None,
         }
     }
@@ -51,16 +64,17 @@ impl CommitBatchCall {
         match self {
             Self::CommitBatch(b) => b.version,
             Self::CommitBatchWithBlobProof(b) => b.version,
+            Self::CommitBatches(b) => b.version,
         }
     }
 
     /// Returns the parent batch header for the commit call.
-    pub fn parent_batch_header(&self) -> Vec<u8> {
-        let header = match self {
-            Self::CommitBatch(b) => &b.parent_batch_header,
-            Self::CommitBatchWithBlobProof(b) => &b.parent_batch_header,
-        };
-        header.to_vec()
+    pub fn parent_batch_header(&self) -> Option<Vec<u8>> {
+        match &self {
+            Self::CommitBatch(b) => Some(b.parent_batch_header.to_vec()),
+            Self::CommitBatchWithBlobProof(b) => Some(b.parent_batch_header.to_vec()),
+            Self::CommitBatches(_) => None,
+        }
     }
 
     /// Returns the chunks for the commit call if any, returns None otherwise.
@@ -68,6 +82,7 @@ impl CommitBatchCall {
         let chunks = match self {
             Self::CommitBatch(b) => &b.chunks,
             Self::CommitBatchWithBlobProof(b) => &b.chunks,
+            Self::CommitBatches(_) => return None,
         };
         Some(chunks.iter().map(|c| c.as_ref()).collect())
     }
@@ -77,6 +92,7 @@ impl CommitBatchCall {
         let bitmap = match self {
             Self::CommitBatch(b) => &b.skipped_l1_message_bitmap,
             Self::CommitBatchWithBlobProof(b) => &b.skipped_l1_message_bitmap,
+            Self::CommitBatches(_) => return None,
         };
         Some(bitmap.to_vec())
     }

@@ -1,7 +1,7 @@
 //! Decoding implementations for the commit data.
 
-/// Batch header decoding.
-pub mod batch_header;
+/// Batch related structures.
+pub mod batch;
 
 /// Blob related helpers.
 pub mod blob;

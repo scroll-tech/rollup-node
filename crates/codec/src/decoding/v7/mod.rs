@@ -6,9 +6,12 @@ mod block_context;
 
 use crate::{
     L2Block, check_buf_len,
-    decoding::{blob::BlobSliceIter, transaction::Transaction, v2::zstd::decompress_blob_data},
+    decoding::{
+        batch::Batch, blob::BlobSliceIter, transaction::Transaction, v2::zstd::decompress_blob_data,
+    },
     error::DecodingError,
     from_be_bytes_slice_and_advance_buf,
+    payload::PayloadData,
 };
 use std::vec::Vec;
 
@@ -17,9 +20,8 @@ use alloy_primitives::{B256, bytes::Buf};
 /// The offset in the blob to the payload envelope.
 const BLOB_ENVELOPE_V7_OFFSET_PAYLOAD: usize = 5;
 
-/// Decodes the input blob into a tuple containing: the list of [`L2Block`], the
-/// previous message queue hash and the post message queue hash.
-pub fn decode_v7(blob: &[u8]) -> Result<(Vec<L2Block>, B256, B256), DecodingError> {
+/// Decodes the input blob into a [`Batch`].
+pub fn decode_v7(blob: &[u8]) -> Result<Batch, DecodingError> {
     // get blob iterator and collect, skipping unused bytes.
     let mut heap_blob = BlobSliceIter::from_blob_slice(blob).copied().collect::<Vec<_>>();
     let buf = &mut (&*heap_blob);
@@ -54,9 +56,8 @@ pub fn decode_v7(blob: &[u8]) -> Result<(Vec<L2Block>, B256, B256), DecodingErro
     decode_v7_payload(buf)
 }
 
-/// Decode the blob data into a tuple ([`L2Block`], [`B256`], [`B256`]), containing the vector of L2
-/// blocks, the previous L1 message hash queue and the post L1 message hash queue.
-pub(crate) fn decode_v7_payload(blob: &[u8]) -> Result<(Vec<L2Block>, B256, B256), DecodingError> {
+/// Decode the blob data into a [`Batch`].
+pub(crate) fn decode_v7_payload(blob: &[u8]) -> Result<Batch, DecodingError> {
     let buf = &mut (&*blob);
 
     // check buf len.
@@ -93,7 +94,8 @@ pub(crate) fn decode_v7_payload(blob: &[u8]) -> Result<(Vec<L2Block>, B256, B256
             .push(L2Block::new(transactions, (context, initial_block_number + i as u64).into()));
     }
 
-    Ok((l2_blocks, prev_message_queue_hash, post_message_queue_hash))
+    let payload: PayloadData = (l2_blocks, prev_message_queue_hash, post_message_queue_hash).into();
+    Ok(Batch::new(7, None, payload))
 }
 
 #[cfg(test)]
@@ -107,7 +109,8 @@ mod tests {
     fn test_should_decode_v7_uncompressed() -> eyre::Result<()> {
         // <https://sepolia.etherscan.io/tx/0x6dca39d9f34790c4d6a86e84638cee69681a84e8d95d684e9a85d0a629ed26c5>
         let blob = read_to_bytes("./testdata/blob_v7_uncompressed.bin")?;
-        let blocks = decode_v7(&blob)?.0;
+        let data = decode_v7(&blob)?.data;
+        let blocks = data.l2_blocks();
 
         assert_eq!(blocks.len(), 4);
 
@@ -176,7 +179,8 @@ mod tests {
     fn test_should_decode_v7_compressed() -> eyre::Result<()> {
         // <https://sepolia.etherscan.io/tx/0x6dca39d9f34790c4d6a86e84638cee69681a84e8d95d684e9a85d0a629ed26c5>
         let blob = read_to_bytes("./testdata/blob_v7_compressed.bin")?;
-        let blocks = decode_v7(&blob)?.0;
+        let data = decode_v7(&blob)?.data;
+        let blocks = data.l2_blocks();
 
         assert_eq!(blocks.len(), 4);
 

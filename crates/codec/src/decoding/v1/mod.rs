@@ -3,7 +3,7 @@ mod batch_header;
 
 use crate::{
     L2Block, check_buf_len,
-    decoding::{blob::BlobSliceIter, transaction::Transaction, v0::BlockContextV0},
+    decoding::{batch::Batch, blob::BlobSliceIter, transaction::Transaction, v0::BlockContextV0},
     error::DecodingError,
     from_be_bytes_slice_and_advance_buf,
 };
@@ -23,8 +23,8 @@ const TRANSACTION_DATA_BLOB_INDEX_OFFSET: usize = 4 * MAX_CHUNKS_PER_BATCH;
 /// The block context for v1 decoding is identical to the v0 decoding.
 pub(crate) type BlockContextV1 = BlockContextV0;
 
-/// Decodes the input calldata and blob into a [`Vec<L2Block>`].
-pub fn decode_v1(calldata: &[u8], blob: &[u8]) -> Result<Vec<L2Block>, DecodingError> {
+/// Decodes the input calldata and blob into a [`Batch`].
+pub fn decode_v1(calldata: &[u8], blob: &[u8]) -> Result<Batch, DecodingError> {
     // abi decode into a commit batch call
     let call = CommitBatchCall::try_decode(calldata).ok_or(DecodingError::InvalidCalldataFormat)?;
 
@@ -44,15 +44,17 @@ pub fn decode_v1(calldata: &[u8], blob: &[u8]) -> Result<Vec<L2Block>, DecodingE
     // move pass chunk information.
     buf.advance(TRANSACTION_DATA_BLOB_INDEX_OFFSET);
 
-    decode_v1_chunk(chunks, buf)
+    decode_v1_chunk(call.version(), chunks, buf)
 }
 
 /// Decode the provided chunks and blob data into [`L2Block`].
 pub(crate) fn decode_v1_chunk(
+    version: u8,
     chunks: Vec<&[u8]>,
     blob: &[u8],
-) -> Result<Vec<L2Block>, DecodingError> {
+) -> Result<Batch, DecodingError> {
     let mut l2_blocks: Vec<L2Block> = Vec::new();
+    let mut chunks_block_count = Vec::new();
     let blob = &mut &*blob;
 
     // iterate the chunks
@@ -61,6 +63,7 @@ pub(crate) fn decode_v1_chunk(
 
         // get the block count
         let blocks_count = buf.first().copied().ok_or(DecodingError::Eof)? as usize;
+        chunks_block_count.push(blocks_count);
         buf.advance(1);
 
         let mut block_contexts: Vec<BlockContextV1> = Vec::with_capacity(blocks_count);
@@ -86,7 +89,7 @@ pub(crate) fn decode_v1_chunk(
         }
     }
 
-    Ok(l2_blocks)
+    Ok(Batch::new(version, Some(chunks_block_count), l2_blocks.into()))
 }
 
 #[cfg(test)]
@@ -103,9 +106,9 @@ mod tests {
         let blob = read_to_bytes("./testdata/blob_v1.bin")?;
         let blocks = decode_v1(&commit_calldata, &blob)?;
 
-        assert_eq!(blocks.len(), 12);
+        assert_eq!(blocks.data.l2_blocks().len(), 12);
 
-        let last_block = blocks.last().expect("should have 12 blocks");
+        let last_block = blocks.data.l2_blocks().last().expect("should have 12 blocks");
         let expected_block = L2Block {
             transactions: vec![
                 bytes!(
