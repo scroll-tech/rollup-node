@@ -130,7 +130,7 @@ scroll-alloy-provider = { git = "https://github.com/scroll-tech/reth.git", branc
 scroll-alloy-network = { git = "https://github.com/scroll-tech/reth.git", branch = "chore-merge-upstream-90513dfe3", default-features = false }
 
 # reth
-reth-eth-wire-types = { git = "https://github.com/scroll-tech/reth.git", branch = "chore-merge-upstream-90513dfe3" }
+reth-eth-wire-types = { git = "https://github.com/scroll-tech/reth.git", branch = "chore-merge-upstream-90513dfe3", default-features = false }
 reth-network = { git = "https://github.com/scroll-tech/reth.git", branch = "chore-merge-upstream-90513dfe3", default-features = false }
 reth-network-api = { git = "https://github.com/scroll-tech/reth.git", branch = "chore-merge-upstream-90513dfe3", default-features = false }
 reth-network-peers = { git = "https://github.com/scroll-tech/reth.git", branch = "chore-merge-upstream-90513dfe3", default-features = false }
