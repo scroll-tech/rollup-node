@@ -15,13 +15,13 @@ alloy-primitives.workspace = true
 alloy-rpc-types-engine.workspace = true
 
 # scroll
+reth-scroll-chainspec.workspace = true
 scroll-alloy-consensus.workspace = true
 scroll-alloy-rpc-types-engine.workspace = true
 
 # rollup node
 rollup-node-primitives.workspace = true
 scroll-codec.workspace = true
-scroll-l1.workspace = true
 
 # misc
 thiserror.workspace = true

@@ -9545,11 +9545,11 @@ dependencies = [
  "alloy-primitives",
  "alloy-rpc-types-engine",
  "eyre",
+ "reth-scroll-chainspec",
  "rollup-node-primitives",
  "scroll-alloy-consensus",
  "scroll-alloy-rpc-types-engine",
  "scroll-codec",
- "scroll-l1",
  "thiserror 2.0.12",
 ]
 
