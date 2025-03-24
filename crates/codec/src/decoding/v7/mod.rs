@@ -1,3 +1,6 @@
+pub use batch_header::BatchHeaderV7;
+mod batch_header;
+
 pub(crate) use block_context::BlockContextV7;
 mod block_context;
 
