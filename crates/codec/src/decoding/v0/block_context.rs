@@ -1,6 +1,6 @@
-use crate::{BlockContext, from_be_bytes_slice_and_advance_buf};
+use crate::{from_be_bytes_slice_and_advance_buf, BlockContext};
 
-use alloy_primitives::{U256, bytes::Buf};
+use alloy_primitives::{bytes::Buf, U256};
 
 #[derive(Debug)]
 pub(crate) struct BlockContextV0 {

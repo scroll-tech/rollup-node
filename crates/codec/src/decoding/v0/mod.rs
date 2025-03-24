@@ -3,7 +3,7 @@
 pub(crate) use block_context::BlockContextV0;
 mod block_context;
 
-use crate::{L2Block, decoding::transaction::Transaction, error::DecodingError};
+use crate::{decoding::transaction::Transaction, error::DecodingError, L2Block};
 use std::vec::Vec;
 
 use alloy_primitives::bytes::Buf;
@@ -57,7 +57,7 @@ mod tests {
     use super::*;
 
     use crate::BlockContext;
-    use alloy_primitives::{U256, bytes};
+    use alloy_primitives::{bytes, U256};
 
     #[test]
     fn test_should_decode_v0() -> eyre::Result<()> {
