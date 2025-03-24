@@ -17,7 +17,7 @@ use crate::{
 };
 
 use alloy_eips::eip4844::Blob;
-use alloy_primitives::{B256, Bytes};
+use alloy_primitives::Bytes;
 
 /// The Codec.
 #[derive(Debug)]
@@ -52,32 +52,21 @@ impl Codec {
         let payload = match version {
             0 => decode_v0(calldata)?.into(),
             1 => {
-                let blob = input.blob(0).ok_or(DecodingError::MissingBlob)?;
+                let blob = input.blob().ok_or(DecodingError::MissingBlob)?;
                 decode_v1(calldata, blob.as_ref())?.into()
             }
             2..4 => {
-                let blob = input.blob(0).ok_or(DecodingError::MissingBlob)?;
+                let blob = input.blob().ok_or(DecodingError::MissingBlob)?;
                 decode_v2(calldata, blob.as_ref())?.into()
             }
             4..7 => {
-                let blob = input.blob(0).ok_or(DecodingError::MissingBlob)?;
+                let blob = input.blob().ok_or(DecodingError::MissingBlob)?;
                 decode_v4(calldata, blob.as_ref())?.into()
             }
             7 => {
-                let mut blob_index = 0;
-                let mut blocks = Vec::new();
-                let mut prev_hash = None;
-                let mut post_hash = B256::ZERO;
-
-                while let Some(blob) = input.blob(blob_index) {
-                    let (mut b, pre, post) = decode_v7(blob.as_ref())?;
-                    prev_hash = prev_hash.or(Some(pre));
-                    post_hash = post;
-                    blocks.append(&mut b);
-                    blob_index += 1;
-                }
-
-                (blocks, prev_hash.unwrap_or_default(), post_hash).into()
+                let blob = input.blob().ok_or(DecodingError::MissingBlob)?;
+                let (blocks, prev_hash, post_hash) = decode_v7(blob.as_ref())?;
+                (blocks, prev_hash, post_hash).into()
             }
             v => return Err(DecodingError::UnsupportedCodecVersion(*v).into()),
         };
@@ -91,5 +80,5 @@ pub trait CommitDataSource {
     /// Returns the calldata from the commit transaction.
     fn calldata(&self) -> &Bytes;
     /// Returns the blob for decoding.
-    fn blob(&self, index: usize) -> Option<&Blob>;
+    fn blob(&self) -> Option<&Blob>;
 }

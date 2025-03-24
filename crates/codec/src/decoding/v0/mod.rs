@@ -58,7 +58,7 @@ mod tests {
     use super::*;
 
     use crate::{BlockContext, decoding::test_utils::read_to_bytes};
-    use alloy_primitives::{U256, bytes};
+    use alloy_primitives::{U256, bytes, keccak256};
 
     #[test]
     fn test_should_decode_v0() -> eyre::Result<()> {
