@@ -10,6 +10,7 @@ members = [
     "bin/bridge",
     "crates/database/db",
     "crates/database/migration",
+    "crates/codec",
     "crates/engine",
     "crates/indexer",
     "crates/l1",
@@ -150,6 +151,7 @@ rollup-node-manager = { path = "crates/node" }
 rollup-node-primitives = { path = "crates/primitives" }
 rollup-node-watcher = { path = "crates/watcher" }
 scroll-db = { path = "crates/database/db" }
+scroll-codec = { path = "crates/codec" }
 scroll-engine = { path = "crates/engine" }
 scroll-l1 = { path = "crates/l1" }
 scroll-network = { path = "crates/network" }
