@@ -125,25 +125,25 @@ alloy-sol-types = { version = "0.8.20", default-features = false }
 alloy-transport = { version = "0.12.2", default-features = false }
 
 # scroll-alloy
-scroll-alloy-consensus = { git = "https://github.com/scroll-tech/reth.git", default-features = false }
-scroll-alloy-provider = { git = "https://github.com/scroll-tech/reth.git", default-features = false }
-scroll-alloy-network = { git = "https://github.com/scroll-tech/reth.git", default-features = false }
+scroll-alloy-consensus = { git = "https://github.com/scroll-tech/reth.git", branch = "chore-merge-upstream-90513dfe3", default-features = false }
+scroll-alloy-provider = { git = "https://github.com/scroll-tech/reth.git", branch = "chore-merge-upstream-90513dfe3", default-features = false }
+scroll-alloy-network = { git = "https://github.com/scroll-tech/reth.git", branch = "chore-merge-upstream-90513dfe3", default-features = false }
 
 # reth
-reth-eth-wire-types = { git = "https://github.com/scroll-tech/reth.git" }
-reth-network = { git = "https://github.com/scroll-tech/reth.git", default-features = false }
-reth-network-api = { git = "https://github.com/scroll-tech/reth.git", default-features = false }
-reth-network-peers = { git = "https://github.com/scroll-tech/reth.git", default-features = false }
-reth-primitives = { git = "https://github.com/scroll-tech/reth.git", default-features = false }
-reth-provider = { git = "https://github.com/scroll-tech/reth.git", default-features = false }
-reth-tasks = { git = "https://github.com/scroll-tech/reth.git" }
-reth-tokio-util = { git = "https://github.com/scroll-tech/reth.git", default-features = false }
+reth-eth-wire-types = { git = "https://github.com/scroll-tech/reth.git", branch = "chore-merge-upstream-90513dfe3" }
+reth-network = { git = "https://github.com/scroll-tech/reth.git", branch = "chore-merge-upstream-90513dfe3", default-features = false }
+reth-network-api = { git = "https://github.com/scroll-tech/reth.git", branch = "chore-merge-upstream-90513dfe3", default-features = false }
+reth-network-peers = { git = "https://github.com/scroll-tech/reth.git", branch = "chore-merge-upstream-90513dfe3", default-features = false }
+reth-primitives = { git = "https://github.com/scroll-tech/reth.git", branch = "chore-merge-upstream-90513dfe3", default-features = false }
+reth-provider = { git = "https://github.com/scroll-tech/reth.git", branch = "chore-merge-upstream-90513dfe3", default-features = false }
+reth-tasks = { git = "https://github.com/scroll-tech/reth.git", branch = "chore-merge-upstream-90513dfe3" }
+reth-tokio-util = { git = "https://github.com/scroll-tech/reth.git", branch = "chore-merge-upstream-90513dfe3", default-features = false }
 
 # reth-scroll
-reth-scroll-chainspec = { git = "https://github.com/scroll-tech/reth.git", default-features = false }
-reth-scroll-engine-primitives = { git = "https://github.com/scroll-tech/reth.git", default-features = false }
-reth-scroll-node = { git = "https://github.com/scroll-tech/reth.git", default-features = false }
-reth-scroll-primitives = { git = "https://github.com/scroll-tech/reth.git", default-features = false }
+reth-scroll-chainspec = { git = "https://github.com/scroll-tech/reth.git", branch = "chore-merge-upstream-90513dfe3", default-features = false }
+reth-scroll-engine-primitives = { git = "https://github.com/scroll-tech/reth.git", branch = "chore-merge-upstream-90513dfe3", default-features = false }
+reth-scroll-node = { git = "https://github.com/scroll-tech/reth.git", branch = "chore-merge-upstream-90513dfe3", default-features = false }
+reth-scroll-primitives = { git = "https://github.com/scroll-tech/reth.git", branch = "chore-merge-upstream-90513dfe3", default-features = false }
 
 # rollup node
 rollup-node-indexer = { path = "crates/indexer" }
@@ -169,19 +169,3 @@ thiserror = "2.0"
 tokio = { version = "1.39", default-features = false }
 tokio-stream = { version = "0.1", default-features = false }
 tracing = "0.1.0"
-
-[patch.crates-io]
-revm = { git = "https://github.com/bluealloy/revm", rev = "19a5f3b" }
-revm-bytecode = { git = "https://github.com/bluealloy/revm", rev = "19a5f3b" }
-revm-database = { git = "https://github.com/bluealloy/revm", rev = "19a5f3b" }
-revm-state = { git = "https://github.com/bluealloy/revm", rev = "19a5f3b" }
-revm-primitives = { git = "https://github.com/bluealloy/revm", rev = "19a5f3b" }
-revm-interpreter = { git = "https://github.com/bluealloy/revm", rev = "19a5f3b" }
-revm-inspector = { git = "https://github.com/bluealloy/revm", rev = "19a5f3b" }
-revm-context = { git = "https://github.com/bluealloy/revm", rev = "19a5f3b" }
-revm-context-interface = { git = "https://github.com/bluealloy/revm", rev = "19a5f3b" }
-revm-database-interface = { git = "https://github.com/bluealloy/revm", rev = "19a5f3b" }
-revm-specification = { git = "https://github.com/bluealloy/revm", rev = "19a5f3b" }
-op-revm = { git = "https://github.com/bluealloy/revm", rev = "19a5f3b" }
-
-revm-inspectors = { git = "https://github.com/paradigmxyz/revm-inspectors", rev = "9219073" }

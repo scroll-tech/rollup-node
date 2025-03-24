@@ -3,7 +3,7 @@ static ALLOC: reth_cli_util::allocator::Allocator = reth_cli_util::allocator::ne
 
 fn main() {
     use clap::Parser;
-    use reth_node_builder::{engine_tree_config::TreeConfig, EngineNodeLauncher};
+    use reth_node_builder::{EngineNodeLauncher, TreeConfig};
     use reth_provider::providers::BlockchainProvider;
     use reth_scroll_cli::{Cli, ScrollChainSpecParser};
     use reth_scroll_node::{ScrollAddOns, ScrollNode};
