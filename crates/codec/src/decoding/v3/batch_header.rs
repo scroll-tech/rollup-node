@@ -1,5 +1,4 @@
 use crate::{from_be_bytes_slice_and_advance_buf, from_slice_and_advance_buf};
-use std::sync::OnceLock;
 
 use alloy_primitives::{B256, bytes::BufMut, keccak256};
 
@@ -24,14 +23,13 @@ pub struct BatchHeaderV3 {
     pub last_block_timestamp: u64,
     /// The blob data proof: z (32 bytes) and y (32 bytes).
     pub blob_data_proof: [B256; 2],
-    /// The hash of the header.
-    hash: OnceLock<B256>,
 }
 
 impl BatchHeaderV3 {
     pub const BYTES_LENGTH: usize = 193;
 
     /// Returns a new instance [`BatchHeader`].
+    #[allow(clippy::too_many_arguments)]
     pub fn new(
         version: u8,
         batch_index: u64,
@@ -53,7 +51,6 @@ impl BatchHeaderV3 {
             parent_batch_hash,
             last_block_timestamp,
             blob_data_proof,
-            hash: OnceLock::new(),
         }
     }
 
@@ -89,17 +86,11 @@ impl BatchHeaderV3 {
             parent_batch_hash,
             last_block_timestamp,
             blob_data_proof: [blob_data_proof_z, blob_data_proof_y],
-            hash: OnceLock::new(),
         })
     }
 
-    /// Returns the hash of the batch header, computing it if it is queried for the first time.
-    pub fn hash(&self) -> &B256 {
-        self.hash.get_or_init(|| self.hash_slow())
-    }
-
     /// Computes the hash for the header.
-    fn hash_slow(&self) -> B256 {
+    pub fn hash_slow(&self) -> B256 {
         let mut bytes = Vec::<u8>::with_capacity(Self::BYTES_LENGTH);
         bytes.put_slice(&self.version.to_be_bytes());
         bytes.put_slice(&self.batch_index.to_be_bytes());

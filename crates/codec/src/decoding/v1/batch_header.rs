@@ -1,5 +1,4 @@
 use crate::{from_be_bytes_slice_and_advance_buf, from_slice_and_advance_buf};
-use std::sync::OnceLock;
 
 use alloy_primitives::{
     B256, U256,
@@ -26,14 +25,13 @@ pub struct BatchHeaderV1 {
     pub parent_batch_hash: B256,
     /// A bitmap to indicate which L1 messages are skipped in the batch.
     pub skipped_l1_message_bitmap: Vec<U256>,
-    /// The hash of the header.
-    hash: OnceLock<B256>,
 }
 
 impl BatchHeaderV1 {
     pub const BYTES_LENGTH: usize = 121;
 
     /// Returns a new instance [`BatchHeader`].
+    #[allow(clippy::too_many_arguments)]
     pub fn new(
         version: u8,
         batch_index: u64,
@@ -53,7 +51,6 @@ impl BatchHeaderV1 {
             blob_versioned_hash,
             parent_batch_hash,
             skipped_l1_message_bitmap,
-            hash: OnceLock::new(),
         }
     }
 
@@ -78,7 +75,7 @@ impl BatchHeaderV1 {
             buf.chunks(32).map(|chunk| U256::from_be_slice(chunk)).collect();
 
         // check leftover bytes are correct.
-        if buf.len() as u64 != (l1_message_popped + 255) / 256 * 32 {
+        if buf.len() as u64 != l1_message_popped.div_ceil(256) * 32 {
             return None
         }
         buf.advance(skipped_l1_message_bitmap.len() * 32);
@@ -92,17 +89,11 @@ impl BatchHeaderV1 {
             blob_versioned_hash,
             parent_batch_hash,
             skipped_l1_message_bitmap,
-            hash: OnceLock::new(),
         })
     }
 
-    /// Returns the hash of the batch header, computing it if it is queried for the first time.
-    pub fn hash(&self) -> &B256 {
-        self.hash.get_or_init(|| self.hash_slow())
-    }
-
     /// Computes the hash for the header.
-    fn hash_slow(&self) -> B256 {
+    pub fn hash_slow(&self) -> B256 {
         let mut bytes = Vec::<u8>::with_capacity(
             Self::BYTES_LENGTH + self.skipped_l1_message_bitmap.len() * 32,
         );

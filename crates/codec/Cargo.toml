@@ -5,6 +5,7 @@ edition = "2024"
 
 [dependencies]
 # alloy
+scroll-alloy-consensus.workspace = true
 alloy-eips.workspace = true
 alloy-primitives.workspace = true
 alloy-rlp = { version = "0.3", default-features = false }

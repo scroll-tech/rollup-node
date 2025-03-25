@@ -1,5 +1,3 @@
-use std::sync::OnceLock;
-
 use alloy_primitives::{B256, bytes::BufMut, keccak256};
 
 /// The batch header for V7.
@@ -13,8 +11,6 @@ pub struct BatchHeaderV7 {
     pub blob_versioned_hash: B256,
     /// The parent batch hash.
     pub parent_batch_hash: B256,
-    /// The hash of the header.
-    hash: OnceLock<B256>,
 }
 
 impl BatchHeaderV7 {
@@ -27,16 +23,11 @@ impl BatchHeaderV7 {
         blob_versioned_hash: B256,
         parent_batch_hash: B256,
     ) -> Self {
-        Self { version, batch_index, blob_versioned_hash, parent_batch_hash, hash: OnceLock::new() }
-    }
-
-    /// Returns the hash of the batch header, computing it if it is queried for the first time.
-    pub fn hash(&self) -> &B256 {
-        self.hash.get_or_init(|| self.hash_slow())
+        Self { version, batch_index, blob_versioned_hash, parent_batch_hash }
     }
 
     /// Computes the hash for the header.
-    fn hash_slow(&self) -> B256 {
+    pub fn hash_slow(&self) -> B256 {
         let mut bytes = Vec::<u8>::with_capacity(Self::BYTES_LENGTH);
         bytes.put_slice(&self.version.to_be_bytes());
         bytes.put_slice(&self.batch_index.to_be_bytes());

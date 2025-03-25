@@ -325,16 +325,12 @@ where
                 tracing::trace!(target: "scroll::watcher", commit_batch = ?decoded_log, ?block_number);
 
                 // feed all batch information to the batch input builder.
-                let batch_builder = BatchInputBuilder::new(
-                    info.version(),
-                    batch_index,
-                    batch_hash,
-                    block_number,
-                    info.parent_batch_header(),
-                )
-                .with_chunks(info.chunks().map(|c| c.iter().map(|c| c.to_vec()).collect()))
-                .with_skipped_l1_message_bitmap(info.skipped_l1_message_bitmap())
-                .with_blob_hashes(blob_hashes);
+                let batch_builder =
+                    BatchInputBuilder::new(info.version(), batch_index, batch_hash, block_number)
+                        .with_parent_batch_header(info.parent_batch_header())
+                        .with_chunks(info.chunks().map(|c| c.iter().map(|c| c.to_vec()).collect()))
+                        .with_skipped_l1_message_bitmap(info.skipped_l1_message_bitmap())
+                        .with_blob_hashes(blob_hashes);
 
                 // if builder can build a batch input from data, notify via channel.
                 if let Some(batch_input) = batch_builder.try_build() {

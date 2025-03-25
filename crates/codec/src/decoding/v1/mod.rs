@@ -69,7 +69,7 @@ pub(crate) fn decode_v1_chunk(
 
     // iterate the chunks
     for chunk in chunks {
-        let buf: &mut &[u8] = &mut chunk.as_ref();
+        let buf: &mut &[u8] = &mut &*chunk;
 
         // get the block count
         let blocks_count = buf.first().copied().ok_or(DecodingError::Eof)? as usize;

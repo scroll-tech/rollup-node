@@ -26,7 +26,7 @@ pub fn decode_v0(calldata: &[u8]) -> Result<Batch, DecodingError> {
 
     // iterate the chunks
     for chunk in call.chunks().ok_or(DecodingError::MissingChunkData)? {
-        let buf = &mut chunk.as_ref();
+        let buf = &mut &*chunk;
 
         // get the block count
         let blocks_count = buf.first().copied().ok_or(DecodingError::Eof)? as usize;

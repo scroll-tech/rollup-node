@@ -1,13 +1,7 @@
 //! A stateless derivation pipeline for Scroll.
 //!
-//! This crate provides a simple implementation of a derivation pipeline that transforms commit
-//! payload into payload attributes for block building.
-
-pub use error::DerivationPipelineError;
-mod error;
-
-pub use hash::try_compute_data_hash;
-mod hash;
+//! This crate provides a simple implementation of a derivation pipeline that transforms a batch
+//! into payload attributes for block building.
 
 use alloy_primitives::B256;
 use alloy_rpc_types_engine::PayloadAttributes;
@@ -28,8 +22,8 @@ pub trait L1MessageProvider {
 pub fn derive<P: L1MessageProvider>(
     batch: Batch,
     l1_message_provider: &P,
-) -> Result<impl Iterator<Item = ScrollPayloadAttributes> + use<'_, P>, DerivationPipelineError> {
-    let iter = batch.data.into_l2_blocks().into_iter().map(|mut block| {
+) -> impl Iterator<Item = ScrollPayloadAttributes> + use<'_, P> {
+    batch.data.into_l2_blocks().into_iter().map(|mut block| {
         // query the appropriate amount of l1 messages.
         let mut txs = (0..block.context.num_l1_messages)
             .map(|_| l1_message_provider.next_l1_message())
@@ -56,9 +50,7 @@ pub fn derive<P: L1MessageProvider>(
             transactions: Some(txs),
             no_tx_pool: true,
         }
-    });
-
-    Ok(iter)
+    })
 }
 
 #[cfg(test)]
@@ -101,7 +93,7 @@ mod tests {
         }];
         let provider = TestL1MessageProvider { messages: RefCell::new(l1_messages) };
 
-        let mut attributes = derive(batch, &provider)?;
+        let mut attributes = derive(batch, &provider);
         let attribute = attributes.find(|a| a.payload_attributes.timestamp == 1696935384).unwrap();
 
         let expected = ScrollPayloadAttributes{
