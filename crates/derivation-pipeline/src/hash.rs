@@ -1,12 +1,9 @@
 use alloy_primitives::{bytes::BufMut, keccak256, B256};
-use rollup_node_primitives::L1MessageWithBlockNumber;
+use scroll_alloy_consensus::TxL1Message;
 use scroll_codec::{decoding::batch::Batch, BlockContext, L2Block};
 
 /// Computes the data hash for the batch.
-pub fn try_compute_data_hash(
-    batch: &Batch,
-    l1_messages: Vec<&L1MessageWithBlockNumber>,
-) -> Option<B256> {
+pub fn try_compute_data_hash(batch: &Batch, l1_messages: &[TxL1Message]) -> Option<B256> {
     // From version 7 and above, the batch doesn't have a data hash.
     if batch.version >= 7 {
         return None;
@@ -14,16 +11,15 @@ pub fn try_compute_data_hash(
 
     let chunks_count = batch.chunks_block_count.as_ref()?;
     let blocks_buf = &mut (&**batch.data.l2_blocks());
-    let l1_messages = l1_messages.into_iter();
+    let l1_messages = &mut (&*l1_messages);
 
     let mut chunk_hashes = Vec::with_capacity(chunks_count.len() * 32);
 
     for chunk_count in chunks_count {
         // slice the blocks at chunk_count and filter l1 message.
         let blocks = blocks_buf.get(..*chunk_count)?;
-        let messages = l1_messages
-            .clone()
-            .filter(|tx| blocks.iter().any(|block| block.context.number == tx.block_number));
+        let l1_messages_count = blocks.iter().map(|b| b.context.num_l1_messages as usize).sum();
+        let messages = l1_messages.get(..l1_messages_count)?;
 
         // compute the chunk data hash.
         chunk_hashes.append(&mut compute_chunk_data_hash(batch.version, blocks, messages).to_vec());
@@ -39,13 +35,10 @@ pub fn try_compute_data_hash(
 fn compute_chunk_data_hash<'a>(
     version: u8,
     l2_blocks: &[L2Block],
-    l1_messages: impl Iterator<Item = &'a L1MessageWithBlockNumber>,
+    l1_messages: &[TxL1Message],
 ) -> B256 {
     // reserve the correct capacity.
-    let mut capacity = l2_blocks.len() * (BlockContext::BYTES_LENGTH - 2);
-    if let (_, Some(upper)) = l1_messages.size_hint() {
-        capacity += upper * 32
-    };
+    let mut capacity = l2_blocks.len() * (BlockContext::BYTES_LENGTH - 2) + l1_messages.len() * 32;
     if version == 0 {
         capacity += l2_blocks.iter().map(|b| b.transactions.len()).sum::<usize>();
     }
@@ -59,7 +52,7 @@ fn compute_chunk_data_hash<'a>(
     }
 
     for l1_message in l1_messages {
-        buf.put_slice(l1_message.transaction.tx_hash().as_slice())
+        buf.put_slice(l1_message.tx_hash().as_slice())
     }
 
     // for v0, we add the l2 transaction hashes.
@@ -87,7 +80,7 @@ mod tests {
         let raw_calldata = read_to_bytes("../codec/testdata/calldata_v0.bin")?;
         let batch = decode_v0(&raw_calldata)?;
 
-        let hash = try_compute_data_hash(&batch, vec![]).unwrap();
+        let hash = try_compute_data_hash(&batch, &[]).unwrap();
 
         assert_eq!(hash, b256!("33e608dbf683c1ee03a34d01de52f67d60a0563b7e713b65a7395bb3b646f71f"));
 
@@ -101,7 +94,7 @@ mod tests {
         let blob = read_to_bytes("../codec/testdata/blob_v1.bin")?;
         let batch = decode_v1(&raw_calldata, &blob)?;
 
-        let hash = try_compute_data_hash(&batch, vec![]).unwrap();
+        let hash = try_compute_data_hash(&batch, &[]).unwrap();
 
         assert_eq!(hash, b256!("c20f5914a772663080f8a77955b33814a04f7a19c880536e562a1bcfd5343a37"));
 

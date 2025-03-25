@@ -20,7 +20,6 @@ scroll-alloy-consensus.workspace = true
 scroll-alloy-rpc-types-engine.workspace = true
 
 # rollup node
-rollup-node-primitives.workspace = true
 scroll-codec.workspace = true
 
 # misc
