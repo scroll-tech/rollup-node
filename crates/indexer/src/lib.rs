@@ -44,7 +44,7 @@ impl Indexer {
                 )),
                 L1Notification::NewBlock(_block_number) |
                 L1Notification::Finalized(_block_number) => return,
-                L1Notification::BatchCommit(batch_input) => IndexerFuture::HandleBatchCommit(
+                L1Notification::BatchCommit { index, .. } => IndexerFuture::HandleBatchCommit(
                     Box::pin(Self::handle_batch_commit(self.database.clone(), batch_input)),
                 ),
                 L1Notification::L1Message(l1_message) => IndexerFuture::HandleL1Message(Box::pin(
@@ -91,7 +91,7 @@ impl Indexer {
     /// Handles a batch input by inserting it into the database.
     async fn handle_batch_commit(
         database: Arc<Database>,
-        batch_input: BatchInput,
+        index: BatchInput,
     ) -> Result<IndexerEvent, IndexerError> {
         let event = IndexerEvent::BatchCommitIndexed(batch_input.batch_index());
         database.insert_batch_input(batch_input).await?;

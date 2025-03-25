@@ -15,16 +15,14 @@ pub mod test_utils;
 use std::{sync::Arc, time::Duration};
 
 use alloy_network::Ethereum;
-use alloy_primitives::{BlockNumber, B256};
+use alloy_primitives::{BlockNumber, Bytes, B256};
 use alloy_provider::{Network, Provider};
 use alloy_rpc_types_eth::{BlockNumberOrTag, Log, TransactionTrait};
 use error::L1WatcherResult;
-use rollup_node_primitives::{BatchInput, BatchInputBuilder, BoundedVec, L1MessageWithBlockNumber};
+use itertools::Itertools;
+use rollup_node_primitives::{BoundedVec, L1MessageWithBlockNumber};
 use scroll_alloy_consensus::TxL1Message;
-use scroll_l1::abi::{
-    calls::CommitBatchCall,
-    logs::{try_decode_log, CommitBatch, FinalizeBatch, QueueTransaction},
-};
+use scroll_l1::abi::logs::{try_decode_log, CommitBatch, FinalizeBatch, QueueTransaction};
 use tokio::sync::mpsc;
 
 /// The block range used to fetch L1 logs.
@@ -84,7 +82,18 @@ pub enum L1Notification {
     /// A notification for a reorg of the L1 up to a given block number.
     Reorg(u64),
     /// A new batch has been committed on the L1 rollup contract.
-    BatchCommit(BatchInput),
+    BatchCommit {
+        /// The hash of the committed batch.
+        hash: B256,
+        /// The index of the batch.
+        index: u64,
+        /// The block number the batch was committed at.
+        block_number: BlockNumber,
+        /// The commit transaction calldata.
+        calldata: Arc<Bytes>,
+        /// The optional blob hash for the commit.
+        blob_versioned_hash: Option<B256>,
+    },
     /// A new batch has been finalized on the L1 rollup contract.
     BatchFinalization {
         /// The hash of the finalized batch.
@@ -200,7 +209,7 @@ where
         // shortcircuit.
         if self.unfinalized_blocks.is_empty() {
             tracing::trace!(target: "scroll::watcher", "no unfinalized blocks");
-            return
+            return;
         }
 
         let tail_block = self.unfinalized_blocks.last().expect("tail exists");
@@ -208,7 +217,7 @@ where
             // clear, the finalized block is past the tail.
             tracing::trace!(target: "scroll::watcher", tail = ?tail_block.number, finalized = ?finalized.number, "draining all unfinalized blocks");
             self.unfinalized_blocks.clear();
-            return
+            return;
         }
 
         let finalized_block_position =
@@ -235,7 +244,7 @@ where
         let tail = self.unfinalized_blocks.last();
 
         if tail.is_some_and(|h| h.hash == latest.hash) {
-            return Ok(())
+            return Ok(());
         } else if tail.is_some_and(|h| h.hash == latest.parent_hash) {
             // latest block extends the tip.
             tracing::trace!(target: "scroll::watcher", number = ?latest.number, hash = ?latest.hash, "block extends chain");
@@ -299,43 +308,50 @@ where
     #[tracing::instrument(skip_all)]
     async fn handle_batch_commits(&self, logs: &[Log]) -> L1WatcherResult<()> {
         // filter commit logs.
-        let commit_logs_with_tx =
-            logs.iter().map(|l| (l, l.transaction_hash)).filter_map(|(log, tx_hash)| {
+        let mut commit_logs_with_tx = logs
+            .iter()
+            .map(|l| (l, l.transaction_hash))
+            .filter_map(|(log, tx_hash)| {
+                let tx_hash = tx_hash?;
                 try_decode_log::<CommitBatch>(&log.inner)
                     .map(|decoded| (log, decoded.data, tx_hash))
-            });
+            })
+            .collect::<Vec<_>>();
 
-        for (raw_log, decoded_log, maybe_tx_hash) in commit_logs_with_tx {
+        // sort the commits and group by tx hash.
+        commit_logs_with_tx
+            .sort_by(|(_, data_a, _), (_, data_b, _)| data_a.batch_index.cmp(&data_b.batch_index));
+        let groups = commit_logs_with_tx.into_iter().chunk_by(|(_, _, hash)| *hash);
+        let groups: Vec<_> =
+            groups.into_iter().map(|(hash, group)| (hash, group.collect::<Vec<_>>())).collect();
+
+        for (tx_hash, group) in groups {
             // fetch the commit transaction.
-            let tx_hash = maybe_tx_hash.ok_or(FilterLogError::MissingTransactionHash)?;
             let transaction = self
                 .execution_provider
                 .get_transaction_by_hash(tx_hash)
                 .await?
                 .ok_or(EthRequestError::MissingTransactionHash(tx_hash))?;
 
-            // decode the transaction's input into a commit batch call.
-            let commit_info = CommitBatchCall::try_decode(transaction.inner.input());
-            if let Some(info) = commit_info {
-                let batch_index: u64 = decoded_log.batchIndex.saturating_to();
+            // get the optional blobs and calldata.
+            let mut blob_versioned_hashes =
+                transaction.blob_versioned_hashes().unwrap_or(&[]).into_iter().copied();
+            let input = Arc::new(transaction.input().clone());
+
+            for (raw_log, decoded_log, _) in group {
                 let block_number =
                     raw_log.block_number.ok_or(FilterLogError::MissingBlockNumber)?;
-                let batch_hash = decoded_log.batchHash;
-                let blob_hashes = transaction.blob_versioned_hashes().map(|blobs| blobs.to_vec());
-                tracing::trace!(target: "scroll::watcher", commit_batch = ?decoded_log, ?block_number);
+                let batch_index = decoded_log.batch_index.to();
 
-                // feed all batch information to the batch input builder.
-                let batch_builder =
-                    BatchInputBuilder::new(info.version(), batch_index, batch_hash, block_number)
-                        .with_parent_batch_header(info.parent_batch_header())
-                        .with_chunks(info.chunks().map(|c| c.iter().map(|c| c.to_vec()).collect()))
-                        .with_skipped_l1_message_bitmap(info.skipped_l1_message_bitmap())
-                        .with_blob_hashes(blob_hashes);
-
-                // if builder can build a batch input from data, notify via channel.
-                if let Some(batch_input) = batch_builder.try_build() {
-                    self.notify(L1Notification::BatchCommit(batch_input)).await;
-                }
+                // notify via channel.
+                self.notify(L1Notification::BatchCommit {
+                    hash: decoded_log.batch_hash,
+                    index: batch_index,
+                    block_number,
+                    calldata: input.clone(),
+                    blob_versioned_hash: blob_versioned_hashes.next(),
+                })
+                .await;
             }
         }
         Ok(())
@@ -359,7 +375,7 @@ where
             let _ = self
                 .sender
                 .send(Arc::new(L1Notification::BatchFinalization {
-                    hash: decoded_log.batchHash,
+                    hash: decoded_log.batch_hash,
                     block_number,
                 }))
                 .await;
@@ -784,7 +800,7 @@ mod tests {
 
         // Then
         let notification = receiver.recv().await.unwrap();
-        assert!(matches!(*notification, L1Notification::BatchCommit(_)));
+        assert!(matches!(*notification, L1Notification::BatchCommit { .. }));
 
         Ok(())
     }
