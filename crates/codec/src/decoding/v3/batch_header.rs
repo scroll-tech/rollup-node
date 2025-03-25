@@ -28,7 +28,7 @@ pub struct BatchHeaderV3 {
 impl BatchHeaderV3 {
     pub const BYTES_LENGTH: usize = 193;
 
-    /// Returns a new instance [`BatchHeader`].
+    /// Returns a new instance [`BatchHeaderV3`].
     #[allow(clippy::too_many_arguments)]
     pub fn new(
         version: u8,
@@ -54,8 +54,8 @@ impl BatchHeaderV3 {
         }
     }
 
-    /// Tries to read from the input buffer into the [`BatchHeader`].
-    /// Returns [`None`] if the buffer.len() < [`BatchHeader::BYTES_LENGTH`].
+    /// Tries to read from the input buffer into the [`BatchHeaderV3`].
+    /// Returns [`None`] if the buffer.len() < [`BatchHeaderV3::BYTES_LENGTH`].
     pub fn try_from_buf(buf: &mut &[u8]) -> Option<Self> {
         if buf.len() < Self::BYTES_LENGTH {
             return None;

@@ -9550,7 +9550,6 @@ dependencies = [
  "scroll-alloy-consensus",
  "scroll-alloy-rpc-types-engine",
  "scroll-codec",
- "thiserror 2.0.12",
 ]
 
 [[package]]

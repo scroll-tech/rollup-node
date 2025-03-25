@@ -3,6 +3,10 @@
 //! This crate provides a simple implementation of a derivation pipeline that transforms a batch
 //! into payload attributes for block building.
 
+#![cfg_attr(not(feature = "std"), no_std)]
+#[cfg(not(feature = "std"))]
+extern crate alloc as std;
+
 use alloy_primitives::B256;
 use alloy_rpc_types_engine::PayloadAttributes;
 use reth_scroll_chainspec::SCROLL_FEE_VAULT_ADDRESS;

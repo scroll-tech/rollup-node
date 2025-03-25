@@ -22,9 +22,16 @@ scroll-alloy-rpc-types-engine.workspace = true
 # rollup node
 scroll-codec.workspace = true
 
-# misc
-thiserror.workspace = true
-
 [dev-dependencies]
 eyre.workspace = true
 scroll-codec = { workspace = true, features = ["test-utils"] }
+
+[features]
+default = ["std"]
+std = [
+    "scroll-alloy-consensus/std",
+    "scroll-alloy-rpc-types-engine/std",
+    "alloy-primitives/std",
+    "alloy-rpc-types-engine/std",
+    "reth-scroll-chainspec/std",
+]

@@ -28,7 +28,7 @@ pub struct BatchHeaderV0 {
 impl BatchHeaderV0 {
     pub const BYTES_LENGTH: usize = 89;
 
-    /// Returns a new instance [`BatchHeader`].
+    /// Returns a new instance [`BatchHeaderV0`].
     pub fn new(
         version: u8,
         batch_index: u64,
@@ -49,8 +49,8 @@ impl BatchHeaderV0 {
         }
     }
 
-    /// Tries to read from the input buffer into the [`BatchHeader`].
-    /// Returns [`None`] if the buffer.len() < [`BatchHeader::BYTES_LENGTH`].
+    /// Tries to read from the input buffer into the [`BatchHeaderV0`].
+    /// Returns [`None`] if the buffer.len() < [`BatchHeaderV0::BYTES_LENGTH`].
     pub fn try_from_buf(buf: &mut &[u8]) -> Option<Self> {
         if buf.len() < Self::BYTES_LENGTH {
             return None

@@ -16,7 +16,7 @@ pub struct BatchHeaderV7 {
 impl BatchHeaderV7 {
     pub const BYTES_LENGTH: usize = 73;
 
-    /// Returns a new instance [`BatchHeader`].
+    /// Returns a new instance [`BatchHeaderV7`].
     pub fn new(
         version: u8,
         batch_index: u64,
