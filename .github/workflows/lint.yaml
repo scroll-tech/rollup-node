@@ -128,7 +128,7 @@ jobs:
           - type: wasm
             target: wasm32-unknown-unknown
             exclude: |
-              scroll-engine,scroll-wire,scroll-bridge,scroll-network,rollup-node-manager,rollup-node-watcher,scroll-db,scroll-migration,rollup-node-indexer
+              scroll-engine,scroll-wire,scroll-bridge,scroll-network,rollup-node-manager,rollup-node-watcher,scroll-db,scroll-migration,rollup-node-indexer,scroll-derivation-pipeline
           - type: riscv
             target: riscv32imac-unknown-none-elf
             exclude: |
