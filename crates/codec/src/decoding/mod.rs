@@ -26,6 +26,9 @@ pub mod v4;
 /// V7 implementation of the decoding.
 pub mod v7;
 
+/// Decoded payload.
+pub(crate) mod payload;
+
 /// Tests utils.
 #[cfg(any(test, feature = "test-utils"))]
 pub mod test_utils;

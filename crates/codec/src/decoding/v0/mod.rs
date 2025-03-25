@@ -8,7 +8,7 @@ mod block_context;
 
 use crate::{
     L2Block,
-    decoding::{batch::Batch, transaction::Transaction},
+    decoding::{batch::Batch, payload::PayloadData, transaction::Transaction},
     error::DecodingError,
 };
 use std::vec::Vec;
@@ -56,7 +56,16 @@ pub fn decode_v0(calldata: &[u8]) -> Result<Batch, DecodingError> {
         }
     }
 
-    Ok(Batch::new(call.version(), Some(chunks_block_count), l2_blocks.into()))
+    // decode the parent batch header.
+    let raw_parent_header = call.parent_batch_header().ok_or(DecodingError::MissingParentHeader)?;
+    let parent_header = BatchHeaderV0::try_from_buf(&mut (&*raw_parent_header))
+        .ok_or(DecodingError::InvalidParentHeaderFormat)?;
+    let l1_message_start_index = parent_header.total_l1_message_popped;
+
+    let payload =
+        PayloadData { blocks: l2_blocks, l1_message_queue_info: l1_message_start_index.into() };
+
+    Ok(Batch::new(call.version(), Some(chunks_block_count), payload))
 }
 
 #[cfg(test)]

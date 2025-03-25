@@ -8,8 +8,6 @@ pub mod decoding;
 pub use error::CodecError;
 mod error;
 
-pub(crate) mod payload;
-
 use crate::{
     decoding::{
         batch::Batch, v0::decode_v0, v1::decode_v1, v2::decode_v2, v4::decode_v4, v7::decode_v7,

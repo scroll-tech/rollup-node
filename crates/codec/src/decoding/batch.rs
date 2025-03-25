@@ -1,6 +1,8 @@
-use crate::decoding::{v0::BatchHeaderV0, v1::BatchHeaderV1, v3::BatchHeaderV3, v7::BatchHeaderV7};
+use crate::decoding::{
+    payload::PayloadData, v0::BatchHeaderV0, v1::BatchHeaderV1, v3::BatchHeaderV3,
+    v7::BatchHeaderV7,
+};
 
-use crate::payload::PayloadData;
 use alloy_primitives::B256;
 
 /// A batch header.

@@ -7,11 +7,11 @@ mod block_context;
 use crate::{
     L2Block, check_buf_len,
     decoding::{
-        batch::Batch, blob::BlobSliceIter, transaction::Transaction, v2::zstd::decompress_blob_data,
+        batch::Batch, blob::BlobSliceIter, payload::PayloadData, transaction::Transaction,
+        v2::zstd::decompress_blob_data,
     },
     error::DecodingError,
     from_be_bytes_slice_and_advance_buf,
-    payload::PayloadData,
 };
 use std::vec::Vec;
 
@@ -94,7 +94,11 @@ pub(crate) fn decode_v7_payload(blob: &[u8]) -> Result<Batch, DecodingError> {
             .push(L2Block::new(transactions, (context, initial_block_number + i as u64).into()));
     }
 
-    let payload: PayloadData = (l2_blocks, prev_message_queue_hash, post_message_queue_hash).into();
+    let payload = PayloadData {
+        blocks: l2_blocks,
+        l1_message_queue_info: (prev_message_queue_hash, post_message_queue_hash).into(),
+    };
+
     Ok(Batch::new(7, None, payload))
 }
 

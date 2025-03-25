@@ -2,6 +2,7 @@ use crate::{
     check_buf_len,
     decoding::{
         batch::Batch, blob::BlobSliceIter, v1::decode_v1_chunk, v2::zstd::decompress_blob_data,
+        v3::BatchHeaderV3,
     },
     error::DecodingError,
     from_be_bytes_slice_and_advance_buf,
@@ -16,6 +17,12 @@ pub fn decode_v4(calldata: &[u8], blob: &[u8]) -> Result<Batch, DecodingError> {
     // abi decode into a commit batch call
     let call = CommitBatchCall::try_decode(calldata).ok_or(DecodingError::InvalidCalldataFormat)?;
     let chunks = call.chunks().ok_or(DecodingError::MissingChunkData)?;
+
+    // decode the parent batch header.
+    let raw_parent_header = call.parent_batch_header().ok_or(DecodingError::MissingParentHeader)?;
+    let parent_header = BatchHeaderV3::try_from_buf(&mut (&*raw_parent_header))
+        .ok_or(DecodingError::InvalidParentHeaderFormat)?;
+    let l1_message_start_index = parent_header.total_l1_message_popped;
 
     // get blob iterator and collect, skipping unused bytes.
     let mut heap_blob = BlobSliceIter::from_blob_slice(blob).copied().collect::<Vec<_>>();
@@ -40,7 +47,7 @@ pub fn decode_v4(calldata: &[u8], blob: &[u8]) -> Result<Batch, DecodingError> {
     // clone buf and move pass chunk information.
     buf.advance(super::v2::TRANSACTION_DATA_BLOB_INDEX_OFFSET);
 
-    decode_v1_chunk(call.version(), chunks, buf)
+    decode_v1_chunk(call.version(), l1_message_start_index, chunks, buf)
 }
 
 #[cfg(test)]

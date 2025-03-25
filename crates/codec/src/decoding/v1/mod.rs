@@ -3,7 +3,10 @@ mod batch_header;
 
 use crate::{
     L2Block, check_buf_len,
-    decoding::{batch::Batch, blob::BlobSliceIter, transaction::Transaction, v0::BlockContextV0},
+    decoding::{
+        batch::Batch, blob::BlobSliceIter, payload::PayloadData, transaction::Transaction,
+        v0::BlockContextV0,
+    },
     error::DecodingError,
     from_be_bytes_slice_and_advance_buf,
 };
@@ -28,6 +31,12 @@ pub fn decode_v1(calldata: &[u8], blob: &[u8]) -> Result<Batch, DecodingError> {
     // abi decode into a commit batch call
     let call = CommitBatchCall::try_decode(calldata).ok_or(DecodingError::InvalidCalldataFormat)?;
 
+    // decode the parent batch header.
+    let raw_parent_header = call.parent_batch_header().ok_or(DecodingError::MissingParentHeader)?;
+    let parent_header = BatchHeaderV1::try_from_buf(&mut (&*raw_parent_header))
+        .ok_or(DecodingError::InvalidParentHeaderFormat)?;
+    let l1_message_start_index = parent_header.total_l1_message_popped;
+
     let chunks = call.chunks().ok_or(DecodingError::MissingChunkData)?;
 
     // get blob iterator and collect, skipping unused bytes.
@@ -44,12 +53,13 @@ pub fn decode_v1(calldata: &[u8], blob: &[u8]) -> Result<Batch, DecodingError> {
     // move pass chunk information.
     buf.advance(TRANSACTION_DATA_BLOB_INDEX_OFFSET);
 
-    decode_v1_chunk(call.version(), chunks, buf)
+    decode_v1_chunk(call.version(), l1_message_start_index, chunks, buf)
 }
 
 /// Decode the provided chunks and blob data into [`L2Block`].
 pub(crate) fn decode_v1_chunk(
     version: u8,
+    l1_message_start_index: u64,
     chunks: Vec<&[u8]>,
     blob: &[u8],
 ) -> Result<Batch, DecodingError> {
@@ -89,7 +99,10 @@ pub(crate) fn decode_v1_chunk(
         }
     }
 
-    Ok(Batch::new(version, Some(chunks_block_count), l2_blocks.into()))
+    let payload =
+        PayloadData { blocks: l2_blocks, l1_message_queue_info: l1_message_start_index.into() };
+
+    Ok(Batch::new(version, Some(chunks_block_count), payload))
 }
 
 #[cfg(test)]
