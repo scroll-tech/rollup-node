@@ -11,12 +11,12 @@ workspace = true
 
 [dependencies]
 # alloy
-alloy-primitives.workspace = true
-alloy-rpc-types-engine.workspace = true
+alloy-primitives = { workspace = true, default-features = false }
+alloy-rpc-types-engine = { workspace = true, default-features = false }
 
 # scroll
-reth-scroll-chainspec.workspace = true
-scroll-alloy-consensus.workspace = true
+reth-scroll-chainspec = { workspace = true, default-features = false }
+scroll-alloy-consensus = { workspace = true, default-features = false }
 scroll-alloy-rpc-types-engine.workspace = true
 
 # rollup node

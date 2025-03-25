@@ -7,6 +7,8 @@
 #[cfg(not(feature = "std"))]
 extern crate alloc as std;
 
+use std::vec::Vec;
+
 use alloy_primitives::B256;
 use alloy_rpc_types_engine::PayloadAttributes;
 use reth_scroll_chainspec::SCROLL_FEE_VAULT_ADDRESS;
