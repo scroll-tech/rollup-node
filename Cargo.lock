@@ -9515,6 +9515,7 @@ dependencies = [
  "eyre",
  "scroll-alloy-consensus",
  "scroll-l1",
+ "serde_json",
  "thiserror 2.0.12",
  "zstd",
 ]
