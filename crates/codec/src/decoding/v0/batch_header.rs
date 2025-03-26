@@ -1,9 +1,8 @@
 use crate::{from_be_bytes_slice_and_advance_buf, from_slice_and_advance_buf};
 
 use alloy_primitives::{
-    B256, U256,
     bytes::{Buf, BufMut},
-    keccak256,
+    keccak256, B256, U256,
 };
 
 /// The batch header for V0.
@@ -112,7 +111,7 @@ impl BatchHeaderV0 {
 mod tests {
     use crate::decoding::{test_utils::read_to_bytes, v0::BatchHeaderV0};
 
-    use alloy_primitives::{U256, b256};
+    use alloy_primitives::{b256, U256};
     use alloy_sol_types::SolCall;
     use scroll_l1::abi::calls::commitBatchCall;
 

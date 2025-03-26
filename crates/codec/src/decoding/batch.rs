@@ -1,5 +1,6 @@
-use crate::{BlockContext, L2Block, decoding::payload::PayloadData};
-use alloy_primitives::{B256, bytes::BufMut, keccak256};
+use crate::{decoding::payload::PayloadData, BlockContext, L2Block};
+
+use alloy_primitives::{bytes::BufMut, keccak256, B256};
 use scroll_alloy_consensus::TxL1Message;
 
 /// The deserialized batch data.
@@ -107,7 +108,7 @@ fn hash_chunk(
 mod tests {
     use crate::decoding::{test_utils::read_to_bytes, v0::decode_v0, v1::decode_v1};
 
-    use alloy_primitives::{U256, address, b256, bytes};
+    use alloy_primitives::{address, b256, bytes, U256};
     use scroll_alloy_consensus::TxL1Message;
 
     #[test]

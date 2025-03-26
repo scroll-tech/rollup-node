@@ -1,9 +1,8 @@
 use crate::{from_be_bytes_slice_and_advance_buf, from_slice_and_advance_buf};
 
 use alloy_primitives::{
-    B256, U256,
     bytes::{Buf, BufMut},
-    keccak256,
+    keccak256, B256, U256,
 };
 
 /// The batch header for V1.
