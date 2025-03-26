@@ -43,7 +43,7 @@ impl Codec {
     /// Decodes the input data and returns the decoded [`Batch`].
     pub fn decode<T: CommitDataSource>(input: &T) -> Result<Batch, CodecError> {
         let calldata = input.calldata();
-        let version = get_codec_version(&calldata).ok_or(DecodingError::MissingCodecVersion)?;
+        let version = get_codec_version(calldata).ok_or(DecodingError::MissingCodecVersion)?;
 
         let payload = match version {
             0 => decode_v0(calldata)?,
