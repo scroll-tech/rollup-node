@@ -1,12 +1,12 @@
 use crate::{
-    L2Block, check_buf_len,
+    check_buf_len,
     decoding::{blob::BlobSliceIter, transaction::Transaction, v0::BlockContextV0},
     error::DecodingError,
-    from_be_bytes_slice_and_advance_buf,
+    from_be_bytes_slice_and_advance_buf, L2Block,
 };
 use std::vec::Vec;
 
-use alloy_primitives::{Bytes, bytes::Buf};
+use alloy_primitives::{bytes::Buf, Bytes};
 use alloy_sol_types::SolCall;
 use scroll_l1::abi::calls::commitBatchCall;
 
@@ -89,9 +89,9 @@ pub(crate) fn decode_v1_chunk(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{BlockContext, decoding::test_utils::read_to_bytes};
+    use crate::{decoding::test_utils::read_to_bytes, BlockContext};
 
-    use alloy_primitives::{U256, bytes};
+    use alloy_primitives::{bytes, U256};
 
     #[test]
     fn test_should_decode_v1() -> eyre::Result<()> {

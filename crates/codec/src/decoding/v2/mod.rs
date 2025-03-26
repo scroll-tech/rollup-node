@@ -1,10 +1,10 @@
 pub mod zstd;
 
 use crate::{
-    L2Block, check_buf_len,
+    check_buf_len,
     decoding::{blob::BlobSliceIter, v1::decode_v1_chunk, v2::zstd::decompress_blob_data},
     error::DecodingError,
-    from_be_bytes_slice_and_advance_buf,
+    from_be_bytes_slice_and_advance_buf, L2Block,
 };
 use std::vec::Vec;
 
@@ -47,9 +47,9 @@ pub fn decode_v2(calldata: &[u8], blob: &[u8]) -> Result<Vec<L2Block>, DecodingE
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{BlockContext, decoding::test_utils::read_to_bytes};
+    use crate::{decoding::test_utils::read_to_bytes, BlockContext};
 
-    use alloy_primitives::{U256, bytes};
+    use alloy_primitives::{bytes, U256};
 
     #[test]
     fn test_should_decode_v2() -> eyre::Result<()> {

@@ -1,6 +1,5 @@
-use reth_network::{import::BlockImport as RethBlockImport, NetworkPrimitives};
+use reth_network::import::{BlockImport as RethBlockImport, NewBlockEvent};
 use reth_network_peers::PeerId;
-use reth_scroll_node::ScrollNetworkPrimitives;
 use reth_scroll_primitives::ScrollBlock;
 use scroll_network::NewBlockWithPeer;
 use secp256k1::ecdsa::Signature;
@@ -63,22 +62,23 @@ impl RethBlockImport<reth_scroll_primitives::ScrollBlock> for BridgeBlockImport 
     fn on_new_block(
         &mut self,
         peer_id: PeerId,
-        incoming_block: reth_network::message::NewBlockMessage<
-            <ScrollNetworkPrimitives as NetworkPrimitives>::Block,
-        >,
+        incoming_block: NewBlockEvent<reth_scroll_primitives::ScrollBlock>,
     ) {
         // We then delegate the block import to the inner block import.
-        self.bridge_new_block_to_scroll_wire(peer_id, incoming_block.block);
+        match incoming_block {
+            NewBlockEvent::Block(block) => {
+                self.bridge_new_block_to_scroll_wire(peer_id, block.block)
+            }
+            NewBlockEvent::Hashes(_) => {
+                warn!(target: "scroll::bridge::import", peer_id = %peer_id, "Received NewBlockHashes event, expected NewBlock event");
+            }
+        }
     }
 
     fn poll(
         &mut self,
         _cx: &mut Context<'_>,
-    ) -> Poll<
-        reth_network::import::BlockImportOutcome<
-            <ScrollNetworkPrimitives as NetworkPrimitives>::Block,
-        >,
-    > {
+    ) -> Poll<reth_network::import::BlockImportEvent<reth_scroll_primitives::ScrollBlock>> {
         Poll::Pending
     }
 }

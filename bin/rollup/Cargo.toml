@@ -1,5 +1,5 @@
 [package]
-name = "scroll-bridge"
+name = "rollup-node"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -9,6 +9,7 @@ exclude.workspace = true
 [dependencies]
 # alloy
 alloy-chains.workspace = true
+alloy-provider.workspace = true
 alloy-rpc-types-engine.workspace = true
 
 # scroll-alloy
@@ -41,13 +42,18 @@ reth-scroll-primitives = { workspace = true }
 scroll-wire.workspace = true
 scroll-network.workspace = true
 scroll-engine = { workspace = true, features = ["test-utils"] }
+scroll-db = { workspace = true }
+scroll-migration.workspace = true
 
 # rollup-node
 rollup-node-manager.workspace = true
+rollup-node-indexer.workspace = true
+rollup-node-watcher.workspace = true
 
 # misc
 clap = { version = "4", features = ["derive", "env"] }
 eyre.workspace = true
+reqwest = { version = "0.12", default-features = false }
 secp256k1 = { workspace = true, features = ["global-context", "recovery"] }
 tokio = { workspace = true, features = ["full"] }
 tracing.workspace = true
@@ -79,13 +85,15 @@ test-utils = [
     "scroll-engine/test-utils",
     "reth-payload-builder/test-utils",
     "reth-payload-builder/test-utils",
+    "rollup-node-watcher/test-utils",
+    "scroll-db/test-utils",
+    "scroll-db/test-utils",
 ]
 serde = [
     "alloy-primitives/serde",
     "alloy-rpc-types-engine/serde",
     "reth-eth-wire-types/serde",
     "reth-network/serde",
-    "reth-provider/serde",
     "reth-scroll-primitives/serde",
     "scroll-alloy-consensus/serde",
     "scroll-alloy-rpc-types-engine/serde",
@@ -95,9 +103,10 @@ serde = [
     "secp256k1/serde",
     "rollup-node-manager/serde",
     "alloy-chains/serde",
+    "reth-transaction-pool/serde",
 ]
 
 [[bin]]
-name = "bridge"
+name = "rollup-node"
 path = "src/main.rs"
 required-features = ["serde"]
