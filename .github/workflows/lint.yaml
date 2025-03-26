@@ -127,10 +127,12 @@ jobs:
         include:
           - type: wasm
             target: wasm32-unknown-unknown
-            exclude: scroll-engine,scroll-wire,scroll-network,rollup-node-manager,rollup-node-watcher,scroll-db,scroll-migration,rollup-node-indexer,rollup-node
+            exclude: |
+              scroll-engine,scroll-wire,rollup-node,scroll-network,rollup-node-manager,rollup-node-watcher,scroll-db,scroll-migration,rollup-node-indexer,scroll-derivation-pipeline
           - type: riscv
             target: riscv32imac-unknown-none-elf
-            exclude: scroll-engine,scroll-wire,scroll-network,rollup-node-manager,rollup-node-watcher,scroll-db,scroll-migration,rollup-node-indexer,rollup-node,scroll-codec
+            exclude: |
+              scroll-engine,scroll-wire,rollup-node,scroll-network,rollup-node-manager,rollup-node-watcher,scroll-db,scroll-migration,rollup-node-indexer,scroll-codec,scroll-derivation-pipeline
     steps:
       - uses: actions/checkout@v4
       - uses: rui314/setup-mold@v1

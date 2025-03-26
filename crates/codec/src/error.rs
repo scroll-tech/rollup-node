@@ -15,8 +15,14 @@ pub enum DecodingError {
     UnsupportedCodecVersion(u8),
     #[error("missing blob from data source")]
     MissingBlob,
+    #[error("missing chunk data")]
+    MissingChunkData,
+    #[error("missing parent header data")]
+    MissingParentHeader,
     #[error("invalid calldata format")]
     InvalidCalldataFormat,
+    #[error("invalid parent header format")]
+    InvalidParentHeaderFormat,
     #[error("end of file")]
     Eof,
     #[error("decoding error occurred: {0}")]

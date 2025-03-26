@@ -88,7 +88,7 @@ pub struct BatchInputBuilder {
     /// The L1 block number at which the batch was committed.
     block_number: u64,
     /// The parent batch header.
-    parent_batch_header: Vec<u8>,
+    parent_batch_header: Option<Vec<u8>>,
     /// The chunks in the batch.
     chunks: Option<Vec<Vec<u8>>>,
     /// The skipped L1 message bitmap.
@@ -99,23 +99,23 @@ pub struct BatchInputBuilder {
 
 impl BatchInputBuilder {
     /// Returns a new instance of the builder.
-    pub const fn new(
-        version: u8,
-        index: u64,
-        hash: B256,
-        block_number: BlockNumber,
-        parent_batch_header: Vec<u8>,
-    ) -> Self {
+    pub const fn new(version: u8, index: u64, hash: B256, block_number: BlockNumber) -> Self {
         Self {
             version,
             batch_index: index,
             batch_hash: hash,
             block_number,
-            parent_batch_header,
+            parent_batch_header: None,
             chunks: None,
             skipped_l1_message_bitmap: None,
             blob_hashes: None,
         }
+    }
+
+    /// Adds chunks to the builder.
+    pub fn with_parent_batch_header(mut self, header: Option<Vec<u8>>) -> Self {
+        self.parent_batch_header = header;
+        self
     }
 
     /// Adds chunks to the builder.
@@ -146,22 +146,33 @@ impl BatchInputBuilder {
         let batch_index = self.batch_index;
         let batch_hash = self.batch_hash;
         let block_number = self.block_number;
-        let parent_batch_header = self.parent_batch_header;
 
-        match (self.chunks, self.skipped_l1_message_bitmap, self.blob_hashes) {
-            (Some(chunks), Some(skipped_l1_message_bitmap), None) => Some(
-                BatchInputV1 {
-                    version,
-                    batch_index,
-                    batch_hash,
-                    block_number,
-                    parent_batch_header,
-                    chunks,
-                    skipped_l1_message_bitmap,
-                }
-                .into(),
-            ),
-            (Some(chunks), Some(skipped_l1_message_bitmap), Some(blob)) => {
+        match (
+            self.parent_batch_header,
+            self.chunks,
+            self.skipped_l1_message_bitmap,
+            self.blob_hashes,
+        ) {
+            (Some(parent_batch_header), Some(chunks), Some(skipped_l1_message_bitmap), None) => {
+                Some(
+                    BatchInputV1 {
+                        version,
+                        batch_index,
+                        batch_hash,
+                        block_number,
+                        parent_batch_header,
+                        chunks,
+                        skipped_l1_message_bitmap,
+                    }
+                    .into(),
+                )
+            }
+            (
+                Some(parent_batch_header),
+                Some(chunks),
+                Some(skipped_l1_message_bitmap),
+                Some(blob),
+            ) => {
                 let batch_input_data = BatchInputV1 {
                     version,
                     batch_index,
@@ -174,7 +185,7 @@ impl BatchInputBuilder {
                 let blob_hash = blob.first().copied()?;
                 Some(BatchInputV2 { batch_input_base: batch_input_data, blob_hash }.into())
             }
-            (None, None, Some(_blobs)) => {
+            (None, None, None, Some(_blobs)) => {
                 // TODO(greg): for now None but this will be used in Euclid.
                 None
             }

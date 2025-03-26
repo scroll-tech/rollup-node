@@ -37,7 +37,7 @@ mod tests {
 
     #[test]
     fn test_should_skip_unused_blob_bytes() -> eyre::Result<()> {
-        let blob = read_to_bytes("./src/testdata/blob_v1.bin")?;
+        let blob = read_to_bytes("./testdata/blob_v1.bin")?;
         let iterator = BlobSliceIter::from_blob_slice(&blob);
 
         let val = iterator.take(256).copied().collect::<Vec<_>>();
