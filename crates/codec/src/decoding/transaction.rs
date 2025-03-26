@@ -1,4 +1,4 @@
-use alloy_primitives::{Bytes, bytes::Buf};
+use alloy_primitives::{bytes::Buf, Bytes};
 use alloy_rlp::Header;
 
 /// A RLP encoded transaction.

@@ -79,7 +79,7 @@ pub struct L1Watcher<EP> {
 }
 
 /// The L1 notification type yielded by the [`L1Watcher`].
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum L1Notification {
     /// A notification for a reorg of the L1 up to a given block number.
     Reorg(u64),

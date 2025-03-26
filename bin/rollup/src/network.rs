@@ -1,4 +1,6 @@
-use reth_network::{config::NetworkMode, NetworkConfig, NetworkManager, PeersInfo};
+use alloy_provider::ProviderBuilder;
+use migration::MigratorTrait;
+use reth_network::{config::NetworkMode, NetworkManager, PeersInfo};
 use reth_node_api::TxTy;
 use reth_node_builder::{components::NetworkBuilder, BuilderContext, FullNodeTypes};
 use reth_node_types::NodeTypes;
@@ -6,18 +8,33 @@ use reth_rpc_builder::config::RethRpcServerConfig;
 use reth_scroll_chainspec::ScrollChainSpec;
 use reth_scroll_primitives::ScrollPrimitives;
 use reth_transaction_pool::{PoolTransaction, TransactionPool};
+use rollup_node_indexer::Indexer;
 use rollup_node_manager::{PoAConsensus, RollupNodeManager};
+use rollup_node_watcher::L1Watcher;
 use scroll_alloy_provider::ScrollAuthEngineApiProvider;
+use scroll_db::{Database, DatabaseConnectionProvider};
 use scroll_engine::{test_utils::NoopExecutionPayloadProvider, EngineDriver, ForkchoiceState};
 use scroll_network::NetworkManager as ScrollNetworkManager;
 use scroll_wire::{ProtocolHandler, ScrollWireConfig};
+use std::{path::PathBuf, sync::Arc};
 use tracing::info;
 
-/// The network builder for the eth-wire to scroll-wire bridge.
-#[derive(Debug, Default)]
-pub struct ScrollBridgeNetworkBuilder;
+use crate::ScrollRollupNodeArgs;
 
-impl<Node, Pool> NetworkBuilder<Node, Pool> for ScrollBridgeNetworkBuilder
+/// The network builder for the eth-wire to scroll-wire bridge.
+#[derive(Debug)]
+pub struct ScrollRollupNetworkBuilder {
+    config: ScrollRollupNodeArgs,
+}
+
+impl ScrollRollupNetworkBuilder {
+    /// Returns a new [`ScrollRollupNetworkBuilder`] instance with the provided config.
+    pub fn new(config: ScrollRollupNodeArgs) -> Self {
+        Self { config }
+    }
+}
+
+impl<Node, Pool> NetworkBuilder<Node, Pool> for ScrollRollupNetworkBuilder
 where
     Node:
         FullNodeTypes<Types: NodeTypes<ChainSpec = ScrollChainSpec, Primitives = ScrollPrimitives>>,
@@ -37,21 +54,28 @@ where
         pool: Pool,
     ) -> eyre::Result<reth_network::NetworkHandle<Self::Primitives>> {
         // Create a new block channel to bridge between eth-wire and scroll-wire protocols.
-        let (new_block_tx, new_block_rx) = tokio::sync::mpsc::unbounded_channel();
+        let (block_tx, block_rx) =
+            if self.config.enable_eth_scroll_wire_bridge & self.config.enable_scroll_wire {
+                let (tx, rx) = tokio::sync::mpsc::unbounded_channel();
+                (Some(tx), Some(rx))
+            } else {
+                (None, None)
+            };
 
         // Create a scroll-wire protocol handler.
         let (scroll_wire_handler, events) = ProtocolHandler::new(ScrollWireConfig::new(true));
 
         // Create the network configuration.
-        let config = ctx.network_config()?;
-        let mut config = NetworkConfig {
-            network_mode: NetworkMode::Work,
-            block_import: Box::new(super::BridgeBlockImport::new(new_block_tx.clone())),
-            ..config
-        };
+        let mut config = ctx.network_config()?;
+        config.network_mode = NetworkMode::Work;
+        if let Some(tx) = block_tx {
+            config.block_import = Box::new(super::BridgeBlockImport::new(tx.clone()))
+        }
 
         // Add the scroll-wire protocol handler to the network config.
-        config.extra_protocols.push(scroll_wire_handler);
+        if self.config.enable_scroll_wire {
+            config.extra_protocols.push(scroll_wire_handler);
+        }
 
         // Create the network manager.
         let network = NetworkManager::<Self::Primitives>::builder(config).await?;
@@ -69,18 +93,45 @@ where
 
         let engine_api = ScrollAuthEngineApiProvider::new(
             auth_secret,
-            format!("http://localhost:{auth_port}").parse()?,
+            self.config.engine_api_url.unwrap_or(format!("http://localhost:{auth_port}").parse()?),
         );
         let engine = EngineDriver::new(engine_api, payload_provider);
 
+        // Instantiate the database
+        let database_path = if let Some(db_path) = self.config.database_path {
+            db_path
+        } else {
+            PathBuf::from("sqlite://").join(ctx.config().datadir().db().join("scroll.db"))
+        };
+        let db = Database::new(database_path.to_str().unwrap()).await?;
+
+        // Run the database migrations
+        migration::Migrator::up(db.get_connection(), None).await?;
+
+        // Wrap the database in an Arc
+        let db = Arc::new(db);
+
+        // Spawn the indexer
+        let indexer = Indexer::new(db.clone());
+
+        // Spawn the L1Watcher
+        let l1_notification_rx = if let Some(l1_rpc_url) = self.config.l1_rpc_url {
+            Some(L1Watcher::spawn(ProviderBuilder::new().on_http(l1_rpc_url), 20035952).await)
+        } else {
+            None
+        };
+
+        // Spawn the rollup node manager
         let rollup_node_manager = RollupNodeManager::new(
             scroll_network_manager,
             engine,
+            l1_notification_rx,
+            indexer,
             ForkchoiceState::genesis(
                 ctx.config().chain.chain.try_into().expect("must be a named chain"),
             ),
             consensus,
-            new_block_rx,
+            block_rx,
         );
 
         ctx.task_executor().spawn(rollup_node_manager);
