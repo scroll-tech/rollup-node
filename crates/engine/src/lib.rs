@@ -1,17 +1,16 @@
 //! Engine Driver for the Scroll Rollup Node. The [`EngineDriver`] exposes the main interface for
 //! the Rollup Node to the Engine API.
 
-mod engine;
 pub use engine::EngineDriver;
+mod engine;
 
-mod error;
 pub use error::EngineDriverError;
+mod error;
 
-mod fcs;
 pub use fcs::ForkchoiceState;
+mod fcs;
 
 mod payload;
-pub use payload::ExecutionPayloadProvider;
 
 #[cfg(any(test, feature = "test-utils"))]
 pub mod test_utils;
