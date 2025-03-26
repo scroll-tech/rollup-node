@@ -11,39 +11,16 @@ mod error;
 #[cfg(not(feature = "std"))]
 extern crate alloc as std;
 
+use crate::{data_source::CodecDataSource, error::DerivationPipelineError};
 use std::vec::Vec;
 
-use crate::{data_source::CodecDataSource, error::DerivationPipelineError};
-use alloy_eips::eip4844::Blob;
 use alloy_primitives::B256;
 use alloy_rpc_types_engine::PayloadAttributes;
 use reth_scroll_chainspec::SCROLL_FEE_VAULT_ADDRESS;
 use rollup_node_primitives::BatchCommitData;
-use scroll_alloy_consensus::TxL1Message;
+use rollup_node_providers::L1Provider;
 use scroll_alloy_rpc_types_engine::ScrollPayloadAttributes;
 use scroll_codec::Codec;
-
-/// An instance of the trait can provide L1 messages using a cursor approach. Set the cursor for the
-/// provider using the queue index or hash and then call [`L1MessageProvider::next_l1_message`] to
-/// iterate the queue.
-pub trait L1MessageProvider {
-    /// Returns the L1 message at the current cursor and advances the cursor.
-    fn next_l1_message(&self) -> TxL1Message;
-    /// Set the index cursor for the provider.
-    fn set_index_cursor(&mut self, index: u64);
-    /// Set the hash cursor for the provider.
-    fn set_hash_cursor(&mut self, hash: B256);
-}
-
-/// An instance of the trait can be used to fetch L1 blob data.
-pub trait L1BlobProvider {
-    /// Returns corresponding blob data for the provided hash.
-    fn blob(&self, hash: B256) -> Option<Blob>;
-}
-
-/// An instance of the trait can be used to provide L1 data.
-pub trait L1Provider: L1BlobProvider + L1MessageProvider {}
-impl<T> L1Provider for T where T: L1BlobProvider + L1MessageProvider {}
 
 /// Returns an iterator over [`ScrollPayloadAttributes`] from the [`BatchCommitData`] and a
 /// [`L1Provider`].
@@ -104,11 +81,13 @@ pub fn derive<P: L1Provider>(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use core::cell::RefCell;
-    use std::sync::Arc;
-
+    use alloy_eips::eip4844::Blob;
     use alloy_primitives::{address, b256, bytes, U256};
+    use core::cell::RefCell;
+    use rollup_node_providers::L1MessageProvider;
+    use scroll_alloy_consensus::TxL1Message;
     use scroll_codec::decoding::test_utils::read_to_bytes;
+    use std::sync::Arc;
 
     struct TestL1MessageProvider {
         messages: RefCell<Vec<TxL1Message>>,
