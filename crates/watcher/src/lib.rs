@@ -15,12 +15,12 @@ pub mod test_utils;
 use std::{sync::Arc, time::Duration};
 
 use alloy_network::Ethereum;
-use alloy_primitives::{BlockNumber, Bytes, B256};
+use alloy_primitives::{BlockNumber, B256};
 use alloy_provider::{Network, Provider};
 use alloy_rpc_types_eth::{BlockNumberOrTag, Log, TransactionTrait};
 use error::L1WatcherResult;
 use itertools::Itertools;
-use rollup_node_primitives::{BoundedVec, L1MessageWithBlockNumber};
+use rollup_node_primitives::{BatchCommitData, BoundedVec, L1MessageWithBlockNumber};
 use scroll_alloy_consensus::TxL1Message;
 use scroll_l1::abi::logs::{try_decode_log, CommitBatch, FinalizeBatch, QueueTransaction};
 use tokio::sync::mpsc;
@@ -82,18 +82,7 @@ pub enum L1Notification {
     /// A notification for a reorg of the L1 up to a given block number.
     Reorg(u64),
     /// A new batch has been committed on the L1 rollup contract.
-    BatchCommit {
-        /// The hash of the committed batch.
-        hash: B256,
-        /// The index of the batch.
-        index: u64,
-        /// The block number the batch was committed at.
-        block_number: BlockNumber,
-        /// The commit transaction calldata.
-        calldata: Arc<Bytes>,
-        /// The optional blob hash for the commit.
-        blob_versioned_hash: Option<B256>,
-    },
+    BatchCommit(BatchCommitData),
     /// A new batch has been finalized on the L1 rollup contract.
     BatchFinalization {
         /// The hash of the finalized batch.
@@ -335,22 +324,22 @@ where
 
             // get the optional blobs and calldata.
             let mut blob_versioned_hashes =
-                transaction.blob_versioned_hashes().unwrap_or(&[]).into_iter().copied();
+                transaction.blob_versioned_hashes().unwrap_or(&[]).iter().copied();
             let input = Arc::new(transaction.input().clone());
 
             for (raw_log, decoded_log, _) in group {
                 let block_number =
                     raw_log.block_number.ok_or(FilterLogError::MissingBlockNumber)?;
-                let batch_index = decoded_log.batch_index.to();
+                let batch_index = decoded_log.batch_index.saturating_to();
 
                 // notify via channel.
-                self.notify(L1Notification::BatchCommit {
+                self.notify(L1Notification::BatchCommit(BatchCommitData {
                     hash: decoded_log.batch_hash,
                     index: batch_index,
                     block_number,
                     calldata: input.clone(),
                     blob_versioned_hash: blob_versioned_hashes.next(),
-                })
+                }))
                 .await;
             }
         }
