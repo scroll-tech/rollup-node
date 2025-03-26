@@ -4,35 +4,71 @@
 //! into payload attributes for block building.
 
 #![cfg_attr(not(feature = "std"), no_std)]
+
+mod data_source;
+mod error;
+
 #[cfg(not(feature = "std"))]
 extern crate alloc as std;
 
 use std::vec::Vec;
 
+use crate::{data_source::CodecDataSource, error::DerivationPipelineError};
+use alloy_eips::eip4844::Blob;
 use alloy_primitives::B256;
 use alloy_rpc_types_engine::PayloadAttributes;
 use reth_scroll_chainspec::SCROLL_FEE_VAULT_ADDRESS;
+use rollup_node_primitives::BatchCommitData;
 use scroll_alloy_consensus::TxL1Message;
 use scroll_alloy_rpc_types_engine::ScrollPayloadAttributes;
-use scroll_codec::decoding::batch::Batch;
+use scroll_codec::Codec;
 
-/// An instance of the trait can be used to provide the next L1 message to be used in the derivation
-/// pipeline.
+/// An instance of the trait can provide L1 messages using a cursor approach. Set the cursor for the
+/// provider using the queue index or hash and then call [`L1MessageProvider::next_l1_message`] to
+/// iterate the queue.
 pub trait L1MessageProvider {
-    /// Returns the next L1 message.
+    /// Returns the L1 message at the current cursor and advances the cursor.
     fn next_l1_message(&self) -> TxL1Message;
+    /// Set the index cursor for the provider.
+    fn set_index_cursor(&mut self, index: u64);
+    /// Set the hash cursor for the provider.
+    fn set_hash_cursor(&mut self, hash: B256);
 }
 
-/// Returns an iterator over [`ScrollPayloadAttributes`] from the [`Batch`] and a
-/// [`L1MessageProvider`].
-pub fn derive<P: L1MessageProvider>(
-    batch: Batch,
-    l1_message_provider: &P,
-) -> impl Iterator<Item = ScrollPayloadAttributes> + use<'_, P> {
-    batch.data.into_l2_blocks().into_iter().map(|mut block| {
+/// An instance of the trait can be used to provide L1 data.
+pub trait L1Provider: L1MessageProvider {
+    /// Returns corresponding blob data for the provided hash.
+    fn blob(&self, hash: B256) -> Option<Blob>;
+}
+
+/// Returns an iterator over [`ScrollPayloadAttributes`] from the [`BatchCommitData`] and a
+/// [`L1Provider`].
+pub fn derive<P: L1Provider>(
+    batch: BatchCommitData,
+    l1_provider: &mut P,
+) -> Result<impl Iterator<Item = ScrollPayloadAttributes> + use<'_, P>, DerivationPipelineError> {
+    // fetch the blob then decode the input batch.
+    let blob = batch.blob_versioned_hash.and_then(|hash| l1_provider.blob(hash));
+    let data = CodecDataSource { calldata: batch.calldata.as_ref(), blob: blob.as_ref() };
+    let decoded = Codec::decode(&data)?;
+
+    // set the cursor for the l1 provider.
+    let data = &decoded.data;
+    if let Some(index) = data.queue_index_start() {
+        l1_provider.set_index_cursor(index)
+    } else if let Some(hash) = data.prev_l1_message_queue_hash() {
+        l1_provider.set_hash_cursor(*hash);
+        // we skip the first l1 message, as we are interested in the one starting after
+        // prev_l1_message_queue_hash.
+        let _ = l1_provider.next_l1_message();
+    } else {
+        return Err(DerivationPipelineError::MissingL1MessageQueueCursor)
+    }
+
+    let iter = decoded.data.into_l2_blocks().into_iter().map(|mut block| {
         // query the appropriate amount of l1 messages.
         let mut txs = (0..block.context.num_l1_messages)
-            .map(|_| l1_message_provider.next_l1_message())
+            .map(|_| l1_provider.next_l1_message())
             .map(|tx| {
                 let mut bytes = Vec::new();
                 tx.eip2718_encode(&mut bytes);
@@ -56,31 +92,51 @@ pub fn derive<P: L1MessageProvider>(
             transactions: Some(txs),
             no_tx_pool: true,
         }
-    })
+    });
+
+    Ok(iter)
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use alloy_primitives::{address, bytes, U256};
-    use scroll_codec::decoding::{test_utils::read_to_bytes, v0::decode_v0};
-    use std::cell::RefCell;
+    use core::cell::RefCell;
+    use std::sync::Arc;
+
+    use alloy_primitives::{address, b256, bytes, U256};
+    use scroll_codec::decoding::test_utils::read_to_bytes;
 
     struct TestL1MessageProvider {
         messages: RefCell<Vec<TxL1Message>>,
+    }
+
+    impl L1Provider for TestL1MessageProvider {
+        fn blob(&self, _hash: B256) -> Option<Blob> {
+            None
+        }
     }
 
     impl L1MessageProvider for TestL1MessageProvider {
         fn next_l1_message(&self) -> TxL1Message {
             self.messages.borrow_mut().remove(0)
         }
+
+        fn set_index_cursor(&mut self, _index: u64) {}
+
+        fn set_hash_cursor(&mut self, _hash: B256) {}
     }
 
     #[test]
     fn test_should_derive_batch() -> eyre::Result<()> {
         // https://etherscan.io/tx/0x8f4f0fcab656aa81589db5b53255094606c4624bfd99702b56b2debaf6211f48
         let raw_calldata = read_to_bytes("./testdata/calldata_v0.bin")?;
-        let batch = decode_v0(&raw_calldata)?;
+        let batch_data = BatchCommitData {
+            hash: b256!("7f26edf8e3decbc1620b4d2ba5f010a6bdd10d6bb16430c4f458134e36ab3961"),
+            index: 12,
+            block_number: 18319648,
+            calldata: Arc::new(raw_calldata),
+            blob_versioned_hash: None,
+        };
 
         let l1_messages = vec![TxL1Message {
             queue_index: 33,
@@ -97,9 +153,9 @@ mod tests {
             sender: address!("7885BcBd5CeCEf1336b5300fb5186A12DDD8c478"),
             input: bytes!("8ef1332e0000000000000000000000007f2b8c31f88b6006c382775eea88297ec1e3e9050000000000000000000000006ea73e05adc79974b931123675ea8f78ffdacdf000000000000000000000000000000000000000000000000000470de4df820000000000000000000000000000000000000000000000000000000000000000002200000000000000000000000000000000000000000000000000000000000000a000000000000000000000000000000000000000000000000000000000000000a4232e8748000000000000000000000000982fe4a7cbd74bb3422ebe46333c3e8046c12c7f000000000000000000000000982fe4a7cbd74bb3422ebe46333c3e8046c12c7f00000000000000000000000000000000000000000000000000470de4df8200000000000000000000000000000000000000000000000000000000000000000080000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000"),
         }];
-        let provider = TestL1MessageProvider { messages: RefCell::new(l1_messages) };
+        let mut provider = TestL1MessageProvider { messages: RefCell::new(l1_messages) };
 
-        let mut attributes = derive(batch, &provider);
+        let mut attributes = derive(batch_data, &mut provider)?;
         let attribute = attributes.find(|a| a.payload_attributes.timestamp == 1696935384).unwrap();
 
         let expected = ScrollPayloadAttributes{
