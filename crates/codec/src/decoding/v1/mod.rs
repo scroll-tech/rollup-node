@@ -2,6 +2,7 @@ pub use batch_header::BatchHeaderV1;
 mod batch_header;
 
 use crate::{
+    check_buf_len,
     decoding::{
         batch::Batch, blob::BlobSliceIter, payload::PayloadData, transaction::Transaction,
         v0::BlockContextV0,
