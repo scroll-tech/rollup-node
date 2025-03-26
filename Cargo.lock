@@ -9247,6 +9247,7 @@ dependencies = [
  "reth-tokio-util",
  "rollup-node-indexer",
  "rollup-node-primitives",
+ "rollup-node-providers",
  "rollup-node-watcher",
  "scroll-alloy-network",
  "scroll-alloy-provider",
@@ -9268,6 +9269,16 @@ dependencies = [
  "arbitrary",
  "derive_more 2.0.1",
  "scroll-alloy-consensus",
+]
+
+[[package]]
+name = "rollup-node-providers"
+version = "0.0.1"
+dependencies = [
+ "alloy-eips",
+ "alloy-primitives",
+ "alloy-rpc-types-engine",
+ "async-trait",
 ]
 
 [[package]]
@@ -9770,6 +9781,7 @@ dependencies = [
  "reth-scroll-primitives",
  "reth-testing-utils",
  "rollup-node-primitives",
+ "rollup-node-providers",
  "scroll-alloy-network",
  "scroll-alloy-provider",
  "scroll-alloy-rpc-types-engine",
