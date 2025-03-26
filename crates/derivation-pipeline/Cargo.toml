@@ -22,6 +22,7 @@ scroll-alloy-rpc-types-engine.workspace = true
 
 # rollup node
 rollup-node-primitives.workspace = true
+rollup-node-providers.workspace = true
 scroll-codec.workspace = true
 
 # misc
