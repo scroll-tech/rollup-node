@@ -7,9 +7,9 @@ pub(crate) use block_context::BlockContextV0;
 mod block_context;
 
 use crate::{
-    L2Block,
     decoding::{batch::Batch, payload::PayloadData, transaction::Transaction},
     error::DecodingError,
+    L2Block,
 };
 use std::vec::Vec;
 
@@ -71,9 +71,9 @@ pub fn decode_v0(calldata: &[u8]) -> Result<Batch, DecodingError> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{BlockContext, decoding::test_utils::read_to_bytes};
+    use crate::{decoding::test_utils::read_to_bytes, BlockContext};
 
-    use alloy_primitives::{U256, bytes};
+    use alloy_primitives::{bytes, U256};
 
     #[test]
     fn test_should_decode_v0() -> eyre::Result<()> {

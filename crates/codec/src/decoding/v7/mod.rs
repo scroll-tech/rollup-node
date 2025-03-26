@@ -5,17 +5,17 @@ pub(crate) use block_context::BlockContextV7;
 mod block_context;
 
 use crate::{
-    L2Block, check_buf_len,
+    check_buf_len,
     decoding::{
         batch::Batch, blob::BlobSliceIter, payload::PayloadData, transaction::Transaction,
         v2::zstd::decompress_blob_data,
     },
     error::DecodingError,
-    from_be_bytes_slice_and_advance_buf,
+    from_be_bytes_slice_and_advance_buf, L2Block,
 };
 use std::vec::Vec;
 
-use alloy_primitives::{B256, bytes::Buf};
+use alloy_primitives::{bytes::Buf, B256};
 
 /// The offset in the blob to the payload envelope.
 const BLOB_ENVELOPE_V7_OFFSET_PAYLOAD: usize = 5;
@@ -105,9 +105,9 @@ pub(crate) fn decode_v7_payload(blob: &[u8]) -> Result<Batch, DecodingError> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{BlockContext, decoding::test_utils::read_to_bytes};
+    use crate::{decoding::test_utils::read_to_bytes, BlockContext};
 
-    use alloy_primitives::{U256, bytes};
+    use alloy_primitives::{bytes, U256};
 
     #[test]
     fn test_should_decode_v7_uncompressed() -> eyre::Result<()> {

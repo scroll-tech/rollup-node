@@ -53,9 +53,9 @@ pub fn decode_v4(calldata: &[u8], blob: &[u8]) -> Result<Batch, DecodingError> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{BlockContext, L2Block, decoding::test_utils::read_to_bytes};
+    use crate::{decoding::test_utils::read_to_bytes, BlockContext, L2Block};
 
-    use alloy_primitives::{U256, bytes};
+    use alloy_primitives::{bytes, U256};
 
     #[test]
     fn test_should_decode_v4_uncompressed() -> eyre::Result<()> {

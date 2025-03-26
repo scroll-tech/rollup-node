@@ -5,7 +5,7 @@ use crate::{
     decoding::{
         batch::Batch,
         blob::BlobSliceIter,
-        v1::{BatchHeaderV1, decode_v1_chunk},
+        v1::{decode_v1_chunk, BatchHeaderV1},
         v2::zstd::decompress_blob_data,
     },
     error::DecodingError,
@@ -57,9 +57,9 @@ pub fn decode_v2(calldata: &[u8], blob: &[u8]) -> Result<Batch, DecodingError> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{BlockContext, L2Block, decoding::test_utils::read_to_bytes};
+    use crate::{decoding::test_utils::read_to_bytes, BlockContext, L2Block};
 
-    use alloy_primitives::{U256, bytes};
+    use alloy_primitives::{bytes, U256};
 
     #[test]
     fn test_should_decode_v2() -> eyre::Result<()> {
