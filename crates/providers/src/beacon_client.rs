@@ -39,7 +39,7 @@ pub struct ReducedConfigData {
     pub seconds_per_slot: u64,
 }
 
-/// An online implementation of the [BeaconClient] trait.
+/// An online implementation of the [`BeaconClient`] trait.
 #[derive(Debug, Clone)]
 pub struct OnlineBeaconClient {
     /// The base URL of the beacon API.
@@ -49,10 +49,10 @@ pub struct OnlineBeaconClient {
 }
 
 impl OnlineBeaconClient {
-    /// Creates a new [OnlineBeaconClient] from the provided [Url].
+    /// Creates a new [`OnlineBeaconClient`] from the provided [Url].
     pub fn new_http(mut base: String) -> Self {
         // If base ends with a slash, remove it
-        if base.ends_with("/") {
+        if base.ends_with('/') {
             base.remove(base.len() - 1);
         }
         Self { base, inner: Client::new() }
