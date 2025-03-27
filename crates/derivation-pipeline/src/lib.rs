@@ -18,19 +18,24 @@ use alloy_primitives::B256;
 use alloy_rpc_types_engine::PayloadAttributes;
 use reth_scroll_chainspec::SCROLL_FEE_VAULT_ADDRESS;
 use rollup_node_primitives::BatchCommitData;
-use rollup_node_providers::L1Provider;
+use rollup_node_providers::{L1Provider, L1ProviderError};
 use scroll_alloy_rpc_types_engine::ScrollPayloadAttributes;
 use scroll_codec::Codec;
 
 /// Returns an iterator over [`ScrollPayloadAttributes`] from the [`BatchCommitData`] and a
 /// [`L1Provider`].
-pub fn derive<P: L1Provider>(
+pub async fn derive<P: L1Provider<Error = L1ProviderError>>(
     batch: BatchCommitData,
     l1_provider: &mut P,
 ) -> Result<impl Iterator<Item = ScrollPayloadAttributes> + use<'_, P>, DerivationPipelineError> {
     // fetch the blob then decode the input batch.
-    let blob = batch.blob_versioned_hash.and_then(|hash| l1_provider.blob(hash));
-    let data = CodecDataSource { calldata: batch.calldata.as_ref(), blob: blob.as_ref() };
+    let blob = if let Some(hash) = batch.blob_versioned_hash {
+        l1_provider.blob(batch.block_timestamp, hash).await?
+    } else {
+        None
+    };
+    let data =
+        CodecDataSource { calldata: batch.calldata.as_ref(), blob: blob.as_ref().map(|v| &**v) };
     let decoded = Codec::decode(&data)?;
 
     // set the cursor for the l1 provider.
@@ -81,27 +86,35 @@ pub fn derive<P: L1Provider>(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::sync::Arc;
+
     use alloy_eips::eip4844::Blob;
     use alloy_primitives::{address, b256, bytes, U256};
-    use core::cell::RefCell;
     use rollup_node_providers::L1MessageProvider;
     use scroll_alloy_consensus::TxL1Message;
     use scroll_codec::decoding::test_utils::read_to_bytes;
-    use std::sync::Arc;
+    use tokio::sync::Mutex;
 
     struct TestL1MessageProvider {
-        messages: RefCell<Vec<TxL1Message>>,
+        messages: Arc<Mutex<Vec<TxL1Message>>>,
     }
 
+    #[async_trait::async_trait]
     impl L1BlobProvider for TestL1MessageProvider {
-        fn blob(&self, _hash: B256) -> Option<Blob> {
-            None
+        type Error = L1ProviderError;
+
+        async fn blob(
+            &self,
+            _block_timestamp: u64,
+            _hash: B256,
+        ) -> Result<Option<Arc<Blob>>, Self::Error> {
+            Ok(None)
         }
     }
 
     impl L1MessageProvider for TestL1MessageProvider {
         fn next_l1_message(&self) -> TxL1Message {
-            self.messages.borrow_mut().remove(0)
+            self.messages.try_lock().expect("lock is free").remove(0)
         }
 
         fn set_index_cursor(&mut self, _index: u64) {}
@@ -109,14 +122,15 @@ mod tests {
         fn set_hash_cursor(&mut self, _hash: B256) {}
     }
 
-    #[test]
-    fn test_should_derive_batch() -> eyre::Result<()> {
+    #[tokio::test]
+    async fn test_should_derive_batch() -> eyre::Result<()> {
         // https://etherscan.io/tx/0x8f4f0fcab656aa81589db5b53255094606c4624bfd99702b56b2debaf6211f48
         let raw_calldata = read_to_bytes("./testdata/calldata_v0.bin")?;
         let batch_data = BatchCommitData {
             hash: b256!("7f26edf8e3decbc1620b4d2ba5f010a6bdd10d6bb16430c4f458134e36ab3961"),
             index: 12,
             block_number: 18319648,
+            block_timestamp: 1696935971,
             calldata: Arc::new(raw_calldata),
             blob_versioned_hash: None,
         };
@@ -136,9 +150,9 @@ mod tests {
             sender: address!("7885BcBd5CeCEf1336b5300fb5186A12DDD8c478"),
             input: bytes!("8ef1332e0000000000000000000000007f2b8c31f88b6006c382775eea88297ec1e3e9050000000000000000000000006ea73e05adc79974b931123675ea8f78ffdacdf000000000000000000000000000000000000000000000000000470de4df820000000000000000000000000000000000000000000000000000000000000000002200000000000000000000000000000000000000000000000000000000000000a000000000000000000000000000000000000000000000000000000000000000a4232e8748000000000000000000000000982fe4a7cbd74bb3422ebe46333c3e8046c12c7f000000000000000000000000982fe4a7cbd74bb3422ebe46333c3e8046c12c7f00000000000000000000000000000000000000000000000000470de4df8200000000000000000000000000000000000000000000000000000000000000000080000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000"),
         }];
-        let mut provider = TestL1MessageProvider { messages: RefCell::new(l1_messages) };
+        let mut provider = TestL1MessageProvider { messages: Arc::new(Mutex::new(l1_messages)) };
 
-        let mut attributes = derive(batch_data, &mut provider)?;
+        let mut attributes = derive(batch_data, &mut provider).await?;
         let attribute = attributes.find(|a| a.payload_attributes.timestamp == 1696935384).unwrap();
 
         let expected = ScrollPayloadAttributes{

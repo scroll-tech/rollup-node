@@ -29,8 +29,10 @@ scroll-codec.workspace = true
 thiserror.workspace = true
 
 [dev-dependencies]
+async-trait.workspace = true
 eyre.workspace = true
 scroll-codec = { workspace = true, features = ["test-utils"] }
+tokio = { workspace = true, features = ["macros"] }
 
 [features]
 default = ["std"]

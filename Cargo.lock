@@ -4370,116 +4370,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "kona-derive"
-version = "0.3.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "52360c417978c8723d7bcd515edb900a9349aa361d65174d0f1f5611cac210f7"
-dependencies = [
- "alloy-consensus",
- "alloy-eips",
- "alloy-primitives",
- "alloy-rlp",
- "alloy-rpc-types-engine",
- "async-trait",
- "kona-genesis",
- "kona-hardforks",
- "kona-protocol",
- "kona-rpc",
- "op-alloy-rpc-types-engine",
- "thiserror 2.0.12",
- "tracing",
-]
-
-[[package]]
-name = "kona-genesis"
-version = "0.3.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "84adab8269c0baaf119d25d00bd6199052c38a892678fdd09f3d898247027205"
-dependencies = [
- "alloy-consensus",
- "alloy-eips",
- "alloy-primitives",
- "alloy-sol-types",
- "derive_more 2.0.1",
- "thiserror 2.0.12",
-]
-
-[[package]]
-name = "kona-hardforks"
-version = "0.3.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "246c1e7504a78b9b56d09bd66624057c922141226fe98049c25e5207575fe28c"
-dependencies = [
- "alloy-eips",
- "alloy-primitives",
- "op-alloy-consensus",
-]
-
-[[package]]
-name = "kona-protocol"
-version = "0.3.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "4b1b84c5c2121239b1e94eccda3d7462c03e0e8f6844a021ec553ce8d46aa14f"
-dependencies = [
- "alloc-no-stdlib",
- "alloy-consensus",
- "alloy-eips",
- "alloy-primitives",
- "alloy-rlp",
- "alloy-rpc-types-engine",
- "async-trait",
- "brotli",
- "kona-genesis",
- "miniz_oxide",
- "op-alloy-consensus",
- "op-alloy-flz",
- "rand 0.9.0",
- "thiserror 2.0.12",
- "tracing",
- "unsigned-varint",
-]
-
-[[package]]
-name = "kona-providers-alloy"
-version = "0.2.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1dbb5daae2d55b42ce98d707eeff5f6d1e46041d446e01bbaa99ff7a957e09ac"
-dependencies = [
- "alloy-consensus",
- "alloy-eips",
- "alloy-primitives",
- "alloy-provider",
- "alloy-rpc-types-beacon",
- "alloy-serde",
- "alloy-transport",
- "async-trait",
- "kona-derive",
- "kona-genesis",
- "kona-protocol",
- "kona-rpc",
- "lru 0.13.0",
- "op-alloy-consensus",
- "op-alloy-network",
- "reqwest",
- "serde",
- "thiserror 2.0.12",
-]
-
-[[package]]
-name = "kona-rpc"
-version = "0.2.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6113e0249d6cf1245798b916d35025ee156b4dab5f7e6b295b874f02507c3e32"
-dependencies = [
- "alloy-eips",
- "alloy-primitives",
- "derive_more 2.0.1",
- "kona-protocol",
- "op-alloy-consensus",
- "op-alloy-rpc-types-engine",
-]
-
-[[package]]
 name = "kqueue"
 version = "1.0.8"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -5276,45 +5166,6 @@ dependencies = [
  "serde",
  "serde_with",
  "thiserror 2.0.12",
-]
-
-[[package]]
-name = "op-alloy-flz"
-version = "0.11.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2ac5d966d385a50b6975b957196391536569084dd58d53c45a3fdb810cc5de10"
-
-[[package]]
-name = "op-alloy-network"
-version = "0.11.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "697a00d2d89e2e44c0ef2d1b3b7181dd529f5665c9c574bcfda5f975821a000f"
-dependencies = [
- "alloy-consensus",
- "alloy-network",
- "alloy-primitives",
- "alloy-rpc-types-eth",
- "alloy-signer",
- "op-alloy-consensus",
- "op-alloy-rpc-types",
-]
-
-[[package]]
-name = "op-alloy-rpc-types"
-version = "0.11.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "398b77b1fe4a9ca83d031d59a19fa9aa4ffcc2a896a83b7861a94292c2098412"
-dependencies = [
- "alloy-consensus",
- "alloy-eips",
- "alloy-network-primitives",
- "alloy-primitives",
- "alloy-rpc-types-eth",
- "alloy-serde",
- "derive_more 1.0.0",
- "op-alloy-consensus",
- "serde",
- "serde_json",
 ]
 
 [[package]]
@@ -9457,10 +9308,17 @@ version = "0.0.1"
 dependencies = [
  "alloy-eips",
  "alloy-primitives",
+ "alloy-rpc-types-beacon",
  "alloy-rpc-types-engine",
+ "alloy-serde",
  "async-trait",
- "kona-providers-alloy",
+ "eyre",
+ "lru 0.13.0",
+ "reqwest",
  "scroll-alloy-consensus",
+ "serde",
+ "thiserror 2.0.12",
+ "tokio",
 ]
 
 [[package]]
@@ -9936,6 +9794,7 @@ dependencies = [
  "alloy-eips",
  "alloy-primitives",
  "alloy-rpc-types-engine",
+ "async-trait",
  "eyre",
  "reth-scroll-chainspec",
  "rollup-node-primitives",
@@ -9944,6 +9803,7 @@ dependencies = [
  "scroll-alloy-rpc-types-engine",
  "scroll-codec",
  "thiserror 2.0.12",
+ "tokio",
 ]
 
 [[package]]
