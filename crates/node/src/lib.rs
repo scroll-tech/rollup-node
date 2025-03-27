@@ -10,7 +10,7 @@ use rollup_node_indexer::Indexer;
 use rollup_node_watcher::L1Notification;
 use scroll_alloy_network::Scroll as ScrollNetwork;
 use scroll_alloy_provider::ScrollEngineApi;
-use scroll_engine::{EngineDriver, EngineDriverError, ExecutionPayloadProvider, ForkchoiceState};
+use scroll_engine::{EngineDriver, EngineDriverError, ForkchoiceState};
 use scroll_network::{
     BlockImportError, BlockImportOutcome, BlockValidation, BlockValidationError, NetworkManager,
     NetworkManagerEvent, NewBlockWithPeer,
@@ -33,6 +33,7 @@ mod consensus;
 use consensus::Consensus;
 pub use consensus::PoAConsensus;
 use rollup_node_primitives::BlockInfo;
+use rollup_node_providers::ExecutionPayloadProvider;
 
 /// The size of the event channel.
 const EVENT_CHANNEL_SIZE: usize = 100;

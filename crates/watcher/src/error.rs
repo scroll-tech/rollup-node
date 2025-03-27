@@ -36,6 +36,9 @@ pub enum FilterLogError {
     /// The log is missing a block number.
     #[error("missing block number for log")]
     MissingBlockNumber,
+    /// The log is missing a block timestamp.
+    #[error("missing block timestamp for log")]
+    MissingBlockTimestamp,
     /// The log is missing a transaction hash.
     #[error("unknown transaction hash for log")]
     MissingTransactionHash,

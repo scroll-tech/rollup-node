@@ -1,11 +1,8 @@
-use alloy_eips::BlockId;
 use alloy_primitives::B256;
 use alloy_rpc_types_engine::ExecutionPayload;
 use scroll_alloy_rpc_types_engine::ScrollPayloadAttributes;
 
 use tracing::debug;
-
-use crate::EngineDriverError;
 
 /// Returns true if the [`ScrollPayloadAttributes`] matches the [`ExecutionPayload`]:
 ///    - provided parent hash matches the parent hash of the [`ExecutionPayload`]
@@ -62,16 +59,6 @@ pub(crate) fn matching_payloads(
     }
 
     true
-}
-
-/// Implementers of the trait can provide the L2 execution payload for a block id.
-#[async_trait::async_trait]
-pub trait ExecutionPayloadProvider {
-    /// Returns the [`ExecutionPayload`] for the provided [`BlockId`], or [None].
-    async fn execution_payload_by_block(
-        &self,
-        block_id: BlockId,
-    ) -> Result<Option<ExecutionPayload>, EngineDriverError>;
 }
 
 #[cfg(test)]

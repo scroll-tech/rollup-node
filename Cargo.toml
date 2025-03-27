@@ -18,6 +18,7 @@ members = [
     "crates/node",
     "crates/network",
     "crates/primitives",
+    "crates/providers",
     "crates/scroll-wire",
     "crates/watcher",
 ]
@@ -152,6 +153,7 @@ reth-scroll-primitives = { git = "https://github.com/scroll-tech/reth.git", defa
 rollup-node-indexer = { path = "crates/indexer" }
 rollup-node-manager = { path = "crates/node" }
 rollup-node-primitives = { path = "crates/primitives" }
+rollup-node-providers = { path = "crates/providers" }
 rollup-node-watcher = { path = "crates/watcher" }
 scroll-codec = { path = "crates/codec" }
 scroll-db = { path = "crates/database/db" }

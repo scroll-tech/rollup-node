@@ -17,6 +17,7 @@ impl MigrationTrait for Migration {
                     .col(pk_auto(BatchInput::Index))
                     .col(binary_len(BatchInput::Hash, HASH_LENGTH))
                     .col(big_unsigned(BatchInput::BlockNumber))
+                    .col(big_unsigned(BatchInput::BlockTimestamp))
                     .col(binary(BatchInput::Calldata))
                     .col(binary_len_null(BatchInput::BlobHash, HASH_LENGTH))
                     .col(boolean_null(BatchInput::FinalizedBlockNumber))
@@ -36,6 +37,7 @@ enum BatchInput {
     Index,
     Hash,
     BlockNumber,
+    BlockTimestamp,
     Calldata,
     BlobHash,
     FinalizedBlockNumber,
