@@ -7,5 +7,8 @@ mod beacon_client;
 pub use execution_payload::ExecutionPayloadProvider;
 mod execution_payload;
 
-pub use l1::{L1MessageProvider, L1Provider, L1ProviderError, OnlineL1Provider};
+pub use l1::{
+    message::{DatabaseL1MessageProvider, L1MessageProvider},
+    L1Provider, L1ProviderError, OnlineL1Provider,
+};
 mod l1;

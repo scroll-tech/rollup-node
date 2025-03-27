@@ -314,6 +314,7 @@ where
         let groups: Vec<_> =
             groups.into_iter().map(|(hash, group)| (hash, group.collect::<Vec<_>>())).collect();
 
+        // iterate each group of commits
         for (tx_hash, group) in groups {
             // fetch the commit transaction.
             let transaction = self
@@ -327,6 +328,7 @@ where
                 transaction.blob_versioned_hashes().unwrap_or(&[]).iter().copied();
             let input = Arc::new(transaction.input().clone());
 
+            // iterate the logs emitted in the group
             for (raw_log, decoded_log, _) in group {
                 let block_number =
                     raw_log.block_number.ok_or(FilterLogError::MissingBlockNumber)?;
