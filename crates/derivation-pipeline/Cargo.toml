@@ -26,6 +26,7 @@ rollup-node-providers.workspace = true
 scroll-codec.workspace = true
 
 # misc
+futures.workspace = true
 thiserror.workspace = true
 
 [dev-dependencies]
