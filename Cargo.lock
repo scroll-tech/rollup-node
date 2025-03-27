@@ -9285,8 +9285,8 @@ dependencies = [
  "alloy-transport",
  "arbitrary",
  "async-trait",
- "derive_more 2.0.1",
  "eyre",
+ "itertools 0.14.0",
  "rand 0.9.0",
  "rollup-node-primitives",
  "scroll-alloy-consensus",
@@ -9740,13 +9740,16 @@ dependencies = [
 name = "scroll-derivation-pipeline"
 version = "0.0.1"
 dependencies = [
+ "alloy-eips",
  "alloy-primitives",
  "alloy-rpc-types-engine",
  "eyre",
  "reth-scroll-chainspec",
+ "rollup-node-primitives",
  "scroll-alloy-consensus",
  "scroll-alloy-rpc-types-engine",
  "scroll-codec",
+ "thiserror 2.0.12",
 ]
 
 [[package]]

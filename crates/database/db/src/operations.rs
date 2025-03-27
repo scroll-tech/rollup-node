@@ -1,27 +1,28 @@
 use super::{models, DatabaseError};
 use crate::DatabaseConnectionProvider;
+
 use alloy_primitives::B256;
 use futures::{Stream, StreamExt};
-use rollup_node_primitives::{BatchInput, L1MessageWithBlockNumber};
+use rollup_node_primitives::{BatchCommitData, L1MessageWithBlockNumber};
 use sea_orm::{ActiveModelTrait, ColumnTrait, DbErr, EntityTrait, QueryFilter, Set};
 
 /// The [`DatabaseOperations`] trait provides methods for interacting with the database.
 #[async_trait::async_trait]
 pub trait DatabaseOperations: DatabaseConnectionProvider {
-    /// Insert a [`BatchInput`] into the database.
-    async fn insert_batch_input(&self, batch_input: BatchInput) -> Result<(), DatabaseError> {
-        tracing::trace!(target: "scroll::db", batch_hash = ?batch_input.batch_hash(), batch_index = batch_input.batch_index(), "Inserting batch input into database.");
+    /// Insert a [`BatchCommitData`] into the database.
+    async fn insert_batch(&self, batch_input: BatchCommitData) -> Result<(), DatabaseError> {
+        tracing::trace!(target: "scroll::db", batch_hash = ?batch_input.hash, batch_index = batch_input.index, "Inserting batch input into database.");
         let batch_input: models::batch_input::ActiveModel = batch_input.into();
         batch_input.insert(self.get_connection()).await?;
         Ok(())
     }
 
-    /// Finalize a [`BatchInput`] with the provided `batch_hash` in the database and set the
+    /// Finalize a [`BatchCommitData`] with the provided `batch_hash` in the database and set the
     /// finalized block number to the provided block number.
     ///
-    /// Errors if the [`BatchInput`] associated with the provided `batch_hash` is not found in the
-    /// database, this method logs and returns an error.
-    async fn finalize_batch_input(
+    /// Errors if the [`BatchCommitData`] associated with the provided `batch_hash` is not found in
+    /// the database, this method logs and returns an error.
+    async fn finalize_batch(
         &self,
         batch_hash: B256,
         block_number: u64,
@@ -48,11 +49,11 @@ pub trait DatabaseOperations: DatabaseConnectionProvider {
         Ok(())
     }
 
-    /// Get a [`BatchInput`] from the database by its batch index.
-    async fn get_batch_input_by_batch_index(
+    /// Get a [`BatchCommitData`] from the database by its batch index.
+    async fn get_batch_by_index(
         &self,
         batch_index: u64,
-    ) -> Result<Option<BatchInput>, DatabaseError> {
+    ) -> Result<Option<BatchCommitData>, DatabaseError> {
         Ok(models::batch_input::Entity::find_by_id(
             TryInto::<i64>::try_into(batch_index).expect("index should fit in i64"),
         )
@@ -61,8 +62,8 @@ pub trait DatabaseOperations: DatabaseConnectionProvider {
         .map(|x| x.map(Into::into))?)
     }
 
-    /// Delete all [`BatchInput`]s with a block number greater than the provided block number.
-    async fn delete_batch_inputs_gt(&self, block_number: u64) -> Result<(), DatabaseError> {
+    /// Delete all [`BatchCommitData`]s with a block number greater than the provided block number.
+    async fn delete_batches_gt(&self, block_number: u64) -> Result<(), DatabaseError> {
         tracing::trace!(target: "scroll::db", block_number, "Deleting batch inputs greater than block number.");
         Ok(models::batch_input::Entity::delete_many()
             .filter(models::batch_input::Column::BlockNumber.gt(block_number as i64))
@@ -71,10 +72,10 @@ pub trait DatabaseOperations: DatabaseConnectionProvider {
             .map(|_| ())?)
     }
 
-    /// Get an iterator over all [`BatchInput`]s in the database.
-    async fn get_batch_inputs<'a>(
+    /// Get an iterator over all [`BatchCommitData`]s in the database.
+    async fn get_batches<'a>(
         &'a self,
-    ) -> Result<impl Stream<Item = Result<BatchInput, DbErr>> + 'a, DbErr> {
+    ) -> Result<impl Stream<Item = Result<BatchCommitData, DbErr>> + 'a, DbErr> {
         Ok(models::batch_input::Entity::find()
             .stream(self.get_connection())
             .await?

@@ -15,12 +15,11 @@ sol! {
 
     #[cfg_attr(feature = "test-utils", derive(arbitrary::Arbitrary))]
     #[derive(Debug)]
-    event CommitBatch(uint256 indexed batchIndex, bytes32 indexed batchHash);
+    event CommitBatch(uint256 indexed batch_index, bytes32 indexed batch_hash);
 
     #[cfg_attr(feature = "test-utils", derive(arbitrary::Arbitrary))]
     #[derive(Debug)]
-    event FinalizeBatch(uint256 indexed batchIndex, bytes32 indexed batchHash, bytes32 stateRoot, bytes32 withdrawRoot);
-
+    event FinalizeBatch(uint256 indexed batch_index, bytes32 indexed batch_hash, bytes32 state_root, bytes32 withdraw_root);
 }
 
 /// Tries to decode the provided log into the type T.

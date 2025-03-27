@@ -7,7 +7,7 @@ extern crate alloc as std;
 pub use block::BlockInfo;
 mod block;
 
-pub use batch::{BatchInput, BatchInputBuilder, BatchInputV1, BatchInputV2};
+pub use batch::BatchCommitData;
 mod batch;
 
 pub use bounded_vec::BoundedVec;
