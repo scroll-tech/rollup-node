@@ -10,6 +10,9 @@ pub enum DerivationPipelineError {
     /// Missing L1 messages cursor.
     #[error("missing l1 message queue cursor")]
     MissingL1MessageQueueCursor,
+    /// Missing L1 message.
+    #[error("missing l1 message")]
+    MissingL1Message,
     /// An error at the L1 provider.
     #[error(transparent)]
     L1Provider(#[from] L1ProviderError),
