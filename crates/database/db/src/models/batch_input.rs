@@ -11,6 +11,7 @@ pub struct Model {
     index: i64,
     hash: Vec<u8>,
     block_number: i64,
+    block_timestamp: i64,
     calldata: Vec<u8>,
     blob_hash: Option<Vec<u8>>,
     finalized_block_number: Option<i64>,
@@ -31,6 +32,9 @@ impl From<BatchCommitData> for ActiveModel {
             block_number: ActiveValue::Set(
                 batch_input.block_number.try_into().expect("block number should fit in i64"),
             ),
+            block_timestamp: ActiveValue::Set(
+                batch_input.block_timestamp.try_into().expect("block number should fit in i64"),
+            ),
             calldata: ActiveValue::Set(batch_input.calldata.0.to_vec()),
             blob_hash: ActiveValue::Set(batch_input.blob_versioned_hash.map(|b| b.to_vec())),
             finalized_block_number: ActiveValue::Unchanged(None),
@@ -44,6 +48,7 @@ impl From<Model> for BatchCommitData {
             hash: value.hash.as_slice().try_into().expect("data persisted in database is valid"),
             index: value.index as u64,
             block_number: value.block_number as u64,
+            block_timestamp: value.block_timestamp as u64,
             calldata: Arc::new(value.calldata.into()),
             blob_versioned_hash: value
                 .blob_hash

@@ -11,14 +11,23 @@ workspace = true
 
 [dependencies]
 # alloy
-alloy-eips.workspace = true
+alloy-eips = { workspace = true, features = ["kzg"] }
 alloy-primitives.workspace = true
+alloy-rpc-types-beacon = "0.12"
 alloy-rpc-types-engine.workspace = true
-kona-providers-alloy = "0.2.0"
+alloy-serde = "0.12"
 
 # scroll
 scroll-alloy-consensus.workspace = true
 
 # misc
 async-trait.workspace = true
+lru = "0.13.0"
+reqwest = { version = "0.12", features = ["json"] }
+serde = { version = "1.0", features = ["derive"] }
+thiserror.workspace = true
+tokio = { workspace = true, default-features = false }
 
+[dev-dependencies]
+eyre.workspace = true
+tokio = { workspace = true, features = ["macros"] }
