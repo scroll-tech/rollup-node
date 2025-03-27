@@ -99,8 +99,8 @@ impl<P: L1MessageProvider + Sync> L1Provider for OnlineL1Provider<P> {
         hash: B256,
     ) -> Result<Option<Arc<Blob>>, L1ProviderError> {
         // check if the requested blob is in the cache.
-        let cache = self.cache.lock().await;
-        if let Some((_, blob)) = cache.iter().find(|c| c.0 == &hash) {
+        let mut cache = self.cache.lock().await;
+        if let Some(blob) = cache.get(&hash) {
             return Ok(Some(blob.clone()));
         }
         // avoid holding the lock over the blob request.
