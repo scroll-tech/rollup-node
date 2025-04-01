@@ -53,7 +53,7 @@ mod test {
     use rollup_node_primitives::{BatchCommitData, L1MessageWithBlockNumber};
 
     #[tokio::test]
-    async fn test_database_round_trip_batch_input() {
+    async fn test_database_round_trip_batch_commit() {
         // Set up the test database.
         let db = setup_test_db().await;
 
@@ -63,12 +63,13 @@ mod test {
         let mut u = Unstructured::new(&bytes);
 
         // Generate a random BatchInputV1.
-        let batch_input = BatchCommitData::arbitrary(&mut u).unwrap();
+        let batch_commit = BatchCommitData::arbitrary(&mut u).unwrap();
 
         // Round trip the BatchInput through the database.
-        db.insert_batch(batch_input.clone()).await.unwrap();
-        let batch_input_from_db = db.get_batch_by_index(batch_input.index).await.unwrap().unwrap();
-        assert_eq!(batch_input, batch_input_from_db);
+        db.insert_batch(batch_commit.clone()).await.unwrap();
+        let batch_commit_from_db =
+            db.get_batch_by_index(batch_commit.index).await.unwrap().unwrap();
+        assert_eq!(batch_commit, batch_commit_from_db);
     }
 
     #[tokio::test]

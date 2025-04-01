@@ -54,6 +54,7 @@ impl Batch {
                     let num_l1_messages = b.context.num_l1_messages as usize;
                     let block_messages = l1_messages_buf.get(..num_l1_messages).unwrap_or(&[]);
                     *l1_messages_buf = l1_messages_buf.get(num_l1_messages..).unwrap_or(&[]);
+
                     block_messages
                 })
                 .collect::<Vec<_>>();

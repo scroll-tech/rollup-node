@@ -10,10 +10,10 @@ use sea_orm::{ActiveModelTrait, ColumnTrait, DbErr, EntityTrait, QueryFilter, Se
 #[async_trait::async_trait]
 pub trait DatabaseOperations: DatabaseConnectionProvider {
     /// Insert a [`BatchCommitData`] into the database.
-    async fn insert_batch(&self, batch_input: BatchCommitData) -> Result<(), DatabaseError> {
-        tracing::trace!(target: "scroll::db", batch_hash = ?batch_input.hash, batch_index = batch_input.index, "Inserting batch input into database.");
-        let batch_input: models::batch_input::ActiveModel = batch_input.into();
-        batch_input.insert(self.get_connection()).await?;
+    async fn insert_batch(&self, batch_commit: BatchCommitData) -> Result<(), DatabaseError> {
+        tracing::trace!(target: "scroll::db", batch_hash = ?batch_commit.hash, batch_index = batch_commit.index, "Inserting batch input into database.");
+        let batch_commit: models::batch_commit::ActiveModel = batch_commit.into();
+        batch_commit.insert(self.get_connection()).await?;
         Ok(())
     }
 
@@ -27,13 +27,13 @@ pub trait DatabaseOperations: DatabaseConnectionProvider {
         batch_hash: B256,
         block_number: u64,
     ) -> Result<(), DatabaseError> {
-        if let Some(batch) = models::batch_input::Entity::find()
-            .filter(models::batch_input::Column::Hash.eq(batch_hash.to_vec()))
+        if let Some(batch) = models::batch_commit::Entity::find()
+            .filter(models::batch_commit::Column::Hash.eq(batch_hash.to_vec()))
             .one(self.get_connection())
             .await?
         {
             tracing::trace!(target: "scroll::db", batch_hash = ?batch_hash, block_number, "Finalizing batch input in database.");
-            let mut batch: models::batch_input::ActiveModel = batch.into();
+            let mut batch: models::batch_commit::ActiveModel = batch.into();
             batch.finalized_block_number = Set(Some(block_number as i64));
             batch.update(self.get_connection()).await?;
         } else {
@@ -54,7 +54,7 @@ pub trait DatabaseOperations: DatabaseConnectionProvider {
         &self,
         batch_index: u64,
     ) -> Result<Option<BatchCommitData>, DatabaseError> {
-        Ok(models::batch_input::Entity::find_by_id(
+        Ok(models::batch_commit::Entity::find_by_id(
             TryInto::<i64>::try_into(batch_index).expect("index should fit in i64"),
         )
         .one(self.get_connection())
@@ -65,8 +65,8 @@ pub trait DatabaseOperations: DatabaseConnectionProvider {
     /// Delete all [`BatchCommitData`]s with a block number greater than the provided block number.
     async fn delete_batches_gt(&self, block_number: u64) -> Result<(), DatabaseError> {
         tracing::trace!(target: "scroll::db", block_number, "Deleting batch inputs greater than block number.");
-        Ok(models::batch_input::Entity::delete_many()
-            .filter(models::batch_input::Column::BlockNumber.gt(block_number as i64))
+        Ok(models::batch_commit::Entity::delete_many()
+            .filter(models::batch_commit::Column::BlockNumber.gt(block_number as i64))
             .exec(self.get_connection())
             .await
             .map(|_| ())?)
@@ -76,7 +76,7 @@ pub trait DatabaseOperations: DatabaseConnectionProvider {
     async fn get_batches<'a>(
         &'a self,
     ) -> Result<impl Stream<Item = Result<BatchCommitData, DbErr>> + 'a, DbErr> {
-        Ok(models::batch_input::Entity::find()
+        Ok(models::batch_commit::Entity::find()
             .stream(self.get_connection())
             .await?
             .map(|res| res.map(Into::into)))

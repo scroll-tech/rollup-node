@@ -5,7 +5,7 @@ use sea_orm::{entity::prelude::*, ActiveValue};
 
 /// A database model that represents a batch input.
 #[derive(Clone, Debug, PartialEq, Eq, DeriveEntityModel)]
-#[sea_orm(table_name = "batch_input")]
+#[sea_orm(table_name = "batch_commit")]
 pub struct Model {
     #[sea_orm(primary_key)]
     index: i64,
@@ -24,15 +24,17 @@ pub enum Relation {}
 impl ActiveModelBehavior for ActiveModel {}
 
 impl From<BatchCommitData> for ActiveModel {
-    fn from(batch_input: BatchCommitData) -> Self {
+    fn from(batch_commit: BatchCommitData) -> Self {
         Self {
-            index: ActiveValue::Set(batch_input.index.try_into().expect("index should fit in i64")),
-            hash: ActiveValue::Set(batch_input.hash.to_vec()),
-            block_number: ActiveValue::Set(
-                batch_input.block_number.try_into().expect("block number should fit in i64"),
+            index: ActiveValue::Set(
+                batch_commit.index.try_into().expect("index should fit in i64"),
             ),
-            calldata: ActiveValue::Set(batch_input.calldata.0.to_vec()),
-            blob_hash: ActiveValue::Set(batch_input.blob_versioned_hash.map(|b| b.to_vec())),
+            hash: ActiveValue::Set(batch_commit.hash.to_vec()),
+            block_number: ActiveValue::Set(
+                batch_commit.block_number.try_into().expect("block number should fit in i64"),
+            ),
+            calldata: ActiveValue::Set(batch_commit.calldata.0.to_vec()),
+            blob_hash: ActiveValue::Set(batch_commit.blob_versioned_hash.map(|b| b.to_vec())),
             finalized_block_number: ActiveValue::Unchanged(None),
         }
     }

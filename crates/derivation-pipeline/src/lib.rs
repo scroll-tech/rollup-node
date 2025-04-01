@@ -35,11 +35,15 @@ pub trait L1MessageProvider {
     fn set_hash_cursor(&mut self, hash: B256);
 }
 
-/// An instance of the trait can be used to provide L1 data.
-pub trait L1Provider: L1MessageProvider {
+/// An instance of the trait can be used to fetch L1 blob data.
+pub trait L1BlobProvider {
     /// Returns corresponding blob data for the provided hash.
     fn blob(&self, hash: B256) -> Option<Blob>;
 }
+
+/// An instance of the trait can be used to provide L1 data.
+pub trait L1Provider: L1BlobProvider + L1MessageProvider {}
+impl<T> L1Provider for T where T: L1BlobProvider + L1MessageProvider {}
 
 /// Returns an iterator over [`ScrollPayloadAttributes`] from the [`BatchCommitData`] and a
 /// [`L1Provider`].
@@ -110,7 +114,7 @@ mod tests {
         messages: RefCell<Vec<TxL1Message>>,
     }
 
-    impl L1Provider for TestL1MessageProvider {
+    impl L1BlobProvider for TestL1MessageProvider {
         fn blob(&self, _hash: B256) -> Option<Blob> {
             None
         }

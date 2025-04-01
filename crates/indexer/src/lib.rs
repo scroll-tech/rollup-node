@@ -154,14 +154,14 @@ mod test {
         rand::rng().fill(bytes.as_mut_slice());
         let mut u = Unstructured::new(&bytes);
 
-        let batch_input = BatchCommitData::arbitrary(&mut u).unwrap();
-        indexer.handle_l1_notification(L1Notification::BatchCommit(batch_input.clone()));
+        let batch_commit = BatchCommitData::arbitrary(&mut u).unwrap();
+        indexer.handle_l1_notification(L1Notification::BatchCommit(batch_commit.clone()));
 
         let _ = indexer.next().await;
 
-        let batch_input_result = db.get_batch_by_index(batch_input.index).await.unwrap().unwrap();
+        let batch_commit_result = db.get_batch_by_index(batch_commit.index).await.unwrap().unwrap();
 
-        assert_eq!(batch_input, batch_input_result);
+        assert_eq!(batch_commit, batch_commit_result);
     }
 
     #[tokio::test]
@@ -196,22 +196,22 @@ mod test {
         let mut u = Unstructured::new(&bytes);
 
         // Generate a 3 random batch inputs and set their block numbers
-        let mut batch_input_block_1 = BatchCommitData::arbitrary(&mut u).unwrap();
-        batch_input_block_1.block_number = 1;
-        let batch_input_block_1 = batch_input_block_1;
+        let mut batch_commit_block_1 = BatchCommitData::arbitrary(&mut u).unwrap();
+        batch_commit_block_1.block_number = 1;
+        let batch_commit_block_1 = batch_commit_block_1;
 
-        let mut batch_input_block_20 = BatchCommitData::arbitrary(&mut u).unwrap();
-        batch_input_block_20.block_number = 20;
-        let batch_input_block_20 = batch_input_block_20;
+        let mut batch_commit_block_20 = BatchCommitData::arbitrary(&mut u).unwrap();
+        batch_commit_block_20.block_number = 20;
+        let batch_commit_block_20 = batch_commit_block_20;
 
-        let mut batch_input_block_30 = BatchCommitData::arbitrary(&mut u).unwrap();
-        batch_input_block_30.block_number = 30;
-        let batch_input_block_30 = batch_input_block_30;
+        let mut batch_commit_block_30 = BatchCommitData::arbitrary(&mut u).unwrap();
+        batch_commit_block_30.block_number = 30;
+        let batch_commit_block_30 = batch_commit_block_30;
 
         // Index batch inputs
-        indexer.handle_l1_notification(L1Notification::BatchCommit(batch_input_block_1.clone()));
-        indexer.handle_l1_notification(L1Notification::BatchCommit(batch_input_block_20.clone()));
-        indexer.handle_l1_notification(L1Notification::BatchCommit(batch_input_block_30.clone()));
+        indexer.handle_l1_notification(L1Notification::BatchCommit(batch_commit_block_1.clone()));
+        indexer.handle_l1_notification(L1Notification::BatchCommit(batch_commit_block_20.clone()));
+        indexer.handle_l1_notification(L1Notification::BatchCommit(batch_commit_block_30.clone()));
 
         // Generate 3 random L1 messages and set their block numbers
         let mut l1_message_block_1 = L1MessageWithBlockNumber::arbitrary(&mut u).unwrap();
@@ -239,12 +239,12 @@ mod test {
         }
 
         // Check that the batch input at block 30 is deleted
-        let batch_inputs =
+        let batch_commits =
             db.get_batches().await.unwrap().map(|res| res.unwrap()).collect::<Vec<_>>().await;
 
-        assert_eq!(2, batch_inputs.len());
-        assert!(batch_inputs.contains(&batch_input_block_1));
-        assert!(batch_inputs.contains(&batch_input_block_20));
+        assert_eq!(2, batch_commits.len());
+        assert!(batch_commits.contains(&batch_commit_block_1));
+        assert!(batch_commits.contains(&batch_commit_block_20));
 
         // check that the L1 message at block 30 is deleted
         let l1_messages =

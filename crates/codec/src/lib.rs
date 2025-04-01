@@ -13,7 +13,7 @@ use crate::decoding::{
 };
 
 use alloy_eips::eip4844::Blob;
-use alloy_primitives::{Bytes, U256};
+use alloy_primitives::{ruint::UintTryTo, Bytes, U256};
 
 /// The Codec.
 #[derive(Debug)]
@@ -43,7 +43,7 @@ impl Codec {
     /// Decodes the input data and returns the decoded [`Batch`].
     pub fn decode<T: CommitDataSource>(input: &T) -> Result<Batch, CodecError> {
         let calldata = input.calldata();
-        let version = get_codec_version(calldata).ok_or(DecodingError::MissingCodecVersion)?;
+        let version = get_codec_version(calldata)?;
 
         let payload = match version {
             0 => decode_v0(calldata)?,
@@ -79,19 +79,22 @@ pub trait CommitDataSource {
 }
 
 /// Returns the codec version from the calldata.
-fn get_codec_version(calldata: &[u8]) -> Option<u8> {
+fn get_codec_version(calldata: &[u8]) -> Result<u8, DecodingError> {
     const CODEC_VERSION_OFFSET_START: usize = 4;
-    const CODEC_VERSION_OFFSET_END: usize = 4 + 32;
+    const CODEC_VERSION_LEN: usize = 32;
+    const CODEC_VERSION_OFFSET_END: usize = CODEC_VERSION_OFFSET_START + CODEC_VERSION_LEN;
     const HIGH_BYTES_FLAG: U256 =
         U256::from_limbs([u64::MAX, u64::MAX, u64::MAX, 0xffffffffffffff00]);
     const LOW_BYTES_FLAG: U256 = U256::from_limbs([0, 0, 0, 0xff]);
 
-    let version = calldata.get(CODEC_VERSION_OFFSET_START..CODEC_VERSION_OFFSET_END)?;
+    let version = calldata
+        .get(CODEC_VERSION_OFFSET_START..CODEC_VERSION_OFFSET_END)
+        .ok_or(DecodingError::Eof)?;
     let version = U256::from_be_slice(version);
 
     if (version & HIGH_BYTES_FLAG) != U256::ZERO {
-        return None
+        return Err(DecodingError::MissingCodecVersion)
     }
 
-    Some((version & LOW_BYTES_FLAG).saturating_to())
+    Ok((version & LOW_BYTES_FLAG).uint_try_to().expect("masked to a single byte"))
 }
