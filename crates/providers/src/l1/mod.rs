@@ -54,8 +54,8 @@ pub struct OnlineL1Provider<P> {
 }
 
 impl<P> OnlineL1Provider<P> {
-    /// Returns a new [`OnlineBeaconClient`] from the provided [`BeaconClient`], blob capacity and
-    /// [`L1MessageProvider`].
+    /// Returns a new [`OnlineBeaconClient`] from the provided [`OnlineBeaconClient`], blob capacity
+    /// and [`L1MessageProvider`].
     pub async fn new(
         client: OnlineBeaconClient,
         blob_capacity: usize,
