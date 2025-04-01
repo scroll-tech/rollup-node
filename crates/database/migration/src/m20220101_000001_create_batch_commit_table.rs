@@ -12,26 +12,26 @@ impl MigrationTrait for Migration {
         manager
             .create_table(
                 Table::create()
-                    .table(BatchInput::Table)
+                    .table(BatchCommit::Table)
                     .if_not_exists()
-                    .col(pk_auto(BatchInput::Index))
-                    .col(binary_len(BatchInput::Hash, HASH_LENGTH))
-                    .col(big_unsigned(BatchInput::BlockNumber))
-                    .col(binary(BatchInput::Calldata))
-                    .col(binary_len_null(BatchInput::BlobHash, HASH_LENGTH))
-                    .col(boolean_null(BatchInput::FinalizedBlockNumber))
+                    .col(pk_auto(BatchCommit::Index))
+                    .col(binary_len(BatchCommit::Hash, HASH_LENGTH))
+                    .col(big_unsigned(BatchCommit::BlockNumber))
+                    .col(binary(BatchCommit::Calldata))
+                    .col(binary_len_null(BatchCommit::BlobHash, HASH_LENGTH))
+                    .col(boolean_null(BatchCommit::FinalizedBlockNumber))
                     .to_owned(),
             )
             .await
     }
 
     async fn down(&self, manager: &SchemaManager) -> Result<(), DbErr> {
-        manager.drop_table(Table::drop().table(BatchInput::Table).to_owned()).await
+        manager.drop_table(Table::drop().table(BatchCommit::Table).to_owned()).await
     }
 }
 
 #[derive(DeriveIden)]
-enum BatchInput {
+enum BatchCommit {
     Table,
     Index,
     Hash,
