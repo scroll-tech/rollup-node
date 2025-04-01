@@ -12,26 +12,22 @@ mod error;
 extern crate alloc as std;
 
 use crate::{data_source::CodecDataSource, error::DerivationPipelineError};
-use std::{sync::Arc, vec::Vec};
+use std::vec::Vec;
 
 use alloy_primitives::B256;
 use alloy_rpc_types_engine::PayloadAttributes;
-use futures::{stream, Stream, StreamExt};
 use reth_scroll_chainspec::SCROLL_FEE_VAULT_ADDRESS;
 use rollup_node_primitives::BatchCommitData;
 use rollup_node_providers::L1Provider;
 use scroll_alloy_rpc_types_engine::ScrollPayloadAttributes;
 use scroll_codec::Codec;
 
-/// Returns an iterator over [`ScrollPayloadAttributes`] from the [`BatchCommitData`] and a
+/// Returns a vector of [`ScrollPayloadAttributes`] from the [`BatchCommitData`] and a
 /// [`L1Provider`].
 pub async fn derive<P: L1Provider>(
     batch: BatchCommitData,
     l1_provider: &mut P,
-) -> Result<
-    impl Stream<Item = Result<ScrollPayloadAttributes, DerivationPipelineError>> + use<'_, P>,
-    DerivationPipelineError,
-> {
+) -> Result<Vec<ScrollPayloadAttributes>, DerivationPipelineError> {
     // fetch the blob then decode the input batch.
     let blob = if let Some(hash) = batch.blob_versioned_hash {
         l1_provider.blob(batch.block_timestamp, hash).await?
@@ -54,42 +50,42 @@ pub async fn derive<P: L1Provider>(
         return Err(DerivationPipelineError::MissingL1MessageQueueCursor)
     }
 
-    let provider = Arc::new(&*l1_provider);
-    let iter = stream::iter(decoded.data.into_l2_blocks())
-        .map(move |data| (data, provider.clone()))
-        .then(|(mut block, provider)| async move {
-            // query the appropriate amount of l1 messages.
-            let mut txs = Vec::with_capacity(block.context.num_l1_messages as usize);
-            for _ in 0..block.context.num_l1_messages {
-                let l1_message = provider
-                    .next_l1_message()
-                    .await
-                    .map_err(Into::into)?
-                    .ok_or(DerivationPipelineError::MissingL1Message)?;
-                let mut bytes = Vec::new();
-                l1_message.eip2718_encode(&mut bytes);
-                txs.push(bytes.into());
-            }
+    let blocks = decoded.data.into_l2_blocks();
+    let mut attributes = Vec::with_capacity(blocks.len());
+    for mut block in blocks {
+        // query the appropriate amount of l1 messages.
+        let mut txs = Vec::with_capacity(block.context.num_l1_messages as usize);
+        for _ in 0..block.context.num_l1_messages {
+            let l1_message = l1_provider
+                .next_l1_message()
+                .await
+                .map_err(Into::into)?
+                .ok_or(DerivationPipelineError::MissingL1Message)?;
+            let mut bytes = Vec::new();
+            l1_message.eip2718_encode(&mut bytes);
+            txs.push(bytes.into());
+        }
 
-            // add the block transactions.
-            txs.append(&mut block.transactions);
+        // add the block transactions.
+        txs.append(&mut block.transactions);
 
-            // construct the payload attributes.
-            Ok(ScrollPayloadAttributes {
-                payload_attributes: PayloadAttributes {
-                    timestamp: block.context.timestamp,
-                    prev_randao: B256::ZERO,
-                    // TODO: this should be based off the current configuration value.
-                    suggested_fee_recipient: SCROLL_FEE_VAULT_ADDRESS,
-                    withdrawals: None,
-                    parent_beacon_block_root: None,
-                },
-                transactions: Some(txs),
-                no_tx_pool: true,
-            })
-        });
+        // construct the payload attributes.
+        let attribute = ScrollPayloadAttributes {
+            payload_attributes: PayloadAttributes {
+                timestamp: block.context.timestamp,
+                // TODO: this should be based off the current configuration value.
+                suggested_fee_recipient: SCROLL_FEE_VAULT_ADDRESS,
+                prev_randao: B256::ZERO,
+                withdrawals: None,
+                parent_beacon_block_root: None,
+            },
+            transactions: Some(txs),
+            no_tx_pool: true,
+        };
+        attributes.push(attribute);
+    }
 
-    Ok(iter)
+    Ok(attributes)
 }
 
 #[cfg(test)]
@@ -169,18 +165,15 @@ mod tests {
         }];
         let mut provider = TestL1MessageProvider { messages: Arc::new(Mutex::new(l1_messages)) };
 
-        let attributes: Vec<_> = derive(batch_data, &mut provider).await?.collect().await;
-        let attributes = attributes.into_iter().collect::<Result<Vec<_>, _>>()?;
+        let attributes = derive(batch_data, &mut provider).await?;
         let attribute =
             attributes.iter().find(|a| a.payload_attributes.timestamp == 1696935384).unwrap();
 
         let expected = ScrollPayloadAttributes{
             payload_attributes: PayloadAttributes{
                 timestamp: 1696935384,
-                prev_randao: B256::ZERO,
                 suggested_fee_recipient: SCROLL_FEE_VAULT_ADDRESS,
-                withdrawals: None,
-                parent_beacon_block_root: None,
+                ..Default::default()
             },
             transactions: Some(vec![bytes!("7ef901b7218302904094781e90f1c8fc4611c9b7497c3b47f99ef6969cbc80b901848ef1332e0000000000000000000000007f2b8c31f88b6006c382775eea88297ec1e3e9050000000000000000000000006ea73e05adc79974b931123675ea8f78ffdacdf0000000000000000000000000000000000000000000000000006a94d74f430000000000000000000000000000000000000000000000000000000000000000002100000000000000000000000000000000000000000000000000000000000000a000000000000000000000000000000000000000000000000000000000000000a4232e8748000000000000000000000000ca266224613396a0e8d4c2497dbc4f33dd6cdeff000000000000000000000000ca266224613396a0e8d4c2497dbc4f33dd6cdeff000000000000000000000000000000000000000000000000006a94d74f4300000000000000000000000000000000000000000000000000000000000000000080000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000947885bcbd5cecef1336b5300fb5186a12ddd8c478"), bytes!("7ef901b7228302904094781e90f1c8fc4611c9b7497c3b47f99ef6969cbc80b901848ef1332e0000000000000000000000007f2b8c31f88b6006c382775eea88297ec1e3e9050000000000000000000000006ea73e05adc79974b931123675ea8f78ffdacdf000000000000000000000000000000000000000000000000000470de4df820000000000000000000000000000000000000000000000000000000000000000002200000000000000000000000000000000000000000000000000000000000000a000000000000000000000000000000000000000000000000000000000000000a4232e8748000000000000000000000000982fe4a7cbd74bb3422ebe46333c3e8046c12c7f000000000000000000000000982fe4a7cbd74bb3422ebe46333c3e8046c12c7f00000000000000000000000000000000000000000000000000470de4df8200000000000000000000000000000000000000000000000000000000000000000080000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000947885bcbd5cecef1336b5300fb5186a12ddd8c478")]),
             no_tx_pool: true,
@@ -191,10 +184,8 @@ mod tests {
         let expected = ScrollPayloadAttributes{
             payload_attributes: PayloadAttributes{
                 timestamp: 1696935657,
-                prev_randao: B256::ZERO,
                 suggested_fee_recipient: SCROLL_FEE_VAULT_ADDRESS,
-                withdrawals: None,
-                parent_beacon_block_root: None,
+                ..Default::default()
             },
             transactions: Some(vec![bytes!("f88c8202658417d7840082a4f294530000000000000000000000000000000000000280a4bede39b500000000000000000000000000000000000000000000000000000001669aa2f583104ec4a07461e6555f927393ebdf5f183738450c3842bc3b86a1db7549d9bee21fadd0b1a06d7ba96897bd9fb8e838a327d3ca34be66da11955f10d1fb2264949071e9e8cd")]),
             no_tx_pool: true,

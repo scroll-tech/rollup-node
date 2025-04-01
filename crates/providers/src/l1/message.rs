@@ -53,6 +53,7 @@ impl<DB: DatabaseConnectionProvider + Sync> L1MessageProvider for DatabaseL1Mess
     }
 
     fn set_hash_cursor(&mut self, _hash: B256) {
+        // TODO: issue 43
         todo!()
     }
 }

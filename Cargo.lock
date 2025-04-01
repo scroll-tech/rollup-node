@@ -9797,7 +9797,6 @@ dependencies = [
  "alloy-rpc-types-engine",
  "async-trait",
  "eyre",
- "futures",
  "reth-scroll-chainspec",
  "rollup-node-primitives",
  "rollup-node-providers",
