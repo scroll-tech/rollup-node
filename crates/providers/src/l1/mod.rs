@@ -1,6 +1,7 @@
+pub(crate) mod blob;
 pub(crate) mod message;
 
-use crate::{beacon_client::OnlineBeaconClient, l1::message::L1MessageProvider};
+use crate::{beacon_client::OnlineBeaconClient, l1::message::L1MessageProvider, L1BlobProvider};
 use std::{num::NonZeroUsize, sync::Arc};
 
 use alloy_eips::eip4844::{Blob, BlobTransactionSidecarItem};
@@ -11,15 +12,8 @@ use scroll_db::DatabaseError;
 use tokio::sync::Mutex;
 
 /// An instance of the trait can be used to provide L1 data.
-#[async_trait::async_trait]
-pub trait L1Provider: L1MessageProvider {
-    /// Returns corresponding blob data for the provided hash.
-    async fn blob(
-        &self,
-        block_timestamp: u64,
-        hash: B256,
-    ) -> Result<Option<Arc<Blob>>, L1ProviderError>;
-}
+pub trait L1Provider: L1BlobProvider + L1MessageProvider {}
+impl<T> L1Provider for T where T: L1BlobProvider + L1MessageProvider {}
 
 /// An error occurring at the [`L1Provider`].
 #[derive(Debug, thiserror::Error)]
@@ -91,7 +85,7 @@ impl<P> OnlineL1Provider<P> {
 }
 
 #[async_trait::async_trait]
-impl<P: L1MessageProvider + Sync> L1Provider for OnlineL1Provider<P> {
+impl<P: L1MessageProvider + Sync> L1BlobProvider for OnlineL1Provider<P> {
     /// Returns the requested blob corresponding to the passed hash.
     async fn blob(
         &self,

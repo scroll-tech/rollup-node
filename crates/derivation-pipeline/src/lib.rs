@@ -95,7 +95,7 @@ mod tests {
 
     use alloy_eips::eip4844::Blob;
     use alloy_primitives::{address, b256, bytes, U256};
-    use rollup_node_providers::{L1MessageProvider, L1ProviderError};
+    use rollup_node_providers::{L1BlobProvider, L1MessageProvider, L1ProviderError};
     use scroll_alloy_consensus::TxL1Message;
     use scroll_codec::decoding::test_utils::read_to_bytes;
     use tokio::sync::Mutex;

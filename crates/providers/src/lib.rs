@@ -8,6 +8,7 @@ pub use execution_payload::ExecutionPayloadProvider;
 mod execution_payload;
 
 pub use l1::{
+    blob::L1BlobProvider,
     message::{DatabaseL1MessageProvider, L1MessageProvider},
     L1Provider, L1ProviderError, OnlineL1Provider,
 };
