@@ -20,8 +20,7 @@ pub fn decode_v4(calldata: &[u8], blob: &[u8]) -> Result<Batch, DecodingError> {
 
     // decode the parent batch header.
     let raw_parent_header = call.parent_batch_header().ok_or(DecodingError::MissingParentHeader)?;
-    let parent_header = BatchHeaderV3::try_from_buf(&mut (&*raw_parent_header))
-        .ok_or(DecodingError::InvalidParentHeaderFormat)?;
+    let parent_header = BatchHeaderV3::try_from_buf(&mut (&*raw_parent_header))?;
     let l1_message_start_index = parent_header.total_l1_message_popped;
 
     // get blob iterator and collect, skipping unused bytes.

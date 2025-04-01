@@ -33,8 +33,7 @@ pub fn decode_v1(calldata: &[u8], blob: &[u8]) -> Result<Batch, DecodingError> {
 
     // decode the parent batch header.
     let raw_parent_header = call.parent_batch_header().ok_or(DecodingError::MissingParentHeader)?;
-    let parent_header = BatchHeaderV1::try_from_buf(&mut (&*raw_parent_header))
-        .ok_or(DecodingError::InvalidParentHeaderFormat)?;
+    let parent_header = BatchHeaderV1::try_from_buf(&mut (&*raw_parent_header))?;
     let l1_message_start_index = parent_header.total_l1_message_popped;
 
     let chunks = call.chunks().ok_or(DecodingError::MissingChunkData)?;
@@ -81,7 +80,7 @@ pub(crate) fn decode_v1_chunk(
 
         // for each block, decode into a block context
         for _ in 0..blocks_count {
-            let context = BlockContextV1::try_from_buf(buf).ok_or(DecodingError::Eof)?;
+            let context = BlockContextV1::try_from_buf(buf)?;
             block_contexts.push(context);
         }
 

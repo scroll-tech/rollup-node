@@ -40,7 +40,7 @@ pub struct BlockContext {
 impl BlockContext {
     pub const BYTES_LENGTH: usize = 60;
 
-    /// Pushes all fields of the [`BlockContext`] into the provided buf.
+    /// Returns an owned array which contains all fields of the [`BlockContext`].
     pub fn to_be_bytes(&self) -> [u8; Self::BYTES_LENGTH] {
         let mut buf = [0u8; Self::BYTES_LENGTH];
 

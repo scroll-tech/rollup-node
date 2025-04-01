@@ -1,4 +1,6 @@
-use crate::{from_be_bytes_slice_and_advance_buf, from_slice_and_advance_buf};
+use crate::{
+    error::DecodingError, from_be_bytes_slice_and_advance_buf, from_slice_and_advance_buf,
+};
 
 use alloy_primitives::{bytes::BufMut, keccak256, B256};
 
@@ -55,10 +57,10 @@ impl BatchHeaderV3 {
     }
 
     /// Tries to read from the input buffer into the [`BatchHeaderV3`].
-    /// Returns [`None`] if the buffer.len() < [`BatchHeaderV3::BYTES_LENGTH`].
-    pub fn try_from_buf(buf: &mut &[u8]) -> Option<Self> {
+    /// Returns [`DecodingError::Eof`] if the buffer.len() < [`BatchHeaderV3::BYTES_LENGTH`].
+    pub fn try_from_buf(buf: &mut &[u8]) -> Result<Self, DecodingError> {
         if buf.len() < Self::BYTES_LENGTH {
-            return None;
+            return Err(DecodingError::Eof);
         }
 
         let version = from_be_bytes_slice_and_advance_buf!(u8, buf);
@@ -76,7 +78,7 @@ impl BatchHeaderV3 {
         let blob_data_proof_z = from_slice_and_advance_buf!(B256, buf);
         let blob_data_proof_y = from_slice_and_advance_buf!(B256, buf);
 
-        Some(Self {
+        Ok(Self {
             version,
             batch_index,
             l1_message_popped,

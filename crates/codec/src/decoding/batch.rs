@@ -1,4 +1,7 @@
-use crate::{decoding::payload::PayloadData, BlockContext, L2Block};
+use crate::{
+    decoding::{constants::KECCAK_256_DIGEST_BYTES_SIZE, payload::PayloadData},
+    BlockContext, L2Block,
+};
 
 use alloy_primitives::{bytes::BufMut, keccak256, B256};
 use scroll_alloy_consensus::TxL1Message;
@@ -37,7 +40,8 @@ impl Batch {
         let blocks_buf = &mut (&**self.data.l2_blocks());
         let l1_messages_buf = &mut (&*l1_messages);
 
-        let mut chunk_hashes = Vec::with_capacity(chunks_count.len() * 32);
+        let mut chunk_hashes =
+            Vec::with_capacity(chunks_count.len() * KECCAK_256_DIGEST_BYTES_SIZE);
 
         for chunk_count in chunks_count {
             // slice the blocks at chunk_count.
@@ -75,7 +79,8 @@ fn hash_chunk(
     // reserve the correct capacity.
     let l1_messages_count: usize =
         l1_messages_per_block.iter().map(|messages| messages.len()).sum();
-    let mut capacity = l2_blocks.len() * (BlockContext::BYTES_LENGTH - 2) + l1_messages_count * 32;
+    let mut capacity = l2_blocks.len() * (BlockContext::BYTES_LENGTH - 2) +
+        l1_messages_count * KECCAK_256_DIGEST_BYTES_SIZE;
     if version == 0 {
         capacity += l2_blocks.iter().map(|b| b.transactions.len()).sum::<usize>();
     }

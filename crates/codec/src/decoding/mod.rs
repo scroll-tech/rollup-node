@@ -6,6 +6,9 @@ pub mod batch;
 /// Blob related helpers.
 pub mod blob;
 
+/// Constants involved in the decoding process.
+pub mod constants;
+
 mod macros;
 
 /// V0 implementation of the decoding.

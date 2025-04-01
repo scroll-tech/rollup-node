@@ -16,8 +16,8 @@ pub struct PayloadData {
 /// Information about the state of the L1 message queue.
 #[derive(Debug, Clone, PartialEq, Eq, derive_more::From)]
 pub enum L1MessageQueueInfo {
-    /// The queue index of the l1 message.
-    Indexed(u64),
+    /// The initial index of the l1 message queue, before commitment of the payload.
+    InitialQueueIndex(u64),
     /// The hashed state of the l1 message queue.
     Hashed {
         /// The previous l1 message queue hash.
@@ -41,7 +41,7 @@ impl PayloadData {
     /// Returns the l1 message queue index of the first message in the batch.
     pub fn queue_index_start(&self) -> Option<u64> {
         match self.l1_message_queue_info {
-            L1MessageQueueInfo::Indexed(index) => Some(index),
+            L1MessageQueueInfo::InitialQueueIndex(index) => Some(index),
             L1MessageQueueInfo::Hashed { .. } => None,
         }
     }
@@ -49,7 +49,7 @@ impl PayloadData {
     /// Returns the l1 message queue hash before the commitment of the batch.
     pub fn prev_l1_message_queue_hash(&self) -> Option<&B256> {
         match self.l1_message_queue_info {
-            L1MessageQueueInfo::Indexed(_) => None,
+            L1MessageQueueInfo::InitialQueueIndex(_) => None,
             L1MessageQueueInfo::Hashed { ref prev_l1_message_queue_hash, .. } => {
                 Some(prev_l1_message_queue_hash)
             }
@@ -59,7 +59,7 @@ impl PayloadData {
     /// Returns the l1 message queue hash after the commitment of the batch.
     pub fn post_l1_message_queue_hash(&self) -> Option<&B256> {
         match self.l1_message_queue_info {
-            L1MessageQueueInfo::Indexed(_) => None,
+            L1MessageQueueInfo::InitialQueueIndex(_) => None,
             L1MessageQueueInfo::Hashed { ref post_l1_message_queue_hash, .. } => {
                 Some(post_l1_message_queue_hash)
             }

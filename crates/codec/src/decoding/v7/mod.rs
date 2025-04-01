@@ -78,7 +78,7 @@ pub(crate) fn decode_v7_payload(blob: &[u8]) -> Result<Batch, DecodingError> {
 
     // for each block, decode into a block context
     for _ in 0..blocks_count {
-        let context = BlockContextV7::try_from_buf(buf).ok_or(DecodingError::Eof)?;
+        let context = BlockContextV7::try_from_buf(buf)?;
         block_contexts.push(context);
     }
 

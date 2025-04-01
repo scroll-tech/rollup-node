@@ -1,4 +1,7 @@
-use crate::{from_be_bytes_slice_and_advance_buf, from_slice_and_advance_buf};
+use crate::{
+    decoding::constants::SKIPPED_L1_MESSAGE_BITMAP_ITEM_BYTES_SIZE, error::DecodingError,
+    from_be_bytes_slice_and_advance_buf, from_slice_and_advance_buf,
+};
 
 use alloy_primitives::{
     bytes::{Buf, BufMut},
@@ -49,10 +52,10 @@ impl BatchHeaderV0 {
     }
 
     /// Tries to read from the input buffer into the [`BatchHeaderV0`].
-    /// Returns [`None`] if the buffer.len() < [`BatchHeaderV0::BYTES_LENGTH`].
-    pub fn try_from_buf(buf: &mut &[u8]) -> Option<Self> {
+    /// Returns [`DecodingError::Eof`] if the buffer.len() < [`BatchHeaderV0::BYTES_LENGTH`].
+    pub fn try_from_buf(buf: &mut &[u8]) -> Result<Self, DecodingError> {
         if buf.len() < Self::BYTES_LENGTH {
-            return None
+            return Err(DecodingError::Eof)
         }
 
         let version = from_be_bytes_slice_and_advance_buf!(u8, buf);
@@ -64,16 +67,20 @@ impl BatchHeaderV0 {
         let data_hash = from_slice_and_advance_buf!(B256, buf);
         let parent_batch_hash = from_slice_and_advance_buf!(B256, buf);
 
-        let skipped_l1_message_bitmap: Vec<_> =
-            buf.chunks(32).map(|chunk| U256::from_be_slice(chunk)).collect();
+        let skipped_l1_message_bitmap: Vec<_> = buf
+            .chunks(SKIPPED_L1_MESSAGE_BITMAP_ITEM_BYTES_SIZE)
+            .map(|chunk| U256::from_be_slice(chunk))
+            .collect();
 
         // check leftover bytes are correct.
-        if buf.len() as u64 != l1_message_popped.div_ceil(256) * 32 {
-            return None
+        if buf.len() as u64 !=
+            l1_message_popped.div_ceil(256) * SKIPPED_L1_MESSAGE_BITMAP_ITEM_BYTES_SIZE as u64
+        {
+            return Err(DecodingError::Eof)
         }
-        buf.advance(skipped_l1_message_bitmap.len() * 32);
+        buf.advance(skipped_l1_message_bitmap.len() * SKIPPED_L1_MESSAGE_BITMAP_ITEM_BYTES_SIZE);
 
-        Some(Self {
+        Ok(Self {
             version,
             batch_index,
             l1_message_popped,
@@ -87,7 +94,8 @@ impl BatchHeaderV0 {
     /// Computes the hash for the header.
     pub fn hash_slow(&self) -> B256 {
         let mut bytes = Vec::<u8>::with_capacity(
-            Self::BYTES_LENGTH + self.skipped_l1_message_bitmap.len() * 32,
+            Self::BYTES_LENGTH +
+                self.skipped_l1_message_bitmap.len() * SKIPPED_L1_MESSAGE_BITMAP_ITEM_BYTES_SIZE,
         );
         bytes.put_slice(&self.version.to_be_bytes());
         bytes.put_slice(&self.batch_index.to_be_bytes());
