@@ -5,14 +5,11 @@ pub mod block;
 
 pub mod decoding;
 
-pub use error::CodecError;
+pub use error::{CodecError, DecodingError};
 mod error;
 
-use crate::{
-    decoding::{
-        batch::Batch, v0::decode_v0, v1::decode_v1, v2::decode_v2, v4::decode_v4, v7::decode_v7,
-    },
-    error::DecodingError,
+use crate::decoding::{
+    batch::Batch, v0::decode_v0, v1::decode_v1, v2::decode_v2, v4::decode_v4, v7::decode_v7,
 };
 
 use alloy_eips::eip4844::Blob;
