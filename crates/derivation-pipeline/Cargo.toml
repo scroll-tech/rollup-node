@@ -34,6 +34,8 @@ scroll-codec = { workspace = true, features = ["test-utils"] }
 [features]
 default = ["std"]
 std = [
+    "scroll-alloy-consensus/std",
+    "scroll-alloy-rpc-types-engine/std",
     "alloy-primitives/std",
     "alloy-rpc-types-engine/std",
     "alloy-eips/std",
