@@ -61,7 +61,7 @@ pub async fn derive<P: L1Provider>(
                 .await
                 .map_err(Into::into)?
                 .ok_or(DerivationPipelineError::MissingL1Message)?;
-            let mut bytes = Vec::new();
+            let mut bytes = Vec::with_capacity(l1_message.eip2718_encoded_length());
             l1_message.eip2718_encode(&mut bytes);
             txs.push(bytes.into());
         }

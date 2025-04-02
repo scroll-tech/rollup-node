@@ -35,7 +35,7 @@ impl From<BatchCommitData> for ActiveModel {
                 batch_commit.block_number.try_into().expect("block number should fit in i64"),
             ),
             block_timestamp: ActiveValue::Set(
-                batch_commit.block_timestamp.try_into().expect("block number should fit in i64"),
+                batch_commit.block_timestamp.try_into().expect("block timestamp should fit in i64"),
             ),
             calldata: ActiveValue::Set(batch_commit.calldata.0.to_vec()),
             blob_hash: ActiveValue::Set(batch_commit.blob_versioned_hash.map(|b| b.to_vec())),

@@ -85,7 +85,7 @@ impl<P> OnlineL1Provider<P> {
 }
 
 #[async_trait::async_trait]
-impl<P: L1MessageProvider + Sync> L1BlobProvider for OnlineL1Provider<P> {
+impl<P: Sync> L1BlobProvider for OnlineL1Provider<P> {
     /// Returns the requested blob corresponding to the passed hash.
     async fn blob(
         &self,
