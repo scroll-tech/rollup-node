@@ -1,14 +1,19 @@
+pub use batch_header::BatchHeaderV1;
+mod batch_header;
+
 use crate::{
     check_buf_len,
-    decoding::{blob::BlobSliceIter, transaction::Transaction, v0::BlockContextV0},
+    decoding::{
+        batch::Batch, blob::BlobSliceIter, payload::PayloadData, transaction::Transaction,
+        v0::BlockContextV0,
+    },
     error::DecodingError,
     from_be_bytes_slice_and_advance_buf, L2Block,
 };
 use std::vec::Vec;
 
-use alloy_primitives::{bytes::Buf, Bytes};
-use alloy_sol_types::SolCall;
-use scroll_l1::abi::calls::commitBatchCall;
+use alloy_primitives::bytes::Buf;
+use scroll_l1::abi::calls::CommitBatchCall;
 
 /// The max amount of chunks per batch for V1 codec.
 /// <https://github.com/scroll-tech/da-codec/blob/main/encoding/codecv0.go#L18>
@@ -21,11 +26,17 @@ const TRANSACTION_DATA_BLOB_INDEX_OFFSET: usize = 4 * MAX_CHUNKS_PER_BATCH;
 /// The block context for v1 decoding is identical to the v0 decoding.
 pub(crate) type BlockContextV1 = BlockContextV0;
 
-/// Decodes the input calldata and blob into a [`Vec<L2Block>`].
-pub fn decode_v1(calldata: &[u8], blob: &[u8]) -> Result<Vec<L2Block>, DecodingError> {
+/// Decodes the input calldata and blob into a [`Batch`].
+pub fn decode_v1(calldata: &[u8], blob: &[u8]) -> Result<Batch, DecodingError> {
     // abi decode into a commit batch call
-    let call = commitBatchCall::abi_decode(calldata, true)
-        .map_err(|_| DecodingError::InvalidCalldataFormat)?;
+    let call = CommitBatchCall::try_decode(calldata).ok_or(DecodingError::InvalidCalldataFormat)?;
+
+    // decode the parent batch header.
+    let raw_parent_header = call.parent_batch_header().ok_or(DecodingError::MissingParentHeader)?;
+    let parent_header = BatchHeaderV1::try_from_buf(&mut (&*raw_parent_header))?;
+    let l1_message_start_index = parent_header.total_l1_message_popped;
+
+    let chunks = call.chunks().ok_or(DecodingError::MissingChunkData)?;
 
     // get blob iterator and collect, skipping unused bytes.
     let heap_blob = BlobSliceIter::from_blob_slice(blob).copied().collect::<Vec<_>>();
@@ -36,28 +47,32 @@ pub fn decode_v1(calldata: &[u8], blob: &[u8]) -> Result<Vec<L2Block>, DecodingE
 
     // check the chunk count is correct in debug.
     let chunk_count = from_be_bytes_slice_and_advance_buf!(u16, buf);
-    debug_assert_eq!(call.chunks.len(), chunk_count as usize, "mismatched chunk count");
+    debug_assert_eq!(chunks.len(), chunk_count as usize, "mismatched chunk count");
 
     // move pass chunk information.
     buf.advance(TRANSACTION_DATA_BLOB_INDEX_OFFSET);
 
-    decode_v1_chunk(call.chunks, buf)
+    decode_v1_chunk(call.version(), l1_message_start_index, chunks, buf)
 }
 
 /// Decode the provided chunks and blob data into [`L2Block`].
 pub(crate) fn decode_v1_chunk(
-    chunks: Vec<Bytes>,
+    version: u8,
+    l1_message_start_index: u64,
+    chunks: Vec<&[u8]>,
     blob: &[u8],
-) -> Result<Vec<L2Block>, DecodingError> {
+) -> Result<Batch, DecodingError> {
     let mut l2_blocks: Vec<L2Block> = Vec::new();
+    let mut chunks_block_count = Vec::new();
     let blob = &mut &*blob;
 
     // iterate the chunks
     for chunk in chunks {
-        let buf = &mut chunk.as_ref();
+        let buf: &mut &[u8] = &mut &*chunk;
 
         // get the block count
         let blocks_count = buf.first().copied().ok_or(DecodingError::Eof)? as usize;
+        chunks_block_count.push(blocks_count);
         buf.advance(1);
 
         let mut block_contexts: Vec<BlockContextV1> = Vec::with_capacity(blocks_count);
@@ -65,7 +80,7 @@ pub(crate) fn decode_v1_chunk(
 
         // for each block, decode into a block context
         for _ in 0..blocks_count {
-            let context = BlockContextV1::try_from_buf(buf).ok_or(DecodingError::Eof)?;
+            let context = BlockContextV1::try_from_buf(buf)?;
             block_contexts.push(context);
         }
 
@@ -83,7 +98,10 @@ pub(crate) fn decode_v1_chunk(
         }
     }
 
-    Ok(l2_blocks)
+    let payload =
+        PayloadData { blocks: l2_blocks, l1_message_queue_info: l1_message_start_index.into() };
+
+    Ok(Batch::new(version, Some(chunks_block_count), payload))
 }
 
 #[cfg(test)]
@@ -96,15 +114,13 @@ mod tests {
     #[test]
     fn test_should_decode_v1() -> eyre::Result<()> {
         // <https://etherscan.io/tx/0x27d73eef6f0de411f8db966f0def9f28c312a0ae5cfb1ac09ec23f8fa18b005b>
-        let commit_calldata = bytes!(
-            "1325aca000000000000000000000000000000000000000000000000000000000000000010000000000000000000000000000000000000000000000000000000000000080000000000000000000000000000000000000000000000000000000000000012000000000000000000000000000000000000000000000000000000000000007000000000000000000000000000000000000000000000000000000000000000079010000000000032702000000000000000000000000000c7124e58ee8f9c15196600f9e618806bc835d1fdc35fe2467ed71adcf1a7c47d4e7eb014edb613b68d298710004d463b92eed58aab3af7386b8f32127af53b33fc9bea1aece1f54b8a429b121d61619b49f5c9da3b83d924c21c418160531e131965800000000000000000000000000000000000000000000000000000000000000000000000000000b000000000000000000000000000000000000000000000000000000000000016000000000000000000000000000000000000000000000000000000000000001c00000000000000000000000000000000000000000000000000000000000000220000000000000000000000000000000000000000000000000000000000000028000000000000000000000000000000000000000000000000000000000000002e0000000000000000000000000000000000000000000000000000000000000038000000000000000000000000000000000000000000000000000000000000003e0000000000000000000000000000000000000000000000000000000000000044000000000000000000000000000000000000000000000000000000000000004a000000000000000000000000000000000000000000000000000000000000005000000000000000000000000000000000000000000000000000000000000000560000000000000000000000000000000000000000000000000000000000000003d010000000000588865000000006649bd2b00000000000000000000000000000000000000000000000000000000000000000000000000989680000e0000000000000000000000000000000000000000000000000000000000000000000000003d010000000000588866000000006649bd2e00000000000000000000000000000000000000000000000000000000000000000000000000989680000c0000000000000000000000000000000000000000000000000000000000000000000000003d010000000000588867000000006649bd310000000000000000000000000000000000000000000000000000000000000000000000000098968000140000000000000000000000000000000000000000000000000000000000000000000000003d010000000000588868000000006649bd3400000000000000000000000000000000000000000000000000000000000000000000000000989680001100000000000000000000000000000000000000000000000000000000000000000000000079020000000000588869000000006649bd370000000000000000000000000000000000000000000000000000000000000000000000000098968000100000000000000058886a000000006649bd3a000000000000000000000000000000000000000000000000000000000000000000000000009896800009000000000000000000000000000000000000000000000000000000000000000000000000000000003d01000000000058886b000000006649bd3d00000000000000000000000000000000000000000000000000000000000000000000000000989680000a0000000000000000000000000000000000000000000000000000000000000000000000003d01000000000058886c000000006649bd4000000000000000000000000000000000000000000000000000000000000000000000000000989680000e0000000000000000000000000000000000000000000000000000000000000000000000003d01000000000058886d000000006649bd430000000000000000000000000000000000000000000000000000000000000000000000000098968000160000000000000000000000000000000000000000000000000000000000000000000000003d01000000000058886e000000006649bd460000000000000000000000000000000000000000000000000000000000000000000000000098968000150000000000000000000000000000000000000000000000000000000000000000000000003d01000000000058886f000000006649bd4900000000000000000000000000000000000000000000000000000000000000000000000000989680001b0000000000000000000000000000000000000000000000000000000000000000000000003d010000000000588870000000006649bd4c00000000000000000000000000000000000000000000000000000000000000000000000000989680000a00000000000000000000000000000000000000000000000000000000000000000000000000"
-        );
-        let blob = read_to_bytes("./src/testdata/blob_v1.bin")?;
+        let commit_calldata = read_to_bytes("./testdata/calldata_v1.bin")?;
+        let blob = read_to_bytes("./testdata/blob_v1.bin")?;
         let blocks = decode_v1(&commit_calldata, &blob)?;
 
-        assert_eq!(blocks.len(), 12);
+        assert_eq!(blocks.data.l2_blocks().len(), 12);
 
-        let last_block = blocks.last().expect("should have 12 blocks");
+        let last_block = blocks.data.l2_blocks().last().expect("should have 12 blocks");
         let expected_block = L2Block {
             transactions: vec![
                 bytes!(
@@ -143,6 +159,7 @@ mod tests {
                 timestamp: 1716108620,
                 base_fee: U256::ZERO,
                 gas_limit: 10000000,
+                num_transactions: 10,
                 num_l1_messages: 0,
             },
         };

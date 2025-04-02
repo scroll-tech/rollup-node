@@ -1,4 +1,4 @@
-use crate::{from_be_bytes_slice_and_advance_buf, BlockContext};
+use crate::{error::DecodingError, from_be_bytes_slice_and_advance_buf, BlockContext};
 
 use alloy_primitives::{bytes::Buf, U256};
 
@@ -16,22 +16,22 @@ impl BlockContextV0 {
     pub(crate) const BYTES_LENGTH: usize = 60;
 
     /// Tries to read from the input buffer into the [`BlockContextV0`].
-    /// Returns [`None`] if the buffer.len() < [`BlockContextV0::BYTES_LENGTH`].
-    pub(crate) fn try_from_buf(buf: &mut &[u8]) -> Option<Self> {
+    /// Returns [`DecodingError::Eof`] if the buffer.len() < [`BlockContextV0::BYTES_LENGTH`].
+    pub(crate) fn try_from_buf(buf: &mut &[u8]) -> Result<Self, DecodingError> {
         if buf.len() < Self::BYTES_LENGTH {
-            return None
+            return Err(DecodingError::Eof)
         }
         let number = from_be_bytes_slice_and_advance_buf!(u64, buf);
         let timestamp = from_be_bytes_slice_and_advance_buf!(u64, buf);
 
-        let base_fee = U256::from_be_slice(&buf[0..32]);
+        let base_fee = U256::from_be_slice(&buf[..32]);
         buf.advance(32);
 
         let gas_limit = from_be_bytes_slice_and_advance_buf!(u64, buf);
         let num_transactions = from_be_bytes_slice_and_advance_buf!(u16, buf);
         let num_l1_messages = from_be_bytes_slice_and_advance_buf!(u16, buf);
 
-        Some(Self { number, timestamp, base_fee, gas_limit, num_transactions, num_l1_messages })
+        Ok(Self { number, timestamp, base_fee, gas_limit, num_transactions, num_l1_messages })
     }
 
     /// Returns the L2 transaction count for the block, excluding L1 messages.
@@ -47,6 +47,7 @@ impl From<BlockContextV0> for BlockContext {
             timestamp: value.timestamp,
             base_fee: value.base_fee,
             gas_limit: value.gas_limit,
+            num_transactions: value.num_transactions,
             num_l1_messages: value.num_l1_messages,
         }
     }

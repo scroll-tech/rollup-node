@@ -5,15 +5,11 @@ pub mod block;
 
 pub mod decoding;
 
-pub use error::CodecError;
+pub use error::{CodecError, DecodingError};
 mod error;
 
-pub mod payload;
-
-use crate::{
-    decoding::{v0::decode_v0, v1::decode_v1, v2::decode_v2, v4::decode_v4, v7::decode_v7},
-    error::DecodingError,
-    payload::CommitPayload,
+use crate::decoding::{
+    batch::Batch, v0::decode_v0, v1::decode_v1, v2::decode_v2, v4::decode_v4, v7::decode_v7,
 };
 
 use alloy_eips::eip4844::Blob;
@@ -44,28 +40,28 @@ pub enum Codec {
 }
 
 impl Codec {
-    /// Decodes the input data and returns the decoded [`CommitPayload`].
-    pub fn decode<T: CommitDataSource>(input: T) -> Result<CommitPayload, CodecError> {
+    /// Decodes the input data and returns the decoded [`Batch`].
+    pub fn decode<T: CommitDataSource>(input: &T) -> Result<Batch, CodecError> {
         let calldata = input.calldata();
         let version = calldata.first().ok_or(DecodingError::MissingCodecVersion)?;
 
         let payload = match version {
-            0 => decode_v0(calldata)?.into(),
+            0 => decode_v0(calldata)?,
             1 => {
                 let blob = input.blob().ok_or(DecodingError::MissingBlob)?;
-                decode_v1(calldata, blob.as_ref())?.into()
+                decode_v1(calldata, blob.as_ref())?
             }
             2..4 => {
                 let blob = input.blob().ok_or(DecodingError::MissingBlob)?;
-                decode_v2(calldata, blob.as_ref())?.into()
+                decode_v2(calldata, blob.as_ref())?
             }
             4..7 => {
                 let blob = input.blob().ok_or(DecodingError::MissingBlob)?;
-                decode_v4(calldata, blob.as_ref())?.into()
+                decode_v4(calldata, blob.as_ref())?
             }
             7 => {
                 let blob = input.blob().ok_or(DecodingError::MissingBlob)?;
-                decode_v7(blob.as_ref())?.into()
+                decode_v7(blob.as_ref())?
             }
             v => return Err(DecodingError::UnsupportedCodecVersion(*v).into()),
         };

@@ -1,9 +1,15 @@
+pub use batch_header::BatchHeaderV7;
+mod batch_header;
+
 pub(crate) use block_context::BlockContextV7;
 mod block_context;
 
 use crate::{
     check_buf_len,
-    decoding::{blob::BlobSliceIter, transaction::Transaction, v2::zstd::decompress_blob_data},
+    decoding::{
+        batch::Batch, blob::BlobSliceIter, payload::PayloadData, transaction::Transaction,
+        v2::zstd::decompress_blob_data,
+    },
     error::DecodingError,
     from_be_bytes_slice_and_advance_buf, L2Block,
 };
@@ -14,9 +20,8 @@ use alloy_primitives::{bytes::Buf, B256};
 /// The offset in the blob to the payload envelope.
 const BLOB_ENVELOPE_V7_OFFSET_PAYLOAD: usize = 5;
 
-/// Decodes the input blob into a tuple containing: the list of [`L2Block`], the
-/// previous message queue hash and the post message queue hash.
-pub fn decode_v7(blob: &[u8]) -> Result<(Vec<L2Block>, B256, B256), DecodingError> {
+/// Decodes the input blob into a [`Batch`].
+pub fn decode_v7(blob: &[u8]) -> Result<Batch, DecodingError> {
     // get blob iterator and collect, skipping unused bytes.
     let mut heap_blob = BlobSliceIter::from_blob_slice(blob).copied().collect::<Vec<_>>();
     let buf = &mut (&*heap_blob);
@@ -51,9 +56,8 @@ pub fn decode_v7(blob: &[u8]) -> Result<(Vec<L2Block>, B256, B256), DecodingErro
     decode_v7_payload(buf)
 }
 
-/// Decode the blob data into a tuple ([`L2Block`], [`B256`], [`B256`]), containing the vector of L2
-/// blocks, the previous L1 message hash queue and the post L1 message hash queue.
-pub(crate) fn decode_v7_payload(blob: &[u8]) -> Result<(Vec<L2Block>, B256, B256), DecodingError> {
+/// Decode the blob data into a [`Batch`].
+pub(crate) fn decode_v7_payload(blob: &[u8]) -> Result<Batch, DecodingError> {
     let buf = &mut (&*blob);
 
     // check buf len.
@@ -74,7 +78,7 @@ pub(crate) fn decode_v7_payload(blob: &[u8]) -> Result<(Vec<L2Block>, B256, B256
 
     // for each block, decode into a block context
     for _ in 0..blocks_count {
-        let context = BlockContextV7::try_from_buf(buf).ok_or(DecodingError::Eof)?;
+        let context = BlockContextV7::try_from_buf(buf)?;
         block_contexts.push(context);
     }
 
@@ -90,7 +94,12 @@ pub(crate) fn decode_v7_payload(blob: &[u8]) -> Result<(Vec<L2Block>, B256, B256
             .push(L2Block::new(transactions, (context, initial_block_number + i as u64).into()));
     }
 
-    Ok((l2_blocks, prev_message_queue_hash, post_message_queue_hash))
+    let payload = PayloadData {
+        blocks: l2_blocks,
+        l1_message_queue_info: (prev_message_queue_hash, post_message_queue_hash).into(),
+    };
+
+    Ok(Batch::new(7, None, payload))
 }
 
 #[cfg(test)]
@@ -103,8 +112,9 @@ mod tests {
     #[test]
     fn test_should_decode_v7_uncompressed() -> eyre::Result<()> {
         // <https://sepolia.etherscan.io/tx/0x6dca39d9f34790c4d6a86e84638cee69681a84e8d95d684e9a85d0a629ed26c5>
-        let blob = read_to_bytes("./src/testdata/blob_v7_uncompressed.bin")?;
-        let blocks = decode_v7(&blob)?.0;
+        let blob = read_to_bytes("./testdata/blob_v7_uncompressed.bin")?;
+        let data = decode_v7(&blob)?.data;
+        let blocks = data.l2_blocks();
 
         assert_eq!(blocks.len(), 4);
 
@@ -159,6 +169,7 @@ mod tests {
                 timestamp: 1742309682,
                 base_fee: U256::from(40842015),
                 gas_limit: 10000000,
+                num_transactions: 14,
                 num_l1_messages: 0,
             },
         };
@@ -171,8 +182,9 @@ mod tests {
     #[test]
     fn test_should_decode_v7_compressed() -> eyre::Result<()> {
         // <https://sepolia.etherscan.io/tx/0x6dca39d9f34790c4d6a86e84638cee69681a84e8d95d684e9a85d0a629ed26c5>
-        let blob = read_to_bytes("./src/testdata/blob_v7_compressed.bin")?;
-        let blocks = decode_v7(&blob)?.0;
+        let blob = read_to_bytes("./testdata/blob_v7_compressed.bin")?;
+        let data = decode_v7(&blob)?.data;
+        let blocks = data.l2_blocks();
 
         assert_eq!(blocks.len(), 4);
 
@@ -227,6 +239,7 @@ mod tests {
                 timestamp: 1742309682,
                 base_fee: U256::from(40842015),
                 gas_limit: 10000000,
+                num_transactions: 14,
                 num_l1_messages: 0,
             },
         };
