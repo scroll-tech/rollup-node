@@ -15,7 +15,7 @@ pub mod test_utils;
 use std::{sync::Arc, time::Duration};
 
 use alloy_network::Ethereum;
-use alloy_primitives::{BlockNumber, B256};
+use alloy_primitives::{ruint::UintTryTo, BlockNumber, B256};
 use alloy_provider::{Network, Provider};
 use alloy_rpc_types_eth::{BlockNumberOrTag, Log, TransactionTrait};
 use error::L1WatcherResult;
@@ -330,7 +330,8 @@ where
             for (raw_log, decoded_log, _) in group {
                 let block_number =
                     raw_log.block_number.ok_or(FilterLogError::MissingBlockNumber)?;
-                let batch_index = decoded_log.batch_index.saturating_to();
+                let batch_index =
+                    decoded_log.batch_index.uint_try_to().expect("u256 to u64 conversion error");
 
                 // notify via channel.
                 self.notify(L1Notification::BatchCommit(BatchCommitData {
@@ -477,7 +478,7 @@ mod tests {
 
     use crate::test_utils::provider::MockProvider;
     use alloy_consensus::{transaction::Recovered, Signed, TxEip1559};
-    use alloy_primitives::Address;
+    use alloy_primitives::{Address, U256};
     use alloy_rpc_types_eth::Transaction;
     use alloy_sol_types::{SolCall, SolEvent};
     use arbitrary::Arbitrary;
@@ -778,7 +779,9 @@ mod tests {
         let mut logs = (0..10).map(|_| random!(Log)).collect::<Vec<_>>();
         let mut batch_commit = random!(Log);
         let mut inner_log = random!(alloy_primitives::Log);
-        inner_log.data = random!(CommitBatch).encode_log_data();
+        inner_log.data =
+            CommitBatch { batch_index: U256::from(random!(u64)), batch_hash: random!(B256) }
+                .encode_log_data();
         batch_commit.inner = inner_log;
         batch_commit.transaction_hash = Some(*tx.inner.tx_hash());
         batch_commit.block_number = Some(random!(u64));
