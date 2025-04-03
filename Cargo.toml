@@ -20,6 +20,7 @@ members = [
     "crates/primitives",
     "crates/providers",
     "crates/scroll-wire",
+    "crates/sequencer",
     "crates/watcher",
 ]
 
@@ -115,17 +116,17 @@ large_enum_variant = "allow"
 
 [workspace.dependencies]
 # alloy
-alloy-chains = { version = "0.1.32", default-features = false }
-alloy-consensus = { version = "0.12.2", default-features = false }
-alloy-eips = { version = "0.12.2", default-features = false }
-alloy-json-rpc = { version = "0.12.2", default-features = false }
-alloy-network = { version = "0.12.2", default-features = false }
-alloy-primitives = { version = "0.8.20", default-features = false }
-alloy-provider = { version = "0.12.2", default-features = false }
-alloy-rpc-types-engine = { version = "0.12.2", default-features = false }
-alloy-rpc-types-eth = { version = "0.12.2", default-features = false }
-alloy-sol-types = { version = "0.8.20", default-features = false }
-alloy-transport = { version = "0.12.2", default-features = false }
+alloy-chains = { version = "0.1.68", default-features = false }
+alloy-consensus = { version = "0.13.0", default-features = false }
+alloy-eips = { version = "0.13.0", default-features = false }
+alloy-json-rpc = { version = "0.13.0", default-features = false }
+alloy-network = { version = "0.13.0", default-features = false }
+alloy-primitives = { version = "0.8.25", default-features = false, features = ["map-foldhash"] }
+alloy-provider = { version = "0.13.0", default-features = false }
+alloy-rpc-types-engine = { version = "0.13.0", default-features = false }
+alloy-rpc-types-eth = { version = "0.13.0", default-features = false }
+alloy-sol-types = { version = "0.8.25", default-features = false }
+alloy-transport = { version = "0.13.0" }
 
 # scroll-alloy
 scroll-alloy-consensus = { git = "https://github.com/scroll-tech/reth.git", default-features = false }
@@ -134,6 +135,7 @@ scroll-alloy-provider = { git = "https://github.com/scroll-tech/reth.git", defau
 scroll-alloy-rpc-types-engine = { git = "https://github.com/scroll-tech/reth.git" }
 
 # reth
+reth-e2e-test-utils = { git = "https://github.com/scroll-tech/reth.git" }
 reth-eth-wire-types = { git = "https://github.com/scroll-tech/reth.git", default-features = false }
 reth-network = { git = "https://github.com/scroll-tech/reth.git", default-features = false }
 reth-network-api = { git = "https://github.com/scroll-tech/reth.git", default-features = false }

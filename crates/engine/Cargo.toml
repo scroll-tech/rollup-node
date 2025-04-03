@@ -37,6 +37,7 @@ rollup-node-providers.workspace = true
 # misc
 async-trait.workspace = true
 eyre.workspace = true
+thiserror.workspace = true
 tokio.workspace = true
 tracing.workspace = true
 

@@ -5,11 +5,11 @@ use rollup_node_primitives::BlockInfo;
 
 /// The fork choice state.
 ///
-/// The state is composed of the [`BlockInfo`] for `unsafe`, `safe` block, and the `finalized`
+/// The state is composed of the [`BlockInfo`] for `head`, `safe` block, and the `finalized`
 /// blocks.
 #[derive(Debug, Clone)]
 pub struct ForkchoiceState {
-    unsafe_: BlockInfo,
+    head: BlockInfo,
     safe: BlockInfo,
     finalized: BlockInfo,
 }
@@ -22,7 +22,7 @@ impl ForkchoiceState {
 
     /// Creates a new [`ForkchoiceState`] instance.
     pub const fn new(unsafe_: BlockInfo, safe: BlockInfo, finalized: BlockInfo) -> Self {
-        Self { unsafe_, safe, finalized }
+        Self { head: unsafe_, safe, finalized }
     }
 
     /// Creates a [`ForkchoiceState`] instance that represents the genesis state of the provided
@@ -38,7 +38,7 @@ impl ForkchoiceState {
 
     /// Updates the `unsafe` block info.
     pub fn update_unsafe_block_info(&mut self, unsafe_: BlockInfo) {
-        self.unsafe_ = unsafe_;
+        self.head = unsafe_;
     }
 
     /// Updates the `safe` block info.
@@ -53,7 +53,7 @@ impl ForkchoiceState {
 
     /// Returns the block info for the `unsafe` block.
     pub const fn unsafe_block_info(&self) -> &BlockInfo {
-        &self.unsafe_
+        &self.head
     }
 
     /// Returns the block info for the `safe` block.
@@ -69,7 +69,7 @@ impl ForkchoiceState {
     /// Returns the [`AlloyForkchoiceState`] representation of the fork choice state.
     pub const fn get_alloy_fcs(&self) -> AlloyForkchoiceState {
         AlloyForkchoiceState {
-            head_block_hash: self.unsafe_.hash,
+            head_block_hash: self.head.hash,
             safe_block_hash: self.safe.hash,
             finalized_block_hash: self.finalized.hash,
         }
@@ -77,6 +77,6 @@ impl ForkchoiceState {
 
     /// Returns `true` if the fork choice state is the genesis state.
     pub const fn is_genesis(&self) -> bool {
-        self.unsafe_.number == 0
+        self.head.number == 0
     }
 }
