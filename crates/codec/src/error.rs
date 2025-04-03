@@ -1,3 +1,5 @@
+use alloy_primitives::U256;
+
 /// An error occurring during the codec process.
 #[derive(Debug, thiserror::Error)]
 pub enum CodecError {
@@ -13,6 +15,8 @@ pub enum DecodingError {
     MissingCodecVersion,
     #[error("unsupported codec version {0}")]
     UnsupportedCodecVersion(u8),
+    #[error("malformed codec version: {0}")]
+    MalformedCodecVersion(U256),
     #[error("missing blob from data source")]
     MissingBlob,
     #[error("missing chunk data")]

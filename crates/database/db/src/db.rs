@@ -46,15 +46,14 @@ impl From<DatabaseConnection> for Database {
 #[cfg(test)]
 mod test {
     use crate::{operations::DatabaseOperations, test_utils::setup_test_db};
+
     use arbitrary::{Arbitrary, Unstructured};
     use futures::StreamExt;
     use rand::Rng;
-    use rollup_node_primitives::{
-        BatchInput, BatchInputV1, BatchInputV2, L1MessageWithBlockNumber,
-    };
+    use rollup_node_primitives::{BatchCommitData, L1MessageWithBlockNumber};
 
     #[tokio::test]
-    async fn test_database_round_trip_batch_input() {
+    async fn test_database_round_trip_batch_commit() {
         // Set up the test database.
         let db = setup_test_db().await;
 
@@ -64,24 +63,13 @@ mod test {
         let mut u = Unstructured::new(&bytes);
 
         // Generate a random BatchInputV1.
-        let batch_input_v1 = BatchInputV1::arbitrary(&mut u).unwrap();
-        let batch_input = BatchInput::BatchInputDataV1(batch_input_v1);
+        let batch_commit = BatchCommitData::arbitrary(&mut u).unwrap();
 
         // Round trip the BatchInput through the database.
-        db.insert_batch_input(batch_input.clone()).await.unwrap();
-        let batch_input_from_db =
-            db.get_batch_input_by_batch_index(batch_input.batch_index()).await.unwrap().unwrap();
-        assert_eq!(batch_input, batch_input_from_db);
-
-        // Generate a random BatchInputV2.
-        let batch_input_v2 = BatchInputV2::arbitrary(&mut u).unwrap();
-        let batch_input = BatchInput::BatchInputDataV2(batch_input_v2);
-
-        // Round trip the BatchInput through the database.
-        db.insert_batch_input(batch_input.clone()).await.unwrap();
-        let batch_input_from_db =
-            db.get_batch_input_by_batch_index(batch_input.batch_index()).await.unwrap().unwrap();
-        assert_eq!(batch_input, batch_input_from_db);
+        db.insert_batch(batch_commit.clone()).await.unwrap();
+        let batch_commit_from_db =
+            db.get_batch_by_index(batch_commit.index).await.unwrap().unwrap();
+        assert_eq!(batch_commit, batch_commit_from_db);
     }
 
     #[tokio::test]
