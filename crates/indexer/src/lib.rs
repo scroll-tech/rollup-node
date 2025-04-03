@@ -1,7 +1,7 @@
 //! A library responsible for indexing data relevant to the L1.
 use alloy_primitives::B256;
 use futures::Stream;
-use rollup_node_primitives::{BatchInput, L1MessageWithBlockNumber};
+use rollup_node_primitives::{BatchCommitData, L1MessageWithBlockNumber};
 use rollup_node_watcher::L1Notification;
 use scroll_db::{Database, DatabaseOperations};
 use std::{
@@ -44,9 +44,9 @@ impl Indexer {
                 )),
                 L1Notification::NewBlock(_block_number) |
                 L1Notification::Finalized(_block_number) => return,
-                L1Notification::BatchCommit(batch_input) => IndexerFuture::HandleBatchCommit(
-                    Box::pin(Self::handle_batch_commit(self.database.clone(), batch_input)),
-                ),
+                L1Notification::BatchCommit(batch) => IndexerFuture::HandleBatchCommit(Box::pin(
+                    Self::handle_batch_commit(self.database.clone(), batch),
+                )),
                 L1Notification::L1Message(l1_message) => IndexerFuture::HandleL1Message(Box::pin(
                     Self::handle_l1_message(self.database.clone(), l1_message),
                 )),
@@ -70,7 +70,7 @@ impl Indexer {
         let txn = database.tx().await?;
 
         // delete batch inputs and l1 messages
-        txn.delete_batch_inputs_gt(block_number).await?;
+        txn.delete_batches_gt(block_number).await?;
         txn.delete_l1_messages_gt(block_number).await?;
 
         // commit the transaction
@@ -91,10 +91,10 @@ impl Indexer {
     /// Handles a batch input by inserting it into the database.
     async fn handle_batch_commit(
         database: Arc<Database>,
-        batch_input: BatchInput,
+        batch: BatchCommitData,
     ) -> Result<IndexerEvent, IndexerError> {
-        let event = IndexerEvent::BatchCommitIndexed(batch_input.batch_index());
-        database.insert_batch_input(batch_input).await?;
+        let event = IndexerEvent::BatchCommitIndexed(batch.index);
+        database.insert_batch(batch).await?;
         Ok(event)
     }
 
@@ -105,7 +105,7 @@ impl Indexer {
         block_number: u64,
     ) -> Result<IndexerEvent, IndexerError> {
         let event = IndexerEvent::BatchFinalizationIndexed(batch_hash);
-        database.finalize_batch_input(batch_hash, block_number).await?;
+        database.finalize_batch(batch_hash, block_number).await?;
         Ok(event)
     }
 }
@@ -132,10 +132,11 @@ impl Stream for Indexer {
 #[cfg(test)]
 mod test {
     use super::*;
+
     use arbitrary::{Arbitrary, Unstructured};
     use futures::StreamExt;
     use rand::Rng;
-    use rollup_node_primitives::BatchInput;
+    use rollup_node_primitives::BatchCommitData;
     use scroll_db::test_utils::setup_test_db;
 
     async fn setup_test_indexer() -> (Indexer, Arc<Database>) {
@@ -153,15 +154,14 @@ mod test {
         rand::rng().fill(bytes.as_mut_slice());
         let mut u = Unstructured::new(&bytes);
 
-        let batch_input = BatchInput::arbitrary(&mut u).unwrap();
-        indexer.handle_l1_notification(L1Notification::BatchCommit(batch_input.clone()));
+        let batch_commit = BatchCommitData::arbitrary(&mut u).unwrap();
+        indexer.handle_l1_notification(L1Notification::BatchCommit(batch_commit.clone()));
 
         let _ = indexer.next().await;
 
-        let batch_input_result =
-            db.get_batch_input_by_batch_index(batch_input.batch_index()).await.unwrap().unwrap();
+        let batch_commit_result = db.get_batch_by_index(batch_commit.index).await.unwrap().unwrap();
 
-        assert_eq!(batch_input, batch_input_result);
+        assert_eq!(batch_commit, batch_commit_result);
     }
 
     #[tokio::test]
@@ -196,22 +196,22 @@ mod test {
         let mut u = Unstructured::new(&bytes);
 
         // Generate a 3 random batch inputs and set their block numbers
-        let mut batch_input_block_1 = BatchInput::arbitrary(&mut u).unwrap();
-        batch_input_block_1.set_block_number(1);
-        let batch_input_block_1 = batch_input_block_1;
+        let mut batch_commit_block_1 = BatchCommitData::arbitrary(&mut u).unwrap();
+        batch_commit_block_1.block_number = 1;
+        let batch_commit_block_1 = batch_commit_block_1;
 
-        let mut batch_input_block_20 = BatchInput::arbitrary(&mut u).unwrap();
-        batch_input_block_20.set_block_number(20);
-        let batch_input_block_20 = batch_input_block_20;
+        let mut batch_commit_block_20 = BatchCommitData::arbitrary(&mut u).unwrap();
+        batch_commit_block_20.block_number = 20;
+        let batch_commit_block_20 = batch_commit_block_20;
 
-        let mut batch_input_block_30 = BatchInput::arbitrary(&mut u).unwrap();
-        batch_input_block_30.set_block_number(30);
-        let batch_input_block_30 = batch_input_block_30;
+        let mut batch_commit_block_30 = BatchCommitData::arbitrary(&mut u).unwrap();
+        batch_commit_block_30.block_number = 30;
+        let batch_commit_block_30 = batch_commit_block_30;
 
         // Index batch inputs
-        indexer.handle_l1_notification(L1Notification::BatchCommit(batch_input_block_1.clone()));
-        indexer.handle_l1_notification(L1Notification::BatchCommit(batch_input_block_20.clone()));
-        indexer.handle_l1_notification(L1Notification::BatchCommit(batch_input_block_30.clone()));
+        indexer.handle_l1_notification(L1Notification::BatchCommit(batch_commit_block_1.clone()));
+        indexer.handle_l1_notification(L1Notification::BatchCommit(batch_commit_block_20.clone()));
+        indexer.handle_l1_notification(L1Notification::BatchCommit(batch_commit_block_30.clone()));
 
         // Generate 3 random L1 messages and set their block numbers
         let mut l1_message_block_1 = L1MessageWithBlockNumber::arbitrary(&mut u).unwrap();
@@ -239,12 +239,12 @@ mod test {
         }
 
         // Check that the batch input at block 30 is deleted
-        let batch_inputs =
-            db.get_batch_inputs().await.unwrap().map(|res| res.unwrap()).collect::<Vec<_>>().await;
+        let batch_commits =
+            db.get_batches().await.unwrap().map(|res| res.unwrap()).collect::<Vec<_>>().await;
 
-        assert_eq!(2, batch_inputs.len());
-        assert!(batch_inputs.contains(&batch_input_block_1));
-        assert!(batch_inputs.contains(&batch_input_block_20));
+        assert_eq!(2, batch_commits.len());
+        assert!(batch_commits.contains(&batch_commit_block_1));
+        assert!(batch_commits.contains(&batch_commit_block_20));
 
         // check that the L1 message at block 30 is deleted
         let l1_messages =
