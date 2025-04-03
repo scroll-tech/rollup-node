@@ -1,5 +1,5 @@
 use super::error::EngineDriverError;
-use crate::{payload::matching_payloads, ExecutionPayloadProvider};
+use crate::payload::matching_payloads;
 
 use alloy_rpc_types_engine::{
     ExecutionPayload, ExecutionPayloadV1, ForkchoiceState, ForkchoiceUpdated, PayloadId,
@@ -9,8 +9,8 @@ use eyre::Result;
 use reth_payload_primitives::PayloadTypes;
 use reth_scroll_engine_primitives::ScrollEngineTypes;
 use rollup_node_primitives::BlockInfo;
+use rollup_node_providers::ExecutionPayloadProvider;
 use scroll_alloy_provider::ScrollEngineApi;
-
 use tokio::time::Duration;
 use tracing::{debug, error, info, instrument, trace};
 

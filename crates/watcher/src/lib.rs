@@ -314,6 +314,7 @@ where
         let groups: Vec<_> =
             groups.into_iter().map(|(hash, group)| (hash, group.collect::<Vec<_>>())).collect();
 
+        // iterate each group of commits
         for (tx_hash, group) in groups {
             // fetch the commit transaction.
             let transaction = self
@@ -327,9 +328,12 @@ where
                 transaction.blob_versioned_hashes().unwrap_or(&[]).iter().copied();
             let input = Arc::new(transaction.input().clone());
 
+            // iterate the logs emitted in the group
             for (raw_log, decoded_log, _) in group {
                 let block_number =
                     raw_log.block_number.ok_or(FilterLogError::MissingBlockNumber)?;
+                let block_timestamp =
+                    raw_log.block_timestamp.ok_or(FilterLogError::MissingBlockTimestamp)?;
                 let batch_index =
                     decoded_log.batch_index.uint_try_to().expect("u256 to u64 conversion error");
 
@@ -338,6 +342,7 @@ where
                     hash: decoded_log.batch_hash,
                     index: batch_index,
                     block_number,
+                    block_timestamp,
                     calldata: input.clone(),
                     blob_versioned_hash: blob_versioned_hashes.next(),
                 }))
@@ -785,6 +790,7 @@ mod tests {
         batch_commit.inner = inner_log;
         batch_commit.transaction_hash = Some(*tx.inner.tx_hash());
         batch_commit.block_number = Some(random!(u64));
+        batch_commit.block_timestamp = Some(random!(u64));
         logs.push(batch_commit);
 
         // When

@@ -22,14 +22,17 @@ scroll-alloy-rpc-types-engine.workspace = true
 
 # rollup node
 rollup-node-primitives.workspace = true
+rollup-node-providers.workspace = true
 scroll-codec.workspace = true
 
 # misc
 thiserror.workspace = true
 
 [dev-dependencies]
+async-trait.workspace = true
 eyre.workspace = true
 scroll-codec = { workspace = true, features = ["test-utils"] }
+tokio = { workspace = true, features = ["macros"] }
 
 [features]
 default = ["std"]
