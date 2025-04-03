@@ -47,10 +47,6 @@ const EVENT_CHANNEL_SIZE: usize = 100;
 type PendingBlockImportFuture =
     Pin<Box<dyn Future<Output = (Option<BlockInfo>, Option<BlockImportOutcome>)> + Send>>;
 
-/// A future that resolves to a result containing a vector of [`ScrollPayloadAttributes`].
-type DerivationPipelineFuture =
-    Pin<Box<dyn Future<Output = Result<(), Box<dyn std::error::Error>>> + Send>>;
-
 /// The main manager for the rollup node.
 ///
 /// This is an endless [`Future`] that drives the state of the entire network forward and includes
@@ -64,17 +60,13 @@ type DerivationPipelineFuture =
 /// - `forkchoice_state`: The forkchoice state of the rollup node.
 /// - `pending_block_imports`: A collection of pending block imports.
 /// - `event_sender`: An event sender for sending events to subscribers of the rollup node manager.
-pub struct RollupNodeManager<C, EC, P, L1P> {
+#[derive(Debug)]
+pub struct RollupNodeManager<C, EC, P> {
     /// The network manager that manages the scroll p2p network.
     network: NetworkManager,
-    ///  The engine driver used to communicate with the engine.
+    /// The engine driver used to communicate with the engine.
     engine: Arc<EngineDriver<EC, P>>,
-    /// The L1 provider used to retrieve L1 data.
-    l1_provider: Arc<L1P>,
-    /// The current derivation pipeline future.
-    derivation_pipeline_future: Option<DerivationPipelineFuture>,
-    /// The database which stores data from the [`Indexer`].
-    database: Arc<Database>,
+    /// The derivation pipeline, used to
     /// A receiver for [`L1Notification`]s from the [`rollup_node_watcher::L1Watcher`].
     l1_notification_rx: Option<ReceiverStream<Arc<L1Notification>>>,
     /// An indexer used to index data for the rollup node.
@@ -91,33 +83,6 @@ pub struct RollupNodeManager<C, EC, P, L1P> {
     event_sender: Option<EventSender<RollupEvent>>,
 }
 
-impl<C, EC, P, L1P> Debug for RollupNodeManager<C, EC, P, L1P>
-where
-    C: Debug,
-    EC: Debug,
-    P: Debug,
-    L1P: Debug,
-{
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.debug_struct("RollupNodeManager")
-            .field("network", &self.network)
-            .field("engine", &self.engine)
-            .field("l1_provider", &self.l1_provider)
-            .field(
-                "derivation_pipeline_future",
-                &self.derivation_pipeline_future.as_ref().map(|_| "Some({ ... })"),
-            )
-            .field("l1_notification_rx", &self.l1_notification_rx)
-            .field("indexer", &self.indexer)
-            .field("consensus", &self.consensus)
-            .field("new_block_rx", &self.new_block_rx)
-            .field("forkchoice_state", &self.forkchoice_state)
-            .field("pending_block_imports", &self.pending_block_imports)
-            .field("event_sender", &self.event_sender)
-            .finish()
-    }
-}
-
 impl<C, EC, P, L1P> RollupNodeManager<C, EC, P, L1P>
 where
     C: Consensus + Unpin,
@@ -130,20 +95,15 @@ where
     pub fn new(
         network: NetworkManager,
         engine: EngineDriver<EC, P>,
-        l1_provider: L1P,
-        database: Arc<Database>,
         l1_notification_rx: Option<Receiver<Arc<L1Notification>>>,
+        indexer: Indexer,
         forkchoice_state: ForkchoiceState,
         consensus: C,
         new_block_rx: Option<UnboundedReceiver<NewBlockWithPeer>>,
     ) -> Self {
-        let indexer = Indexer::new(database.clone());
         Self {
             network,
             engine: Arc::new(engine),
-            l1_provider: Arc::new(l1_provider),
-            derivation_pipeline_future: None,
-            database,
             l1_notification_rx: l1_notification_rx.map(Into::into),
             indexer,
             consensus,
@@ -275,41 +235,6 @@ where
     fn handle_l1_notification(&mut self, notification: L1Notification) {
         self.indexer.handle_l1_notification(notification);
     }
-
-    /// Handles the next batch from database.
-    fn handle_next_batch(&mut self) {
-        let fcs = self.get_alloy_fcs();
-        let db = self.database.clone();
-        let engine = self.engine.clone();
-        let mut provider = self.l1_provider.clone();
-        // TODO: how to fetch the current safe_block_info? We need a way to save the current block
-        // infos (in the RNM?).
-        // TODO: this should be removed.
-        let mut safe_block_info = Default::default();
-
-        let fut = Box::pin(async move {
-            if let Some(batch) = db.get_next_unprocessed_batch().await? {
-                trace!(target: "scroll::node::manager", batch_hash = ?batch.hash, index = ?batch.index, "processing batch");
-
-                // derive the attributes from the batch.
-                let hash = batch.hash;
-                let attributes = derive(batch, &mut provider).await?;
-
-                // handle all attributes by forwarding them to the engine driver.
-                for attribute in attributes {
-                    (safe_block_info, _) =
-                        engine.handle_payload_attributes(safe_block_info, fcs, attribute).await?;
-                }
-
-                // mark the batch as processed in database.
-                db.process_batch(hash).await?;
-            }
-
-            Ok(())
-        });
-
-        self.derivation_pipeline_future.replace(fut);
-    }
 }
 
 impl<C, EC, P, L1P> Future for RollupNodeManager<C, EC, P, L1P>
@@ -336,15 +261,6 @@ where
             this.l1_notification_rx.as_mut().map(|x| x.poll_next_unpin(cx))
         {
             this.handle_l1_notification((*event).clone());
-        }
-
-        // Handle derivation pipeline.
-        match this.derivation_pipeline_future.take() {
-            Some(mut fut) => match fut.poll_unpin(cx) {
-                Poll::Ready(res) => res.expect("failed to handle batch"),
-                Poll::Pending => this.derivation_pipeline_future = Some(fut),
-            },
-            None => this.handle_next_batch(),
         }
 
         // Drain all Indexer events

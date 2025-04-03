@@ -21,7 +21,6 @@ impl MigrationTrait for Migration {
                     .col(binary(BatchCommit::Calldata))
                     .col(binary_len_null(BatchCommit::BlobHash, HASH_LENGTH))
                     .col(big_unsigned_null(BatchCommit::FinalizedBlockNumber))
-                    .col(boolean(BatchCommit::Processed))
                     .to_owned(),
             )
             .await
@@ -42,5 +41,4 @@ enum BatchCommit {
     Calldata,
     BlobHash,
     FinalizedBlockNumber,
-    Processed,
 }

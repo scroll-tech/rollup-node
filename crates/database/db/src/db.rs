@@ -107,36 +107,6 @@ mod test {
     }
 
     #[tokio::test]
-    async fn test_database_process_batch_commit() {
-        // Set up the test database.
-        let db = setup_test_db().await;
-
-        // Generate unstructured bytes.
-        let mut bytes = [0u8; 1024];
-        rand::rng().fill(bytes.as_mut_slice());
-        let mut u = Unstructured::new(&bytes);
-
-        // Generate multiple random BatchCommitData and insert in database.
-        let mut batches = Vec::new();
-        for _ in 0..2 {
-            let batch_commit = BatchCommitData::arbitrary(&mut u).unwrap();
-            db.insert_batch(batch_commit.clone()).await.unwrap();
-            batches.push(batch_commit);
-        }
-        batches.sort_by(|a, b| a.index.cmp(&b.index));
-
-        // First unprocessed batch should match sorted batches
-        let unprocessed_batch = db.get_next_unprocessed_batch().await.unwrap().unwrap();
-        assert_eq!(batches[0], unprocessed_batch);
-
-        db.process_batch(batches[0].hash).await.unwrap();
-
-        // Second unprocessed batch should match sorted batches
-        let unprocessed_batch = db.get_next_unprocessed_batch().await.unwrap().unwrap();
-        assert_eq!(batches[1], unprocessed_batch);
-    }
-
-    #[tokio::test]
     async fn test_database_round_trip_l1_message() {
         // Set up the test database.
         let db = setup_test_db().await;

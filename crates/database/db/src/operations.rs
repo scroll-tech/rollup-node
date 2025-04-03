@@ -49,29 +49,6 @@ pub trait DatabaseOperations: DatabaseConnectionProvider {
         Ok(())
     }
 
-    /// Marks the batch corresponding to the provided [`BatchCommitData`] as processed.
-    async fn process_batch(&self, batch_hash: B256) -> Result<(), DatabaseError> {
-        if let Some(batch) = models::batch_commit::Entity::find()
-            .filter(models::batch_commit::Column::Hash.eq(batch_hash.to_vec()))
-            .one(self.get_connection())
-            .await?
-        {
-            tracing::trace!(target: "scroll::db", batch_hash = ?batch_hash, "Marked batch commit as processed in database.");
-            let mut batch: models::batch_commit::ActiveModel = batch.into();
-            batch.processed = Set(true);
-            batch.update(self.get_connection()).await?;
-        } else {
-            tracing::error!(
-                target: "scroll::db",
-                batch_hash = ?batch_hash,
-                "Batch not found in DB when trying to mark as processed."
-            );
-            return Err(DatabaseError::BatchNotFound(batch_hash));
-        }
-
-        Ok(())
-    }
-
     /// Get a [`BatchCommitData`] from the database by its batch index.
     async fn get_batch_by_index(
         &self,
@@ -83,16 +60,6 @@ pub trait DatabaseOperations: DatabaseConnectionProvider {
         .one(self.get_connection())
         .await
         .map(|x| x.map(Into::into))?)
-    }
-
-    /// Returns the next unprocessed [`BatchCommitData`] from the database.
-    async fn get_next_unprocessed_batch(&self) -> Result<Option<BatchCommitData>, DatabaseError> {
-        Ok(models::batch_commit::Entity::find()
-            .filter(models::batch_commit::Column::Processed.eq(false))
-            .order_by_asc(models::batch_commit::Column::Index)
-            .one(self.get_connection())
-            .await
-            .map(|x| x.map(Into::into))?)
     }
 
     /// Delete all [`BatchCommitData`]s with a block number greater than the provided block number.

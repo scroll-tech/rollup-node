@@ -9,7 +9,7 @@ use scroll_db::{DatabaseConnectionProvider, DatabaseOperations};
 /// provider using the queue index or hash and then call [`L1MessageProvider::next_l1_message`] to
 /// iterate the queue.
 #[async_trait::async_trait]
-#[auto_impl::auto_impl(Arc)]
+#[auto_impl::auto_impl(Arc, &)]
 pub trait L1MessageProvider {
     /// The error type for the provider.
     type Error: Into<L1ProviderError>;
