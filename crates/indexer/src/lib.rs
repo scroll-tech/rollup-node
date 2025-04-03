@@ -116,11 +116,11 @@ impl Stream for Indexer {
     fn poll_next(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
         // Remove and poll the next future in the queue
         if let Some(mut action) = self.pending_futures.pop_front() {
-            match action.poll(cx) {
-                Poll::Ready(result) => return Poll::Ready(Some(result)),
+            return match action.poll(cx) {
+                Poll::Ready(result) => Poll::Ready(Some(result)),
                 Poll::Pending => {
                     self.pending_futures.push_front(action);
-                    return Poll::Pending;
+                    Poll::Pending
                 }
             }
         }

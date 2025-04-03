@@ -8,8 +8,8 @@ use reth_rpc_builder::config::RethRpcServerConfig;
 use reth_scroll_chainspec::ScrollChainSpec;
 use reth_scroll_primitives::ScrollPrimitives;
 use reth_transaction_pool::{PoolTransaction, TransactionPool};
-use rollup_node_indexer::Indexer;
 use rollup_node_manager::{PoAConsensus, RollupNodeManager};
+use rollup_node_providers::{DatabaseL1MessageProvider, OnlineBeaconClient, OnlineL1Provider};
 use rollup_node_watcher::L1Watcher;
 use scroll_alloy_provider::ScrollAuthEngineApiProvider;
 use scroll_db::{Database, DatabaseConnectionProvider};
@@ -111,9 +111,6 @@ where
         // Wrap the database in an Arc
         let db = Arc::new(db);
 
-        // Spawn the indexer
-        let indexer = Indexer::new(db.clone());
-
         // Spawn the L1Watcher
         let l1_notification_rx = if let Some(l1_rpc_url) = self.config.l1_rpc_url {
             Some(L1Watcher::spawn(ProviderBuilder::new().on_http(l1_rpc_url), 20035952).await)
@@ -121,12 +118,20 @@ where
             None
         };
 
+        // Get a new blob client and l1 provider
+        // TODO: point to correct provider endpoint.
+        let blob_client = OnlineBeaconClient::new_http("http://localhost:8080".to_string());
+        let l1_message_provider = DatabaseL1MessageProvider::new(db.clone(), 0);
+        // TODO: use CLI argument for blob cache size.
+        let l1_provider = OnlineL1Provider::new(blob_client, 20, l1_message_provider).await;
+
         // Spawn the rollup node manager
         let rollup_node_manager = RollupNodeManager::new(
             scroll_network_manager,
             engine,
+            l1_provider,
+            db,
             l1_notification_rx,
-            indexer,
             ForkchoiceState::genesis(
                 ctx.config().chain.chain.try_into().expect("must be a named chain"),
             ),
