@@ -8,13 +8,14 @@ use sea_orm::{entity::prelude::*, ActiveValue};
 #[sea_orm(table_name = "batch_commit")]
 pub struct Model {
     #[sea_orm(primary_key)]
-    index: i64,
-    hash: Vec<u8>,
-    block_number: i64,
-    block_timestamp: i64,
-    calldata: Vec<u8>,
-    blob_hash: Option<Vec<u8>>,
-    finalized_block_number: Option<i64>,
+    pub(crate) index: i64,
+    pub(crate) hash: Vec<u8>,
+    pub(crate) block_number: i64,
+    pub(crate) block_timestamp: i64,
+    pub(crate) calldata: Vec<u8>,
+    pub(crate) blob_hash: Option<Vec<u8>>,
+    pub(crate) finalized_block_number: Option<i64>,
+    pub(crate) processed: bool,
 }
 
 /// The relation for the batch input model.
@@ -40,6 +41,7 @@ impl From<BatchCommitData> for ActiveModel {
             calldata: ActiveValue::Set(batch_commit.calldata.0.to_vec()),
             blob_hash: ActiveValue::Set(batch_commit.blob_versioned_hash.map(|b| b.to_vec())),
             finalized_block_number: ActiveValue::Unchanged(None),
+            processed: ActiveValue::Unchanged(false),
         }
     }
 }

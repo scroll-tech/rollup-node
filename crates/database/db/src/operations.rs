@@ -4,7 +4,7 @@ use crate::DatabaseConnectionProvider;
 use alloy_primitives::B256;
 use futures::{Stream, StreamExt};
 use rollup_node_primitives::{BatchCommitData, L1MessageWithBlockNumber};
-use sea_orm::{ActiveModelTrait, ColumnTrait, DbErr, EntityTrait, QueryFilter, Set};
+use sea_orm::{ActiveModelTrait, ColumnTrait, DbErr, EntityTrait, QueryFilter, QueryOrder, Set};
 
 /// The [`DatabaseOperations`] trait provides methods for interacting with the database.
 #[async_trait::async_trait]
@@ -32,7 +32,7 @@ pub trait DatabaseOperations: DatabaseConnectionProvider {
             .one(self.get_connection())
             .await?
         {
-            tracing::trace!(target: "scroll::db", batch_hash = ?batch_hash, block_number, "Finalizing batch input in database.");
+            tracing::trace!(target: "scroll::db", batch_hash = ?batch_hash, block_number, "Finalizing batch commit in database.");
             let mut batch: models::batch_commit::ActiveModel = batch.into();
             batch.finalized_block_number = Set(Some(block_number as i64));
             batch.update(self.get_connection()).await?;
@@ -42,6 +42,29 @@ pub trait DatabaseOperations: DatabaseConnectionProvider {
                 batch_hash = ?batch_hash,
                 block_number,
                 "Batch not found in DB when trying to finalize."
+            );
+            return Err(DatabaseError::BatchNotFound(batch_hash));
+        }
+
+        Ok(())
+    }
+
+    /// Marks the batch corresponding to the provided [`BatchCommitData`] as processed.
+    async fn process_batch(&self, batch_hash: B256) -> Result<(), DatabaseError> {
+        if let Some(batch) = models::batch_commit::Entity::find()
+            .filter(models::batch_commit::Column::Hash.eq(batch_hash.to_vec()))
+            .one(self.get_connection())
+            .await?
+        {
+            tracing::trace!(target: "scroll::db", batch_hash = ?batch_hash, "Marked batch commit as processed in database.");
+            let mut batch: models::batch_commit::ActiveModel = batch.into();
+            batch.processed = Set(true);
+            batch.update(self.get_connection()).await?;
+        } else {
+            tracing::error!(
+                target: "scroll::db",
+                batch_hash = ?batch_hash,
+                "Batch not found in DB when trying to mark as processed."
             );
             return Err(DatabaseError::BatchNotFound(batch_hash));
         }
@@ -60,6 +83,16 @@ pub trait DatabaseOperations: DatabaseConnectionProvider {
         .one(self.get_connection())
         .await
         .map(|x| x.map(Into::into))?)
+    }
+
+    /// Returns the next unprocessed [`BatchCommitData`] from the database.
+    async fn get_next_unprocessed_batch(&self) -> Result<Option<BatchCommitData>, DatabaseError> {
+        Ok(models::batch_commit::Entity::find()
+            .filter(models::batch_commit::Column::Processed.eq(false))
+            .order_by_asc(models::batch_commit::Column::Index)
+            .one(self.get_connection())
+            .await
+            .map(|x| x.map(Into::into))?)
     }
 
     /// Delete all [`BatchCommitData`]s with a block number greater than the provided block number.

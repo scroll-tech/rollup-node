@@ -6,12 +6,14 @@
 #![cfg_attr(not(feature = "std"), no_std)]
 
 mod data_source;
+
+pub use error::DerivationPipelineError;
 mod error;
 
 #[cfg(not(feature = "std"))]
 extern crate alloc as std;
 
-use crate::{data_source::CodecDataSource, error::DerivationPipelineError};
+use crate::data_source::CodecDataSource;
 use std::vec::Vec;
 
 use alloy_primitives::B256;
@@ -130,9 +132,9 @@ mod tests {
             Ok(Some(self.messages.try_lock().expect("lock is free").remove(0)))
         }
 
-        fn set_index_cursor(&mut self, _index: u64) {}
+        fn set_index_cursor(&self, _index: u64) {}
 
-        fn set_hash_cursor(&mut self, _hash: B256) {}
+        fn set_hash_cursor(&self, _hash: B256) {}
     }
 
     #[tokio::test]
