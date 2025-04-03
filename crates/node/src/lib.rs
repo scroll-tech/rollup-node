@@ -154,7 +154,7 @@ where
 
         // Send the block to the engine to validate the correctness of the block.
         let mut fcs = self.get_alloy_fcs();
-        let engine = self.engine.clone();
+        let engine: Arc<EngineDriver<EC, P>> = self.engine.clone();
         let future = Box::pin(async move {
             trace!(target: "scroll::node::manager", "handling block import future for block {:?}", block.hash_slow());
 
