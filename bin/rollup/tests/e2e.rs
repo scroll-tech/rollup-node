@@ -137,7 +137,8 @@ pub async fn build_bridge_node(
         enable_scroll_wire: true,
         database_path: Some(PathBuf::from("sqlite::memory:")),
         l1_rpc_url: None,
-        beacon_rpc_url: reqwest::Url::parse("http://localhost:3030")?,
+        // <https://docs.arbitrum.io/run-arbitrum-node/l1-ethereum-beacon-chain-rpc-providers>
+        beacon_rpc_url: reqwest::Url::parse("https://eth-beacon-chain.drpc.org/rest/")?,
         engine_api_url: None,
     };
     let node = ScrollNode;

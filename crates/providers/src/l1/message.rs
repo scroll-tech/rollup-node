@@ -9,7 +9,7 @@ use scroll_db::{DatabaseConnectionProvider, DatabaseOperations};
 /// provider using the queue index or hash and then call [`L1MessageProvider::next_l1_message`] to
 /// iterate the queue.
 #[async_trait::async_trait]
-#[auto_impl::auto_impl(Arc, &)]
+#[auto_impl::auto_impl(&)]
 pub trait L1MessageProvider {
     /// The error type for the provider.
     type Error: Into<L1ProviderError>;
@@ -31,10 +31,18 @@ pub struct DatabaseL1MessageProvider<DB> {
     index: AtomicU64,
 }
 
+/// Cloning the [`DatabaseL1MessageProvider`] clones the reference to the database and creates a new
+/// u64 atomic.
+impl<DB: Clone> Clone for DatabaseL1MessageProvider<DB> {
+    fn clone(&self) -> Self {
+        Self { database_connection: self.database_connection.clone(), index: AtomicU64::new(0) }
+    }
+}
+
 impl<DB> DatabaseL1MessageProvider<DB> {
     /// Returns a new instance of the [`DatabaseL1MessageProvider`].
-    pub const fn new(db: DB, index: u64) -> Self {
-        Self { database_connection: db, index: AtomicU64::new(index) }
+    pub const fn new(db: DB) -> Self {
+        Self { database_connection: db, index: AtomicU64::new(0) }
     }
 }
 
@@ -43,20 +51,21 @@ impl<DB: DatabaseConnectionProvider + Sync> L1MessageProvider for DatabaseL1Mess
     type Error = L1ProviderError;
 
     async fn next_l1_message(&self) -> Result<Option<TxL1Message>, Self::Error> {
+        // Memory Ordering: [`Ordering::Relaxed`] is sufficient based on this comment:
+        // https://github.com/tokio-rs/tokio/discussions/4484#discussioncomment-2140741
+        let index = self.index.fetch_add(1, Ordering::Relaxed);
         Ok(self
             .database_connection
-            .get_l1_message(self.index.load(Ordering::Relaxed))
+            .get_l1_message(index)
             .await
             .map(|tx| tx.map(|tx| tx.transaction))?)
     }
 
-    // TODO: check if ordering relaxed is sufficient.
     fn set_index_cursor(&self, index: u64) {
         self.index.store(index, Ordering::Relaxed);
     }
 
     fn set_hash_cursor(&self, _hash: B256) {
-        // TODO: issue 43
-        todo!()
+        todo!("issue #43")
     }
 }

@@ -51,7 +51,7 @@ pub struct DerivationPipeline<P> {
     /// A reference to the database.
     database: Arc<Database>,
     /// A L1 provider.
-    l1_provider: Arc<P>,
+    l1_provider: P,
     /// The queue of batches to handle.
     batch_index_queue: VecDeque<u64>,
     /// The queue of polled attributes.
@@ -62,10 +62,10 @@ pub struct DerivationPipeline<P> {
 
 impl<P> DerivationPipeline<P>
 where
-    P: L1Provider + Send + Sync + 'static,
+    P: L1Provider + Clone + Send + Sync + 'static,
 {
     /// Returns a new instance of the [`DerivationPipeline`].
-    pub fn new(l1_provider: Arc<P>, database: Arc<Database>) -> Self {
+    pub fn new(l1_provider: P, database: Arc<Database>) -> Self {
         Self {
             database,
             l1_provider,
@@ -113,40 +113,42 @@ where
 
 impl<P> Stream for DerivationPipeline<P>
 where
-    P: L1Provider + Send + Sync + 'static,
+    P: L1Provider + Clone + Unpin + Send + Sync + 'static,
 {
     type Item = ScrollPayloadAttributes;
 
-    fn poll_next(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
+    fn poll_next(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
+        let this = self.get_mut();
+
         // if futures are empty and the batch queue is empty, store the waker
         // and return.
-        if self.pipeline_futures.is_empty() && self.batch_index_queue.is_empty() {
-            self.waker = Some(cx.waker().clone());
+        if this.pipeline_futures.is_empty() && this.batch_index_queue.is_empty() {
+            this.waker = Some(cx.waker().clone());
             return Poll::Pending
         }
 
         // if the futures can still grow, handle the next batch.
-        if self.pipeline_futures.len() < MAX_CONCURRENT_DERIVATION_PIPELINE_FUTS {
-            self.handle_next_batch(|queue, fut| queue.push_back(fut));
+        if this.pipeline_futures.len() < MAX_CONCURRENT_DERIVATION_PIPELINE_FUTS {
+            this.handle_next_batch(|queue, fut| queue.push_back(fut));
         }
 
         // return attributes from the queue if any.
-        if let Some(attribute) = self.attributes_queue.pop_front() {
+        if let Some(attribute) = this.attributes_queue.pop_front() {
             return Poll::Ready(Some(attribute))
         }
 
         // poll the futures and handle result.
-        if let Some(res) = ready!(self.pipeline_futures.poll_next_unpin(cx)) {
+        if let Some(res) = ready!(this.pipeline_futures.poll_next_unpin(cx)) {
             match res {
                 Ok(attributes) => {
-                    self.attributes_queue.extend(attributes);
+                    this.attributes_queue.extend(attributes);
                     cx.waker().wake_by_ref();
                 }
                 Err((index, err)) => {
                     tracing::error!(target: "scroll::node::derivation_pipeline", ?index, ?err, "failed to derive payload attributes for batch");
                     // retry polling the same batch index.
-                    self.batch_index_queue.push_front(index);
-                    self.handle_next_batch(|queue, fut| queue.push_front(fut));
+                    this.batch_index_queue.push_front(index);
+                    this.handle_next_batch(|queue, fut| queue.push_front(fut));
                 }
             }
         }
@@ -227,12 +229,15 @@ mod tests {
 
     use alloy_eips::eip4844::Blob;
     use alloy_primitives::{address, b256, bytes, U256};
-    use rollup_node_providers::{L1BlobProvider, L1MessageProvider, L1ProviderError};
+    use rollup_node_providers::{
+        DatabaseL1MessageProvider, L1BlobProvider, L1MessageProvider, L1ProviderError,
+    };
     use scroll_alloy_consensus::TxL1Message;
     use scroll_codec::decoding::test_utils::read_to_bytes;
+    use scroll_db::test_utils::setup_test_db;
     use tokio::sync::Mutex;
 
-    struct TestL1MessageProvider {
+    struct MockL1MessageProvider {
         messages: Arc<Mutex<Vec<TxL1Message>>>,
     }
 
@@ -244,7 +249,7 @@ mod tests {
     }
 
     #[async_trait::async_trait]
-    impl L1BlobProvider for TestL1MessageProvider {
+    impl L1BlobProvider for MockL1MessageProvider {
         async fn blob(
             &self,
             _block_timestamp: u64,
@@ -255,7 +260,7 @@ mod tests {
     }
 
     #[async_trait::async_trait]
-    impl L1MessageProvider for TestL1MessageProvider {
+    impl L1MessageProvider for MockL1MessageProvider {
         type Error = Infallible;
 
         async fn next_l1_message(&self) -> Result<Option<TxL1Message>, Self::Error> {
@@ -295,7 +300,7 @@ mod tests {
             sender: address!("7885BcBd5CeCEf1336b5300fb5186A12DDD8c478"),
             input: bytes!("8ef1332e0000000000000000000000007f2b8c31f88b6006c382775eea88297ec1e3e9050000000000000000000000006ea73e05adc79974b931123675ea8f78ffdacdf000000000000000000000000000000000000000000000000000470de4df820000000000000000000000000000000000000000000000000000000000000000002200000000000000000000000000000000000000000000000000000000000000a000000000000000000000000000000000000000000000000000000000000000a4232e8748000000000000000000000000982fe4a7cbd74bb3422ebe46333c3e8046c12c7f000000000000000000000000982fe4a7cbd74bb3422ebe46333c3e8046c12c7f00000000000000000000000000000000000000000000000000470de4df8200000000000000000000000000000000000000000000000000000000000000000080000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000"),
         }];
-        let provider = TestL1MessageProvider { messages: Arc::new(Mutex::new(l1_messages)) };
+        let provider = MockL1MessageProvider { messages: Arc::new(Mutex::new(l1_messages)) };
 
         let attributes: Vec<_> = derive(batch_data, provider).await?;
         let attribute =

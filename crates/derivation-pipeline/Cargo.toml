@@ -34,6 +34,7 @@ tracing.workspace = true
 [dev-dependencies]
 async-trait.workspace = true
 eyre.workspace = true
+scroll-db = { workspace = true, features = ["test-utils"] }
 scroll-codec = { workspace = true, features = ["test-utils"] }
 tokio = { workspace = true, features = ["macros"] }
 

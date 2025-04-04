@@ -33,7 +33,7 @@ pub enum L1ProviderError {
 }
 
 /// An online implementation of the [`L1Provider`] trait.
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct OnlineL1Provider<P> {
     /// The Beacon client.
     beacon_client: OnlineBeaconClient,

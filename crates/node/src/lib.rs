@@ -113,7 +113,7 @@ where
     C: Consensus + Unpin,
     EC: ScrollEngineApi<ScrollNetwork> + Unpin + Sync + Send + 'static,
     P: ExecutionPayloadProvider + Unpin + Send + Sync + 'static,
-    L1P: L1Provider + Send + Sync + 'static,
+    L1P: L1Provider + Clone + Send + Sync + 'static,
 {
     /// Create a new [`RollupNodeManager`] instance.
     #[allow(clippy::too_many_arguments)]
@@ -128,8 +128,7 @@ where
         new_block_rx: Option<UnboundedReceiver<NewBlockWithPeer>>,
     ) -> Self {
         let database = indexer.database();
-        let provider = Arc::new(l1_provider);
-        let derivation_pipeline = DerivationPipeline::new(provider, database);
+        let derivation_pipeline = DerivationPipeline::new(l1_provider, database);
         Self {
             network,
             engine: Arc::new(engine),
@@ -313,7 +312,7 @@ where
     C: Consensus + Unpin,
     EC: ScrollEngineApi<ScrollNetwork> + Unpin + Sync + Send + 'static,
     P: ExecutionPayloadProvider + Unpin + Send + Sync + 'static,
-    L1P: L1Provider + Unpin + Send + Sync + 'static,
+    L1P: L1Provider + Clone + Unpin + Send + Sync + 'static,
 {
     type Output = ();
 
