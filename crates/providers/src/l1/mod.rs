@@ -141,11 +141,11 @@ impl<P: L1MessageProvider + Sync> L1MessageProvider for OnlineL1Provider<P> {
         self.l1_message_provider.next_l1_message().await
     }
 
-    fn set_index_cursor(&mut self, index: u64) {
+    fn set_index_cursor(&self, index: u64) {
         self.l1_message_provider.set_index_cursor(index)
     }
 
-    fn set_hash_cursor(&mut self, hash: B256) {
+    fn set_hash_cursor(&self, hash: B256) {
         self.l1_message_provider.set_hash_cursor(hash)
     }
 }

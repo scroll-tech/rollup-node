@@ -1,3 +1,4 @@
+use crate::ScrollRollupNodeArgs;
 use alloy_provider::ProviderBuilder;
 use migration::MigratorTrait;
 use reth_network::{config::NetworkMode, NetworkManager, PeersInfo};
@@ -10,6 +11,7 @@ use reth_scroll_primitives::ScrollPrimitives;
 use reth_transaction_pool::{PoolTransaction, TransactionPool};
 use rollup_node_indexer::Indexer;
 use rollup_node_manager::{PoAConsensus, RollupNodeManager};
+use rollup_node_providers::{DatabaseL1MessageProvider, OnlineBeaconClient, OnlineL1Provider};
 use rollup_node_watcher::L1Watcher;
 use scroll_alloy_provider::ScrollAuthEngineApiProvider;
 use scroll_db::{Database, DatabaseConnectionProvider};
@@ -18,8 +20,6 @@ use scroll_network::NetworkManager as ScrollNetworkManager;
 use scroll_wire::{ProtocolHandler, ScrollWireConfig};
 use std::{path::PathBuf, sync::Arc};
 use tracing::info;
-
-use crate::ScrollRollupNodeArgs;
 
 /// The network builder for the eth-wire to scroll-wire bridge.
 #[derive(Debug)]
@@ -121,10 +121,15 @@ where
             None
         };
 
+        let beacon_client = OnlineBeaconClient::new_http(self.config.beacon_rpc_url.to_string());
+        let l1_messages_provider = DatabaseL1MessageProvider::new(db.clone(), 0);
+        let l1_provider = OnlineL1Provider::new(beacon_client, 100, l1_messages_provider).await;
+
         // Spawn the rollup node manager
         let rollup_node_manager = RollupNodeManager::new(
             scroll_network_manager,
             engine,
+            l1_provider,
             l1_notification_rx,
             indexer,
             ForkchoiceState::genesis(
