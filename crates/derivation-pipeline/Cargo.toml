@@ -29,6 +29,7 @@ scroll-db.workspace = true
 # misc
 futures.workspace = true
 thiserror.workspace = true
+tracing.workspace = true
 
 [dev-dependencies]
 async-trait.workspace = true

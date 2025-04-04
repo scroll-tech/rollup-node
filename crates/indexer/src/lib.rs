@@ -18,7 +18,7 @@ mod event;
 pub use event::IndexerEvent;
 
 mod error;
-use error::IndexerError;
+pub use error::IndexerError;
 
 /// The indexer is responsible for indexing data relevant to the L1.
 #[derive(Debug)]
@@ -33,6 +33,11 @@ impl Indexer {
     /// Creates a new indexer with the given [`Database`].
     pub fn new(database: Arc<Database>) -> Self {
         Self { database, pending_futures: Default::default() }
+    }
+
+    /// Returns a reference to the database used by the indexer.
+    pub fn database(&self) -> Arc<Database> {
+        self.database.clone()
     }
 
     /// Handles an event from the L1.

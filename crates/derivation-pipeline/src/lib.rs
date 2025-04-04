@@ -24,7 +24,7 @@ use core::{
     pin::Pin,
     task::{Context, Poll, Waker},
 };
-use futures::{ready, stream, stream::FuturesOrdered, Stream, StreamExt};
+use futures::{ready, stream::FuturesOrdered, Stream, StreamExt};
 use reth_scroll_chainspec::SCROLL_FEE_VAULT_ADDRESS;
 use rollup_node_primitives::BatchCommitData;
 use rollup_node_providers::L1Provider;
@@ -35,22 +35,12 @@ use scroll_db::{Database, DatabaseOperations};
 /// A future that resolves to a stream of [`ScrollPayloadAttributes`].
 type DerivationPipelineFuture = Pin<
     Box<
-        dyn Future<Output = Result<Pin<Box<dyn DerivationPipelineStream>>, DerivationPipelineError>>
+        dyn Future<Output = Result<Vec<ScrollPayloadAttributes>, (u64, DerivationPipelineError)>>
             + Send,
     >,
 >;
 
-/// A trait defining the stream returned by the derivation pipeline.
-pub trait DerivationPipelineStream:
-    Stream<Item = Result<ScrollPayloadAttributes, DerivationPipelineError>>
-{
-}
-impl<S> DerivationPipelineStream for S where
-    S: Stream<Item = Result<ScrollPayloadAttributes, DerivationPipelineError>>
-{
-}
-
-/// Limit on the amount of pipeline futures allowed to be polled concurrently.
+/// Limit the amount of pipeline futures allowed to be polled concurrently.
 const MAX_CONCURRENT_DERIVATION_PIPELINE_FUTS: usize = 20;
 
 /// A structure holding the current unresolved futures for the derivation pipeline.
@@ -64,6 +54,8 @@ pub struct DerivationPipeline<P> {
     l1_provider: Arc<P>,
     /// The queue of batches to handle.
     batch_index_queue: VecDeque<u64>,
+    /// The queue of polled attributes.
+    attributes_queue: VecDeque<ScrollPayloadAttributes>,
     /// The waker for the pipeline.
     waker: Option<Waker>,
 }
@@ -75,10 +67,11 @@ where
     /// Returns a new instance of the [`DerivationPipeline`].
     pub fn new(l1_provider: Arc<P>, database: Arc<Database>) -> Self {
         Self {
-            pipeline_futures: Default::default(),
             database,
             l1_provider,
             batch_index_queue: Default::default(),
+            pipeline_futures: Default::default(),
+            attributes_queue: Default::default(),
             waker: None,
         }
     }
@@ -92,37 +85,39 @@ where
         }
     }
 
-    /// Handles the next batch index in the batch index queue, pushing the futures in the pipeline
+    /// Handles the next batch index in the batch index queue, pushing the future in the pipeline
     /// futures.
-    fn handle_next_batch(&mut self) {
+    fn handle_next_batch<
+        F: FnMut(&mut FuturesOrdered<DerivationPipelineFuture>, DerivationPipelineFuture),
+    >(
+        &mut self,
+        mut queue_fut: F,
+    ) {
         let database = self.database.clone();
-        let index = self.batch_index_queue.pop_front();
         let provider = self.l1_provider.clone();
 
-        if let Some(index) = index {
+        if let Some(index) = self.batch_index_queue.pop_front() {
             let fut = Box::pin(async move {
                 let batch = database
                     .get_batch_by_index(index)
-                    .await?
-                    .ok_or(DerivationPipelineError::UnknownBatch(index))?;
-                let stream = derive(batch, provider).await?;
+                    .await
+                    .map_err(|err| (index, err.into()))?
+                    .ok_or((index, DerivationPipelineError::UnknownBatch(index)))?;
 
-                Ok::<_, DerivationPipelineError>(
-                    Box::pin(stream) as Pin<Box<dyn DerivationPipelineStream>>
-                )
+                derive(batch, provider).await.map_err(|err| (index, err))
             });
-            self.pipeline_futures.push_back(fut)
+            queue_fut(&mut self.pipeline_futures, fut);
         }
     }
 }
 
-impl<P> Future for DerivationPipeline<P>
+impl<P> Stream for DerivationPipeline<P>
 where
     P: L1Provider + Send + Sync + 'static,
 {
-    type Output = Result<Box<dyn DerivationPipelineStream>, DerivationPipelineError>;
+    type Item = ScrollPayloadAttributes;
 
-    fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
+    fn poll_next(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
         // if futures are empty and the batch queue is empty, store the waker
         // and return.
         if self.pipeline_futures.is_empty() && self.batch_index_queue.is_empty() {
@@ -132,25 +127,39 @@ where
 
         // if the futures can still grow, handle the next batch.
         if self.pipeline_futures.len() < MAX_CONCURRENT_DERIVATION_PIPELINE_FUTS {
-            self.handle_next_batch();
+            self.handle_next_batch(|queue, fut| queue.push_back(fut));
         }
 
-        // poll the futures and return the result.
-        if let Some(res) = ready!(self.pipeline_futures.poll_next_unpin(cx)) {
-            let val = res.unwrap().poll_next_unpin(cx);
-            Poll::Ready(res)
-        } else {
-            Poll::Pending
+        // return attributes from the queue if any.
+        if let Some(attribute) = self.attributes_queue.pop_front() {
+            return Poll::Ready(Some(attribute))
         }
+
+        // poll the futures and handle result.
+        if let Some(res) = ready!(self.pipeline_futures.poll_next_unpin(cx)) {
+            match res {
+                Ok(attributes) => {
+                    self.attributes_queue.extend(attributes);
+                    cx.waker().wake_by_ref();
+                }
+                Err((index, err)) => {
+                    tracing::error!(target: "scroll::node::derivation_pipeline", ?index, ?err, "failed to derive payload attributes for batch");
+                    // retry polling the same batch index.
+                    self.batch_index_queue.push_front(index);
+                    self.handle_next_batch(|queue, fut| queue.push_front(fut));
+                }
+            }
+        }
+        Poll::Pending
     }
 }
 
-/// Returns an stream over [`ScrollPayloadAttributes`] from the [`BatchCommitData`] and a
+/// Returns a vector of [`ScrollPayloadAttributes`] from the [`BatchCommitData`] and a
 /// [`L1Provider`].
 pub async fn derive<P: L1Provider>(
     batch: BatchCommitData,
     l1_provider: P,
-) -> Result<impl DerivationPipelineStream, DerivationPipelineError> {
+) -> Result<Vec<ScrollPayloadAttributes>, DerivationPipelineError> {
     // fetch the blob then decode the input batch.
     let blob = if let Some(hash) = batch.blob_versioned_hash {
         l1_provider.blob(batch.block_timestamp, hash).await?
@@ -173,43 +182,44 @@ pub async fn derive<P: L1Provider>(
         return Err(DerivationPipelineError::MissingL1MessageQueueCursor)
     }
 
-    let provider = Arc::new(l1_provider);
-    let iter = stream::iter(decoded.data.into_l2_blocks())
-        .map(move |data| (data, provider.clone()))
-        .then(|(mut block, provider)| async move {
-            // query the appropriate amount of l1 messages.
-            let mut txs = Vec::with_capacity(block.context.num_l1_messages as usize);
-            for _ in 0..block.context.num_l1_messages {
-                let l1_message = provider
-                    .next_l1_message()
-                    .await
-                    .map_err(Into::into)?
-                    .ok_or(DerivationPipelineError::MissingL1Message)?;
-                let mut bytes = Vec::new();
-                l1_message.eip2718_encode(&mut bytes);
-                txs.push(bytes.into());
-            }
+    let blocks = decoded.data.into_l2_blocks();
+    let mut attributes = Vec::with_capacity(blocks.len());
+    for mut block in blocks {
+        // query the appropriate amount of l1 messages.
+        let mut txs = Vec::with_capacity(block.context.num_l1_messages as usize);
+        for _ in 0..block.context.num_l1_messages {
+            let l1_message = l1_provider
+                .next_l1_message()
+                .await
+                .map_err(Into::into)?
+                .ok_or(DerivationPipelineError::MissingL1Message)?;
+            let mut bytes = Vec::with_capacity(l1_message.eip2718_encoded_length());
+            l1_message.eip2718_encode(&mut bytes);
+            txs.push(bytes.into());
+        }
 
-            // add the block transactions.
-            txs.append(&mut block.transactions);
+        // add the block transactions.
+        txs.append(&mut block.transactions);
 
-            // construct the payload attributes.
-            Ok(ScrollPayloadAttributes {
-                payload_attributes: PayloadAttributes {
-                    timestamp: block.context.timestamp,
-                    prev_randao: B256::ZERO,
-                    // TODO: this should be based off the current configuration value.
-                    suggested_fee_recipient: SCROLL_FEE_VAULT_ADDRESS,
-                    withdrawals: None,
-                    parent_beacon_block_root: None,
-                },
-                transactions: Some(txs),
-                no_tx_pool: true,
-            })
-        });
+        // construct the payload attributes.
+        let attribute = ScrollPayloadAttributes {
+            payload_attributes: PayloadAttributes {
+                timestamp: block.context.timestamp,
+                // TODO: this should be based off the current configuration value.
+                suggested_fee_recipient: SCROLL_FEE_VAULT_ADDRESS,
+                prev_randao: B256::ZERO,
+                withdrawals: None,
+                parent_beacon_block_root: None,
+            },
+            transactions: Some(txs),
+            no_tx_pool: true,
+        };
+        attributes.push(attribute);
+    }
 
-    Ok(iter)
+    Ok(attributes)
 }
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -287,8 +297,7 @@ mod tests {
         }];
         let provider = TestL1MessageProvider { messages: Arc::new(Mutex::new(l1_messages)) };
 
-        let attributes: Vec<_> = derive(batch_data, provider).await?.collect().await;
-        let attributes = attributes.into_iter().collect::<Result<Vec<_>, _>>()?;
+        let attributes: Vec<_> = derive(batch_data, provider).await?;
         let attribute =
             attributes.iter().find(|a| a.payload_attributes.timestamp == 1696935384).unwrap();
 

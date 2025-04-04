@@ -12,6 +12,8 @@ pub struct ScrollRollupNodeArgs {
     pub database_path: Option<PathBuf>,
     /// The URL for the L1 RPC URL.
     pub l1_rpc_url: Option<reqwest::Url>,
+    /// The URL for the Beacon RPC URL.
+    pub beacon_rpc_url: reqwest::Url,
     /// The EngineAPI URL.
     pub engine_api_url: Option<reqwest::Url>,
 }

@@ -4,7 +4,7 @@ use crate::DatabaseConnectionProvider;
 use alloy_primitives::B256;
 use futures::{Stream, StreamExt};
 use rollup_node_primitives::{BatchCommitData, L1MessageWithBlockNumber};
-use sea_orm::{ActiveModelTrait, ColumnTrait, DbErr, EntityTrait, QueryFilter, QueryOrder, Set};
+use sea_orm::{ActiveModelTrait, ColumnTrait, DbErr, EntityTrait, QueryFilter, Set};
 
 /// The [`DatabaseOperations`] trait provides methods for interacting with the database.
 #[async_trait::async_trait]

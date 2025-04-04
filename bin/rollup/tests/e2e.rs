@@ -137,6 +137,7 @@ pub async fn build_bridge_node(
         enable_scroll_wire: true,
         database_path: Some(PathBuf::from("sqlite::memory:")),
         l1_rpc_url: None,
+        beacon_rpc_url: reqwest::Url::parse("http://localhost:3030")?,
         engine_api_url: None,
     };
     let node = ScrollNode;
