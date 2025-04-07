@@ -11,11 +11,13 @@ exclude.workspace = true
 alloy-chains.workspace = true
 alloy-provider.workspace = true
 alloy-rpc-types-engine.workspace = true
+alloy-rpc-client.workspace = true
+alloy-transport.workspace = true
 
 # scroll-alloy
 scroll-alloy-consensus.workspace = true
-scroll-alloy-rpc-types-engine.workspace = true
 scroll-alloy-provider.workspace = true
+scroll-alloy-rpc-types-engine.workspace = true
 
 # reth
 reth-cli-util = { git = "https://github.com/scroll-tech/reth.git" }

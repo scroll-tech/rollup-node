@@ -1,4 +1,6 @@
 use alloy_provider::ProviderBuilder;
+use alloy_rpc_client::RpcClient;
+use alloy_transport::layers::RetryBackoffLayer;
 use migration::MigratorTrait;
 use reth_network::{config::NetworkMode, NetworkManager, PeersInfo};
 use reth_node_api::TxTy;
@@ -17,10 +19,10 @@ use scroll_db::{Database, DatabaseConnectionProvider};
 use scroll_engine::{test_utils::NoopExecutionPayloadProvider, EngineDriver, ForkchoiceState};
 use scroll_network::NetworkManager as ScrollNetworkManager;
 use scroll_wire::{ProtocolHandler, ScrollWireConfig};
-use std::{path::PathBuf, sync::Arc};
+use std::sync::Arc;
 use tracing::info;
 
-use crate::ScrollRollupNodeArgs;
+use crate::{L1ProviderArgs, ScrollRollupNodeArgs, WATCHER_START_BLOCK_NUMBER};
 
 /// The network builder for the eth-wire to scroll-wire bridge.
 #[derive(Debug)]
@@ -100,11 +102,14 @@ where
 
         // Instantiate the database
         let database_path = if let Some(db_path) = self.config.database_path {
-            db_path
+            db_path.to_string_lossy().to_string()
         } else {
-            PathBuf::from("sqlite://").join(ctx.config().datadir().db().join("scroll.db"))
+            // append the path using strings as using `join(...)` overwrites "sqlite://"
+            // if the path is absolute.
+            let path = ctx.config().datadir().db().join("scroll.db");
+            "sqlite://".to_string() + &*path.to_string_lossy()
         };
-        let db = Database::new(database_path.to_str().unwrap()).await?;
+        let db = Database::new(&database_path).await?;
 
         // Run the database migrations
         migration::Migrator::up(db.get_connection(), None).await?;
@@ -116,13 +121,25 @@ where
         let indexer = Indexer::new(db.clone());
 
         // Spawn the L1Watcher
-        let l1_notification_rx = if let Some(l1_rpc_url) = self.config.l1_rpc_url {
-            Some(L1Watcher::spawn(ProviderBuilder::new().on_http(l1_rpc_url), 20035952).await)
+        let l1_provider_args = self.config.l1_provider_args;
+        let l1_notification_rx = if let Some(l1_rpc_url) = l1_provider_args.l1_rpc_url {
+            let L1ProviderArgs { max_retries, initial_backoff, compute_units_per_second, .. } =
+                l1_provider_args;
+            let client = RpcClient::builder()
+                .layer(RetryBackoffLayer::new(
+                    max_retries,
+                    initial_backoff,
+                    compute_units_per_second,
+                ))
+                .http(l1_rpc_url);
+            let provider = ProviderBuilder::new().on_client(client);
+            Some(L1Watcher::spawn(provider, WATCHER_START_BLOCK_NUMBER).await)
         } else {
             None
         };
 
-        let beacon_client = OnlineBeaconClient::new_http(self.config.beacon_rpc_url.to_string());
+        let beacon_client =
+            OnlineBeaconClient::new_http(l1_provider_args.beacon_rpc_url.to_string());
         let l1_messages_provider = DatabaseL1MessageProvider::new(db.clone());
         let l1_provider = OnlineL1Provider::new(beacon_client, 100, l1_messages_provider).await;
 
