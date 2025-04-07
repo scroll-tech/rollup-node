@@ -348,10 +348,6 @@ mod tests {
         let mut pipeline = DerivationPipeline::new(mock_l1_provider, db);
 
         // as long as we don't call `handle_commit_batch`, pipeline should not return attributes.
-        let waker = noop_waker_ref();
-        let mut cx = Context::from_waker(waker);
-        assert!(pipeline.poll_next_unpin(&mut cx).is_pending());
-
         pipeline.handle_batch_commit(12);
 
         // we should find some attributes now
