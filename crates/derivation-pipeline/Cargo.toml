@@ -49,4 +49,5 @@ std = [
     "reth-scroll-chainspec/std",
     "scroll-alloy-consensus/std",
     "scroll-alloy-rpc-types-engine/std",
+    "futures/std",
 ]

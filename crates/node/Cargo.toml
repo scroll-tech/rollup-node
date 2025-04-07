@@ -23,7 +23,6 @@ reth-scroll-primitives.workspace = true
 
 # scroll
 scroll-alloy-rpc-types-engine.workspace = true
-scroll-db.workspace = true
 scroll-derivation-pipeline.workspace = true
 scroll-engine.workspace = true
 scroll-network.workspace = true
@@ -49,6 +48,7 @@ workspace = true
 serde = [
     "alloy-rpc-types-engine/serde",
     "reth-scroll-primitives/serde",
+    "scroll-alloy-rpc-types-engine/serde",
     "scroll-engine/serde",
     "scroll-network/serde",
     "scroll-wire/serde",

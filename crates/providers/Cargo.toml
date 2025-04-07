@@ -31,11 +31,6 @@ thiserror.workspace = true
 tokio = { workspace = true, default-features = false }
 
 [dev-dependencies]
-arbitrary.workspace = true
 eyre.workspace = true
-futures.workspace = true
-rand.workspace = true
-rollup-node-primitives = { workspace = true, features = ["arbitrary"] }
-rollup-node-watcher = { workspace = true, features = ["test-utils"] }
 scroll-db = { workspace = true, features = ["test-utils"] }
 tokio = { workspace = true, features = ["macros"] }

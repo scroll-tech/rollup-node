@@ -14,7 +14,7 @@ mod error;
 extern crate alloc as std;
 
 use crate::data_source::CodecDataSource;
-use std::{collections::VecDeque, sync::Arc, vec::Vec};
+use std::{boxed::Box, collections::VecDeque, sync::Arc, vec::Vec};
 
 use alloy_primitives::B256;
 use alloy_rpc_types_engine::PayloadAttributes;
