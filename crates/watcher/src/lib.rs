@@ -332,8 +332,19 @@ where
             for (raw_log, decoded_log, _) in group {
                 let block_number =
                     raw_log.block_number.ok_or(FilterLogError::MissingBlockNumber)?;
-                let block_timestamp =
-                    raw_log.block_timestamp.ok_or(FilterLogError::MissingBlockTimestamp)?;
+                let log_timestamp = raw_log.block_timestamp;
+                // if the log is missing the block timestamp, we need to fetch it.
+                // the block timestamp is necessary in order to derive the beacon
+                // slot and query the blobs.
+                let block_timestamp = if log_timestamp.is_none() {
+                    self.execution_provider
+                        .get_block(block_number.into())
+                        .await?
+                        .map(|b| b.header.timestamp)
+                        .ok_or(FilterLogError::MissingBlockTimestamp)?
+                } else {
+                    log_timestamp.expect("checked for Some(...)")
+                };
                 let batch_index =
                     decoded_log.batch_index.uint_try_to().expect("u256 to u64 conversion error");
 
