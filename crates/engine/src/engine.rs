@@ -30,7 +30,7 @@ pub struct EngineDriver<EC, P> {
 
 impl<EC, P> EngineDriver<EC, P>
 where
-    EC: ScrollEngineApi<scroll_alloy_network::Scroll> + Unpin + Send + Sync + 'static,
+    EC: ScrollEngineApi + Unpin + Send + Sync + 'static,
     P: ExecutionPayloadProvider + Unpin + Send + Sync + 'static,
 {
     /// Create a new [`EngineDriver`] from the provided [`ScrollEngineApi`] and

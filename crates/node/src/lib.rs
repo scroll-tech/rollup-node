@@ -8,7 +8,6 @@ use futures::{stream::FuturesOrdered, StreamExt};
 use reth_tokio_util::{EventSender, EventStream};
 use rollup_node_indexer::Indexer;
 use rollup_node_watcher::L1Notification;
-use scroll_alloy_network::Scroll as ScrollNetwork;
 use scroll_alloy_provider::ScrollEngineApi;
 use scroll_engine::{EngineDriver, EngineDriverError, ForkchoiceState};
 use scroll_network::{
@@ -80,7 +79,7 @@ pub struct RollupNodeManager<C, EC, P> {
 impl<C, EC, P> RollupNodeManager<C, EC, P>
 where
     C: Consensus + Unpin,
-    EC: ScrollEngineApi<ScrollNetwork> + Unpin + Sync + Send + 'static,
+    EC: ScrollEngineApi + Unpin + Sync + Send + 'static,
     P: ExecutionPayloadProvider + Unpin + Send + Sync + 'static,
 {
     /// Create a new [`RollupNodeManager`] instance.
@@ -232,7 +231,7 @@ where
 impl<C, EC, P> Future for RollupNodeManager<C, EC, P>
 where
     C: Consensus + Unpin,
-    EC: ScrollEngineApi<ScrollNetwork> + Unpin + Sync + Send + 'static,
+    EC: ScrollEngineApi + Unpin + Sync + Send + 'static,
     P: ExecutionPayloadProvider + Unpin + Send + Sync + 'static,
 {
     type Output = ();

@@ -18,25 +18,25 @@ scroll-alloy-rpc-types-engine.workspace = true
 scroll-alloy-provider.workspace = true
 
 # reth
-reth-cli-util = { git = "https://github.com/scroll-tech/reth.git" }
+reth-cli-util = { git = "https://github.com/scroll-tech/reth.git", branch = "feat/sequencer-rn-integration" }
 # keep this import as it is needed for correct compilation.
-reth-engine-local = { git = "https://github.com/scroll-tech/reth.git", features = ["scroll-alloy-traits"] }
+reth-engine-local = { git = "https://github.com/scroll-tech/reth.git", features = ["scroll-alloy-traits"], branch = "feat/sequencer-rn-integration" }
 reth-eth-wire-types.workspace = true
 reth-network.workspace = true
 reth-network-peers.workspace = true
-reth-node-api = { git = "https://github.com/scroll-tech/reth.git" }
-reth-node-builder = { git = "https://github.com/scroll-tech/reth.git", features = ["skip-state-root-validation"] }
-reth-node-core = { git = "https://github.com/scroll-tech/reth.git" }
-reth-node-types = { git = "https://github.com/scroll-tech/reth.git" }
+reth-node-api = { git = "https://github.com/scroll-tech/reth.git", branch = "feat/sequencer-rn-integration" }
+reth-node-builder = { git = "https://github.com/scroll-tech/reth.git", features = ["skip-state-root-validation"], branch = "feat/sequencer-rn-integration" }
+reth-node-core = { git = "https://github.com/scroll-tech/reth.git", branch = "feat/sequencer-rn-integration" }
+reth-node-types = { git = "https://github.com/scroll-tech/reth.git", branch = "feat/sequencer-rn-integration" }
 reth-primitives.workspace = true
 reth-provider = { workspace = true, features = ["skip-state-root-validation"] }
-reth-rpc-builder = { git = "https://github.com/scroll-tech/reth.git" }
-reth-transaction-pool = { git = "https://github.com/scroll-tech/reth.git" }
+reth-rpc-builder = { git = "https://github.com/scroll-tech/reth.git", branch = "feat/sequencer-rn-integration" }
+reth-transaction-pool = { git = "https://github.com/scroll-tech/reth.git", branch = "feat/sequencer-rn-integration" }
 
 # scroll
 reth-scroll-chainspec.workspace = true
-reth-scroll-cli = { git = "https://github.com/scroll-tech/reth.git" }
-reth-scroll-engine-primitives = { git = "https://github.com/scroll-tech/reth.git" }
+reth-scroll-cli = { git = "https://github.com/scroll-tech/reth.git", branch = "feat/sequencer-rn-integration" }
+reth-scroll-engine-primitives = { git = "https://github.com/scroll-tech/reth.git", branch = "feat/sequencer-rn-integration" }
 reth-scroll-node = { workspace = true, features = ["skip-state-root-validation"] }
 reth-scroll-primitives = { workspace = true }
 scroll-wire.workspace = true
@@ -65,10 +65,10 @@ alloy-rpc-types-engine.workspace = true
 
 # reth
 reth-e2e-test-utils.workspace = true
-reth-payload-builder = { git = "https://github.com/scroll-tech/reth.git" }
-reth-rpc-server-types = { git = "https://github.com/scroll-tech/reth.git" }
+reth-payload-builder = { git = "https://github.com/scroll-tech/reth.git", branch = "feat/sequencer-rn-integration" }
+reth-rpc-server-types = { git = "https://github.com/scroll-tech/reth.git", branch = "feat/sequencer-rn-integration" }
 reth-tasks.workspace = true
-reth-tracing = { git = "https://github.com/scroll-tech/reth.git" }
+reth-tracing = { git = "https://github.com/scroll-tech/reth.git", branch = "feat/sequencer-rn-integration" }
 
 # misc
 futures.workspace = true
@@ -88,6 +88,8 @@ test-utils = [
     "rollup-node-watcher/test-utils",
     "scroll-db/test-utils",
     "scroll-db/test-utils",
+    "reth-scroll-node/test-utils",
+    "reth-scroll-node/test-utils",
 ]
 serde = [
     "alloy-primitives/serde",

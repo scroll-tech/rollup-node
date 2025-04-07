@@ -16,6 +16,10 @@ use std::task::{Context, Poll};
 mod error;
 pub use error::SequencerError;
 
+/// A type alias for the payload building job future.
+pub type PayloadBuildingJobFuture =
+    Pin<Box<dyn Future<Output = Result<(ScrollBlock, u64), SequencerError>> + Send>>;
+
 /// The sequencer is responsible for sequencing transactions and producing new blocks.
 pub struct Sequencer<EC, P> {
     /// A reference to the database
@@ -35,15 +39,36 @@ pub struct Sequencer<EC, P> {
     /// The number of L1 messages to include in each block.
     max_l1_messages_per_block: u64,
     /// The inflight payload building job
-    payload_building_job:
-        Option<Pin<Box<dyn Future<Output = Result<(ScrollBlock, u64), SequencerError>> + Send>>>,
+    payload_building_job: Option<PayloadBuildingJobFuture>,
 }
 
 impl<EC, P> Sequencer<EC, P>
 where
-    EC: ScrollEngineApi<scroll_alloy_network::Scroll> + Unpin + Send + Sync + 'static,
+    EC: ScrollEngineApi + Unpin + Send + Sync + 'static,
     P: ExecutionPayloadProvider + Unpin + Send + Sync + 'static,
 {
+    /// Creates a new sequencer.
+    pub fn new(
+        database: Arc<Database>,
+        engine: Arc<EngineDriver<EC, P>>,
+        l1_block_number: u64,
+        l2_block_number: u64,
+        l1_message_index: u64,
+        l1_message_delay: u64,
+        max_l1_messages_per_block: u64,
+    ) -> Self {
+        Self {
+            database,
+            engine,
+            l1_block_number,
+            l2_block_number,
+            l1_message_index,
+            l1_message_delay,
+            max_l1_messages_per_block,
+            payload_building_job: None,
+        }
+    }
+
     /// Creates a new block using the pending transactions from the
     pub fn build_block(&mut self, fcs: ForkchoiceState) {
         let payload_attributes = PayloadAttributes { timestamp: 1, ..Default::default() };
@@ -73,7 +98,7 @@ where
 }
 
 async fn build_block<
-    EC: ScrollEngineApi<scroll_alloy_network::Scroll> + Unpin + Send + Sync + 'static,
+    EC: ScrollEngineApi + Unpin + Send + Sync + 'static,
     P: ExecutionPayloadProvider + Unpin + Send + Sync + 'static,
 >(
     engine: Arc<EngineDriver<EC, P>>,
