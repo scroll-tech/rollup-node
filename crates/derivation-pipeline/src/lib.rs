@@ -229,7 +229,6 @@ mod tests {
 
     use alloy_eips::eip4844::Blob;
     use alloy_primitives::{address, b256, bytes, U256};
-    use futures::task::noop_waker_ref;
     use rollup_node_primitives::L1MessageWithBlockNumber;
     use rollup_node_providers::{
         DatabaseL1MessageProvider, L1BlobProvider, L1MessageProvider, L1ProviderError,
