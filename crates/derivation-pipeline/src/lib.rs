@@ -120,6 +120,11 @@ where
     fn poll_next(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
         let this = self.get_mut();
 
+        // return attributes from the queue if any.
+        if let Some(attribute) = this.attributes_queue.pop_front() {
+            return Poll::Ready(Some(attribute))
+        }
+
         // if futures are empty and the batch queue is empty, store the waker
         // and return.
         if this.pipeline_futures.is_empty() && this.batch_index_queue.is_empty() {
@@ -130,11 +135,6 @@ where
         // if the futures can still grow, handle the next batch.
         if this.pipeline_futures.len() < MAX_CONCURRENT_DERIVATION_PIPELINE_FUTS {
             this.handle_next_batch(|queue, fut| queue.push_back(fut));
-        }
-
-        // return attributes from the queue if any.
-        if let Some(attribute) = this.attributes_queue.pop_front() {
-            return Poll::Ready(Some(attribute))
         }
 
         // poll the futures and handle result.
@@ -229,6 +229,8 @@ mod tests {
 
     use alloy_eips::eip4844::Blob;
     use alloy_primitives::{address, b256, bytes, U256};
+    use futures::task::noop_waker_ref;
+    use rollup_node_primitives::L1MessageWithBlockNumber;
     use rollup_node_providers::{
         DatabaseL1MessageProvider, L1BlobProvider, L1MessageProvider, L1ProviderError,
     };
@@ -270,6 +272,111 @@ mod tests {
         fn set_index_cursor(&self, _index: u64) {}
 
         fn set_hash_cursor(&self, _hash: B256) {}
+    }
+
+    #[derive(Clone)]
+    struct MockL1Provider<P: L1MessageProvider> {
+        l1_messages_provider: P,
+    }
+
+    #[async_trait::async_trait]
+    impl<P: L1MessageProvider + Sync> L1BlobProvider for MockL1Provider<P> {
+        async fn blob(
+            &self,
+            _block_timestamp: u64,
+            _hash: B256,
+        ) -> Result<Option<Arc<Blob>>, L1ProviderError> {
+            Ok(None)
+        }
+    }
+
+    #[async_trait::async_trait]
+    impl<P: L1MessageProvider + Sync> L1MessageProvider for MockL1Provider<P> {
+        type Error = P::Error;
+
+        async fn next_l1_message(&self) -> Result<Option<TxL1Message>, Self::Error> {
+            self.l1_messages_provider.next_l1_message().await
+        }
+        fn set_index_cursor(&self, index: u64) {
+            self.l1_messages_provider.set_index_cursor(index)
+        }
+        fn set_hash_cursor(&self, hash: B256) {
+            self.l1_messages_provider.set_hash_cursor(hash)
+        }
+    }
+
+    #[tokio::test]
+    async fn test_should_stream_payload_attributes() -> eyre::Result<()> {
+        // https://etherscan.io/tx/0x8f4f0fcab656aa81589db5b53255094606c4624bfd99702b56b2debaf6211f48
+        // load batch data in the db.
+        let db = Arc::new(setup_test_db().await);
+        let raw_calldata = read_to_bytes("./testdata/calldata_v0.bin")?;
+        let batch_data = BatchCommitData {
+            hash: b256!("7f26edf8e3decbc1620b4d2ba5f010a6bdd10d6bb16430c4f458134e36ab3961"),
+            index: 12,
+            block_number: 18319648,
+            block_timestamp: 1696935971,
+            calldata: Arc::new(raw_calldata),
+            blob_versioned_hash: None,
+        };
+        db.insert_batch(batch_data).await?;
+
+        // load messages in db.
+        let l1_messages = vec![
+            L1MessageWithBlockNumber{ block_number: 717, transaction: TxL1Message {
+            queue_index: 33,
+            gas_limit: 168000,
+            to: address!("781e90f1c8Fc4611c9b7497C3B47F99Ef6969CbC"),
+            value: U256::ZERO,
+            sender: address!("7885BcBd5CeCEf1336b5300fb5186A12DDD8c478"),
+            input: bytes!("8ef1332e0000000000000000000000007f2b8c31f88b6006c382775eea88297ec1e3e9050000000000000000000000006ea73e05adc79974b931123675ea8f78ffdacdf0000000000000000000000000000000000000000000000000006a94d74f430000000000000000000000000000000000000000000000000000000000000000002100000000000000000000000000000000000000000000000000000000000000a000000000000000000000000000000000000000000000000000000000000000a4232e8748000000000000000000000000ca266224613396a0e8d4c2497dbc4f33dd6cdeff000000000000000000000000ca266224613396a0e8d4c2497dbc4f33dd6cdeff000000000000000000000000000000000000000000000000006a94d74f4300000000000000000000000000000000000000000000000000000000000000000080000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000"),
+        } }, L1MessageWithBlockNumber{transaction: TxL1Message {
+            queue_index: 34,
+            gas_limit: 168000,
+            to: address!("781e90f1c8fc4611c9b7497c3b47f99ef6969cbc"),
+            value: U256::ZERO,
+            sender: address!("7885BcBd5CeCEf1336b5300fb5186A12DDD8c478"),
+            input: bytes!("8ef1332e0000000000000000000000007f2b8c31f88b6006c382775eea88297ec1e3e9050000000000000000000000006ea73e05adc79974b931123675ea8f78ffdacdf000000000000000000000000000000000000000000000000000470de4df820000000000000000000000000000000000000000000000000000000000000000002200000000000000000000000000000000000000000000000000000000000000a000000000000000000000000000000000000000000000000000000000000000a4232e8748000000000000000000000000982fe4a7cbd74bb3422ebe46333c3e8046c12c7f000000000000000000000000982fe4a7cbd74bb3422ebe46333c3e8046c12c7f00000000000000000000000000000000000000000000000000470de4df8200000000000000000000000000000000000000000000000000000000000000000080000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000"),
+        }, block_number: 717}];
+        for message in l1_messages {
+            db.insert_l1_message(message).await?;
+        }
+
+        // construct the pipeline.
+        let l1_messages_provider = DatabaseL1MessageProvider::new(db.clone());
+        let mock_l1_provider = MockL1Provider { l1_messages_provider };
+        let mut pipeline = DerivationPipeline::new(mock_l1_provider, db);
+
+        // as long as we don't call `handle_commit_batch`, pipeline should not return attributes.
+        let waker = noop_waker_ref();
+        let mut cx = Context::from_waker(waker);
+        assert!(pipeline.poll_next_unpin(&mut cx).is_pending());
+
+        pipeline.handle_batch_commit(12);
+
+        // we should find some attributes now
+        assert!(pipeline.next().await.is_some());
+
+        // check the correctness of the last attribute.
+        let mut attribute = ScrollPayloadAttributes::default();
+        while let Some(a) = pipeline.next().await {
+            if a.payload_attributes.timestamp == 1696935657 {
+                attribute = a;
+                break
+            }
+        }
+        let expected = ScrollPayloadAttributes{
+            payload_attributes: PayloadAttributes{
+                timestamp: 1696935657,
+                suggested_fee_recipient: SCROLL_FEE_VAULT_ADDRESS,
+                ..Default::default()
+            },
+            transactions: Some(vec![bytes!("f88c8202658417d7840082a4f294530000000000000000000000000000000000000280a4bede39b500000000000000000000000000000000000000000000000000000001669aa2f583104ec4a07461e6555f927393ebdf5f183738450c3842bc3b86a1db7549d9bee21fadd0b1a06d7ba96897bd9fb8e838a327d3ca34be66da11955f10d1fb2264949071e9e8cd")]),
+            no_tx_pool: true,
+        };
+        assert_eq!(attribute, expected);
+
+        Ok(())
     }
 
     #[tokio::test]
