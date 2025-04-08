@@ -39,6 +39,7 @@ mod consensus;
 use consensus::Consensus;
 use rollup_node_primitives::BlockInfo;
 use rollup_node_providers::{ExecutionPayloadProvider, L1Provider};
+use scroll_db::Database;
 use scroll_derivation_pipeline::DerivationPipeline;
 
 /// The size of the event channel.
@@ -121,13 +122,13 @@ where
         network: NetworkManager,
         engine: EngineDriver<EC, P>,
         l1_provider: L1P,
+        database: Arc<Database>,
         l1_notification_rx: Option<Receiver<Arc<L1Notification>>>,
-        indexer: Indexer,
         forkchoice_state: ForkchoiceState,
         consensus: C,
         new_block_rx: Option<UnboundedReceiver<NewBlockWithPeer>>,
     ) -> Self {
-        let database = indexer.database();
+        let indexer = Indexer::new(database.clone());
         let derivation_pipeline = DerivationPipeline::new(l1_provider, database);
         Self {
             network,

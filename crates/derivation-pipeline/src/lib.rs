@@ -86,12 +86,7 @@ where
 
     /// Handles the next batch index in the batch index queue, pushing the future in the pipeline
     /// futures.
-    fn handle_next_batch<
-        F: FnMut(&mut FuturesOrdered<DerivationPipelineFuture>, DerivationPipelineFuture),
-    >(
-        &mut self,
-        mut queue_fut: F,
-    ) {
+    fn handle_next_batch(&mut self) -> Option<DerivationPipelineFuture> {
         let database = self.database.clone();
         let provider = self.l1_provider.clone();
 
@@ -105,8 +100,9 @@ where
 
                 derive(batch, provider).await.map_err(|err| (index, err))
             });
-            queue_fut(&mut self.pipeline_futures, fut);
+            return Some(fut);
         }
+        None
     }
 }
 
@@ -133,7 +129,9 @@ where
 
         // if the futures can still grow, handle the next batch.
         if this.pipeline_futures.len() < MAX_CONCURRENT_DERIVATION_PIPELINE_FUTS {
-            this.handle_next_batch(|queue, fut| queue.push_back(fut));
+            if let Some(fut) = this.handle_next_batch() {
+                this.pipeline_futures.push_back(fut)
+            }
         }
 
         // poll the futures and handle result.
@@ -147,7 +145,9 @@ where
                     tracing::error!(target: "scroll::node::derivation_pipeline", ?index, ?err, "failed to derive payload attributes for batch");
                     // retry polling the same batch index.
                     this.batch_index_queue.push_front(index);
-                    this.handle_next_batch(|queue, fut| queue.push_front(fut));
+                    if let Some(fut) = this.handle_next_batch() {
+                        this.pipeline_futures.push_front(fut)
+                    }
                 }
             }
         }

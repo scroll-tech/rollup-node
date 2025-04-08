@@ -23,6 +23,7 @@ reth-scroll-primitives.workspace = true
 
 # scroll
 scroll-alloy-rpc-types-engine.workspace = true
+scroll-db.workspace = true
 scroll-derivation-pipeline.workspace = true
 scroll-engine.workspace = true
 scroll-network.workspace = true

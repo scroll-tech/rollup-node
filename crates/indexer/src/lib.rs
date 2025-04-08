@@ -35,11 +35,6 @@ impl Indexer {
         Self { database, pending_futures: Default::default() }
     }
 
-    /// Returns a reference to the database used by the indexer.
-    pub fn database(&self) -> Arc<Database> {
-        self.database.clone()
-    }
-
     /// Handles an event from the L1.
     pub fn handle_l1_notification(&mut self, event: L1Notification) {
         let fut =

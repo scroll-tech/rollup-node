@@ -9547,6 +9547,7 @@ dependencies = [
  "scroll-alloy-network",
  "scroll-alloy-provider",
  "scroll-alloy-rpc-types-engine",
+ "scroll-db",
  "scroll-derivation-pipeline",
  "scroll-engine",
  "scroll-network",

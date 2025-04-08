@@ -10,7 +10,6 @@ use reth_rpc_builder::config::RethRpcServerConfig;
 use reth_scroll_chainspec::ScrollChainSpec;
 use reth_scroll_primitives::ScrollPrimitives;
 use reth_transaction_pool::{PoolTransaction, TransactionPool};
-use rollup_node_indexer::Indexer;
 use rollup_node_manager::{PoAConsensus, RollupNodeManager};
 use rollup_node_providers::{beacon_provider, DatabaseL1MessageProvider, OnlineL1Provider};
 use rollup_node_watcher::L1Watcher;
@@ -120,9 +119,6 @@ where
         // Wrap the database in an Arc
         let db = Arc::new(db);
 
-        // Spawn the indexer
-        let indexer = Indexer::new(db.clone());
-
         // Spawn the L1Watcher
         let l1_provider_args = self.config.l1_provider_args;
         let l1_notification_rx = if let Some(l1_rpc_url) = l1_provider_args.l1_rpc_url {
@@ -153,8 +149,8 @@ where
             scroll_network_manager,
             engine,
             l1_provider,
+            db,
             l1_notification_rx,
-            indexer,
             ForkchoiceState::genesis(
                 ctx.config().chain.chain.try_into().expect("must be a named chain"),
             ),

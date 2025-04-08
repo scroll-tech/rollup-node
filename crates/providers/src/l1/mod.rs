@@ -51,7 +51,7 @@ impl<L1P, BP> OnlineL1Provider<L1P, BP>
 where
     BP: BeaconProvider,
 {
-    /// Returns a new [`OnlineBeaconClient`] from the provided [`OnlineBeaconClient`], blob capacity
+    /// Returns a new [`OnlineL1Provider`] from the provided [`BeaconProvider`], blob capacity
     /// and [`L1MessageProvider`].
     pub async fn new(beacon_provider: BP, blob_capacity: usize, l1_message_provider: L1P) -> Self {
         let cache = Arc::new(Mutex::new(LruCache::new(
