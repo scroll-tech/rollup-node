@@ -84,7 +84,7 @@ fn get_codec_version(calldata: &[u8]) -> Result<u8, DecodingError> {
     const CODEC_VERSION_LEN: usize = 32;
     const CODEC_VERSION_OFFSET_END: usize = CODEC_VERSION_OFFSET_START + CODEC_VERSION_LEN;
     const HIGH_BYTES_MASK: U256 =
-        U256::from_limbs([u64::MAX, u64::MAX, u64::MAX, 0xffffffffffffff00]);
+        U256::from_limbs([0xffffffffffffff00, u64::MAX, u64::MAX, u64::MAX]);
 
     let version = calldata
         .get(CODEC_VERSION_OFFSET_START..CODEC_VERSION_OFFSET_END)
