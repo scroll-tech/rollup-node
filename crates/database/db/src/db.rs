@@ -127,6 +127,16 @@ mod test {
     }
 
     #[tokio::test]
+    async fn test_database_extra_data_seed() {
+        // Setup the test database.
+        let db = setup_test_db().await;
+
+        // db should contain the seeded data after migration.
+        let data = db.get_extra_data(0.into()).await.unwrap();
+        assert!(data.is_some());
+    }
+
+    #[tokio::test]
     async fn test_database_tx() {
         // Setup the test database.
         let db = setup_test_db().await;

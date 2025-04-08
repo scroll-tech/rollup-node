@@ -9518,7 +9518,6 @@ dependencies = [
  "reth-tasks",
  "reth-tracing",
  "reth-transaction-pool",
- "rollup-node-indexer",
  "rollup-node-manager",
  "rollup-node-providers",
  "rollup-node-watcher",

@@ -4,7 +4,7 @@ use alloy_primitives::{Bytes, B256};
 use sea_orm::{prelude::*, ActiveValue, TransactionTrait};
 use sea_orm_migration::{prelude::*, seaql_migrations::Relation};
 
-const EXTRA_DATA_FILE_PATH: LazyLock<PathBuf> = LazyLock::new(|| {
+static EXTRA_DATA_FILE_PATH: LazyLock<PathBuf> = LazyLock::new(|| {
     let manifest_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
     manifest_path.join("./migration-data/extra_data.csv")
 });

@@ -1,7 +1,8 @@
 use super::{models, DatabaseError};
 use crate::DatabaseConnectionProvider;
 
-use alloy_primitives::B256;
+use alloy_eips::{BlockId, BlockNumberOrTag};
+use alloy_primitives::{Bytes, B256};
 use futures::{Stream, StreamExt};
 use rollup_node_primitives::{BatchCommitData, L1MessageWithBlockNumber};
 use sea_orm::{ActiveModelTrait, ColumnTrait, DbErr, EntityTrait, QueryFilter, Set};
@@ -124,6 +125,24 @@ pub trait DatabaseOperations: DatabaseConnectionProvider {
             .stream(self.get_connection())
             .await?
             .map(|res| res.map(Into::into)))
+    }
+
+    /// Get the extra data for the provided [`BlockId`].
+    async fn get_extra_data(&self, block_id: BlockId) -> Result<Option<Bytes>, DatabaseError> {
+        let filter = match block_id {
+            BlockId::Hash(hash) => {
+                models::extra_data::Column::BlockHash.eq(hash.block_hash.to_vec())
+            }
+            BlockId::Number(BlockNumberOrTag::Number(number)) => {
+                models::extra_data::Column::BlockNumber.eq(number as i64)
+            }
+            x => return Err(DatabaseError::ExtraDataNotFound(x)),
+        };
+        Ok(models::extra_data::Entity::find()
+            .filter(filter)
+            .one(self.get_connection())
+            .await
+            .map(|x| x.map(|x| x.extra_data()))?)
     }
 }
 

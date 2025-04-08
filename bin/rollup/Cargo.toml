@@ -48,7 +48,6 @@ scroll-network.workspace = true
 scroll-wire.workspace = true
 
 # rollup-node
-rollup-node-indexer.workspace = true
 rollup-node-manager.workspace = true
 rollup-node-providers.workspace = true
 rollup-node-watcher.workspace = true
