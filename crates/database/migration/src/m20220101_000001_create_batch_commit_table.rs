@@ -20,7 +20,7 @@ impl MigrationTrait for Migration {
                     .col(big_unsigned(BatchCommit::BlockTimestamp))
                     .col(binary(BatchCommit::Calldata))
                     .col(binary_len_null(BatchCommit::BlobHash, HASH_LENGTH))
-                    .col(boolean_null(BatchCommit::FinalizedBlockNumber))
+                    .col(big_unsigned_null(BatchCommit::FinalizedBlockNumber))
                     .to_owned(),
             )
             .await

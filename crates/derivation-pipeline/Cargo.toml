@@ -16,7 +16,6 @@ alloy-primitives = { workspace = true, default-features = false }
 alloy-rpc-types-engine = { workspace = true, default-features = false }
 
 # scroll
-reth-scroll-chainspec = { workspace = true, default-features = false }
 scroll-alloy-consensus = { workspace = true, default-features = false }
 scroll-alloy-rpc-types-engine.workspace = true
 
@@ -24,13 +23,17 @@ scroll-alloy-rpc-types-engine.workspace = true
 rollup-node-primitives.workspace = true
 rollup-node-providers.workspace = true
 scroll-codec.workspace = true
+scroll-db.workspace = true
 
 # misc
+futures.workspace = true
 thiserror.workspace = true
+tracing.workspace = true
 
 [dev-dependencies]
 async-trait.workspace = true
 eyre.workspace = true
+scroll-db = { workspace = true, features = ["test-utils"] }
 scroll-codec = { workspace = true, features = ["test-utils"] }
 tokio = { workspace = true, features = ["macros"] }
 
@@ -42,7 +45,7 @@ std = [
     "alloy-primitives/std",
     "alloy-rpc-types-engine/std",
     "alloy-eips/std",
-    "reth-scroll-chainspec/std",
     "scroll-alloy-consensus/std",
     "scroll-alloy-rpc-types-engine/std",
+    "futures/std",
 ]

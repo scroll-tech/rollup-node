@@ -54,7 +54,7 @@ pub trait L1MessageProvider: L1MessageWithBlockNumberProvider {
 
     /// Returns the L1 message at the current cursor.
     /// This method does not advance the cursor.
-    async fn peek_l1_message(&self) -> Result<Option<TxL1Message>, Self::Error> {
+    async fn get_l1_message(&self) -> Result<Option<TxL1Message>, Self::Error> {
         let message = self.get_l1_message_with_block_number().await?;
         Ok(message.map(|message| message.transaction))
     }
@@ -63,3 +63,21 @@ pub trait L1MessageProvider: L1MessageWithBlockNumberProvider {
 /// A blanket implementation of [`L1MessageProvider`] for any type that implements
 /// [`L1MessageWithBlockNumberProvider`].
 impl<T> L1MessageProvider for T where T: L1MessageWithBlockNumberProvider + Sync {}
+
+pub trait L1MessageProviderWithPredicate: L1MessageWithBlockNumberProvider {
+    async fn next_l1_message_with_predicate(
+        &self,
+        predicate: impl Fn(&L1MessageWithBlockNumber, u64) -> bool + Send,
+    ) -> Result<Option<L1MessageWithBlockNumber>, Self::Error> {
+        loop {
+            let message = self.next_l1_message_with_block_number().await?;
+            if let Some(message) = message {
+                if predicate(&message) {
+                    return Ok(Some(message));
+                }
+            } else {
+                return Ok(None);
+            }
+        }
+    }
+}

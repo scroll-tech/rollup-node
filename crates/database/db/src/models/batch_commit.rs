@@ -14,7 +14,7 @@ pub struct Model {
     block_timestamp: i64,
     calldata: Vec<u8>,
     blob_hash: Option<Vec<u8>>,
-    finalized_block_number: Option<i64>,
+    pub(crate) finalized_block_number: Option<i64>,
 }
 
 /// The relation for the batch input model.

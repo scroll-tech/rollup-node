@@ -11,11 +11,13 @@ exclude.workspace = true
 alloy-chains.workspace = true
 alloy-provider.workspace = true
 alloy-rpc-types-engine.workspace = true
+alloy-rpc-client.workspace = true
+alloy-transport.workspace = true
 
 # scroll-alloy
 scroll-alloy-consensus.workspace = true
-scroll-alloy-rpc-types-engine.workspace = true
 scroll-alloy-provider.workspace = true
+scroll-alloy-rpc-types-engine.workspace = true
 
 # reth
 reth-cli-util = { git = "https://github.com/scroll-tech/reth.git", branch = "feat/sequencer-rn-integration" }
@@ -39,15 +41,16 @@ reth-scroll-cli = { git = "https://github.com/scroll-tech/reth.git", branch = "f
 reth-scroll-engine-primitives = { git = "https://github.com/scroll-tech/reth.git", branch = "feat/sequencer-rn-integration" }
 reth-scroll-node = { workspace = true, features = ["skip-state-root-validation"] }
 reth-scroll-primitives = { workspace = true }
-scroll-wire.workspace = true
-scroll-network.workspace = true
-scroll-engine = { workspace = true, features = ["test-utils"] }
 scroll-db = { workspace = true }
+scroll-engine = { workspace = true, features = ["test-utils"] }
 scroll-migration.workspace = true
+scroll-network.workspace = true
+scroll-wire.workspace = true
 
 # rollup-node
-rollup-node-manager.workspace = true
 rollup-node-indexer.workspace = true
+rollup-node-manager.workspace = true
+rollup-node-providers.workspace = true
 rollup-node-watcher.workspace = true
 
 # misc
@@ -72,6 +75,7 @@ reth-tracing = { git = "https://github.com/scroll-tech/reth.git", branch = "feat
 
 # misc
 futures.workspace = true
+reqwest.workspace = true
 serde_json = { version = "1.0.94", default-features = false, features = ["alloc"] }
 tokio = { workspace = true, features = ["full"] }
 
@@ -85,11 +89,13 @@ test-utils = [
     "scroll-engine/test-utils",
     "reth-payload-builder/test-utils",
     "reth-payload-builder/test-utils",
+    "reth-scroll-node/test-utils",
     "rollup-node-watcher/test-utils",
     "scroll-db/test-utils",
     "scroll-db/test-utils",
     "reth-scroll-node/test-utils",
     "reth-scroll-node/test-utils",
+    "rollup-node-providers/test-utils",
 ]
 serde = [
     "alloy-primitives/serde",

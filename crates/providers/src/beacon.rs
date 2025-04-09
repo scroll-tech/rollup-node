@@ -1,9 +1,41 @@
-//! Contains an implementation of a Beacon client.
+//! Exposes the [`BeaconProvider`] trait allowing to retrieve information from the Beacon chain.
 //! Credit to <https://github.com/op-rs/kona/tree/main/crates/providers/providers-alloy>
+
+use crate::L1ProviderError;
+use std::{format, sync::Arc, vec::Vec};
 
 use alloy_rpc_types_beacon::sidecar::{BeaconBlobBundle, BlobData};
 use reqwest::Client;
-use std::{format, vec::Vec};
+
+/// Returns a Beacon provider implementation, yielding a [`crate::test_utils::MockBeaconProvider`]
+/// when the test-utils feature is activated.
+pub fn beacon_provider(
+    _base: String,
+) -> Arc<dyn BeaconProvider<Error = reqwest::Error> + Send + Sync> {
+    #[cfg(feature = "test-utils")]
+    {
+        Arc::new(crate::test_utils::MockBeaconProvider::default())
+    }
+    #[cfg(not(feature = "test-utils"))]
+    {
+        Arc::new(OnlineBeaconClient::new_http(_base))
+    }
+}
+
+/// An implementation of the trait can provide information related to the Beacon chain.
+#[async_trait::async_trait]
+#[auto_impl::auto_impl(&, Arc)]
+pub trait BeaconProvider {
+    /// The error type for the provider.
+    type Error: Into<L1ProviderError> + std::fmt::Debug;
+
+    /// Returns the reduced configuration data for the Beacon client.
+    async fn config_spec(&self) -> Result<APIResponse<ReducedConfigData>, Self::Error>;
+    /// Returns the Beacon genesis information.
+    async fn beacon_genesis(&self) -> Result<APIResponse<ReducedGenesisData>, Self::Error>;
+    /// Returns the blobs for the provided slot.
+    async fn blobs(&self, slot: u64) -> Result<Vec<BlobData>, Self::Error>;
+}
 
 /// The config spec engine api method.
 const SPEC_METHOD: &str = "eth/v1/config/spec";
@@ -59,21 +91,24 @@ impl OnlineBeaconClient {
     }
 }
 
-impl OnlineBeaconClient {
+#[async_trait::async_trait]
+impl BeaconProvider for OnlineBeaconClient {
+    type Error = reqwest::Error;
+
     /// Returns the reduced configuration data for the Beacon client.
-    pub async fn config_spec(&self) -> Result<APIResponse<ReducedConfigData>, reqwest::Error> {
+    async fn config_spec(&self) -> Result<APIResponse<ReducedConfigData>, Self::Error> {
         let first = self.inner.get(format!("{}/{}", self.base, SPEC_METHOD)).send().await?;
         first.json::<APIResponse<ReducedConfigData>>().await
     }
 
     /// Returns the Beacon genesis information.
-    pub async fn beacon_genesis(&self) -> Result<APIResponse<ReducedGenesisData>, reqwest::Error> {
+    async fn beacon_genesis(&self) -> Result<APIResponse<ReducedGenesisData>, Self::Error> {
         let first = self.inner.get(format!("{}/{}", self.base, GENESIS_METHOD)).send().await?;
         first.json::<APIResponse<ReducedGenesisData>>().await
     }
 
     /// Returns the blobs for the provided slot.
-    pub async fn blobs(&self, slot: u64) -> Result<Vec<BlobData>, reqwest::Error> {
+    async fn blobs(&self, slot: u64) -> Result<Vec<BlobData>, Self::Error> {
         let raw_response = self
             .inner
             .get(format!("{}/{}/{}", self.base, SIDECARS_METHOD_PREFIX, slot))
@@ -93,6 +128,7 @@ mod tests {
     const BEACON_CLIENT_URL: &str = "https://eth-beacon-chain.drpc.org/rest/";
 
     #[tokio::test]
+    #[ignore]
     async fn test_should_return_genesis() -> eyre::Result<()> {
         let client = OnlineBeaconClient::new_http(BEACON_CLIENT_URL.to_string());
         let genesis = client.beacon_genesis().await?;
@@ -103,6 +139,7 @@ mod tests {
     }
 
     #[tokio::test]
+    #[ignore]
     async fn test_should_return_config() -> eyre::Result<()> {
         let client = OnlineBeaconClient::new_http(BEACON_CLIENT_URL.to_string());
         let config = client.config_spec().await?;

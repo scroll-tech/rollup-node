@@ -13,7 +13,7 @@ workspace = true
 # alloy
 alloy-eips = { workspace = true, features = ["kzg"] }
 alloy-primitives.workspace = true
-alloy-rpc-types-beacon = { version = "0.13.0", default-features = false }
+alloy-rpc-types-beacon = "0.13"
 alloy-rpc-types-engine.workspace = true
 alloy-serde = { version = "0.13.0", default-features = false }
 
@@ -28,11 +28,15 @@ rollup-node-primitives.workspace = true
 async-trait.workspace = true
 auto_impl.workspace = true
 lru = "0.13.0"
-reqwest = { version = "0.12", features = ["json"] }
+reqwest = { workspace = true, features = ["json"] }
 serde = { version = "1.0", features = ["derive"] }
 thiserror.workspace = true
 tokio = { workspace = true, default-features = false }
 
 [dev-dependencies]
 eyre.workspace = true
+scroll-db = { workspace = true, features = ["test-utils"] }
 tokio = { workspace = true, features = ["macros"] }
+
+[features]
+test-utils = ["scroll-db/test-utils"]

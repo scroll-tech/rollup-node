@@ -45,12 +45,16 @@ impl From<DatabaseConnection> for Database {
 
 #[cfg(test)]
 mod test {
-    use crate::{operations::DatabaseOperations, test_utils::setup_test_db};
+    use crate::{
+        models, operations::DatabaseOperations, test_utils::setup_test_db,
+        DatabaseConnectionProvider,
+    };
 
     use arbitrary::{Arbitrary, Unstructured};
     use futures::StreamExt;
     use rand::Rng;
     use rollup_node_primitives::{BatchCommitData, L1MessageWithBlockNumber};
+    use sea_orm::{ColumnTrait, EntityTrait, QueryFilter};
 
     #[tokio::test]
     async fn test_database_round_trip_batch_commit() {
@@ -62,14 +66,44 @@ mod test {
         rand::rng().fill(bytes.as_mut_slice());
         let mut u = Unstructured::new(&bytes);
 
-        // Generate a random BatchInputV1.
+        // Generate a random BatchCommitData.
         let batch_commit = BatchCommitData::arbitrary(&mut u).unwrap();
 
-        // Round trip the BatchInput through the database.
+        // Round trip the BatchCommitData through the database.
         db.insert_batch(batch_commit.clone()).await.unwrap();
         let batch_commit_from_db =
             db.get_batch_by_index(batch_commit.index).await.unwrap().unwrap();
         assert_eq!(batch_commit, batch_commit_from_db);
+    }
+
+    #[tokio::test]
+    async fn test_database_finalize_batch_commit() {
+        // Set up the test database.
+        let db = setup_test_db().await;
+
+        // Generate unstructured bytes.
+        let mut bytes = [0u8; 1024];
+        rand::rng().fill(bytes.as_mut_slice());
+        let mut u = Unstructured::new(&bytes);
+
+        // Generate a random BatchCommitData.
+        let batch_commit = BatchCommitData::arbitrary(&mut u).unwrap();
+
+        // Store the batch and finalize it.
+        let finalized_block_number = u64::arbitrary(&mut u).unwrap();
+        db.insert_batch(batch_commit.clone()).await.unwrap();
+        db.finalize_batch(batch_commit.hash, finalized_block_number).await.unwrap();
+
+        // Verify the finalized_block_number is correctly updated.
+        let finalized_block_number_from_db = models::batch_commit::Entity::find()
+            .filter(models::batch_commit::Column::Hash.eq(batch_commit.hash.to_vec()))
+            .one(db.get_connection())
+            .await
+            .unwrap()
+            .unwrap()
+            .finalized_block_number
+            .unwrap();
+        assert_eq!(finalized_block_number, finalized_block_number_from_db as u64);
     }
 
     #[tokio::test]
