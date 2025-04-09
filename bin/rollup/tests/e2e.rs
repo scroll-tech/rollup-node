@@ -14,7 +14,7 @@ use reth_scroll_chainspec::ScrollChainSpec;
 use reth_scroll_engine_primitives::ScrollPayloadBuilderAttributes;
 use reth_scroll_node::{ScrollNetworkPrimitives, ScrollNode};
 use reth_tasks::TaskManager;
-use rollup_node::ScrollRollupNodeArgs;
+use rollup_node::{L1ProviderArgs, ScrollRollupNodeArgs};
 use scroll_alloy_rpc_types_engine::ScrollPayloadAttributes;
 use scroll_network::{NewBlockWithPeer, SCROLL_MAINNET};
 use scroll_wire::ScrollWireConfig;
@@ -136,7 +136,14 @@ pub async fn build_bridge_node(
         enable_eth_scroll_wire_bridge: true,
         enable_scroll_wire: true,
         database_path: Some(PathBuf::from("sqlite::memory:")),
-        l1_rpc_url: None,
+        l1_provider_args: L1ProviderArgs {
+            l1_rpc_url: None,
+            // <https://docs.arbitrum.io/run-arbitrum-node/l1-ethereum-beacon-chain-rpc-providers>
+            beacon_rpc_url: reqwest::Url::parse("https://eth-beacon-chain.drpc.org/rest/")?,
+            compute_units_per_second: 100,
+            max_retries: 10,
+            initial_backoff: 100,
+        },
         engine_api_url: None,
     };
     let node = ScrollNode;

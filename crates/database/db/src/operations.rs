@@ -32,7 +32,7 @@ pub trait DatabaseOperations: DatabaseConnectionProvider {
             .one(self.get_connection())
             .await?
         {
-            tracing::trace!(target: "scroll::db", batch_hash = ?batch_hash, block_number, "Finalizing batch input in database.");
+            tracing::trace!(target: "scroll::db", batch_hash = ?batch_hash, block_number, "Finalizing batch commit in database.");
             let mut batch: models::batch_commit::ActiveModel = batch.into();
             batch.finalized_block_number = Set(Some(block_number as i64));
             batch.update(self.get_connection()).await?;

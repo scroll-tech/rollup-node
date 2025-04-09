@@ -4,12 +4,13 @@ use alloy_rpc_types_engine::{
     ExecutionPayload, ExecutionPayloadV1, ForkchoiceState as AlloyForkchoiceState,
     PayloadStatusEnum,
 };
-use futures::{stream::FuturesOrdered, StreamExt};
+use futures::{stream::FuturesOrdered, FutureExt, StreamExt};
 use reth_tokio_util::{EventSender, EventStream};
-use rollup_node_indexer::Indexer;
+use rollup_node_indexer::{Indexer, IndexerEvent};
 use rollup_node_watcher::L1Notification;
 use scroll_alloy_network::Scroll as ScrollNetwork;
 use scroll_alloy_provider::ScrollEngineApi;
+use scroll_alloy_rpc_types_engine::ScrollPayloadAttributes;
 use scroll_engine::{EngineDriver, EngineDriverError, ForkchoiceState};
 use scroll_network::{
     BlockImportError, BlockImportOutcome, BlockValidation, BlockValidationError, NetworkManager,
@@ -17,6 +18,9 @@ use scroll_network::{
 };
 use scroll_wire::NewBlock;
 use std::{
+    collections::VecDeque,
+    fmt,
+    fmt::{Debug, Formatter},
     future::Future,
     pin::Pin,
     sync::Arc,
@@ -26,14 +30,17 @@ use tokio::sync::mpsc::{Receiver, UnboundedReceiver};
 use tokio_stream::wrappers::{ReceiverStream, UnboundedReceiverStream};
 use tracing::{error, trace};
 
-mod event;
 pub use event::RollupEvent;
+mod event;
 
-mod consensus;
-use consensus::Consensus;
 pub use consensus::PoAConsensus;
+mod consensus;
+
+use consensus::Consensus;
 use rollup_node_primitives::BlockInfo;
-use rollup_node_providers::ExecutionPayloadProvider;
+use rollup_node_providers::{ExecutionPayloadProvider, L1Provider};
+use scroll_db::Database;
+use scroll_derivation_pipeline::DerivationPipeline;
 
 /// The size of the event channel.
 const EVENT_CHANNEL_SIZE: usize = 100;
@@ -41,6 +48,10 @@ const EVENT_CHANNEL_SIZE: usize = 100;
 /// A future that resolves to a tuple of the block info and the block import outcome.
 type PendingBlockImportFuture =
     Pin<Box<dyn Future<Output = (Option<BlockInfo>, Option<BlockImportOutcome>)> + Send>>;
+
+/// A future that resolves to a tuple of the block info and the block import outcome.
+type EngineDriverFuture =
+    Pin<Box<dyn Future<Output = Result<BlockInfo, EngineDriverError>> + Send>>;
 
 /// The main manager for the rollup node.
 ///
@@ -55,12 +66,13 @@ type PendingBlockImportFuture =
 /// - `forkchoice_state`: The forkchoice state of the rollup node.
 /// - `pending_block_imports`: A collection of pending block imports.
 /// - `event_sender`: An event sender for sending events to subscribers of the rollup node manager.
-#[derive(Debug)]
-pub struct RollupNodeManager<C, EC, P> {
+pub struct RollupNodeManager<C, EC, P, L1P> {
     /// The network manager that manages the scroll p2p network.
     network: NetworkManager,
-    ///  The engine driver used to communicate with the engine.
+    /// The engine driver used to communicate with the engine.
     engine: Arc<EngineDriver<EC, P>>,
+    /// The derivation pipeline, used to derive payload attributes from batches.
+    derivation_pipeline: DerivationPipeline<L1P>,
     /// A receiver for [`L1Notification`]s from the [`rollup_node_watcher::L1Watcher`].
     l1_notification_rx: Option<ReceiverStream<Arc<L1Notification>>>,
     /// An indexer used to index data for the rollup node.
@@ -73,35 +85,62 @@ pub struct RollupNodeManager<C, EC, P> {
     forkchoice_state: ForkchoiceState,
     /// A collection of pending block imports.
     pending_block_imports: FuturesOrdered<PendingBlockImportFuture>,
+    /// A collection of pending engine driver tasks.
+    pending_engine_tasks: VecDeque<EngineDriverFuture>,
     /// An event sender for sending events to subscribers of the rollup node manager.
     event_sender: Option<EventSender<RollupEvent>>,
 }
 
-impl<C, EC, P> RollupNodeManager<C, EC, P>
+impl<C: Debug, EC: Debug, P: Debug, L1P: Debug> Debug for RollupNodeManager<C, EC, P, L1P> {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        f.debug_struct("RollupNodeManager")
+            .field("network", &self.network)
+            .field("engine", &self.engine)
+            .field("derivation_pipeline", &self.derivation_pipeline)
+            .field("l1_notification_rx", &self.l1_notification_rx)
+            .field("indexer", &self.indexer)
+            .field("consensus", &self.consensus)
+            .field("new_block_rx", &self.new_block_rx)
+            .field("forkchoice_state", &self.forkchoice_state)
+            .field("pending_block_imports", &self.pending_block_imports)
+            .field("pending_engine_tasks", &"[ ... ]")
+            .field("event_sender", &self.event_sender)
+            .finish()
+    }
+}
+
+impl<C, EC, P, L1P> RollupNodeManager<C, EC, P, L1P>
 where
     C: Consensus + Unpin,
     EC: ScrollEngineApi<ScrollNetwork> + Unpin + Sync + Send + 'static,
     P: ExecutionPayloadProvider + Unpin + Send + Sync + 'static,
+    L1P: L1Provider + Clone + Send + Sync + 'static,
 {
     /// Create a new [`RollupNodeManager`] instance.
+    #[allow(clippy::too_many_arguments)]
     pub fn new(
         network: NetworkManager,
         engine: EngineDriver<EC, P>,
+        l1_provider: L1P,
+        database: Arc<Database>,
         l1_notification_rx: Option<Receiver<Arc<L1Notification>>>,
-        indexer: Indexer,
         forkchoice_state: ForkchoiceState,
         consensus: C,
         new_block_rx: Option<UnboundedReceiver<NewBlockWithPeer>>,
     ) -> Self {
+        let indexer = Indexer::new(database.clone());
+        let derivation_pipeline = DerivationPipeline::new(l1_provider, database);
         Self {
             network,
             engine: Arc::new(engine),
+            derivation_pipeline,
             l1_notification_rx: l1_notification_rx.map(Into::into),
             indexer,
             consensus,
             new_block_rx: new_block_rx.map(Into::into),
             forkchoice_state,
             pending_block_imports: FuturesOrdered::new(),
+            pending_engine_tasks: VecDeque::new(),
             event_sender: None,
         }
     }
@@ -191,6 +230,38 @@ where
         cx.waker().wake_by_ref();
     }
 
+    /// Handles a [`ScrollPayloadAttributes`] by initiating a task sending the attribute to the EN
+    /// via the [`EngineDriver`].
+    fn handle_payload_attribute(&mut self, attribute: ScrollPayloadAttributes) {
+        let engine = self.engine.clone();
+        let safe_block_info = *self.forkchoice_state.safe_block_info();
+        let fcs = self.get_alloy_fcs();
+
+        let fut = Box::pin(async move {
+            engine
+                .handle_payload_attributes(safe_block_info, fcs, attribute)
+                .await
+                .map(|(info, _)| info)
+        });
+        self.pending_engine_tasks.push_back(fut);
+    }
+
+    /// Handles a [`EngineDriverFuture`] by polling it and updating the forkchoice state if it
+    /// resolves.
+    fn handle_engine_driver_future(&mut self, mut fut: EngineDriverFuture, cx: &mut Context<'_>) {
+        match fut.poll_unpin(cx) {
+            Poll::Ready(result) => match result {
+                Ok(block_info) => self.forkchoice_state.update_safe_block_info(block_info),
+                Err(err) => {
+                    error!(target: "scroll::node::manager", ?err, "Engine driver failed to handle attribute")
+                }
+            },
+            Poll::Pending => {
+                self.pending_engine_tasks.push_front(fut);
+            }
+        }
+    }
+
     const fn get_alloy_fcs(&self) -> AlloyForkchoiceState {
         self.forkchoice_state.get_alloy_fcs()
     }
@@ -201,6 +272,14 @@ where
     fn handle_network_manager_event(&mut self, event: NetworkManagerEvent, cx: &mut Context<'_>) {
         match event {
             NetworkManagerEvent::NewBlock(block) => self.handle_new_block(block, cx),
+        }
+    }
+
+    /// Handles an indexer event.
+    fn handle_indexer_event(&mut self, event: IndexerEvent) {
+        trace!(target: "scroll::node::manager", "Received indexer event: {:?}", event);
+        if let IndexerEvent::BatchCommitIndexed(index) = event {
+            self.derivation_pipeline.handle_batch_commit(index)
         }
     }
 
@@ -229,11 +308,12 @@ where
     }
 }
 
-impl<C, EC, P> Future for RollupNodeManager<C, EC, P>
+impl<C, EC, P, L1P> Future for RollupNodeManager<C, EC, P, L1P>
 where
     C: Consensus + Unpin,
     EC: ScrollEngineApi<ScrollNetwork> + Unpin + Sync + Send + 'static,
     P: ExecutionPayloadProvider + Unpin + Send + Sync + 'static,
+    L1P: L1Provider + Clone + Unpin + Send + Sync + 'static,
 {
     type Output = ();
 
@@ -254,9 +334,24 @@ where
             this.handle_l1_notification((*event).clone());
         }
 
-        // Drain all Indexer events
-        while let Poll::Ready(Some(event)) = this.indexer.poll_next_unpin(cx) {
-            tracing::trace!(target: "scroll::node::manager", "Received indexer event: {:?}", event);
+        // Drain all Indexer events.
+        while let Poll::Ready(Some(result)) = this.indexer.poll_next_unpin(cx) {
+            match result {
+                Ok(event) => this.handle_indexer_event(event),
+                Err(err) => {
+                    error!(target: "scroll::node::manager", ?err, "Error occurred at indexer level")
+                }
+            }
+        }
+
+        // Poll Derivation Pipeline and push attribute in queue if any.
+        while let Poll::Ready(Some(attribute)) = this.derivation_pipeline.poll_next_unpin(cx) {
+            this.handle_payload_attribute(attribute)
+        }
+
+        // Poll Engine Driver tasks.
+        if let Some(fut) = this.pending_engine_tasks.pop_front() {
+            this.handle_engine_driver_future(fut, cx);
         }
 
         // Handle blocks received from the eth-wire protocol.

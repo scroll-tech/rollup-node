@@ -1,7 +1,7 @@
 pub(crate) mod blob;
 pub(crate) mod message;
 
-use crate::{beacon_client::OnlineBeaconClient, l1::message::L1MessageProvider, L1BlobProvider};
+use crate::{beacon::BeaconProvider, l1::message::L1MessageProvider, L1BlobProvider};
 use std::{num::NonZeroUsize, sync::Arc};
 
 use alloy_eips::eip4844::{Blob, BlobTransactionSidecarItem};
@@ -18,9 +18,9 @@ impl<T> L1Provider for T where T: L1BlobProvider + L1MessageProvider {}
 /// An error occurring at the [`L1Provider`].
 #[derive(Debug, thiserror::Error)]
 pub enum L1ProviderError {
-    /// Invalid timestamp for slot.
-    #[error("Beacon client error: {0}")]
-    BeaconClient(#[from] reqwest::Error),
+    /// Error at the beacon provider.
+    #[error("Beacon provider error: {0}")]
+    BeaconProvider(#[from] reqwest::Error),
     /// Invalid timestamp for slot.
     #[error("invalid block timestamp: genesis {0}, provided {1}")]
     InvalidBlockTimestamp(u64, u64),
@@ -33,38 +33,41 @@ pub enum L1ProviderError {
 }
 
 /// An online implementation of the [`L1Provider`] trait.
-#[derive(Debug)]
-pub struct OnlineL1Provider<P> {
-    /// The Beacon client.
-    beacon_client: OnlineBeaconClient,
+#[derive(Debug, Clone)]
+pub struct OnlineL1Provider<L1P, BP> {
+    /// The beacon provider.
+    beacon_provider: BP,
     /// The cache for blobs from similar blocks.
     cache: Arc<Mutex<LruCache<B256, Arc<Blob>>>>,
     /// The L1 message provider
-    l1_message_provider: P,
+    l1_message_provider: L1P,
     /// The genesis timestamp for the Beacon chain.
     genesis_timestamp: u64,
     /// The slot interval for the Beacon chain.
     slot_interval: u64,
 }
 
-impl<P> OnlineL1Provider<P> {
-    /// Returns a new [`OnlineBeaconClient`] from the provided [`OnlineBeaconClient`], blob capacity
+impl<L1P, BP> OnlineL1Provider<L1P, BP>
+where
+    BP: BeaconProvider,
+{
+    /// Returns a new [`OnlineL1Provider`] from the provided [`BeaconProvider`], blob capacity
     /// and [`L1MessageProvider`].
-    pub async fn new(
-        client: OnlineBeaconClient,
-        blob_capacity: usize,
-        l1_message_provider: P,
-    ) -> Self {
+    pub async fn new(beacon_provider: BP, blob_capacity: usize, l1_message_provider: L1P) -> Self {
         let cache = Arc::new(Mutex::new(LruCache::new(
             NonZeroUsize::new(blob_capacity).expect("cache requires non-zero capacity"),
         )));
-        let config =
-            client.config_spec().await.expect("failed to fetch Beacon chain configuration");
-        let genesis =
-            client.beacon_genesis().await.expect("failed to fetch Beacon chain genesis info");
+        let config = beacon_provider
+            .config_spec()
+            .await
+            .expect("failed to fetch Beacon chain configuration");
+        let genesis = beacon_provider
+            .beacon_genesis()
+            .await
+            .expect("failed to fetch Beacon chain genesis info");
 
         Self {
-            beacon_client: client,
+            beacon_provider,
             cache,
             l1_message_provider,
             genesis_timestamp: genesis.data.genesis_time,
@@ -85,7 +88,7 @@ impl<P> OnlineL1Provider<P> {
 }
 
 #[async_trait::async_trait]
-impl<P: Sync> L1BlobProvider for OnlineL1Provider<P> {
+impl<L1P: Sync, BP: BeaconProvider + Sync> L1BlobProvider for OnlineL1Provider<L1P, BP> {
     /// Returns the requested blob corresponding to the passed hash.
     async fn blob(
         &self,
@@ -103,9 +106,10 @@ impl<P: Sync> L1BlobProvider for OnlineL1Provider<P> {
         // query the blobs with the client, return target blob and store all others in cache.
         let slot = self.slot(block_timestamp)?;
         let mut blobs = self
-            .beacon_client
+            .beacon_provider
             .blobs(slot)
-            .await?
+            .await
+            .map_err(Into::into)?
             .into_iter()
             .map(|blob| BlobTransactionSidecarItem {
                 index: blob.index,
@@ -134,18 +138,18 @@ impl<P: Sync> L1BlobProvider for OnlineL1Provider<P> {
 }
 
 #[async_trait::async_trait]
-impl<P: L1MessageProvider + Sync> L1MessageProvider for OnlineL1Provider<P> {
-    type Error = <P>::Error;
+impl<L1P: L1MessageProvider + Sync, BP: Sync> L1MessageProvider for OnlineL1Provider<L1P, BP> {
+    type Error = <L1P>::Error;
 
     async fn next_l1_message(&self) -> Result<Option<TxL1Message>, Self::Error> {
         self.l1_message_provider.next_l1_message().await
     }
 
-    fn set_index_cursor(&mut self, index: u64) {
+    fn set_index_cursor(&self, index: u64) {
         self.l1_message_provider.set_index_cursor(index)
     }
 
-    fn set_hash_cursor(&mut self, hash: B256) {
+    fn set_hash_cursor(&self, hash: B256) {
         self.l1_message_provider.set_hash_cursor(hash)
     }
 }

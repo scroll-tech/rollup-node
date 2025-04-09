@@ -12,7 +12,7 @@ workspace = true
 [dependencies]
 # alloy
 alloy-consensus.workspace = true
-alloy-eips = { workspace = true, optional = true }
+alloy-eips.workspace = true
 alloy-json-rpc.workspace = true
 alloy-network.workspace = true
 alloy-primitives.workspace = true
@@ -48,7 +48,7 @@ scroll-l1 = { workspace = true, features = ["test-utils"] }
 tracing-subscriber = "0.3"
 
 [features]
-test-utils = ["arbitrary", "alloy-eips", "rand", "scroll-l1/test-utils"]
+test-utils = ["arbitrary", "rand", "scroll-l1/test-utils"]
 arbitrary = [
     "dep:arbitrary",
     "alloy-consensus/arbitrary",

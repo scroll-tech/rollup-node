@@ -110,7 +110,7 @@ where
         )
     )]
     pub async fn handle_payload_attributes(
-        &mut self,
+        &self,
         safe_block_info: BlockInfo,
         mut fcs: ForkchoiceState,
         mut payload_attributes: <ScrollEngineTypes as PayloadTypes>::PayloadAttributes,
