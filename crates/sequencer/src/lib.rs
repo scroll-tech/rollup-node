@@ -1,15 +1,24 @@
 //! This library contains the sequencer, which is responsible for sequencing transactions and
 //! producing new blocks.
 
-use std::{future::Future, pin::Pin, sync::Arc};
+use std::{
+    future::Future,
+    pin::Pin,
+    sync::Arc,
+    time::{SystemTime, UNIX_EPOCH},
+};
 
+use alloy_eips::eip2718::Encodable2718;
+use alloy_primitives::Address;
 use alloy_rpc_types_engine::{ForkchoiceState, PayloadAttributes};
 use futures::Stream;
 use reth_scroll_primitives::ScrollBlock;
-use rollup_node_providers::ExecutionPayloadProvider;
+use rollup_node_providers::{
+    DatabaseL1MessageDelayProvider, ExecutionPayloadProvider, L1MessageProvider,
+};
 use scroll_alloy_provider::ScrollEngineApi;
 use scroll_alloy_rpc_types_engine::ScrollPayloadAttributes;
-use scroll_db::{Database, DatabaseOperations};
+use scroll_db::{Database, DatabaseConnectionProvider, DatabaseOperations};
 use scroll_engine::EngineDriver;
 use std::task::{Context, Poll};
 
@@ -21,11 +30,13 @@ pub type PayloadBuildingJobFuture =
     Pin<Box<dyn Future<Output = Result<(ScrollBlock, u64), SequencerError>> + Send>>;
 
 /// The sequencer is responsible for sequencing transactions and producing new blocks.
-pub struct Sequencer<EC, P> {
+pub struct Sequencer<DB, EC, P> {
     /// A reference to the database
-    database: Arc<Database>,
+    database: Arc<DatabaseL1MessageDelayProvider<DB>>,
     /// The engine API
     engine: Arc<EngineDriver<EC, P>>,
+    /// The fee recipient
+    fee_recipient: Address,
     // TODO: The configuration below should be removed and instead replaced by a Provider type that
     // can yield L1 messages at the appropriate depth.
     /// The current L1 block number
@@ -42,15 +53,17 @@ pub struct Sequencer<EC, P> {
     payload_building_job: Option<PayloadBuildingJobFuture>,
 }
 
-impl<EC, P> Sequencer<EC, P>
+impl<DB, EC, P> Sequencer<DB, EC, P>
 where
     EC: ScrollEngineApi + Unpin + Send + Sync + 'static,
     P: ExecutionPayloadProvider + Unpin + Send + Sync + 'static,
+    DB: DatabaseConnectionProvider + Unpin + Send + Sync + 'static,
 {
     /// Creates a new sequencer.
     pub fn new(
-        database: Arc<Database>,
+        database: Arc<DatabaseL1MessageDelayProvider<DB>>,
         engine: Arc<EngineDriver<EC, P>>,
+        fee_recipient: Address,
         l1_block_number: u64,
         l2_block_number: u64,
         l1_message_index: u64,
@@ -60,6 +73,7 @@ where
         Self {
             database,
             engine,
+            fee_recipient,
             l1_block_number,
             l2_block_number,
             l1_message_index,
@@ -71,7 +85,22 @@ where
 
     /// Creates a new block using the pending transactions from the
     pub fn build_block(&mut self, fcs: ForkchoiceState) {
-        let payload_attributes = PayloadAttributes { timestamp: 1, ..Default::default() };
+        if self.payload_building_job.is_some() {
+            tracing::warn!(target: "rollup_node::sequender", "A payload building job is already in progress");
+            return;
+        }
+
+        let timestamp = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .expect("Time can't go backwards")
+            .as_secs();
+        let payload_attributes = PayloadAttributes {
+            timestamp,
+            suggested_fee_recipient: self.fee_recipient,
+            parent_beacon_block_root: None,
+            prev_randao: Default::default(),
+            withdrawals: None,
+        };
         let l1_message_start_index = self.l1_message_index;
         let max_l1_messages = self.max_l1_messages_per_block;
 
@@ -100,9 +129,10 @@ where
 async fn build_block<
     EC: ScrollEngineApi + Unpin + Send + Sync + 'static,
     P: ExecutionPayloadProvider + Unpin + Send + Sync + 'static,
+    DB: DatabaseConnectionProvider + Unpin + Send + Sync + 'static,
 >(
     engine: Arc<EngineDriver<EC, P>>,
-    database: Arc<Database>,
+    mut provider: Arc<DatabaseL1MessageDelayProvider<DB>>,
     mut l1_message_start_index: u64,
     max_l1_messages: u64,
     fcs: ForkchoiceState,
@@ -112,19 +142,32 @@ async fn build_block<
 
     loop {
         if l1_messages.len() == max_l1_messages as usize {
+            println!("breaking due to max length");
             break;
         }
-        match database.get_l1_message(l1_message_start_index).await? {
+        match provider.next_l1_message().await? {
             Some(l1_message) => {
                 l1_messages.push(l1_message);
-                l1_message_start_index += 1;
             }
-            None => break,
+            None => {
+                println!("breaking as no messages yielded");
+                break;
+            }
         }
     }
 
-    let scroll_payload_attributes =
-        ScrollPayloadAttributes { payload_attributes, transactions: None, no_tx_pool: false };
+    let transactions = l1_messages
+        .into_iter()
+        .map(|l1_message| l1_message.encoded_2718().into())
+        .collect::<Vec<_>>();
+
+    println!("transactions: {:?}", transactions);
+
+    let scroll_payload_attributes = ScrollPayloadAttributes {
+        payload_attributes,
+        transactions: (!transactions.is_empty()).then_some(transactions),
+        no_tx_pool: false,
+    };
     Ok((engine.build_new_payload(fcs, scroll_payload_attributes).await?, l1_message_start_index))
 }
 

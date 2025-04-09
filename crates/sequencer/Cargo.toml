@@ -14,6 +14,8 @@ workspace = true
 reth-scroll-primitives.workspace = true
 
 # alloy
+alloy-eips.workspace = true
+alloy-primitives.workspace = true
 alloy-rpc-types-engine.workspace = true
 
 # scroll-alloy
@@ -29,6 +31,7 @@ rollup-node-providers.workspace = true
 # misc
 futures.workspace = true
 thiserror.workspace = true
+tracing.workspace = true
 
 [dev-dependencies]
 jsonrpsee.workspace = true
@@ -44,6 +47,7 @@ reth-node-builder = { git = "https://github.com/scroll-tech/reth.git", features 
 reth-provider = { workspace = true, features = ["test-utils"] }
 reth-revm = { git = "https://github.com/scroll-tech/reth.git", features = ["test-utils"], branch = "feat/sequencer-rn-integration" }
 reth-tasks.workspace = true
+rollup-node-primitives.workspace = true
 
 reth-rpc-api = { git = "https://github.com/scroll-tech/reth.git", branch = "feat/sequencer-rn-integration" }
 reth-rpc-layer = { git = "https://github.com/scroll-tech/reth.git", branch = "feat/sequencer-rn-integration" }

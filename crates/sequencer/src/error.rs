@@ -1,3 +1,4 @@
+use rollup_node_providers::L1ProviderError;
 use scroll_db::DatabaseError;
 use scroll_engine::EngineDriverError;
 
@@ -12,4 +13,7 @@ pub enum SequencerError {
     /// The sequencer encountered an error when interacting with the engine driver.
     #[error("Encountered an error interacting with the EngineDriver {0}")]
     EngineDriverError(#[from] EngineDriverError),
+    /// The sequencer encountered an error when interacting with the L1 message provider.
+    #[error("Encountered an error interacting with the L1 message provider: {0}")]
+    L1MessageProviderError(#[from] L1ProviderError),
 }

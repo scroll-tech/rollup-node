@@ -1,19 +1,31 @@
 pub(crate) mod blob;
 pub(crate) mod message;
 
-use crate::{beacon_client::OnlineBeaconClient, l1::message::L1MessageProvider, L1BlobProvider};
+use crate::{
+    beacon_client::OnlineBeaconClient,
+    l1::message::{
+        DatabaseL1MessageDelayProvider, L1MessageProvider, L1MessageWithBlockNumberProvider,
+    },
+    L1BlobProvider,
+};
 use std::{num::NonZeroUsize, sync::Arc};
 
 use alloy_eips::eip4844::{Blob, BlobTransactionSidecarItem};
 use alloy_primitives::B256;
 use lru::LruCache;
-use scroll_alloy_consensus::TxL1Message;
+use rollup_node_primitives::L1MessageWithBlockNumber;
 use scroll_db::DatabaseError;
 use tokio::sync::Mutex;
 
 /// An instance of the trait can be used to provide L1 data.
-pub trait L1Provider: L1BlobProvider + L1MessageProvider {}
-impl<T> L1Provider for T where T: L1BlobProvider + L1MessageProvider {}
+pub trait L1Provider:
+    L1BlobProvider + L1MessageWithBlockNumberProvider + L1MessageProvider
+{
+}
+impl<T> L1Provider for T where
+    T: L1BlobProvider + L1MessageWithBlockNumberProvider + L1MessageProvider
+{
+}
 
 /// An error occurring at the [`L1Provider`].
 #[derive(Debug, thiserror::Error)]
@@ -134,11 +146,15 @@ impl<P: Sync> L1BlobProvider for OnlineL1Provider<P> {
 }
 
 #[async_trait::async_trait]
-impl<P: L1MessageProvider + Sync> L1MessageProvider for OnlineL1Provider<P> {
+impl<P: L1MessageWithBlockNumberProvider + Sync + Send> L1MessageWithBlockNumberProvider
+    for OnlineL1Provider<P>
+{
     type Error = <P>::Error;
 
-    async fn next_l1_message(&self) -> Result<Option<TxL1Message>, Self::Error> {
-        self.l1_message_provider.next_l1_message().await
+    async fn get_l1_message_with_block_number(
+        &self,
+    ) -> Result<Option<L1MessageWithBlockNumber>, Self::Error> {
+        self.l1_message_provider.get_l1_message_with_block_number().await
     }
 
     fn set_index_cursor(&mut self, index: u64) {
@@ -147,5 +163,9 @@ impl<P: L1MessageProvider + Sync> L1MessageProvider for OnlineL1Provider<P> {
 
     fn set_hash_cursor(&mut self, hash: B256) {
         self.l1_message_provider.set_hash_cursor(hash)
+    }
+
+    fn increment_cursor(&mut self) {
+        self.l1_message_provider.increment_cursor()
     }
 }
