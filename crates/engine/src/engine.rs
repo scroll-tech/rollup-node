@@ -1,8 +1,9 @@
-use crate::{error::EngineDriverError, payload::matching_payloads, ForkchoiceState};
-use std::sync::Arc;
+use super::error::EngineDriverError;
+use crate::payload::matching_payloads;
 
 use alloy_rpc_types_engine::{
-    ExecutionPayload, ExecutionPayloadV1, ForkchoiceUpdated, PayloadId, PayloadStatusEnum,
+    ExecutionPayload, ExecutionPayloadV1, ForkchoiceState, ForkchoiceUpdated, PayloadId,
+    PayloadStatusEnum,
 };
 use eyre::Result;
 use reth_payload_primitives::PayloadTypes;
@@ -10,7 +11,7 @@ use reth_scroll_engine_primitives::ScrollEngineTypes;
 use rollup_node_primitives::BlockInfo;
 use rollup_node_providers::ExecutionPayloadProvider;
 use scroll_alloy_provider::ScrollEngineApi;
-use tokio::{sync::Mutex, time::Duration};
+use tokio::time::Duration;
 use tracing::{debug, error, info, instrument, trace};
 
 const ENGINE_BACKOFF_INTERVAL: Duration = Duration::from_secs(1);
@@ -23,8 +24,6 @@ pub struct EngineDriver<EC, P> {
     client: EC,
     /// The execution payload provider
     execution_payload_provider: P,
-    /// The current forkchoice state of the engine.
-    forkchoice_state: Arc<Mutex<ForkchoiceState>>,
 }
 
 impl<EC, P> EngineDriver<EC, P>
@@ -34,24 +33,19 @@ where
 {
     /// Create a new [`EngineDriver`] from the provided [`ScrollEngineApi`] and
     /// [`ExecutionPayloadProvider`].
-    pub fn new(
-        client: EC,
-        execution_payload_provider: P,
-        forkchoice_state: ForkchoiceState,
-    ) -> Self {
-        let forkchoice_state = Arc::new(Mutex::new(forkchoice_state));
-        Self { client, execution_payload_provider, forkchoice_state }
+    pub const fn new(client: EC, execution_payload_provider: P) -> Self {
+        Self { client, execution_payload_provider }
     }
 
     /// Initialize the driver and wait for the Engine server to be ready.
     pub async fn init_and_wait_for_engine(
         client: EC,
         execution_payload_provider: P,
-        forkchoice_state: ForkchoiceState,
+        fcs: ForkchoiceState,
     ) -> Self {
         // wait on engine
         loop {
-            match client.fork_choice_updated_v1(forkchoice_state.get_alloy_fcs(), None).await {
+            match client.fork_choice_updated_v1(fcs, None).await {
                 Err(err) => {
                     debug!(target: "scroll::engine::driver", ?err, "waiting on engine client");
                     tokio::time::sleep(ENGINE_BACKOFF_INTERVAL).await;
@@ -63,8 +57,7 @@ where
             }
         }
 
-        let forkchoice_state = Arc::new(Mutex::new(forkchoice_state));
-        Self { client, execution_payload_provider, forkchoice_state }
+        Self { client, execution_payload_provider }
     }
 
     /// Handles an execution payload:
@@ -74,11 +67,13 @@ where
         fields(
             payload_block_hash = %execution_payload.block_hash(),
             payload_block_num = %execution_payload.block_number(),
+            fcs = ?fcs
         )
     )]
     pub async fn handle_execution_payload(
         &self,
         execution_payload: ExecutionPayload,
+        fcs: ForkchoiceState,
     ) -> Result<(PayloadStatusEnum, PayloadStatusEnum), EngineDriverError> {
         // Convert the payload to the V1 format.
         let execution_payload = execution_payload.into_v1();
@@ -87,7 +82,7 @@ where
         let payload_status = self.new_payload(execution_payload).await?;
 
         // Invoke the FCU with the new state.
-        let fcu = self.forkchoice_updated(None).await?;
+        let fcu = self.forkchoice_updated(fcs, None).await?;
 
         // We should never have a case where the fork choice is syncing as we have already validated
         // the payload and provided it to the EN.
@@ -107,12 +102,19 @@ where
     ///   - If the execution payload matches the attributes:
     ///     - Sets the current fork choice for the EL via `engine_forkchoiceUpdatedV1`, advancing
     ///       the safe head by one.
-    #[instrument(skip_all, level = "trace", fields(payload_attributes = ?payload_attributes.payload_attributes))]
+    #[instrument(skip_all, level = "trace",
+        fields(
+             safe_block_info = ?safe_block_info,
+             fcs = ?fcs,
+             payload_attributes = ?payload_attributes
+        )
+    )]
     pub async fn handle_payload_attributes(
         &self,
+        safe_block_info: BlockInfo,
+        mut fcs: ForkchoiceState,
         mut payload_attributes: <ScrollEngineTypes as PayloadTypes>::PayloadAttributes,
     ) -> Result<(BlockInfo, bool), EngineDriverError> {
-        let safe_block_info = self.safe_head().await;
         let maybe_execution_payload = self
             .execution_payload_provider
             .execution_payload_by_block((safe_block_info.number + 1).into())
@@ -129,18 +131,17 @@ where
             // forkchoiceUpdated.
             let safe_block_info: BlockInfo =
                 maybe_execution_payload.expect("execution payload exists").into();
-            self.update_safe_head(safe_block_info).await;
-            self.forkchoice_updated(None).await?;
+            fcs.safe_block_hash = safe_block_info.hash;
+            self.forkchoice_updated(fcs, None).await?;
             Ok((safe_block_info, false))
         } else {
             // Otherwise, we construct a block from the payload attributes on top of the current
             // safe head.
-            let safe_block_info = self.safe_head().await;
-            self.update_unsafe_head(safe_block_info).await;
+            fcs.head_block_hash = fcs.safe_block_hash;
 
             // start payload building with `no_tx_pool = true`.
             payload_attributes.no_tx_pool = true;
-            let fc_updated = self.forkchoice_updated(Some(payload_attributes)).await?;
+            let fc_updated = self.forkchoice_updated(fcs, Some(payload_attributes)).await?;
 
             // retrieve the execution payload.
             let payload_id =
@@ -156,9 +157,9 @@ where
             debug_assert!(result.is_valid());
 
             // update the fork choice state with the new block hash.
-            self.update_unsafe_head(safe_block_info).await;
-            self.update_safe_head(safe_block_info).await;
-            self.forkchoice_updated(None).await?;
+            fcs.head_block_hash = safe_block_info.hash;
+            fcs.safe_block_hash = safe_block_info.hash;
+            self.forkchoice_updated(fcs, None).await?;
 
             Ok((safe_block_info, true))
         }
@@ -199,9 +200,9 @@ where
     /// Calls `engine_forkchoiceUpdatedV1` and logs the result.
     async fn forkchoice_updated(
         &self,
+        fcs: ForkchoiceState,
         attributes: Option<<ScrollEngineTypes as PayloadTypes>::PayloadAttributes>,
     ) -> Result<ForkchoiceUpdated, EngineDriverError> {
-        let fcs = self.get_alloy_fcs().await;
         let forkchoice_updated = self
             .client
             .fork_choice_updated_v1(fcs, attributes)
@@ -237,25 +238,5 @@ where
             .await
             .map_err(|_| EngineDriverError::EngineUnavailable)?
             .into())
-    }
-
-    /// Returns the [alloy_rpc_types_engine::ForkchoiceState].
-    async fn get_alloy_fcs(&self) -> alloy_rpc_types_engine::ForkchoiceState {
-        self.forkchoice_state.lock().await.get_alloy_fcs()
-    }
-
-    /// Returns the safe head of the [`ForkchoiceState`].
-    async fn safe_head(&self) -> BlockInfo {
-        *self.forkchoice_state.lock().await.safe_block_info()
-    }
-
-    /// Updates the safe head of the [`ForkchoiceState`].
-    async fn update_safe_head(&self, block_info: BlockInfo) {
-        self.forkchoice_state.lock().await.update_safe_block_info(block_info)
-    }
-
-    /// Updates the unsafe head of the [`ForkchoiceState`].
-    async fn update_unsafe_head(&self, block_info: BlockInfo) {
-        self.forkchoice_state.lock().await.update_unsafe_block_info(block_info)
     }
 }

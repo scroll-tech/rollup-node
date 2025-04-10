@@ -1,6 +1,9 @@
 //! This library contains the main manager for the rollup node.
 
-use alloy_rpc_types_engine::{ExecutionPayload, ExecutionPayloadV1, PayloadStatusEnum};
+use alloy_rpc_types_engine::{
+    ExecutionPayload, ExecutionPayloadV1, ForkchoiceState as AlloyForkchoiceState,
+    PayloadStatusEnum,
+};
 use futures::{stream::FuturesOrdered, FutureExt, StreamExt};
 use reth_tokio_util::{EventSender, EventStream};
 use rollup_node_indexer::{Indexer, IndexerEvent};
@@ -8,14 +11,13 @@ use rollup_node_watcher::L1Notification;
 use scroll_alloy_network::Scroll as ScrollNetwork;
 use scroll_alloy_provider::ScrollEngineApi;
 use scroll_alloy_rpc_types_engine::ScrollPayloadAttributes;
-use scroll_engine::{EngineDriver, EngineDriverError};
+use scroll_engine::{EngineDriver, EngineDriverError, ForkchoiceState};
 use scroll_network::{
     BlockImportError, BlockImportOutcome, BlockValidation, BlockValidationError, NetworkManager,
     NetworkManagerEvent, NewBlockWithPeer,
 };
 use scroll_wire::NewBlock;
 use std::{
-    collections::VecDeque,
     fmt,
     fmt::{Debug, Formatter},
     future::Future,
@@ -43,11 +45,12 @@ use scroll_derivation_pipeline::DerivationPipeline;
 const EVENT_CHANNEL_SIZE: usize = 100;
 
 /// A future that resolves to a tuple of the block info and the block import outcome.
-type PendingBlockImportFuture = Pin<Box<dyn Future<Output = Option<BlockImportOutcome>> + Send>>;
+type PendingBlockImportFuture =
+    Pin<Box<dyn Future<Output = (Option<BlockInfo>, Option<BlockImportOutcome>)> + Send>>;
 
 /// A future that resolves to a tuple of the block info and the block import outcome.
 type EngineDriverFuture =
-    Pin<Box<dyn Future<Output = Result<BlockInfo, EngineDriverError>> + Send>>;
+    Pin<Box<dyn Future<Output = Result<(BlockInfo, bool), EngineDriverError>> + Send>>;
 
 /// The main manager for the rollup node.
 ///
@@ -77,10 +80,12 @@ pub struct RollupNodeManager<C, EC, P, L1P> {
     consensus: C,
     /// The receiver for new blocks received from the network (used to bridge from eth-wire).
     new_block_rx: Option<UnboundedReceiverStream<NewBlockWithPeer>>,
+    /// The forkchoice state of the rollup node.
+    forkchoice_state: ForkchoiceState,
     /// A collection of pending block imports.
     pending_block_imports: FuturesOrdered<PendingBlockImportFuture>,
-    /// A collection of pending engine driver tasks.
-    pending_engine_tasks: VecDeque<EngineDriverFuture>,
+    /// A pending engine driver task.
+    pending_engine_task: Option<EngineDriverFuture>,
     /// An event sender for sending events to subscribers of the rollup node manager.
     event_sender: Option<EventSender<RollupEvent>>,
 }
@@ -95,8 +100,12 @@ impl<C: Debug, EC: Debug, P: Debug, L1P: Debug> Debug for RollupNodeManager<C, E
             .field("indexer", &self.indexer)
             .field("consensus", &self.consensus)
             .field("new_block_rx", &self.new_block_rx)
+            .field("forkchoice_state", &self.forkchoice_state)
             .field("pending_block_imports", &self.pending_block_imports)
-            .field("pending_engine_tasks", &"[ ... ]")
+            .field(
+                "pending_engine_tasks",
+                &self.pending_engine_task.is_some().then_some("Some( ... )").unwrap_or("None"),
+            )
             .field("event_sender", &self.event_sender)
             .finish()
     }
@@ -117,6 +126,7 @@ where
         l1_provider: L1P,
         database: Arc<Database>,
         l1_notification_rx: Option<Receiver<Arc<L1Notification>>>,
+        forkchoice_state: ForkchoiceState,
         consensus: C,
         new_block_rx: Option<UnboundedReceiver<NewBlockWithPeer>>,
     ) -> Self {
@@ -130,8 +140,9 @@ where
             indexer,
             consensus,
             new_block_rx: new_block_rx.map(Into::into),
+            forkchoice_state,
             pending_block_imports: FuturesOrdered::new(),
-            pending_engine_tasks: VecDeque::default(),
+            pending_engine_task: None,
             event_sender: None,
         }
     }
@@ -174,16 +185,16 @@ where
 
         // If the forkchoice state is at genesis, update the forkchoice state with the parent of the
         // block.
-        // TODO(greg): how to fix this?
-        // if self.engine.forkchoice_state.is_genesis() {
-        //     let block_num_hash = block.parent_num_hash();
-        //     self.forkchoice_state = ForkchoiceState::from_block_info(BlockInfo {
-        //         number: block_num_hash.number,
-        //         hash: block_num_hash.hash,
-        //     });
-        // }
+        if self.forkchoice_state.is_genesis() {
+            let block_num_hash = block.parent_num_hash();
+            self.forkchoice_state = ForkchoiceState::from_block_info(BlockInfo {
+                number: block_num_hash.number,
+                hash: block_num_hash.hash,
+            });
+        }
 
         // Send the block to the engine to validate the correctness of the block.
+        let mut fcs = self.get_alloy_fcs();
         let engine = self.engine.clone();
         let future = Box::pin(async move {
             trace!(target: "scroll::node::manager", "handling block import future for block {:?}", block.hash_slow());
@@ -191,25 +202,30 @@ where
             // convert the block to an execution payload and update the forkchoice state
             let execution_payload: ExecutionPayload =
                 ExecutionPayloadV1::from_block_slow(&block).into();
+            let unsafe_block_info: BlockInfo = (&execution_payload).into();
+            fcs.head_block_hash = unsafe_block_info.hash;
 
             // process the execution payload
             // TODO: needs testing
-            let import_outcome = match engine.handle_execution_payload(execution_payload).await {
-                Err(EngineDriverError::InvalidExecutionPayload) => {
-                    Some(Err(BlockImportError::Validation(BlockValidationError::InvalidBlock)))
-                }
-                Ok((PayloadStatusEnum::Valid, PayloadStatusEnum::Valid)) => {
-                    Some(Ok(BlockValidation::ValidBlock {
-                        new_block: NewBlock {
-                            block,
-                            signature: signature.serialize_compact().to_vec().into(),
-                        },
-                    }))
-                }
-                _ => None,
-            };
+            let (unsafe_block_info, import_outcome) =
+                match engine.handle_execution_payload(execution_payload, fcs).await {
+                    Err(EngineDriverError::InvalidExecutionPayload) => (
+                        Some(unsafe_block_info),
+                        Some(Err(BlockImportError::Validation(BlockValidationError::InvalidBlock))),
+                    ),
+                    Ok((PayloadStatusEnum::Valid, PayloadStatusEnum::Valid)) => (
+                        Some(unsafe_block_info),
+                        Some(Ok(BlockValidation::ValidBlock {
+                            new_block: NewBlock {
+                                block,
+                                signature: signature.serialize_compact().to_vec().into(),
+                            },
+                        })),
+                    ),
+                    _ => (None, None),
+                };
 
-            import_outcome.map(|result| BlockImportOutcome { peer, result })
+            (unsafe_block_info, import_outcome.map(|result| BlockImportOutcome { peer, result }))
         });
 
         self.pending_block_imports.push_back(future);
@@ -220,12 +236,14 @@ where
     /// via the [`EngineDriver`].
     fn handle_payload_attribute(&mut self, attribute: ScrollPayloadAttributes) {
         let engine = self.engine.clone();
-        trace!(target: "scroll::node::manager", payload = ?attribute.payload_attributes, "New engine driver task");
+        let safe_block_info = *self.forkchoice_state.safe_block_info();
+        let fcs = self.get_alloy_fcs();
 
+        trace!(target: "scroll::node::manager", payload = ?attribute.payload_attributes, "New engine driver task");
         let fut = Box::pin(async move {
-            engine.handle_payload_attributes(attribute).await.map(|(info, _)| info)
+            engine.handle_payload_attributes(safe_block_info, fcs, attribute).await
         });
-        self.pending_engine_tasks.push_back(fut);
+        self.pending_engine_task.replace(fut);
     }
 
     /// Handles a [`EngineDriverFuture`] by polling it and updating the forkchoice state if it
@@ -233,17 +251,25 @@ where
     fn handle_engine_driver_future(&mut self, mut fut: EngineDriverFuture, cx: &mut Context<'_>) {
         match fut.poll_unpin(cx) {
             Poll::Ready(result) => match result {
-                Ok(block_info) => {
-                    trace!(target: "scroll::node::manager", safe_block = ?block_info, "Engine driver task resolved");
+                Ok((safe_block_info, should_update_unsafe_head)) => {
+                    self.forkchoice_state.update_safe_block_info(safe_block_info);
+                    if should_update_unsafe_head {
+                        self.forkchoice_state.update_unsafe_block_info(safe_block_info);
+                    }
+                    trace!(target: "scroll::node::manager", new_forkchoice_state = ?self.forkchoice_state, "Handled ScrollPayloadAttributes");
                 }
                 Err(err) => {
                     error!(target: "scroll::node::manager", ?err, "Engine driver failed to handle attribute")
                 }
             },
             Poll::Pending => {
-                self.pending_engine_tasks.push_front(fut);
+                self.pending_engine_task.replace(fut);
             }
         }
+    }
+
+    const fn get_alloy_fcs(&self) -> AlloyForkchoiceState {
+        self.forkchoice_state.get_alloy_fcs()
     }
 
     /// Handles a network manager event.
@@ -264,8 +290,18 @@ where
     }
 
     /// Handles a block import outcome.
-    fn handle_block_import_outcome(&mut self, outcome: Option<BlockImportOutcome>) {
+    fn handle_block_import_outcome(
+        &mut self,
+        unsafe_block_info: Option<BlockInfo>,
+        outcome: Option<BlockImportOutcome>,
+    ) {
         trace!(target: "scroll::node::manager", ?outcome, "handling block import outcome");
+
+        // If we have an unsafe block info, update the forkchoice state.
+        if let Some(unsafe_block_info) = unsafe_block_info {
+            self.forkchoice_state.update_unsafe_block_info(unsafe_block_info);
+        }
+
         // If we have an outcome, send it to the network manager.
         if let Some(outcome) = outcome {
             self.network.handle().block_import_outcome(outcome);
@@ -291,18 +327,10 @@ where
         let this = self.get_mut();
 
         // Handle pending block imports.
-        while let Poll::Ready(Some(outcome)) = this.pending_block_imports.poll_next_unpin(cx) {
-            this.handle_block_import_outcome(outcome);
-        }
-
-        // Poll Derivation Pipeline and push attribute in queue if any.
-        while let Poll::Ready(Some(attribute)) = this.derivation_pipeline.poll_next_unpin(cx) {
-            this.handle_payload_attribute(attribute)
-        }
-
-        // Poll Engine Driver tasks.
-        if let Some(fut) = this.pending_engine_tasks.pop_front() {
-            this.handle_engine_driver_future(fut, cx);
+        while let Poll::Ready(Some((block_info, outcome))) =
+            this.pending_block_imports.poll_next_unpin(cx)
+        {
+            this.handle_block_import_outcome(block_info, outcome);
         }
 
         // Drain all L1 notifications.
@@ -320,6 +348,18 @@ where
                     error!(target: "scroll::node::manager", ?err, "Error occurred at indexer level")
                 }
             }
+        }
+
+        // Handle payload attribute if engine task is empty.
+        if this.pending_engine_task.is_none() {
+            if let Poll::Ready(Some(attribute)) = this.derivation_pipeline.poll_next_unpin(cx) {
+                this.handle_payload_attribute(attribute)
+            }
+        }
+
+        // Poll Engine Driver tasks.
+        if let Some(fut) = this.pending_engine_task.take() {
+            this.handle_engine_driver_future(fut, cx);
         }
 
         // Handle blocks received from the eth-wire protocol.

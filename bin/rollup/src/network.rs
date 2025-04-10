@@ -100,10 +100,7 @@ where
             auth_secret,
             self.config.engine_api_url.unwrap_or(format!("http://localhost:{auth_port}").parse()?),
         );
-        let fcs = ForkchoiceState::genesis(
-            ctx.config().chain.chain.try_into().expect("must be a named chain"),
-        );
-        let engine = EngineDriver::new(engine_api, payload_provider, fcs);
+        let engine = EngineDriver::new(engine_api, payload_provider);
 
         // Instantiate the database
         let database_path = if let Some(db_path) = self.config.database_path {
@@ -154,6 +151,9 @@ where
             l1_provider,
             db,
             l1_notification_rx,
+            ForkchoiceState::genesis(
+                ctx.config().chain.chain.try_into().expect("must be a named chain"),
+            ),
             consensus,
             block_rx,
         );
