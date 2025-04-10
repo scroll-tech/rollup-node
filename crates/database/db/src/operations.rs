@@ -1,9 +1,11 @@
 use super::{models, DatabaseError};
 use crate::DatabaseConnectionProvider;
 
+use alloy_eips::{BlockId, BlockNumberOrTag};
 use alloy_primitives::B256;
 use futures::{Stream, StreamExt};
 use rollup_node_primitives::{BatchCommitData, L1MessageWithBlockNumber};
+use scroll_alloy_rpc_types_engine::BlockDataHint;
 use sea_orm::{ActiveModelTrait, ColumnTrait, DbErr, EntityTrait, QueryFilter, Set};
 
 /// The [`DatabaseOperations`] trait provides methods for interacting with the database.
@@ -124,6 +126,25 @@ pub trait DatabaseOperations: DatabaseConnectionProvider {
             .stream(self.get_connection())
             .await?
             .map(|res| res.map(Into::into)))
+    }
+
+    /// Get the extra data for the provided [`BlockId`].
+    async fn get_block_data(
+        &self,
+        block_id: BlockId,
+    ) -> Result<Option<BlockDataHint>, DatabaseError> {
+        let filter = match block_id {
+            BlockId::Hash(hash) => models::block_data::Column::Hash.eq(hash.block_hash.to_vec()),
+            BlockId::Number(BlockNumberOrTag::Number(number)) => {
+                models::block_data::Column::Number.eq(number as i64)
+            }
+            x => return Err(DatabaseError::BlockNotFound(x)),
+        };
+        Ok(models::block_data::Entity::find()
+            .filter(filter)
+            .one(self.get_connection())
+            .await
+            .map(|x| x.map(Into::into))?)
     }
 }
 

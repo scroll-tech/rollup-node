@@ -4,6 +4,9 @@
 pub use beacon::{beacon_provider, BeaconProvider, OnlineBeaconClient};
 mod beacon;
 
+pub use block::BlockDataProvider;
+mod block;
+
 pub use execution_payload::ExecutionPayloadProvider;
 mod execution_payload;
 

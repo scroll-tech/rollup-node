@@ -11,10 +11,12 @@ workspace = true
 
 [dependencies]
 # alloy
+alloy-eips.workspace = true
 alloy-primitives.workspace = true
 
 # scroll-alloy
 scroll-alloy-consensus.workspace = true
+scroll-alloy-rpc-types-engine.workspace = true
 
 # scroll
 scroll-migration = { workspace = true, optional = true }
@@ -24,7 +26,7 @@ rollup-node-primitives.workspace = true
 async-trait.workspace = true
 auto_impl.workspace = true
 futures.workspace = true
-sea-orm = { version = "1.1.0", features = ["sqlx-sqlite", "runtime-tokio-native-tls", "macros"] }
+sea-orm = { workspace = true, features = ["sqlx-sqlite", "runtime-tokio-native-tls", "macros"] }
 thiserror.workspace = true
 tokio = { workspace = true, features = ["macros", "sync"] }
 tracing.workspace = true
