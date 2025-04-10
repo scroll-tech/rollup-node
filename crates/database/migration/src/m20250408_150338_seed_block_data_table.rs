@@ -1,13 +1,8 @@
-use std::{path::PathBuf, sync::LazyLock};
-
 use alloy_primitives::{Bytes, B256, U256};
 use sea_orm::{prelude::*, ActiveValue};
 use sea_orm_migration::{prelude::*, seaql_migrations::Relation};
 
-static BLOCK_DATA_FILE_PATH: LazyLock<PathBuf> = LazyLock::new(|| {
-    let manifest_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-    manifest_path.join("./migration-data/block_data.csv")
-});
+const BLOCK_DATA_CSV: &str = include_str!("../migration-data/block_data.csv");
 
 #[derive(DeriveMigrationName)]
 pub struct Migration;
@@ -15,9 +10,7 @@ pub struct Migration;
 #[async_trait::async_trait]
 impl MigrationTrait for Migration {
     async fn up(&self, manager: &SchemaManager) -> Result<(), DbErr> {
-        let file =
-            std::fs::File::open(BLOCK_DATA_FILE_PATH.clone()).expect("missing migration data");
-        let mut rdr = csv::Reader::from_reader(file);
+        let mut rdr = csv::Reader::from_reader(BLOCK_DATA_CSV.as_bytes());
 
         let db = manager.get_connection();
         let records: Vec<ActiveModel> =
