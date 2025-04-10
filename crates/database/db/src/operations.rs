@@ -138,7 +138,7 @@ pub trait DatabaseOperations: DatabaseConnectionProvider {
             BlockId::Number(BlockNumberOrTag::Number(number)) => {
                 models::block_data::Column::Number.eq(number as i64)
             }
-            x => return Err(DatabaseError::ExtraDataNotFound(x)),
+            x => return Err(DatabaseError::BlockNotFound(x)),
         };
         Ok(models::block_data::Entity::find()
             .filter(filter)

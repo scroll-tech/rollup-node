@@ -10,7 +10,7 @@ pub enum DatabaseError {
     /// A batch was not found in the database.
     #[error("batch with hash [{0}] not found in database")]
     BatchNotFound(B256),
-    /// The extra data was not found
-    #[error("extra data not found in database for block id [{0}]")]
-    ExtraDataNotFound(BlockId),
+    /// The block was not found in database.
+    #[error("no block for id {0}")]
+    BlockNotFound(BlockId),
 }
