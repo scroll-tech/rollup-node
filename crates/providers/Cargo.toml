@@ -19,6 +19,7 @@ alloy-serde = "0.12"
 
 # scroll
 scroll-alloy-consensus.workspace = true
+scroll-alloy-rpc-types-engine.workspace = true
 scroll-db.workspace = true
 
 # misc

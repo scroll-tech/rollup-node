@@ -9594,6 +9594,7 @@ dependencies = [
  "lru 0.13.0",
  "reqwest",
  "scroll-alloy-consensus",
+ "scroll-alloy-rpc-types-engine",
  "scroll-db",
  "serde",
  "thiserror 2.0.12",

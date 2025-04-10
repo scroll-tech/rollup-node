@@ -143,10 +143,10 @@ where
             payload_attributes.no_tx_pool = true;
             let fc_updated = self.forkchoice_updated(fcs, Some(payload_attributes)).await?;
 
-            // retrieve the execution payload.
-            let payload_id =
-                fc_updated.payload_id.ok_or(EngineDriverError::MissingExecutionPayloadId)?;
-            let execution_payload = self.get_payload(payload_id).await?;
+            // retrieve the execution payload
+            let execution_payload = self
+                .get_payload(fc_updated.payload_id.expect("payload attributes has been set"))
+                .await?;
 
             // issue the execution payload to the EL
             let safe_block_info: BlockInfo = (&execution_payload).into();

@@ -16,7 +16,7 @@ extern crate alloc as std;
 use crate::data_source::CodecDataSource;
 use std::{boxed::Box, collections::VecDeque, sync::Arc, vec::Vec};
 
-use alloy_primitives::{Address, BlockNumber, B256};
+use alloy_primitives::{Address, B256};
 use alloy_rpc_types_engine::PayloadAttributes;
 use core::{
     fmt::Debug,
@@ -26,7 +26,7 @@ use core::{
 };
 use futures::{ready, stream::FuturesOrdered, Stream, StreamExt};
 use rollup_node_primitives::BatchCommitData;
-use rollup_node_providers::L1Provider;
+use rollup_node_providers::{BlockDataProvider, L1Provider};
 use scroll_alloy_rpc_types_engine::ScrollPayloadAttributes;
 use scroll_codec::Codec;
 use scroll_db::{Database, DatabaseOperations};
@@ -98,13 +98,7 @@ where
                     .map_err(|err| (index, err.into()))?
                     .ok_or((index, DerivationPipelineError::UnknownBatch(index)))?;
 
-                let mut attributes = derive(batch, provider).await.map_err(|err| (index, err))?;
-                for (attribute, block_number) in &mut attributes {
-                    let block_data =
-                        database.get_block_data((*block_number).into()).await.ok().flatten();
-                    attribute.block_data_hint = block_data;
-                }
-                Ok(attributes.into_iter().map(|(a, _)| a).collect())
+                derive(batch, provider, database).await.map_err(|err| (index, err))
             });
             return Some(fut);
         }
@@ -161,12 +155,13 @@ where
     }
 }
 
-/// Returns a vector of tuples of [`ScrollPayloadAttributes`] and [`BlockNumber`] from the
-/// [`BatchCommitData`] and a [`L1Provider`].
-pub async fn derive<P: L1Provider>(
+/// Returns a vector of [`ScrollPayloadAttributes`] from the [`BatchCommitData`] and a
+/// [`L1Provider`].
+pub async fn derive<L1P: L1Provider, L2P: BlockDataProvider>(
     batch: BatchCommitData,
-    l1_provider: P,
-) -> Result<Vec<(ScrollPayloadAttributes, BlockNumber)>, DerivationPipelineError> {
+    l1_provider: L1P,
+    l2_provider: L2P,
+) -> Result<Vec<ScrollPayloadAttributes>, DerivationPipelineError> {
     // fetch the blob then decode the input batch.
     let blob = if let Some(hash) = batch.blob_versioned_hash {
         l1_provider.blob(batch.block_timestamp, hash).await?
@@ -208,6 +203,10 @@ pub async fn derive<P: L1Provider>(
         // add the block transactions.
         txs.append(&mut block.transactions);
 
+        // get the block data for the l2 block.
+        let number = block.context.number;
+        let block_data = l2_provider.block_data(number.into()).await.map_err(Into::into)?;
+
         // construct the payload attributes.
         let attribute = ScrollPayloadAttributes {
             payload_attributes: PayloadAttributes {
@@ -219,9 +218,9 @@ pub async fn derive<P: L1Provider>(
             },
             transactions: Some(txs),
             no_tx_pool: true,
-            block_data_hint: None,
+            block_data_hint: block_data,
         };
-        attributes.push((attribute, block.context.number));
+        attributes.push(attribute);
     }
 
     Ok(attributes)
@@ -230,9 +229,7 @@ pub async fn derive<P: L1Provider>(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::sync::Arc;
-
-    use alloy_eips::eip4844::Blob;
+    use alloy_eips::{eip4844::Blob, BlockId};
     use alloy_primitives::{address, b256, bytes, B256, U256};
     use rollup_node_primitives::L1MessageWithBlockNumber;
     use rollup_node_providers::{
@@ -242,6 +239,7 @@ mod tests {
     use scroll_alloy_rpc_types_engine::BlockDataHint;
     use scroll_codec::decoding::test_utils::read_to_bytes;
     use scroll_db::test_utils::setup_test_db;
+    use std::sync::Arc;
     use tokio::sync::Mutex;
 
     struct MockL1MessageProvider {
@@ -307,6 +305,20 @@ mod tests {
         }
         fn set_hash_cursor(&self, hash: B256) {
             self.l1_messages_provider.set_hash_cursor(hash)
+        }
+    }
+
+    struct MockL2Provider;
+
+    #[async_trait::async_trait]
+    impl BlockDataProvider for MockL2Provider {
+        type Error = Infallible;
+
+        async fn block_data(
+            &self,
+            _block_id: BlockId,
+        ) -> Result<Option<BlockDataHint>, Self::Error> {
+            Ok(None)
         }
     }
 
@@ -408,11 +420,12 @@ mod tests {
             sender: address!("7885BcBd5CeCEf1336b5300fb5186A12DDD8c478"),
             input: bytes!("8ef1332e0000000000000000000000007f2b8c31f88b6006c382775eea88297ec1e3e9050000000000000000000000006ea73e05adc79974b931123675ea8f78ffdacdf000000000000000000000000000000000000000000000000000470de4df820000000000000000000000000000000000000000000000000000000000000000002200000000000000000000000000000000000000000000000000000000000000a000000000000000000000000000000000000000000000000000000000000000a4232e8748000000000000000000000000982fe4a7cbd74bb3422ebe46333c3e8046c12c7f000000000000000000000000982fe4a7cbd74bb3422ebe46333c3e8046c12c7f00000000000000000000000000000000000000000000000000470de4df8200000000000000000000000000000000000000000000000000000000000000000080000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000"),
         }];
-        let provider = MockL1MessageProvider { messages: Arc::new(Mutex::new(l1_messages)) };
+        let l1_provider = MockL1MessageProvider { messages: Arc::new(Mutex::new(l1_messages)) };
+        let l2_provider = MockL2Provider;
 
-        let attributes: Vec<_> = derive(batch_data, provider).await?;
-        let (attribute, _) =
-            attributes.iter().find(|(a, _)| a.payload_attributes.timestamp == 1696935384).unwrap();
+        let attributes: Vec<_> = derive(batch_data, l1_provider, l2_provider).await?;
+        let attribute =
+            attributes.iter().find(|a| a.payload_attributes.timestamp == 1696935384).unwrap();
 
         let expected = ScrollPayloadAttributes{
             payload_attributes: PayloadAttributes{
@@ -425,7 +438,7 @@ mod tests {
         };
         assert_eq!(attribute, &expected);
 
-        let (attribute, _) = attributes.last().unwrap();
+        let attribute = attributes.last().unwrap();
         let expected = ScrollPayloadAttributes{
             payload_attributes: PayloadAttributes{
                 timestamp: 1696935657,

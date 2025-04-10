@@ -1,7 +1,7 @@
 use std::{path::PathBuf, sync::LazyLock};
 
 use alloy_primitives::{Bytes, B256, U256};
-use sea_orm::{prelude::*, ActiveValue, TransactionTrait};
+use sea_orm::{prelude::*, ActiveValue};
 use sea_orm_migration::{prelude::*, seaql_migrations::Relation};
 
 static BLOCK_DATA_FILE_PATH: LazyLock<PathBuf> = LazyLock::new(|| {
@@ -20,15 +20,12 @@ impl MigrationTrait for Migration {
         let mut rdr = csv::Reader::from_reader(file);
 
         let db = manager.get_connection();
-        let transaction = db.begin().await?;
-        for result in rdr.deserialize() {
-            let record: Record = result.map_err(|err| DbErr::Migration(err.to_string()))?;
-            let db_model: ActiveModel = record.into();
-            // we ignore the `Failed to find inserted item` error.
-            let _ = db_model.insert(&transaction).await;
-        }
+        let records: Vec<ActiveModel> =
+            rdr.deserialize::<Record>().filter_map(|a| a.ok().map(Into::into)).collect();
+        // we ignore the `Failed to find inserted item` error.
+        let _ = Entity::insert_many(records).exec(db).await;
 
-        transaction.commit().await
+        Ok(())
     }
 
     async fn down(&self, _: &SchemaManager) -> Result<(), DbErr> {

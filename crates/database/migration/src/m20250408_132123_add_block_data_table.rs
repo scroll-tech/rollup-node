@@ -13,7 +13,7 @@ impl MigrationTrait for Migration {
                     .table(BlockData::Table)
                     .if_not_exists()
                     .col(big_unsigned(BlockData::Number).primary_key())
-                    .col(binary_len(BlockData::Hash, 32))
+                    .col(binary_len(BlockData::Hash, 32).unique_key())
                     .col(binary(BlockData::ExtraData))
                     .col(binary_len(BlockData::Difficulty, 32))
                     .to_owned(),
