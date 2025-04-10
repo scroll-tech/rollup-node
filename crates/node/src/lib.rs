@@ -103,8 +103,8 @@ impl<C: Debug, EC: Debug, P: Debug, L1P: Debug> Debug for RollupNodeManager<C, E
             .field("forkchoice_state", &self.forkchoice_state)
             .field("pending_block_imports", &self.pending_block_imports)
             .field(
-                "pending_engine_tasks",
-                &self.pending_engine_task.is_some().then_some("Some( ... )").unwrap_or("None"),
+                "pending_engine_task",
+                &self.pending_engine_task.as_ref().map(|_| "Some( ... )").unwrap_or("None"),
             )
             .field("event_sender", &self.event_sender)
             .finish()
