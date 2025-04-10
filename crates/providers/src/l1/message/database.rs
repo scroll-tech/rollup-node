@@ -58,7 +58,7 @@ pub struct DatabaseL1MessageDelayProvider<DB> {
     /// The database L1 message provider.
     l1_message_provider: DatabaseL1MessageProvider<DB>,
     /// The current L1 block number.
-    l1_head: u64,
+    l1_tip: AtomicU64,
     /// The number of blocks to wait for before including a L1 message in a block.
     l1_message_delay: u64,
 }
@@ -67,40 +67,31 @@ impl<DB> DatabaseL1MessageDelayProvider<DB> {
     /// Returns a new instance of the [`DatabaseL1MessageDelayProvider`].
     pub fn new(
         l1_message_provider: DatabaseL1MessageProvider<DB>,
-        current_head_number: u64,
+        l1_tip_block_number: u64,
         l1_message_delay: u64,
     ) -> Self {
-        Self { l1_message_provider, l1_head: current_head_number, l1_message_delay }
+        Self { l1_message_provider, l1_tip: l1_tip_block_number.into(), l1_message_delay }
     }
 
     /// Sets the block number of the current L1 head.
-    pub fn set_l1_head(&mut self, current_head_number: u64) {
-        self.l1_head = current_head_number;
+    pub fn set_l1_head(&self, block_number: u64) {
+        self.l1_tip.store(block_number, Ordering::Relaxed);
     }
 }
 
 /// A trait that allows the L1 message delay provider to set the current head number.
 pub trait L1MessageDelayProvider {
-    /// Set the number of the current L1 head.
-    fn set_l1_head(&mut self, l1_head: u64);
+    /// Set the number of the current L1 head block number.
+    fn set_l1_head(&self, _block_number: u64) {}
 }
 
 impl<DB> L1MessageDelayProvider for DatabaseL1MessageDelayProvider<DB> {
-    fn set_l1_head(&mut self, current_head_number: u64) {
-        self.set_l1_head(current_head_number);
+    fn set_l1_head(&self, block_number: u64) {
+        Self::set_l1_head(self, block_number);
     }
 }
 
-/// A delay predicate that checks if the L1 message is delayed by a certain number of blocks.
-fn validate_delay_predicate(
-    msg_w_bn: &L1MessageWithBlockNumber,
-    current_head_number: u64,
-    l1_message_delay: u64,
-) -> bool {
-    let tx_block_number = msg_w_bn.block_number;
-    let delay = current_head_number.saturating_sub(tx_block_number);
-    delay >= l1_message_delay
-}
+impl<DB> L1MessageDelayProvider for DatabaseL1MessageProvider<DB> {}
 
 #[async_trait::async_trait]
 impl<DB: DatabaseConnectionProvider + Sync> L1MessageProvider
@@ -112,13 +103,15 @@ impl<DB: DatabaseConnectionProvider + Sync> L1MessageProvider
         &self,
     ) -> Result<Option<L1MessageWithBlockNumber>, Self::Error> {
         let msg_w_bn = self.l1_message_provider.get_l1_message_with_block_number().await?;
-        if let Some(msg_w_bn) = msg_w_bn {
-            if validate_delay_predicate(&msg_w_bn, self.l1_head, self.l1_message_delay) {
-                return Ok(Some(msg_w_bn));
-            }
-        }
+        let result = if let Some(msg_w_bn) = msg_w_bn {
+            let tx_block_number = msg_w_bn.block_number;
+            let depth = self.l1_tip.load(Ordering::Relaxed) - tx_block_number;
+            (depth >= self.l1_message_delay).then_some(msg_w_bn)
+        } else {
+            None
+        };
 
-        Ok(None)
+        Ok(result)
     }
 
     fn set_index_cursor(&self, index: u64) {

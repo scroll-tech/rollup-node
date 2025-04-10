@@ -6,9 +6,9 @@ use alloy_rpc_types_engine::ForkchoiceState;
 use futures::stream::StreamExt;
 use reth_e2e_test_utils::transaction::TransactionTestContext;
 use reth_node_core::primitives::SignedTransaction;
-use rollup_node_primitives::L1MessageWithBlockNumber;
-
 use reth_scroll_node::test_utils::setup;
+use rollup_node_primitives::L1MessageWithBlockNumber;
+use rollup_node_providers::DatabaseL1MessageProvider;
 use rollup_node_sequencer::Sequencer;
 use scroll_alloy_consensus::TxL1Message;
 use scroll_alloy_provider::ScrollAuthApiEngineClient;
@@ -41,9 +41,10 @@ async fn can_build_blocks() {
 
     // create a test database
     let database = Arc::new(setup_test_db().await);
+    let provider = Arc::new(DatabaseL1MessageProvider::new(database.clone(), 0));
 
     // create a sequencer
-    let mut sequencer = Sequencer::new(database.clone(), engine_driver, Default::default(), 4);
+    let mut sequencer = Sequencer::new(provider, engine_driver, Default::default(), 4);
 
     // add a transaction to the pool
     let mut wallet_lock = wallet.lock().await;

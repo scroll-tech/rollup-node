@@ -223,11 +223,11 @@ pub async fn derive<P: L1Provider + Sync + Send>(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use core::sync::atomic::{AtomicU64, Ordering};
     use std::sync::Arc;
 
     use alloy_eips::eip4844::Blob;
     use alloy_primitives::{address, b256, bytes, U256};
+    use core::sync::atomic::{AtomicU64, Ordering};
     use rollup_node_primitives::L1MessageWithBlockNumber;
     use rollup_node_providers::{
         DatabaseL1MessageProvider, L1BlobProvider, L1MessageProvider, L1ProviderError,
@@ -235,10 +235,9 @@ mod tests {
     use scroll_alloy_consensus::TxL1Message;
     use scroll_codec::decoding::test_utils::read_to_bytes;
     use scroll_db::test_utils::setup_test_db;
-    use tokio::sync::Mutex;
 
     struct MockL1MessageProvider {
-        messages: Arc<Mutex<Vec<L1MessageWithBlockNumber>>>,
+        messages: Arc<Vec<L1MessageWithBlockNumber>>,
         index: AtomicU64,
     }
 
@@ -267,18 +266,13 @@ mod tests {
         async fn get_l1_message_with_block_number(
             &self,
         ) -> Result<Option<L1MessageWithBlockNumber>, Self::Error> {
-            let messages = self.messages.try_lock().expect("lock is free");
             let index = self.index.load(Ordering::Relaxed);
-            Ok(messages.get(index as usize).cloned())
+            Ok(self.messages.get(index as usize).cloned())
         }
 
-        fn set_index_cursor(&self, index: u64) {
-            self.index.store(index, Ordering::Relaxed);
-        }
+        fn set_index_cursor(&self, _index: u64) {}
 
-        fn set_hash_cursor(&self, _hash: B256) {
-            todo!()
-        }
+        fn set_hash_cursor(&self, _hash: B256) {}
 
         fn increment_cursor(&self) {
             self.index.fetch_add(1, Ordering::Relaxed);
@@ -311,7 +305,7 @@ mod tests {
             self.l1_messages_provider.get_l1_message_with_block_number().await
         }
         fn set_index_cursor(&self, index: u64) {
-            self.l1_messages_provider.set_index_cursor(index)
+            self.l1_messages_provider.set_index_cursor(index);
         }
         fn set_hash_cursor(&self, hash: B256) {
             self.l1_messages_provider.set_hash_cursor(hash)
@@ -418,8 +412,7 @@ mod tests {
             sender: address!("7885BcBd5CeCEf1336b5300fb5186A12DDD8c478"),
             input: bytes!("8ef1332e0000000000000000000000007f2b8c31f88b6006c382775eea88297ec1e3e9050000000000000000000000006ea73e05adc79974b931123675ea8f78ffdacdf000000000000000000000000000000000000000000000000000470de4df820000000000000000000000000000000000000000000000000000000000000000002200000000000000000000000000000000000000000000000000000000000000a000000000000000000000000000000000000000000000000000000000000000a4232e8748000000000000000000000000982fe4a7cbd74bb3422ebe46333c3e8046c12c7f000000000000000000000000982fe4a7cbd74bb3422ebe46333c3e8046c12c7f00000000000000000000000000000000000000000000000000470de4df8200000000000000000000000000000000000000000000000000000000000000000080000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000"),
         }}];
-        let provider =
-            MockL1MessageProvider { messages: Arc::new(Mutex::new(l1_messages)), index: 0.into() };
+        let provider = MockL1MessageProvider { messages: Arc::new(l1_messages), index: 0.into() };
 
         let attributes: Vec<_> = derive(batch_data, provider).await?;
         let attribute =

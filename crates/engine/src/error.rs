@@ -1,5 +1,5 @@
 /// The error type for the engine API.
-#[derive(Debug, thiserror::Error, Debug, thiserror::Error)]
+#[derive(Debug, thiserror::Error)]
 pub enum EngineDriverError {
     /// The engine is unavailable.
     #[error("Engine is unavailable")]

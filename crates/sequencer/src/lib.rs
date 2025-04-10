@@ -13,13 +13,9 @@ use alloy_primitives::Address;
 use alloy_rpc_types_engine::{ForkchoiceState, PayloadAttributes};
 use futures::Stream;
 use reth_scroll_primitives::ScrollBlock;
-use rollup_node_providers::{
-    DatabaseL1MessageDelayProvider, ExecutionPayloadProvider, L1MessageDelayProvider,
-    L1MessageProvider,
-};
+use rollup_node_providers::{ExecutionPayloadProvider, L1MessageDelayProvider, L1MessageProvider};
 use scroll_alloy_provider::ScrollEngineApi;
 use scroll_alloy_rpc_types_engine::ScrollPayloadAttributes;
-use scroll_db::{Database, DatabaseConnectionProvider, DatabaseOperations};
 use scroll_engine::EngineDriver;
 use std::task::{Context, Poll};
 
@@ -28,16 +24,16 @@ pub use error::SequencerError;
 
 /// A type alias for the payload building job future.
 pub type PayloadBuildingJobFuture =
-    Pin<Box<dyn Future<Output = Result<(ScrollBlock, u64), SequencerError>> + Send>>;
+    Pin<Box<dyn Future<Output = Result<ScrollBlock, SequencerError>> + Send>>;
 
-/// The L1MessageProvider trait for the sequencer.
+/// A trait used to define the L1 message provider for the sequencer.
 pub trait SequencerL1MessageProvider: L1MessageProvider + L1MessageDelayProvider {}
 impl<T> SequencerL1MessageProvider for T where T: L1MessageProvider + L1MessageDelayProvider {}
 
 /// The sequencer is responsible for sequencing transactions and producing new blocks.
 pub struct Sequencer<EC, P, SMP> {
     /// A reference to the database
-    provider: Arc<SequencerL1MessageProvider>,
+    provider: Arc<SMP>,
     /// The engine API
     engine: Arc<EngineDriver<EC, P>>,
     /// The fee recipient
@@ -56,7 +52,7 @@ where
 {
     /// Creates a new sequencer.
     pub fn new(
-        provider: Arc<SequencerL1MessageProvider>,
+        provider: Arc<SMP>,
         engine: Arc<EngineDriver<EC, P>>,
         fee_recipient: Address,
         max_l1_messages_per_block: u64,
@@ -99,18 +95,24 @@ where
     }
 
     /// Handle a reorg event.
-    pub fn handle_reorg(&mut self, queue_index: u64) {
-        todo!()
+    pub fn handle_reorg(&mut self, queue_index: u64, block_number: u64) {
+        self.provider.set_index_cursor(queue_index);
+        self.provider.set_l1_head(block_number);
+    }
+
+    /// Handle a new L1 block.
+    pub fn handle_new_l1_block(&mut self, block_number: u64) {
+        self.provider.set_l1_head(block_number);
     }
 }
 
 async fn build_block<
     EC: ScrollEngineApi + Unpin + Send + Sync + 'static,
     P: ExecutionPayloadProvider + Unpin + Send + Sync + 'static,
-    DB: DatabaseConnectionProvider + Unpin + Send + Sync + 'static,
+    SMP: SequencerL1MessageProvider + Unpin + Send + Sync + 'static,
 >(
     engine: Arc<EngineDriver<EC, P>>,
-    mut provider: Arc<DatabaseL1MessageDelayProvider<DB>>,
+    provider: Arc<SMP>,
     max_l1_messages: u64,
     fcs: ForkchoiceState,
     payload_attributes: PayloadAttributes,
@@ -122,7 +124,7 @@ async fn build_block<
             println!("breaking due to max length");
             break;
         }
-        match provider.next_l1_message().await? {
+        match provider.next_l1_message().await.map_err(Into::into)? {
             Some(l1_message) => {
                 l1_messages.push(l1_message.encoded_2718().into());
             }
@@ -135,33 +137,32 @@ async fn build_block<
 
     let scroll_payload_attributes = ScrollPayloadAttributes {
         payload_attributes,
-        transactions: (!transactions.is_empty()).then_some(l1_messages),
+        transactions: (!l1_messages.is_empty()).then_some(l1_messages),
         no_tx_pool: false,
     };
     Ok(engine.build_new_payload(fcs, scroll_payload_attributes).await?)
 }
 
-impl<EC, P> std::fmt::Debug for Sequencer<EC, P> {
+impl<EC, P, SMP> std::fmt::Debug for Sequencer<EC, P, SMP> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("Sequencer")
-            .field("l1_block_number", &self.l1_block_number)
-            .field("l2_block_number", &self.l2_block_number)
-            .field("l1_message_index", &self.l1_message_index)
-            .field("l1_message_delay", &self.l1_message_delay)
+            .field("engine", &"EngineDriver")
+            .field("provider", &"SequencerMessageProvider")
+            .field("fee_recipient", &self.fee_recipient)
+            .field("payload_building_job", &"PayloadBuildingJob")
             .field("l1_message_per_block", &self.max_l1_messages_per_block)
             .finish()
     }
 }
 
-impl<EC, P> Stream for Sequencer<EC, P> {
+impl<EC, P, SMP> Stream for Sequencer<EC, P, SMP> {
     type Item = ScrollBlock;
 
     fn poll_next(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
         if let Some(payload_building_job) = self.payload_building_job.as_mut() {
             match payload_building_job.as_mut().poll(cx) {
-                Poll::Ready(Ok((block, l1_message_index))) => {
+                Poll::Ready(Ok(block)) => {
                     self.payload_building_job = None;
-                    self.l1_message_index = l1_message_index;
                     Poll::Ready(Some(block))
                 }
                 Poll::Ready(Err(_)) => {
