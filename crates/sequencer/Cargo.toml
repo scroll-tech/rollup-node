@@ -10,9 +10,6 @@ exclude.workspace = true
 workspace = true
 
 [dependencies]
-# reth-scroll
-reth-scroll-primitives.workspace = true
-
 # alloy
 alloy-eips.workspace = true
 alloy-primitives.workspace = true
@@ -23,9 +20,12 @@ scroll-alloy-network.workspace = true
 scroll-alloy-provider.workspace = true
 scroll-alloy-rpc-types-engine.workspace = true
 
+# reth-scroll
+reth-scroll-primitives.workspace = true
+
 # rollup-node
 scroll-engine.workspace = true
-scroll-db = { workspace = true, features = ["test-utils"] }
+scroll-db = { workspace = true }
 rollup-node-providers.workspace = true
 
 # misc
@@ -34,27 +34,36 @@ thiserror.workspace = true
 tracing.workspace = true
 
 [dev-dependencies]
-jsonrpsee.workspace = true
-rollup-node-sequencer.workspace = true
-reth-tracing = { git = "https://github.com/scroll-tech/reth.git", branch = "feat/sequencer-rn-integration" }
-reth-e2e-test-utils.workspace = true
-tokio.workspace = true
+# alloy
+alloy-consensus.workspace = true
+alloy-network.workspace = true
+alloy-primitives.workspace = true
 
-reth-scroll-node = { workspace = true, features = ["test-utils"] }
+# scroll-alloy
+scroll-alloy-consensus.workspace = true
+
+# reth
 reth-db = { git = "https://github.com/scroll-tech/reth.git", branch = "feat/sequencer-rn-integration" }
+reth-e2e-test-utils.workspace = true
+reth-node-builder = { git = "https://github.com/scroll-tech/reth.git", branch = "feat/sequencer-rn-integration", features = ["test-utils"] }
 reth-node-core = { git = "https://github.com/scroll-tech/reth.git", branch = "feat/sequencer-rn-integration" }
-reth-node-builder = { git = "https://github.com/scroll-tech/reth.git", features = ["test-utils"], branch = "feat/sequencer-rn-integration" }
 reth-provider = { workspace = true, features = ["test-utils"] }
-reth-revm = { git = "https://github.com/scroll-tech/reth.git", features = ["test-utils"], branch = "feat/sequencer-rn-integration" }
-reth-tasks.workspace = true
-rollup-node-primitives.workspace = true
-
+reth-revm = { git = "https://github.com/scroll-tech/reth.git", branch = "feat/sequencer-rn-integration", features = ["test-utils"] }
 reth-rpc-api = { git = "https://github.com/scroll-tech/reth.git", branch = "feat/sequencer-rn-integration" }
 reth-rpc-layer = { git = "https://github.com/scroll-tech/reth.git", branch = "feat/sequencer-rn-integration" }
+reth-tasks.workspace = true
+reth-tracing = { git = "https://github.com/scroll-tech/reth.git", branch = "feat/sequencer-rn-integration" }
+
+# reth-scroll
+reth-scroll-node = { workspace = true, features = ["test-utils"] }
+
+# rollup-node
+rollup-node-primitives.workspace = true
+rollup-node-sequencer.workspace = true
+scroll-db = { workspace = true, features = ["test-utils"] }
 scroll-engine = { workspace = true, features = ["test-utils"] }
 
-alloy-primitives.workspace = true
-scroll-alloy-consensus.workspace = true
-alloy-network.workspace = true
-alloy-consensus.workspace = true
+# misc
 futures.workspace = true
+jsonrpsee.workspace = true
+tokio.workspace = true
