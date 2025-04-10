@@ -7,9 +7,6 @@ mod beacon;
 pub use execution_payload::ExecutionPayloadProvider;
 mod execution_payload;
 
-pub use block::BlockDataProvider;
-mod block;
-
 pub use l1::{
     blob::L1BlobProvider,
     message::{DatabaseL1MessageProvider, L1MessageProvider},
