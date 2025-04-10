@@ -43,8 +43,7 @@ async fn can_build_blocks() {
     let database = Arc::new(setup_test_db().await);
 
     // create a sequencer
-    let mut sequencer =
-        Sequencer::new(database.clone(), engine_driver, Default::default(), 0, 0, 0, 0, 4);
+    let mut sequencer = Sequencer::new(database.clone(), engine_driver, Default::default(), 4);
 
     // add a transaction to the pool
     let mut wallet_lock = wallet.lock().await;

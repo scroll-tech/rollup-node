@@ -1,4 +1,5 @@
 use super::*;
+use std::sync::atomic::{AtomicU64, Ordering};
 
 /// Implements [`L1MessageProvider`] via a database connection.
 #[derive(Debug)]
@@ -6,39 +7,46 @@ pub struct DatabaseL1MessageProvider<DB> {
     /// A connection to the database.
     database_connection: DB,
     /// The current L1 message index.
-    index: u64,
+    index: AtomicU64,
 }
 
 impl<DB> DatabaseL1MessageProvider<DB> {
     /// Returns a new instance of the [`DatabaseL1MessageProvider`].
     pub const fn new(db: DB, index: u64) -> Self {
-        Self { database_connection: db, index }
+        Self { database_connection: db, index: AtomicU64::new(index) }
+    }
+}
+
+/// Cloning the [`DatabaseL1MessageProvider`] clones the reference to the database and creates a new
+/// u64 atomic.
+impl<DB: Clone> Clone for DatabaseL1MessageProvider<DB> {
+    fn clone(&self) -> Self {
+        Self { database_connection: self.database_connection.clone(), index: AtomicU64::new(0) }
     }
 }
 
 #[async_trait::async_trait]
-impl<DB: DatabaseConnectionProvider + Sync> L1MessageWithBlockNumberProvider
-    for DatabaseL1MessageProvider<DB>
-{
+impl<DB: DatabaseConnectionProvider + Sync> L1MessageProvider for DatabaseL1MessageProvider<DB> {
     type Error = L1ProviderError;
 
     async fn get_l1_message_with_block_number(
         &self,
     ) -> Result<Option<L1MessageWithBlockNumber>, Self::Error> {
-        Ok(self.database_connection.get_l1_message(self.index).await?)
+        let index = self.index.load(Ordering::Relaxed);
+        Ok(self.database_connection.get_l1_message(index).await?)
     }
 
-    fn set_index_cursor(&mut self, index: u64) {
-        self.index = index;
+    fn set_index_cursor(&self, index: u64) {
+        self.index.store(index, Ordering::Relaxed);
     }
 
-    fn set_hash_cursor(&mut self, _hash: B256) {
+    fn set_hash_cursor(&self, _hash: B256) {
         // TODO: issue 43
         todo!()
     }
 
-    fn increment_cursor(&mut self) {
-        self.index += 1;
+    fn increment_cursor(&self) {
+        self.index.fetch_add(1, Ordering::Relaxed);
     }
 }
 
@@ -50,7 +58,7 @@ pub struct DatabaseL1MessageDelayProvider<DB> {
     /// The database L1 message provider.
     l1_message_provider: DatabaseL1MessageProvider<DB>,
     /// The current L1 block number.
-    current_head_number: u64,
+    l1_head: u64,
     /// The number of blocks to wait for before including a L1 message in a block.
     l1_message_delay: u64,
 }
@@ -62,12 +70,24 @@ impl<DB> DatabaseL1MessageDelayProvider<DB> {
         current_head_number: u64,
         l1_message_delay: u64,
     ) -> Self {
-        Self { l1_message_provider, current_head_number, l1_message_delay }
+        Self { l1_message_provider, l1_head: current_head_number, l1_message_delay }
     }
 
     /// Sets the block number of the current L1 head.
-    pub fn set_current_head_number(&mut self, current_head_number: u64) {
-        self.current_head_number = current_head_number;
+    pub fn set_l1_head(&mut self, current_head_number: u64) {
+        self.l1_head = current_head_number;
+    }
+}
+
+/// A trait that allows the L1 message delay provider to set the current head number.
+pub trait L1MessageDelayProvider {
+    /// Set the number of the current L1 head.
+    fn set_l1_head(&mut self, l1_head: u64);
+}
+
+impl<DB> L1MessageDelayProvider for DatabaseL1MessageDelayProvider<DB> {
+    fn set_l1_head(&mut self, current_head_number: u64) {
+        self.set_l1_head(current_head_number);
     }
 }
 
@@ -83,7 +103,7 @@ fn validate_delay_predicate(
 }
 
 #[async_trait::async_trait]
-impl<DB: DatabaseConnectionProvider + Sync> L1MessageWithBlockNumberProvider
+impl<DB: DatabaseConnectionProvider + Sync> L1MessageProvider
     for DatabaseL1MessageDelayProvider<DB>
 {
     type Error = L1ProviderError;
@@ -93,8 +113,7 @@ impl<DB: DatabaseConnectionProvider + Sync> L1MessageWithBlockNumberProvider
     ) -> Result<Option<L1MessageWithBlockNumber>, Self::Error> {
         let msg_w_bn = self.l1_message_provider.get_l1_message_with_block_number().await?;
         if let Some(msg_w_bn) = msg_w_bn {
-            if validate_delay_predicate(&msg_w_bn, self.current_head_number, self.l1_message_delay)
-            {
+            if validate_delay_predicate(&msg_w_bn, self.l1_head, self.l1_message_delay) {
                 return Ok(Some(msg_w_bn));
             }
         }
@@ -102,16 +121,16 @@ impl<DB: DatabaseConnectionProvider + Sync> L1MessageWithBlockNumberProvider
         Ok(None)
     }
 
-    fn set_index_cursor(&mut self, index: u64) {
+    fn set_index_cursor(&self, index: u64) {
         self.l1_message_provider.set_index_cursor(index);
     }
 
-    fn set_hash_cursor(&mut self, _hash: B256) {
+    fn set_hash_cursor(&self, _hash: B256) {
         // TODO: issue 43
         todo!()
     }
 
-    fn increment_cursor(&mut self) {
+    fn increment_cursor(&self) {
         self.l1_message_provider.increment_cursor();
     }
 }

@@ -14,7 +14,8 @@ use alloy_rpc_types_engine::{ForkchoiceState, PayloadAttributes};
 use futures::Stream;
 use reth_scroll_primitives::ScrollBlock;
 use rollup_node_providers::{
-    DatabaseL1MessageDelayProvider, ExecutionPayloadProvider, L1MessageProvider,
+    DatabaseL1MessageDelayProvider, ExecutionPayloadProvider, L1MessageDelayProvider,
+    L1MessageProvider,
 };
 use scroll_alloy_provider::ScrollEngineApi;
 use scroll_alloy_rpc_types_engine::ScrollPayloadAttributes;
@@ -29,55 +30,41 @@ pub use error::SequencerError;
 pub type PayloadBuildingJobFuture =
     Pin<Box<dyn Future<Output = Result<(ScrollBlock, u64), SequencerError>> + Send>>;
 
+/// The L1MessageProvider trait for the sequencer.
+pub trait SequencerL1MessageProvider: L1MessageProvider + L1MessageDelayProvider {}
+impl<T> SequencerL1MessageProvider for T where T: L1MessageProvider + L1MessageDelayProvider {}
+
 /// The sequencer is responsible for sequencing transactions and producing new blocks.
-pub struct Sequencer<DB, EC, P> {
+pub struct Sequencer<EC, P, SMP> {
     /// A reference to the database
-    database: Arc<DatabaseL1MessageDelayProvider<DB>>,
+    provider: Arc<SequencerL1MessageProvider>,
     /// The engine API
     engine: Arc<EngineDriver<EC, P>>,
     /// The fee recipient
     fee_recipient: Address,
-    // TODO: The configuration below should be removed and instead replaced by a Provider type that
-    // can yield L1 messages at the appropriate depth.
-    /// The current L1 block number
-    l1_block_number: u64,
-    /// The current block number
-    l2_block_number: u64,
-    /// The next L1 message index
-    l1_message_index: u64,
-    /// The number of L1 blocks to wait for before including a L1 message in a block
-    l1_message_delay: u64,
     /// The number of L1 messages to include in each block.
     max_l1_messages_per_block: u64,
     /// The inflight payload building job
     payload_building_job: Option<PayloadBuildingJobFuture>,
 }
 
-impl<DB, EC, P> Sequencer<DB, EC, P>
+impl<EC, P, SMP> Sequencer<EC, P, SMP>
 where
     EC: ScrollEngineApi + Unpin + Send + Sync + 'static,
     P: ExecutionPayloadProvider + Unpin + Send + Sync + 'static,
-    DB: DatabaseConnectionProvider + Unpin + Send + Sync + 'static,
+    SMP: SequencerL1MessageProvider + Unpin + Send + Sync + 'static,
 {
     /// Creates a new sequencer.
     pub fn new(
-        database: Arc<DatabaseL1MessageDelayProvider<DB>>,
+        provider: Arc<SequencerL1MessageProvider>,
         engine: Arc<EngineDriver<EC, P>>,
         fee_recipient: Address,
-        l1_block_number: u64,
-        l2_block_number: u64,
-        l1_message_index: u64,
-        l1_message_delay: u64,
         max_l1_messages_per_block: u64,
     ) -> Self {
         Self {
-            database,
+            provider,
             engine,
             fee_recipient,
-            l1_block_number,
-            l2_block_number,
-            l1_message_index,
-            l1_message_delay,
             max_l1_messages_per_block,
             payload_building_job: None,
         }
@@ -101,27 +88,18 @@ where
             prev_randao: Default::default(),
             withdrawals: None,
         };
-        let l1_message_start_index = self.l1_message_index;
         let max_l1_messages = self.max_l1_messages_per_block;
 
         let engine = self.engine.clone();
-        let database = self.database.clone();
+        let database = self.provider.clone();
 
         self.payload_building_job = Some(Box::pin(async move {
-            build_block(
-                engine,
-                database,
-                l1_message_start_index,
-                max_l1_messages,
-                fcs,
-                payload_attributes,
-            )
-            .await
+            build_block(engine, database, max_l1_messages, fcs, payload_attributes).await
         }));
     }
 
     /// Handle a reorg event.
-    pub fn handle_reorg(&mut self, _block_number: u64) {
+    pub fn handle_reorg(&mut self, queue_index: u64) {
         todo!()
     }
 }
@@ -133,11 +111,10 @@ async fn build_block<
 >(
     engine: Arc<EngineDriver<EC, P>>,
     mut provider: Arc<DatabaseL1MessageDelayProvider<DB>>,
-    mut l1_message_start_index: u64,
     max_l1_messages: u64,
     fcs: ForkchoiceState,
     payload_attributes: PayloadAttributes,
-) -> Result<(ScrollBlock, u64), SequencerError> {
+) -> Result<ScrollBlock, SequencerError> {
     let mut l1_messages = vec![];
 
     loop {
@@ -147,7 +124,7 @@ async fn build_block<
         }
         match provider.next_l1_message().await? {
             Some(l1_message) => {
-                l1_messages.push(l1_message);
+                l1_messages.push(l1_message.encoded_2718().into());
             }
             None => {
                 println!("breaking as no messages yielded");
@@ -156,19 +133,12 @@ async fn build_block<
         }
     }
 
-    let transactions = l1_messages
-        .into_iter()
-        .map(|l1_message| l1_message.encoded_2718().into())
-        .collect::<Vec<_>>();
-
-    println!("transactions: {:?}", transactions);
-
     let scroll_payload_attributes = ScrollPayloadAttributes {
         payload_attributes,
-        transactions: (!transactions.is_empty()).then_some(transactions),
+        transactions: (!transactions.is_empty()).then_some(l1_messages),
         no_tx_pool: false,
     };
-    Ok((engine.build_new_payload(fcs, scroll_payload_attributes).await?, l1_message_start_index))
+    Ok(engine.build_new_payload(fcs, scroll_payload_attributes).await?)
 }
 
 impl<EC, P> std::fmt::Debug for Sequencer<EC, P> {

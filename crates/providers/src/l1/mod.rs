@@ -1,13 +1,7 @@
 pub(crate) mod blob;
 pub(crate) mod message;
 
-use crate::{
-    beacon::BeaconProvider,
-    l1::message::{
-        DatabaseL1MessageDelayProvider, L1MessageProvider, L1MessageWithBlockNumberProvider,
-    },
-    L1BlobProvider,
-};
+use crate::{beacon::BeaconProvider, l1::message::L1MessageProvider, L1BlobProvider};
 use std::{num::NonZeroUsize, sync::Arc};
 
 use alloy_eips::eip4844::{Blob, BlobTransactionSidecarItem};
@@ -18,14 +12,8 @@ use scroll_db::DatabaseError;
 use tokio::sync::Mutex;
 
 /// An instance of the trait can be used to provide L1 data.
-pub trait L1Provider:
-    L1BlobProvider + L1MessageWithBlockNumberProvider + L1MessageProvider
-{
-}
-impl<T> L1Provider for T where
-    T: L1BlobProvider + L1MessageWithBlockNumberProvider + L1MessageProvider
-{
-}
+pub trait L1Provider: L1BlobProvider + L1MessageProvider {}
+impl<T> L1Provider for T where T: L1BlobProvider + L1MessageProvider {}
 
 /// An error occurring at the [`L1Provider`].
 #[derive(Debug, thiserror::Error)]
@@ -150,7 +138,7 @@ impl<L1P: Sync, BP: BeaconProvider + Sync> L1BlobProvider for OnlineL1Provider<L
 }
 
 #[async_trait::async_trait]
-impl<L1P: L1MessageWithBlockNumberProvider + Sync, BP: Sync + Send> L1MessageWithBlockNumberProvider
+impl<L1P: L1MessageProvider + Sync, BP: Sync + Send> L1MessageProvider
     for OnlineL1Provider<L1P, BP>
 {
     type Error = <L1P>::Error;
@@ -169,7 +157,7 @@ impl<L1P: L1MessageWithBlockNumberProvider + Sync, BP: Sync + Send> L1MessageWit
         self.l1_message_provider.set_hash_cursor(hash)
     }
 
-    fn increment_cursor(&mut self) {
+    fn increment_cursor(&self) {
         self.l1_message_provider.increment_cursor()
     }
 }
