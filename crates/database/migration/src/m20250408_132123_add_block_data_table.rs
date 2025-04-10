@@ -10,25 +10,27 @@ impl MigrationTrait for Migration {
         manager
             .create_table(
                 Table::create()
-                    .table(ExtraData::Table)
+                    .table(BlockData::Table)
                     .if_not_exists()
-                    .col(big_unsigned(ExtraData::BlockNumber).primary_key())
-                    .col(binary_len(ExtraData::BlockHash, 32))
-                    .col(binary(ExtraData::Data))
+                    .col(big_unsigned(BlockData::Number).primary_key())
+                    .col(binary_len(BlockData::Hash, 32))
+                    .col(binary(BlockData::ExtraData))
+                    .col(binary_len(BlockData::Difficulty, 32))
                     .to_owned(),
             )
             .await
     }
 
     async fn down(&self, manager: &SchemaManager) -> Result<(), DbErr> {
-        manager.drop_table(Table::drop().table(ExtraData::Table).to_owned()).await
+        manager.drop_table(Table::drop().table(BlockData::Table).to_owned()).await
     }
 }
 
 #[derive(DeriveIden)]
-enum ExtraData {
+enum BlockData {
     Table,
-    BlockNumber,
-    BlockHash,
-    Data,
+    Number,
+    Hash,
+    ExtraData,
+    Difficulty,
 }
