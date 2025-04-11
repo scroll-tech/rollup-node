@@ -173,6 +173,8 @@ where
         mut fcs: ForkchoiceState,
         payload_attributes: ScrollPayloadAttributes,
     ) -> Result<ScrollBlock, EngineDriverError> {
+        tracing::trace!(target: "scroll::engine::driver", ?payload_attributes, "building new payload");
+
         // start a payload building job on top of the current unsafe head.
         let fc_updated = self.forkchoice_updated(fcs, Some(payload_attributes)).await?;
 

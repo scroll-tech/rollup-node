@@ -68,8 +68,10 @@ where
 
     /// Creates a new block using the pending transactions from the
     pub fn build_block(&mut self, fcs: ForkchoiceState) {
+        tracing::info!(target: "rollup_node::sequencer", ?fcs, "New payload request received.");
+
         if self.payload_building_job.is_some() {
-            tracing::warn!(target: "rollup_node::sequender", "A payload building job is already in progress");
+            tracing::error!(target: "rollup_node::sequencer", "A payload building job is already in progress");
             return;
         }
 
@@ -117,19 +119,14 @@ async fn build_block<
     fcs: ForkchoiceState,
     payload_attributes: PayloadAttributes,
 ) -> Result<ScrollBlock, SequencerError> {
+    // Collect L1 messages to include in payload.
     let mut l1_messages = vec![];
-
-    loop {
-        if l1_messages.len() == max_l1_messages as usize {
-            println!("breaking due to max length");
-            break;
-        }
+    for _ in 0..max_l1_messages {
         match provider.next_l1_message().await.map_err(Into::into)? {
             Some(l1_message) => {
                 l1_messages.push(l1_message.encoded_2718().into());
             }
             None => {
-                println!("breaking as no messages yielded");
                 break;
             }
         }
@@ -139,6 +136,7 @@ async fn build_block<
         payload_attributes,
         transactions: (!l1_messages.is_empty()).then_some(l1_messages),
         no_tx_pool: false,
+        block_data_hint: None,
     };
     Ok(engine.build_new_payload(fcs, scroll_payload_attributes).await?)
 }
