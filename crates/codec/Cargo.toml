@@ -8,8 +8,8 @@ edition = "2021"
 scroll-alloy-consensus.workspace = true
 alloy-eips.workspace = true
 alloy-primitives.workspace = true
-alloy-rlp = { version = "0.3", default-features = false }
-alloy-sol-types = { version = "0.8", default-features = false }
+alloy-rlp = { version = "0.3.10", default-features = false }
+alloy-sol-types.workspace = true
 
 # scroll
 scroll-l1.workspace = true

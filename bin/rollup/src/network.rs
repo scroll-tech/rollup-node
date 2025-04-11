@@ -139,7 +139,7 @@ where
 
         // Construct the l1 provider.
         let beacon_provider = beacon_provider(l1_provider_args.beacon_rpc_url.to_string());
-        let l1_messages_provider = DatabaseL1MessageProvider::new(db.clone());
+        let l1_messages_provider = DatabaseL1MessageProvider::new(db.clone(), 0);
         let l1_provider =
             OnlineL1Provider::new(beacon_provider, PROVIDER_BLOB_CACHE_SIZE, l1_messages_provider)
                 .await;
