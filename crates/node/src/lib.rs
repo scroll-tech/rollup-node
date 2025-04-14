@@ -231,8 +231,8 @@ where
         cx.waker().wake_by_ref();
     }
 
-    /// Handles a [`ScrollPayloadAttributes`] by initiating a task sending the attribute to the EN
-    /// via the [`EngineDriver`].
+    /// Handles a [`ScrollPayloadAttributesWithBatchInfo`] by initiating a task sending the
+    /// attribute to the EN via the [`EngineDriver`].
     fn handle_payload_attribute(&mut self, attribute: ScrollPayloadAttributesWithBatchInfo) {
         let engine = self.engine.clone();
         let safe_block_info = *self.forkchoice_state.safe_block_info();
