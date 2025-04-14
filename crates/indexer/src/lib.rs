@@ -108,9 +108,8 @@ impl Indexer {
         Ok(IndexerEvent::ReorgIndexed(block_number))
     }
 
-    /// Handles a finalized event by pulling the newest finalized batch from database for which the
-    /// finalized block number is smaller or equal to the provider block number. If it finds one, it
-    /// queries the highest corresponding L2 block and returns the block as the new finalized block.
+    /// Handles a finalized event by updating the indexer L1 finalized block and returning the new
+    /// finalized L2 chain block.
     async fn handle_finalized(
         database: Arc<Database>,
         block_number: u64,
@@ -206,7 +205,7 @@ impl Stream for Indexer {
                     self.pending_futures.push_front(action);
                     Poll::Pending
                 }
-            };
+            }
         }
 
         Poll::Pending

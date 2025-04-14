@@ -294,7 +294,7 @@ where
 
         for (msg, bn) in l1_messages {
             let block_number = bn.ok_or(FilterLogError::MissingBlockNumber)?;
-            tracing::trace!(target: "scroll::watcher", l1_message = ?msg, ?block_number, "Handled l1 message");
+            tracing::trace!(target: "scroll::watcher", index = msg.queue_index, ?block_number, "Handled l1 message");
 
             let notification = L1MessageWithBlockNumber::new(block_number, msg);
             self.notify(L1Notification::L1Message(notification)).await;
@@ -356,7 +356,7 @@ where
                 let batch_index =
                     decoded_log.batch_index.uint_try_to().expect("u256 to u64 conversion error");
 
-                tracing::trace!(target: "scroll::watcher", batch_hash = ?decoded_log.batch_hash, batch_index, "Handled batch commit");
+                tracing::trace!(target: "scroll::watcher", index = batch_index, hash = ?decoded_log.batch_hash, "Handled batch commit");
 
                 // notify via channel.
                 self.notify(L1Notification::BatchCommit(BatchCommitData {
@@ -386,7 +386,7 @@ where
             // fetch the finalize transaction.
             let block_number = maybe_block_number.ok_or(FilterLogError::MissingBlockNumber)?;
 
-            tracing::trace!(target: "scroll::watcher", batch_hash = ?decoded_log.batch_hash, "Handled batch finalization");
+            tracing::trace!(target: "scroll::watcher", index = ?decoded_log.batch_index, hash = ?decoded_log.batch_hash, "Handled batch finalization");
 
             // send the finalization event in the channel.
             let _ = self

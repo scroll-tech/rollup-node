@@ -31,8 +31,7 @@ use scroll_alloy_rpc_types_engine::ScrollPayloadAttributes;
 use scroll_codec::Codec;
 use scroll_db::{Database, DatabaseOperations};
 
-/// A future that resolves to a stream of tuples, with the first value being the [`BlockInfo`] to
-/// the Batch which contains the yielded [`ScrollPayloadAttributes`].
+/// A future that resolves to a stream of [`ScrollPayloadAttributesWithBatchInfo`].
 type DerivationPipelineFuture = Pin<
     Box<
         dyn Future<
