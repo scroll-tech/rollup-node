@@ -2,7 +2,7 @@ use alloy_primitives::B256;
 use alloy_rpc_types_engine::ExecutionPayload;
 
 /// Information about a block.
-#[derive(Debug, Default, Copy, Clone)]
+#[derive(Debug, Default, Copy, Clone, PartialEq, Eq)]
 pub struct BlockInfo {
     /// The block number.
     pub number: u64,

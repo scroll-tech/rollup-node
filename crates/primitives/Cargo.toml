@@ -16,6 +16,7 @@ alloy-rpc-types-engine.workspace = true
 
 # scroll
 scroll-alloy-consensus.workspace = true
+scroll-alloy-rpc-types-engine.workspace = true
 
 # misc
 arbitrary = { workspace = true, optional = true }
