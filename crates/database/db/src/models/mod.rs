@@ -1,6 +1,9 @@
 /// This module contains the batch commit database model.
 pub mod batch_commit;
 
+/// This module contains the batch to block model.
+pub mod batch_to_block;
+
 /// This module contains the block data database model.
 pub mod block_data;
 
