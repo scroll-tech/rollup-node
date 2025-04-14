@@ -66,7 +66,8 @@ where
         }
     }
 
-    /// Creates a new block using the pending transactions from the
+    /// Creates a new block using the pending transactions from the message queue and
+    /// the transaction pool.
     pub fn build_block(&mut self, fcs: ForkchoiceState) {
         tracing::info!(target: "rollup_node::sequencer", ?fcs, "New payload request received.");
 
