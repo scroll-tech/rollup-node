@@ -9,7 +9,6 @@ use reth_tokio_util::{EventSender, EventStream};
 use rollup_node_indexer::{Indexer, IndexerEvent};
 use rollup_node_watcher::L1Notification;
 use scroll_alloy_provider::ScrollEngineApi;
-use scroll_alloy_rpc_types_engine::ScrollPayloadAttributes;
 use scroll_engine::{EngineDriver, EngineDriverError, ForkchoiceState};
 use scroll_network::{
     BlockImportError, BlockImportOutcome, BlockValidation, BlockValidationError, NetworkManager,
@@ -35,7 +34,7 @@ pub use consensus::PoAConsensus;
 mod consensus;
 
 use consensus::Consensus;
-use rollup_node_primitives::BlockInfo;
+use rollup_node_primitives::{BatchInfo, BlockInfo, ScrollPayloadAttributesWithBatchInfo};
 use rollup_node_providers::{ExecutionPayloadProvider, L1Provider};
 use scroll_db::Database;
 use scroll_derivation_pipeline::DerivationPipeline;
@@ -48,8 +47,9 @@ type PendingBlockImportFuture =
     Pin<Box<dyn Future<Output = (Option<BlockInfo>, Option<BlockImportOutcome>)> + Send>>;
 
 /// A future that resolves to a tuple of the block info and the block import outcome.
-type EngineDriverFuture =
-    Pin<Box<dyn Future<Output = Result<(BlockInfo, bool), EngineDriverError>> + Send>>;
+type EngineDriverFuture = Pin<
+    Box<dyn Future<Output = Result<(BlockInfo, bool, Arc<BatchInfo>), EngineDriverError>> + Send>,
+>;
 
 /// The main manager for the rollup node.
 ///
@@ -233,14 +233,20 @@ where
 
     /// Handles a [`ScrollPayloadAttributes`] by initiating a task sending the attribute to the EN
     /// via the [`EngineDriver`].
-    fn handle_payload_attribute(&mut self, attribute: ScrollPayloadAttributes) {
+    fn handle_payload_attribute(&mut self, attribute: ScrollPayloadAttributesWithBatchInfo) {
         let engine = self.engine.clone();
         let safe_block_info = *self.forkchoice_state.safe_block_info();
         let fcs = self.get_alloy_fcs();
 
-        trace!(target: "scroll::node::manager", payload = ?attribute.payload_attributes, "New engine driver task");
+        trace!(target: "scroll::node::manager", payload = ?attribute.payload_attributes.payload_attributes, "New engine driver task");
         let fut = Box::pin(async move {
-            engine.handle_payload_attributes(safe_block_info, fcs, attribute).await
+            // attach the batch info the engine future.
+            let attributes = attribute.payload_attributes;
+            let batch_info = attribute.batch_info;
+            engine
+                .handle_payload_attributes(safe_block_info, fcs, attributes)
+                .await
+                .map(|(info, b)| (info, b, batch_info))
         });
         self.pending_engine_task.replace(fut);
     }
@@ -250,12 +256,16 @@ where
     fn handle_engine_driver_future(&mut self, mut fut: EngineDriverFuture, cx: &mut Context<'_>) {
         match fut.poll_unpin(cx) {
             Poll::Ready(result) => match result {
-                Ok((safe_block_info, should_update_unsafe_head)) => {
+                Ok((safe_block_info, should_update_unsafe_head, batch_info)) => {
+                    // update the safe and unsafe head if necessary.
                     self.forkchoice_state.update_safe_block_info(safe_block_info);
                     if should_update_unsafe_head {
                         self.forkchoice_state.update_unsafe_block_info(safe_block_info);
                     }
-                    trace!(target: "scroll::node::manager", new_forkchoice_state = ?self.forkchoice_state, "Handled ScrollPayloadAttributes");
+
+                    // index the batch to block new entry.
+                    self.indexer.handle_batch_to_block(*batch_info, safe_block_info);
+                    trace!(target: "scroll::node::manager", new_forkchoice_state = ?self.forkchoice_state, batch_info = ?*batch_info, "Handled ScrollPayloadAttributes");
                 }
                 Err(err) => {
                     error!(target: "scroll::node::manager", ?err, "Engine driver failed to handle attribute")
@@ -282,9 +292,18 @@ where
 
     /// Handles an indexer event.
     fn handle_indexer_event(&mut self, event: IndexerEvent) {
-        trace!(target: "scroll::node::manager", "Received indexer event: {:?}", event);
-        if let IndexerEvent::BatchCommitIndexed(index) = event {
-            self.derivation_pipeline.handle_batch_commit(index)
+        trace!(target: "scroll::node::manager", ?event, "Received indexer event");
+        match event {
+            IndexerEvent::BatchCommitIndexed(batch_info) => {
+                // push the batch info into the derivation pipeline.
+                self.derivation_pipeline.handle_batch_commit(batch_info)
+            }
+            IndexerEvent::BatchFinalizationIndexed(_, Some(finalized_block)) |
+            IndexerEvent::FinalizedIndexed(_, Some(finalized_block)) => {
+                // update the fcs on new finalized block.
+                self.forkchoice_state.update_finalized_block_info(finalized_block);
+            }
+            _ => (),
         }
     }
 
@@ -351,8 +370,8 @@ where
 
         // Handle payload attribute if engine task is empty.
         if this.pending_engine_task.is_none() {
-            if let Poll::Ready(Some(attribute)) = this.derivation_pipeline.poll_next_unpin(cx) {
-                this.handle_payload_attribute(attribute)
+            if let Poll::Ready(Some(attributes)) = this.derivation_pipeline.poll_next_unpin(cx) {
+                this.handle_payload_attribute(attributes)
             }
         }
 

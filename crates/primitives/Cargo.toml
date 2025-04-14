@@ -29,4 +29,5 @@ arbitrary = [
     "dep:arbitrary",
     "alloy-primitives/arbitrary",
     "scroll-alloy-consensus/arbitrary",
+    "scroll-alloy-rpc-types-engine/arbitrary",
 ]
