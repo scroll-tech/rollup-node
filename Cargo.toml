@@ -20,6 +20,7 @@ members = [
     "crates/primitives",
     "crates/providers",
     "crates/scroll-wire",
+    "crates/sequencer",
     "crates/watcher",
 ]
 
@@ -135,6 +136,7 @@ scroll-alloy-provider = { git = "https://github.com/scroll-tech/reth.git", defau
 scroll-alloy-rpc-types-engine = { git = "https://github.com/scroll-tech/reth.git" }
 
 # reth
+reth-e2e-test-utils = { git = "https://github.com/scroll-tech/reth.git" }
 reth-eth-wire-types = { git = "https://github.com/scroll-tech/reth.git", default-features = false }
 reth-network = { git = "https://github.com/scroll-tech/reth.git", default-features = false }
 reth-network-api = { git = "https://github.com/scroll-tech/reth.git", default-features = false }
@@ -155,6 +157,7 @@ rollup-node-indexer = { path = "crates/indexer" }
 rollup-node-manager = { path = "crates/node" }
 rollup-node-primitives = { path = "crates/primitives" }
 rollup-node-providers = { path = "crates/providers" }
+rollup-node-sequencer = { path = "crates/sequencer" }
 rollup-node-watcher = { path = "crates/watcher" }
 scroll-codec = { path = "crates/codec" }
 scroll-db = { path = "crates/database/db" }
@@ -172,6 +175,7 @@ auto_impl = "1.2"
 derive_more = { version = "2.0", default-features = false }
 eyre = "0.6"
 futures = { version = "0.3", default-features = false }
+parking_lot = "0.12"
 rand = { version = "0.9" }
 reqwest = "0.12"
 secp256k1 = { version = "0.29", default-features = false }
@@ -179,3 +183,4 @@ thiserror = "2.0"
 tokio = { version = "1.39", default-features = false }
 tokio-stream = { version = "0.1", default-features = false }
 tracing = "0.1.0"
+jsonrpsee = "0.24.9"

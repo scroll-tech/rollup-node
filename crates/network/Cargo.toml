@@ -26,7 +26,7 @@ scroll-wire.workspace = true
 
 # misc
 futures.workspace = true
-parking_lot = "0.12"
+parking_lot.workspace = true
 secp256k1 = { workspace = true, features = ["global-context", "rand-std", "recovery"] }
 tokio = { workspace = true, features = ["full"] }
 tokio-stream.workspace = true

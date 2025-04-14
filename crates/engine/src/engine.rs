@@ -8,9 +8,11 @@ use alloy_rpc_types_engine::{
 use eyre::Result;
 use reth_payload_primitives::PayloadTypes;
 use reth_scroll_engine_primitives::ScrollEngineTypes;
+use reth_scroll_primitives::ScrollBlock;
 use rollup_node_primitives::BlockInfo;
 use rollup_node_providers::ExecutionPayloadProvider;
 use scroll_alloy_provider::ScrollEngineApi;
+use scroll_alloy_rpc_types_engine::ScrollPayloadAttributes;
 use tokio::time::Duration;
 use tracing::{debug, error, info, instrument, trace};
 
@@ -28,7 +30,7 @@ pub struct EngineDriver<EC, P> {
 
 impl<EC, P> EngineDriver<EC, P>
 where
-    EC: ScrollEngineApi<scroll_alloy_network::Scroll> + Unpin + Send + Sync + 'static,
+    EC: ScrollEngineApi + Unpin + Send + Sync + 'static,
     P: ExecutionPayloadProvider + Unpin + Send + Sync + 'static,
 {
     /// Create a new [`EngineDriver`] from the provided [`ScrollEngineApi`] and
@@ -163,6 +165,32 @@ where
 
             Ok((safe_block_info, true))
         }
+    }
+
+    /// Builds a new payload from the provided fork choice state and payload attributes.
+    pub async fn build_new_payload(
+        &self,
+        mut fcs: ForkchoiceState,
+        payload_attributes: ScrollPayloadAttributes,
+    ) -> Result<ScrollBlock, EngineDriverError> {
+        tracing::trace!(target: "scroll::engine::driver", ?payload_attributes, "building new payload");
+
+        // start a payload building job on top of the current unsafe head.
+        let fc_updated = self.forkchoice_updated(fcs, Some(payload_attributes)).await?;
+
+        // retrieve the execution payload
+        let execution_payload = self
+            .get_payload(fc_updated.payload_id.expect("payload attributes has been set"))
+            .await?;
+
+        // update the head block hash to the new payload block hash.
+        fcs.head_block_hash = execution_payload.block_hash();
+
+        // update the fork choice state with the new block hash.
+        self.forkchoice_updated(fcs, None).await?;
+
+        // convert the payload into a block.
+        execution_payload.try_into().map_err(|_| EngineDriverError::InvalidExecutionPayload)
     }
 
     /// Calls `engine_newPayloadV1` and logs the result.
