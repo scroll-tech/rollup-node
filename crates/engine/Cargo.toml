@@ -22,13 +22,13 @@ scroll-alloy-provider.workspace = true
 scroll-alloy-rpc-types-engine.workspace = true
 
 # reth
-reth-payload-primitives = { git = "https://github.com/scroll-tech/reth.git", branch = "scroll" }
+reth-payload-primitives = { git = "https://github.com/scroll-tech/reth.git" }
 reth-primitives = { workspace = true }
 
 # reth-scroll
 reth-scroll-chainspec.workspace = true
 reth-scroll-primitives.workspace = true
-reth-scroll-engine-primitives = { git = "https://github.com/scroll-tech/reth.git", default-features = false, branch = "scroll" }
+reth-scroll-engine-primitives = { git = "https://github.com/scroll-tech/reth.git", default-features = false }
 
 # rollup-node
 rollup-node-primitives.workspace = true
@@ -46,7 +46,7 @@ arbitrary = { workspace = true, optional = true }
 
 [dev-dependencies]
 arbitrary.workspace = true
-reth-testing-utils = { git = "https://github.com/scroll-tech/reth.git", branch = "scroll" }
+reth-testing-utils = { git = "https://github.com/scroll-tech/reth.git" }
 
 [features]
 arbitrary = [
