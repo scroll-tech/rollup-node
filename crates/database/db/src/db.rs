@@ -49,11 +49,13 @@ mod test {
         models, operations::DatabaseOperations, test_utils::setup_test_db,
         DatabaseConnectionProvider,
     };
+    use alloy_primitives::B256;
+    use std::sync::Arc;
 
     use arbitrary::{Arbitrary, Unstructured};
     use futures::StreamExt;
     use rand::Rng;
-    use rollup_node_primitives::{BatchCommitData, L1MessageWithBlockNumber};
+    use rollup_node_primitives::{BatchCommitData, BatchInfo, BlockInfo, L1MessageWithBlockNumber};
     use sea_orm::{ColumnTrait, EntityTrait, QueryFilter};
 
     #[tokio::test]
@@ -134,6 +136,113 @@ mod test {
         // db should contain the seeded data after migration.
         let data = db.get_block_data(0.into()).await.unwrap();
         assert!(data.is_some());
+    }
+
+    #[tokio::test]
+    async fn test_database_batch_to_block_exists() {
+        // Set up the test database.
+        let db = setup_test_db().await;
+
+        // Generate unstructured bytes.
+        let mut bytes = [0u8; 1024];
+        rand::rng().fill(bytes.as_mut_slice());
+        let mut u = Unstructured::new(&bytes);
+
+        // Generate randoms BatchInfo and BlockInfo with increasing block numbers.
+        let mut block_number = 100;
+        let data = BatchCommitData { index: 100, ..Arbitrary::arbitrary(&mut u).unwrap() };
+        let batch_info = data.clone().into();
+        db.insert_batch(data).await.unwrap();
+
+        for _ in 0..10 {
+            let block_info =
+                BlockInfo { number: block_number, hash: B256::arbitrary(&mut u).unwrap() };
+            db.insert_batch_to_block(batch_info, block_info).await.unwrap();
+            block_number += 1;
+        }
+
+        // Fetch the highest block for the batch and verify number.
+        let highest_block_info =
+            db.get_highest_block_for_batch(batch_info.hash).await.unwrap().unwrap();
+        assert_eq!(highest_block_info.number, block_number - 1);
+    }
+
+    #[tokio::test]
+    async fn test_database_batch_to_block_missing() {
+        // Set up the test database.
+        let db = setup_test_db().await;
+
+        // Generate unstructured bytes.
+        let mut bytes = [0u8; 1024];
+        rand::rng().fill(bytes.as_mut_slice());
+        let mut u = Unstructured::new(&bytes);
+
+        // Generate randoms BatchInfo and BlockInfo with increasing block numbers.
+        let mut block_number = 100;
+        let first_batch = BatchCommitData { index: 100, ..Arbitrary::arbitrary(&mut u).unwrap() };
+        let first_batch_info = first_batch.clone().into();
+
+        let second_batch = BatchCommitData { index: 250, ..Arbitrary::arbitrary(&mut u).unwrap() };
+        let second_batch_info: BatchInfo = second_batch.clone().into();
+
+        db.insert_batch(first_batch).await.unwrap();
+        db.insert_batch(second_batch).await.unwrap();
+
+        for _ in 0..10 {
+            let block_info =
+                BlockInfo { number: block_number, hash: B256::arbitrary(&mut u).unwrap() };
+            db.insert_batch_to_block(first_batch_info, block_info).await.unwrap();
+            block_number += 1;
+        }
+
+        // Fetch the highest block for the batch and verify number.
+        let highest_block_info =
+            db.get_highest_block_for_batch(second_batch_info.hash).await.unwrap().unwrap();
+        assert_eq!(highest_block_info.number, block_number - 1);
+    }
+
+    #[tokio::test]
+    async fn test_database_finalized_batch_hash_at_height() {
+        // Set up the test database.
+        let db = setup_test_db().await;
+
+        // Generate unstructured bytes.
+        let mut bytes = [0u8; 2048];
+        rand::rng().fill(bytes.as_mut_slice());
+        let mut u = Unstructured::new(&bytes);
+
+        // Generate randoms BatchInfoCommitData, insert in database and finalize.
+        let mut block_number = 100;
+        let mut batch_index = 100;
+        let mut highest_finalized_batch_hash = B256::ZERO;
+
+        for _ in 0..20 {
+            let data = BatchCommitData {
+                index: batch_index,
+                calldata: Arc::new(vec![].into()),
+                ..Arbitrary::arbitrary(&mut u).unwrap()
+            };
+            let hash = data.hash;
+            db.insert_batch(data).await.unwrap();
+
+            // save batch hash finalized at block number 109.
+            if block_number == 109 {
+                highest_finalized_batch_hash = hash;
+            }
+
+            // Finalize batch up to block number 110.
+            if block_number <= 110 {
+                db.finalize_batch(hash, block_number).await.unwrap();
+            }
+
+            block_number += 1;
+            batch_index += 1;
+        }
+
+        // Fetch the finalized batch for provided height and verify number.
+        let highest_batch_hash_from_db =
+            db.get_finalized_batch_hash_at_height(109).await.unwrap().unwrap();
+        assert_eq!(highest_finalized_batch_hash, highest_batch_hash_from_db);
     }
 
     #[tokio::test]
