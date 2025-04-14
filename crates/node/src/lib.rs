@@ -17,7 +17,6 @@ use scroll_network::{
 };
 use scroll_wire::NewBlock;
 use std::{
-    collections::VecDeque,
     fmt,
     fmt::{Debug, Formatter},
     future::Future,
@@ -50,7 +49,7 @@ type PendingBlockImportFuture =
 
 /// A future that resolves to a tuple of the block info and the block import outcome.
 type EngineDriverFuture =
-    Pin<Box<dyn Future<Output = Result<BlockInfo, EngineDriverError>> + Send>>;
+    Pin<Box<dyn Future<Output = Result<(BlockInfo, bool), EngineDriverError>> + Send>>;
 
 /// The main manager for the rollup node.
 ///
@@ -84,8 +83,8 @@ pub struct RollupNodeManager<C, EC, P, L1P> {
     forkchoice_state: ForkchoiceState,
     /// A collection of pending block imports.
     pending_block_imports: FuturesOrdered<PendingBlockImportFuture>,
-    /// A collection of pending engine driver tasks.
-    pending_engine_tasks: VecDeque<EngineDriverFuture>,
+    /// A pending engine driver task.
+    pending_engine_task: Option<EngineDriverFuture>,
     /// An event sender for sending events to subscribers of the rollup node manager.
     event_sender: Option<EventSender<RollupEvent>>,
 }
@@ -102,7 +101,10 @@ impl<C: Debug, EC: Debug, P: Debug, L1P: Debug> Debug for RollupNodeManager<C, E
             .field("new_block_rx", &self.new_block_rx)
             .field("forkchoice_state", &self.forkchoice_state)
             .field("pending_block_imports", &self.pending_block_imports)
-            .field("pending_engine_tasks", &"[ ... ]")
+            .field(
+                "pending_engine_task",
+                &self.pending_engine_task.as_ref().map(|_| "Some( ... )").unwrap_or("None"),
+            )
             .field("event_sender", &self.event_sender)
             .finish()
     }
@@ -139,7 +141,7 @@ where
             new_block_rx: new_block_rx.map(Into::into),
             forkchoice_state,
             pending_block_imports: FuturesOrdered::new(),
-            pending_engine_tasks: VecDeque::new(),
+            pending_engine_task: None,
             event_sender: None,
         }
     }
@@ -236,13 +238,11 @@ where
         let safe_block_info = *self.forkchoice_state.safe_block_info();
         let fcs = self.get_alloy_fcs();
 
+        trace!(target: "scroll::node::manager", payload = ?attribute.payload_attributes, "New engine driver task");
         let fut = Box::pin(async move {
-            engine
-                .handle_payload_attributes(safe_block_info, fcs, attribute)
-                .await
-                .map(|(info, _)| info)
+            engine.handle_payload_attributes(safe_block_info, fcs, attribute).await
         });
-        self.pending_engine_tasks.push_back(fut);
+        self.pending_engine_task.replace(fut);
     }
 
     /// Handles a [`EngineDriverFuture`] by polling it and updating the forkchoice state if it
@@ -250,13 +250,19 @@ where
     fn handle_engine_driver_future(&mut self, mut fut: EngineDriverFuture, cx: &mut Context<'_>) {
         match fut.poll_unpin(cx) {
             Poll::Ready(result) => match result {
-                Ok(block_info) => self.forkchoice_state.update_safe_block_info(block_info),
+                Ok((safe_block_info, should_update_unsafe_head)) => {
+                    self.forkchoice_state.update_safe_block_info(safe_block_info);
+                    if should_update_unsafe_head {
+                        self.forkchoice_state.update_unsafe_block_info(safe_block_info);
+                    }
+                    trace!(target: "scroll::node::manager", new_forkchoice_state = ?self.forkchoice_state, "Handled ScrollPayloadAttributes");
+                }
                 Err(err) => {
                     error!(target: "scroll::node::manager", ?err, "Engine driver failed to handle attribute")
                 }
             },
             Poll::Pending => {
-                self.pending_engine_tasks.push_front(fut);
+                self.pending_engine_task.replace(fut);
             }
         }
     }
@@ -267,7 +273,7 @@ where
 
     /// Handles a network manager event.
     ///
-    /// Currently the network manager only emits a `NewBlock` event.
+    /// Currently, the network manager only emits a `NewBlock` event.
     fn handle_network_manager_event(&mut self, event: NetworkManagerEvent, cx: &mut Context<'_>) {
         match event {
             NetworkManagerEvent::NewBlock(block) => self.handle_new_block(block, cx),
@@ -343,13 +349,15 @@ where
             }
         }
 
-        // Poll Derivation Pipeline and push attribute in queue if any.
-        while let Poll::Ready(Some(attribute)) = this.derivation_pipeline.poll_next_unpin(cx) {
-            this.handle_payload_attribute(attribute)
+        // Handle payload attribute if engine task is empty.
+        if this.pending_engine_task.is_none() {
+            if let Poll::Ready(Some(attribute)) = this.derivation_pipeline.poll_next_unpin(cx) {
+                this.handle_payload_attribute(attribute)
+            }
         }
 
         // Poll Engine Driver tasks.
-        if let Some(fut) = this.pending_engine_tasks.pop_front() {
+        if let Some(fut) = this.pending_engine_task.take() {
             this.handle_engine_driver_future(fut, cx);
         }
 
