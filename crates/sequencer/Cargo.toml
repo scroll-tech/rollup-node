@@ -1,0 +1,69 @@
+[package]
+name = "rollup-node-sequencer"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+exclude.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+# alloy
+alloy-eips.workspace = true
+alloy-primitives.workspace = true
+alloy-rpc-types-engine.workspace = true
+
+# scroll-alloy
+scroll-alloy-network.workspace = true
+scroll-alloy-provider.workspace = true
+scroll-alloy-rpc-types-engine.workspace = true
+
+# reth-scroll
+reth-scroll-primitives.workspace = true
+
+# rollup-node
+scroll-engine.workspace = true
+scroll-db = { workspace = true }
+rollup-node-providers.workspace = true
+
+# misc
+futures.workspace = true
+thiserror.workspace = true
+tracing.workspace = true
+
+[dev-dependencies]
+# alloy
+alloy-consensus.workspace = true
+alloy-network.workspace = true
+alloy-primitives.workspace = true
+
+# scroll-alloy
+scroll-alloy-consensus.workspace = true
+
+# reth
+reth-db = { git = "https://github.com/scroll-tech/reth.git" }
+reth-e2e-test-utils.workspace = true
+reth-node-builder = { git = "https://github.com/scroll-tech/reth.git", features = ["test-utils"] }
+reth-node-core = { git = "https://github.com/scroll-tech/reth.git" }
+reth-provider = { workspace = true, features = ["test-utils"] }
+reth-revm = { git = "https://github.com/scroll-tech/reth.git", features = ["test-utils"] }
+reth-rpc-api = { git = "https://github.com/scroll-tech/reth.git" }
+reth-rpc-layer = { git = "https://github.com/scroll-tech/reth.git" }
+reth-tasks.workspace = true
+reth-tracing = { git = "https://github.com/scroll-tech/reth.git" }
+
+# reth-scroll
+reth-scroll-node = { workspace = true, features = ["test-utils"] }
+
+# rollup-node
+rollup-node-primitives.workspace = true
+rollup-node-sequencer.workspace = true
+scroll-db = { workspace = true, features = ["test-utils"] }
+scroll-engine = { workspace = true, features = ["test-utils"] }
+
+# misc
+futures.workspace = true
+jsonrpsee.workspace = true
+tokio.workspace = true

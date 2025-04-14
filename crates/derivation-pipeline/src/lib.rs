@@ -157,7 +157,7 @@ where
 
 /// Returns a vector of [`ScrollPayloadAttributes`] from the [`BatchCommitData`] and a
 /// [`L1Provider`].
-pub async fn derive<L1P: L1Provider, L2P: BlockDataProvider>(
+pub async fn derive<L1P: L1Provider + Sync + Send, L2P: BlockDataProvider + Sync + Send>(
     batch: BatchCommitData,
     l1_provider: L1P,
     l2_provider: L2P,
@@ -229,8 +229,11 @@ pub async fn derive<L1P: L1Provider, L2P: BlockDataProvider>(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::sync::Arc;
+
     use alloy_eips::{eip4844::Blob, BlockId};
-    use alloy_primitives::{address, b256, bytes, B256, U256};
+    use alloy_primitives::{address, b256, bytes, U256};
+    use core::sync::atomic::{AtomicU64, Ordering};
     use rollup_node_primitives::L1MessageWithBlockNumber;
     use rollup_node_providers::{
         DatabaseL1MessageProvider, L1BlobProvider, L1MessageProvider, L1ProviderError,
@@ -239,11 +242,10 @@ mod tests {
     use scroll_alloy_rpc_types_engine::BlockDataHint;
     use scroll_codec::decoding::test_utils::read_to_bytes;
     use scroll_db::test_utils::setup_test_db;
-    use std::sync::Arc;
-    use tokio::sync::Mutex;
 
     struct MockL1MessageProvider {
-        messages: Arc<Mutex<Vec<TxL1Message>>>,
+        messages: Arc<Vec<L1MessageWithBlockNumber>>,
+        index: AtomicU64,
     }
 
     struct Infallible;
@@ -268,13 +270,20 @@ mod tests {
     impl L1MessageProvider for MockL1MessageProvider {
         type Error = Infallible;
 
-        async fn next_l1_message(&self) -> Result<Option<TxL1Message>, Self::Error> {
-            Ok(Some(self.messages.try_lock().expect("lock is free").remove(0)))
+        async fn get_l1_message_with_block_number(
+            &self,
+        ) -> Result<Option<L1MessageWithBlockNumber>, Self::Error> {
+            let index = self.index.load(Ordering::Relaxed);
+            Ok(self.messages.get(index as usize).cloned())
         }
 
         fn set_index_cursor(&self, _index: u64) {}
 
         fn set_hash_cursor(&self, _hash: B256) {}
+
+        fn increment_cursor(&self) {
+            self.index.fetch_add(1, Ordering::Relaxed);
+        }
     }
 
     #[derive(Clone)]
@@ -297,14 +306,19 @@ mod tests {
     impl<P: L1MessageProvider + Sync> L1MessageProvider for MockL1Provider<P> {
         type Error = P::Error;
 
-        async fn next_l1_message(&self) -> Result<Option<TxL1Message>, Self::Error> {
-            self.l1_messages_provider.next_l1_message().await
+        async fn get_l1_message_with_block_number(
+            &self,
+        ) -> Result<Option<L1MessageWithBlockNumber>, Self::Error> {
+            self.l1_messages_provider.get_l1_message_with_block_number().await
         }
         fn set_index_cursor(&self, index: u64) {
-            self.l1_messages_provider.set_index_cursor(index)
+            self.l1_messages_provider.set_index_cursor(index);
         }
         fn set_hash_cursor(&self, hash: B256) {
             self.l1_messages_provider.set_hash_cursor(hash)
+        }
+        fn increment_cursor(&self) {
+            self.l1_messages_provider.increment_cursor()
         }
     }
 
@@ -360,7 +374,7 @@ mod tests {
         }
 
         // construct the pipeline.
-        let l1_messages_provider = DatabaseL1MessageProvider::new(db.clone());
+        let l1_messages_provider = DatabaseL1MessageProvider::new(db.clone(), 0);
         let mock_l1_provider = MockL1Provider { l1_messages_provider };
         let mut pipeline = DerivationPipeline::new(mock_l1_provider, db);
 
@@ -405,22 +419,23 @@ mod tests {
             blob_versioned_hash: None,
         };
 
-        let l1_messages = vec![TxL1Message {
+        let l1_messages = vec![L1MessageWithBlockNumber{ block_number: 5, transaction: TxL1Message {
             queue_index: 33,
             gas_limit: 168000,
             to: address!("781e90f1c8Fc4611c9b7497C3B47F99Ef6969CbC"),
             value: U256::ZERO,
             sender: address!("7885BcBd5CeCEf1336b5300fb5186A12DDD8c478"),
             input: bytes!("8ef1332e0000000000000000000000007f2b8c31f88b6006c382775eea88297ec1e3e9050000000000000000000000006ea73e05adc79974b931123675ea8f78ffdacdf0000000000000000000000000000000000000000000000000006a94d74f430000000000000000000000000000000000000000000000000000000000000000002100000000000000000000000000000000000000000000000000000000000000a000000000000000000000000000000000000000000000000000000000000000a4232e8748000000000000000000000000ca266224613396a0e8d4c2497dbc4f33dd6cdeff000000000000000000000000ca266224613396a0e8d4c2497dbc4f33dd6cdeff000000000000000000000000000000000000000000000000006a94d74f4300000000000000000000000000000000000000000000000000000000000000000080000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000"),
-        },TxL1Message {
+        }} , L1MessageWithBlockNumber { block_number: 10, transaction: TxL1Message {
             queue_index: 34,
             gas_limit: 168000,
             to: address!("781e90f1c8fc4611c9b7497c3b47f99ef6969cbc"),
             value: U256::ZERO,
             sender: address!("7885BcBd5CeCEf1336b5300fb5186A12DDD8c478"),
             input: bytes!("8ef1332e0000000000000000000000007f2b8c31f88b6006c382775eea88297ec1e3e9050000000000000000000000006ea73e05adc79974b931123675ea8f78ffdacdf000000000000000000000000000000000000000000000000000470de4df820000000000000000000000000000000000000000000000000000000000000000002200000000000000000000000000000000000000000000000000000000000000a000000000000000000000000000000000000000000000000000000000000000a4232e8748000000000000000000000000982fe4a7cbd74bb3422ebe46333c3e8046c12c7f000000000000000000000000982fe4a7cbd74bb3422ebe46333c3e8046c12c7f00000000000000000000000000000000000000000000000000470de4df8200000000000000000000000000000000000000000000000000000000000000000080000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000"),
-        }];
-        let l1_provider = MockL1MessageProvider { messages: Arc::new(Mutex::new(l1_messages)) };
+        }}];
+        let l1_provider =
+            MockL1MessageProvider { messages: Arc::new(l1_messages), index: 0.into() };
         let l2_provider = MockL2Provider;
 
         let attributes: Vec<_> = derive(batch_data, l1_provider, l2_provider).await?;

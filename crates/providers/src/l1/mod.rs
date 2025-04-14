@@ -7,7 +7,7 @@ use std::{num::NonZeroUsize, sync::Arc};
 use alloy_eips::eip4844::{Blob, BlobTransactionSidecarItem};
 use alloy_primitives::B256;
 use lru::LruCache;
-use scroll_alloy_consensus::TxL1Message;
+use rollup_node_primitives::L1MessageWithBlockNumber;
 use scroll_db::DatabaseError;
 use tokio::sync::Mutex;
 
@@ -138,11 +138,15 @@ impl<L1P: Sync, BP: BeaconProvider + Sync> L1BlobProvider for OnlineL1Provider<L
 }
 
 #[async_trait::async_trait]
-impl<L1P: L1MessageProvider + Sync, BP: Sync> L1MessageProvider for OnlineL1Provider<L1P, BP> {
+impl<L1P: L1MessageProvider + Sync, BP: Sync + Send> L1MessageProvider
+    for OnlineL1Provider<L1P, BP>
+{
     type Error = <L1P>::Error;
 
-    async fn next_l1_message(&self) -> Result<Option<TxL1Message>, Self::Error> {
-        self.l1_message_provider.next_l1_message().await
+    async fn get_l1_message_with_block_number(
+        &self,
+    ) -> Result<Option<L1MessageWithBlockNumber>, Self::Error> {
+        self.l1_message_provider.get_l1_message_with_block_number().await
     }
 
     fn set_index_cursor(&self, index: u64) {
@@ -151,5 +155,9 @@ impl<L1P: L1MessageProvider + Sync, BP: Sync> L1MessageProvider for OnlineL1Prov
 
     fn set_hash_cursor(&self, hash: B256) {
         self.l1_message_provider.set_hash_cursor(hash)
+    }
+
+    fn increment_cursor(&self) {
+        self.l1_message_provider.increment_cursor()
     }
 }

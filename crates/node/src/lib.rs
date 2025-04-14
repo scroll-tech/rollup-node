@@ -8,7 +8,6 @@ use futures::{stream::FuturesOrdered, FutureExt, StreamExt};
 use reth_tokio_util::{EventSender, EventStream};
 use rollup_node_indexer::{Indexer, IndexerEvent};
 use rollup_node_watcher::L1Notification;
-use scroll_alloy_network::Scroll as ScrollNetwork;
 use scroll_alloy_provider::ScrollEngineApi;
 use scroll_alloy_rpc_types_engine::ScrollPayloadAttributes;
 use scroll_engine::{EngineDriver, EngineDriverError, ForkchoiceState};
@@ -114,7 +113,7 @@ impl<C: Debug, EC: Debug, P: Debug, L1P: Debug> Debug for RollupNodeManager<C, E
 impl<C, EC, P, L1P> RollupNodeManager<C, EC, P, L1P>
 where
     C: Consensus + Unpin,
-    EC: ScrollEngineApi<ScrollNetwork> + Unpin + Sync + Send + 'static,
+    EC: ScrollEngineApi + Unpin + Sync + Send + 'static,
     P: ExecutionPayloadProvider + Unpin + Send + Sync + 'static,
     L1P: L1Provider + Clone + Send + Sync + 'static,
 {
@@ -195,7 +194,7 @@ where
 
         // Send the block to the engine to validate the correctness of the block.
         let mut fcs = self.get_alloy_fcs();
-        let engine = self.engine.clone();
+        let engine: Arc<EngineDriver<EC, P>> = self.engine.clone();
         let future = Box::pin(async move {
             trace!(target: "scroll::node::manager", "handling block import future for block {:?}", block.hash_slow());
 
@@ -317,7 +316,7 @@ where
 impl<C, EC, P, L1P> Future for RollupNodeManager<C, EC, P, L1P>
 where
     C: Consensus + Unpin,
-    EC: ScrollEngineApi<ScrollNetwork> + Unpin + Sync + Send + 'static,
+    EC: ScrollEngineApi + Unpin + Sync + Send + 'static,
     P: ExecutionPayloadProvider + Unpin + Send + Sync + 'static,
     L1P: L1Provider + Clone + Unpin + Send + Sync + 'static,
 {

@@ -15,12 +15,15 @@ alloy-eips = { workspace = true, features = ["kzg"] }
 alloy-primitives.workspace = true
 alloy-rpc-types-beacon = "0.13"
 alloy-rpc-types-engine.workspace = true
-alloy-serde = "0.12"
+alloy-serde = { version = "0.13.0", default-features = false }
 
 # scroll
 scroll-alloy-consensus.workspace = true
 scroll-alloy-rpc-types-engine.workspace = true
 scroll-db.workspace = true
+
+# rollup-node
+rollup-node-primitives.workspace = true
 
 # misc
 async-trait.workspace = true
