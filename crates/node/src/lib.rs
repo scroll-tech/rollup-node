@@ -185,11 +185,7 @@ where
         // If the forkchoice state is at genesis, update the forkchoice state with the parent of the
         // block.
         if self.forkchoice_state.is_genesis() {
-            let block_num_hash = block.parent_num_hash();
-            self.forkchoice_state = ForkchoiceState::from_block_info(BlockInfo {
-                number: block_num_hash.number,
-                hash: block_num_hash.hash,
-            });
+            self.forkchoice_state.update_unsafe_block_info(block.parent_num_hash().into());
         }
 
         // Send the block to the engine to validate the correctness of the block.
