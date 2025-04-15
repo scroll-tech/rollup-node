@@ -135,10 +135,10 @@ mod tests {
     fn test_should_decode_header() -> eyre::Result<()> {
         // <https://etherscan.io/tx/0x27d73eef6f0de411f8db966f0def9f28c312a0ae5cfb1ac09ec23f8fa18b005b>
         let raw_commit_calldata = read_to_bytes("./testdata/calldata_v1.bin")?;
-        let commit_calldata = commitBatchCall::abi_decode(&raw_commit_calldata, true)?;
+        let commit_calldata = commitBatchCall::abi_decode(&raw_commit_calldata)?;
 
         let mut raw_batch_header = &*commit_calldata.parent_batch_header.to_vec();
-        let header = BatchHeaderV1::try_from_buf(&mut raw_batch_header).unwrap();
+        let header = BatchHeaderV1::try_from_buf(&mut raw_batch_header)?;
 
         let expected = BatchHeaderV1::new(
             1,
