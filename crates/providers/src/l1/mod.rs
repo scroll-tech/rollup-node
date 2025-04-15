@@ -7,7 +7,7 @@ use std::{num::NonZeroUsize, sync::Arc};
 use alloy_eips::eip4844::{Blob, BlobTransactionSidecarItem};
 use alloy_primitives::B256;
 use lru::LruCache;
-use rollup_node_primitives::L1MessageWithBlockNumber;
+use rollup_node_primitives::L1MessageEnvelope;
 use scroll_db::DatabaseError;
 use tokio::sync::Mutex;
 
@@ -145,7 +145,7 @@ impl<L1P: L1MessageProvider + Sync, BP: Sync + Send> L1MessageProvider
 
     async fn get_l1_message_with_block_number(
         &self,
-    ) -> Result<Option<L1MessageWithBlockNumber>, Self::Error> {
+    ) -> Result<Option<L1MessageEnvelope>, Self::Error> {
         self.l1_message_provider.get_l1_message_with_block_number().await
     }
 

@@ -31,7 +31,7 @@ impl<DB: DatabaseConnectionProvider + Sync> L1MessageProvider for DatabaseL1Mess
 
     async fn get_l1_message_with_block_number(
         &self,
-    ) -> Result<Option<L1MessageWithBlockNumber>, Self::Error> {
+    ) -> Result<Option<L1MessageEnvelope>, Self::Error> {
         let index = self.index.load(Ordering::Relaxed);
         Ok(self.database_connection.get_l1_message(index).await?)
     }
@@ -101,7 +101,7 @@ impl<DB: DatabaseConnectionProvider + Sync> L1MessageProvider
 
     async fn get_l1_message_with_block_number(
         &self,
-    ) -> Result<Option<L1MessageWithBlockNumber>, Self::Error> {
+    ) -> Result<Option<L1MessageEnvelope>, Self::Error> {
         let msg_w_bn = self.l1_message_provider.get_l1_message_with_block_number().await?;
         let result = if let Some(msg_w_bn) = msg_w_bn {
             let tx_block_number = msg_w_bn.block_number;

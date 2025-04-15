@@ -53,7 +53,7 @@ mod test {
     use arbitrary::{Arbitrary, Unstructured};
     use futures::StreamExt;
     use rand::Rng;
-    use rollup_node_primitives::{BatchCommitData, L1MessageWithBlockNumber};
+    use rollup_node_primitives::{BatchCommitData, L1MessageEnvelope};
     use sea_orm::{ColumnTrait, EntityTrait, QueryFilter};
 
     #[tokio::test]
@@ -117,7 +117,7 @@ mod test {
         let mut u = Unstructured::new(&bytes);
 
         // Generate a random L1Message.
-        let l1_message = L1MessageWithBlockNumber::arbitrary(&mut u).unwrap();
+        let l1_message = L1MessageEnvelope::arbitrary(&mut u).unwrap();
 
         // Round trip the L1Message through the database.
         db.insert_l1_message(l1_message.clone()).await.unwrap();
@@ -147,8 +147,8 @@ mod test {
         let mut u = Unstructured::new(&bytes);
 
         // Generate 2 random L1Messages.
-        let l1_message_1 = L1MessageWithBlockNumber::arbitrary(&mut u).unwrap();
-        let l1_message_2 = L1MessageWithBlockNumber::arbitrary(&mut u).unwrap();
+        let l1_message_1 = L1MessageEnvelope::arbitrary(&mut u).unwrap();
+        let l1_message_2 = L1MessageEnvelope::arbitrary(&mut u).unwrap();
 
         // Insert the L1Messages into the database in a transaction.
         let tx = db.tx().await.unwrap();
@@ -176,8 +176,8 @@ mod test {
         let mut u = Unstructured::new(&bytes);
 
         // Generate 2 random L1Messages.
-        let l1_message_1 = L1MessageWithBlockNumber::arbitrary(&mut u).unwrap();
-        let l1_message_2 = L1MessageWithBlockNumber::arbitrary(&mut u).unwrap();
+        let l1_message_1 = L1MessageEnvelope::arbitrary(&mut u).unwrap();
+        let l1_message_2 = L1MessageEnvelope::arbitrary(&mut u).unwrap();
 
         // Insert the L1Messages into the database.
         db.insert_l1_message(l1_message_1.clone()).await.unwrap();

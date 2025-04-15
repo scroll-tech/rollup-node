@@ -1,7 +1,7 @@
 use crate::L1ProviderError;
 
 use alloy_primitives::B256;
-use rollup_node_primitives::L1MessageWithBlockNumber;
+use rollup_node_primitives::L1MessageEnvelope;
 use scroll_alloy_consensus::TxL1Message;
 use scroll_db::{DatabaseConnectionProvider, DatabaseOperations};
 
@@ -23,12 +23,12 @@ pub trait L1MessageProvider {
     /// This method does not advance the cursor.
     async fn get_l1_message_with_block_number(
         &self,
-    ) -> Result<Option<L1MessageWithBlockNumber>, Self::Error>;
+    ) -> Result<Option<L1MessageEnvelope>, Self::Error>;
 
     /// Returns the L1 message with block number at the current cursor and advances the cursor.
     async fn next_l1_message_with_block_number(
         &self,
-    ) -> Result<Option<L1MessageWithBlockNumber>, Self::Error> {
+    ) -> Result<Option<L1MessageEnvelope>, Self::Error> {
         if let Some(message) = self.get_l1_message_with_block_number().await? {
             self.increment_cursor();
             Ok(Some(message))

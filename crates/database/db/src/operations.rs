@@ -4,7 +4,7 @@ use crate::DatabaseConnectionProvider;
 use alloy_eips::{BlockId, BlockNumberOrTag};
 use alloy_primitives::B256;
 use futures::{Stream, StreamExt};
-use rollup_node_primitives::{BatchCommitData, L1MessageWithBlockNumber};
+use rollup_node_primitives::{BatchCommitData, L1MessageEnvelope};
 use scroll_alloy_rpc_types_engine::BlockDataHint;
 use sea_orm::{ActiveModelTrait, ColumnTrait, DbErr, EntityTrait, QueryFilter, Set};
 
@@ -85,10 +85,7 @@ pub trait DatabaseOperations: DatabaseConnectionProvider {
     }
 
     /// Insert an [`L1MessageWithBlockNumber`] into the database.
-    async fn insert_l1_message(
-        &self,
-        l1_message: L1MessageWithBlockNumber,
-    ) -> Result<(), DatabaseError> {
+    async fn insert_l1_message(&self, l1_message: L1MessageEnvelope) -> Result<(), DatabaseError> {
         tracing::trace!(target: "scroll::db", queue_index = l1_message.transaction.queue_index, "Inserting L1 message into database.");
         let l1_message: models::l1_message::ActiveModel = l1_message.into();
         l1_message.insert(self.get_connection()).await?;
@@ -110,7 +107,7 @@ pub trait DatabaseOperations: DatabaseConnectionProvider {
     async fn get_l1_message(
         &self,
         queue_index: u64,
-    ) -> Result<Option<L1MessageWithBlockNumber>, DatabaseError> {
+    ) -> Result<Option<L1MessageEnvelope>, DatabaseError> {
         Ok(models::l1_message::Entity::find_by_id(queue_index as i64)
             .one(self.get_connection())
             .await
@@ -120,8 +117,7 @@ pub trait DatabaseOperations: DatabaseConnectionProvider {
     /// Gets an iterator over all [`L1MessageWithBlockNumber`]s in the database.
     async fn get_l1_messages<'a>(
         &'a self,
-    ) -> Result<impl Stream<Item = Result<L1MessageWithBlockNumber, DbErr>> + 'a, DatabaseError>
-    {
+    ) -> Result<impl Stream<Item = Result<L1MessageEnvelope, DbErr>> + 'a, DatabaseError> {
         Ok(models::l1_message::Entity::find()
             .stream(self.get_connection())
             .await?
