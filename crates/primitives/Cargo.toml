@@ -24,9 +24,16 @@ derive_more = { workspace = true, features = ["from"] }
 
 [features]
 default = ["std"]
-std = ["alloy-primitives/std", "alloy-rpc-types-engine/std", "scroll-alloy-consensus/std", "derive_more/std"]
+std = [
+    "alloy-primitives/std",
+    "alloy-rpc-types-engine/std",
+    "scroll-alloy-consensus/std",
+    "derive_more/std",
+    "alloy-eips/std",
+]
 arbitrary = [
     "dep:arbitrary",
     "alloy-primitives/arbitrary",
     "scroll-alloy-consensus/arbitrary",
+    "alloy-eips/arbitrary",
 ]
