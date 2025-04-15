@@ -151,9 +151,9 @@ where
             l1_provider,
             db,
             l1_notification_rx,
-            ForkchoiceState::genesis(
-                ctx.config().chain.chain.try_into().expect("must be a named chain"),
-            ),
+            // initiating the safe and finalized block info with a null hash triggers a backfill
+            // using the unsafe head at the EN.
+            ForkchoiceState::default(),
             consensus,
             block_rx,
         );
