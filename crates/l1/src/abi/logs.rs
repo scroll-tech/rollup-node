@@ -24,7 +24,7 @@ sol! {
 
 /// Tries to decode the provided log into the type T.
 pub fn try_decode_log<T: SolEvent>(log: &Log) -> Option<Log<T>> {
-    T::decode_log(log, true).ok()
+    T::decode_log(log).ok()
 }
 
 impl From<QueueTransaction> for TxL1Message {

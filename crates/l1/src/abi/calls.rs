@@ -47,13 +47,13 @@ impl CommitBatchCall {
     pub fn try_decode(calldata: &[u8]) -> Option<Self> {
         match calldata.get(0..4).map(|sel| sel.try_into().expect("correct slice length")) {
             Some(commitBatchCall::SELECTOR) => {
-                commitBatchCall::abi_decode(calldata, true).map(Into::into).ok()
+                commitBatchCall::abi_decode(calldata).map(Into::into).ok()
             }
             Some(commitBatchWithBlobProofCall::SELECTOR) => {
-                commitBatchWithBlobProofCall::abi_decode(calldata, true).map(Into::into).ok()
+                commitBatchWithBlobProofCall::abi_decode(calldata).map(Into::into).ok()
             }
             Some(commitBatchesCall::SELECTOR) => {
-                commitBatchesCall::abi_decode(calldata, true).map(Into::into).ok()
+                commitBatchesCall::abi_decode(calldata).map(Into::into).ok()
             }
             Some(_) | None => None,
         }
