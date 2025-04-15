@@ -47,9 +47,8 @@ type PendingBlockImportFuture =
     Pin<Box<dyn Future<Output = (Option<BlockInfo>, Option<BlockImportOutcome>)> + Send>>;
 
 /// A future that resolves to a tuple of the block info and the block import outcome.
-type EngineDriverFuture = Pin<
-    Box<dyn Future<Output = Result<(BlockInfo, bool, Arc<BatchInfo>), EngineDriverError>> + Send>,
->;
+type EngineDriverFuture =
+    Pin<Box<dyn Future<Output = Result<(BlockInfo, bool, BatchInfo), EngineDriverError>> + Send>>;
 
 /// The main manager for the rollup node.
 ///
@@ -264,8 +263,8 @@ where
                     }
 
                     // index the batch to block new entry.
-                    self.indexer.handle_batch_to_block(*batch_info, safe_block_info);
-                    trace!(target: "scroll::node::manager", new_forkchoice_state = ?self.forkchoice_state, batch_info = ?*batch_info, "Handled ScrollPayloadAttributes");
+                    self.indexer.handle_batch_to_block(batch_info, safe_block_info);
+                    trace!(target: "scroll::node::manager", new_forkchoice_state = ?self.forkchoice_state, batch_info = ?batch_info, "Handled ScrollPayloadAttributes");
                 }
                 Err(err) => {
                     error!(target: "scroll::node::manager", ?err, "Engine driver failed to handle attribute")

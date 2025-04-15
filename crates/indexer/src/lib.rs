@@ -163,13 +163,14 @@ impl Indexer {
         // finalized the batch.
         database.finalize_batch(batch_hash, block_number).await?;
 
-        // get the finalized block.
-        let finalized_block =
-            Self::fetch_highest_finalized_block(database, batch_hash, l2_block_number).await?;
-
         // check if the block where the batch was finalized is finalized on L1.
-        let l1_block_number = l1_block_number.lock().await;
-        let finalized_block = finalized_block.filter(|_| *l1_block_number > block_number);
+        let mut finalized_block = None;
+        let l1_block_number = *l1_block_number.lock().await;
+        if l1_block_number > block_number {
+            // fetch the finalized block.
+            finalized_block =
+                Self::fetch_highest_finalized_block(database, batch_hash, l2_block_number).await?;
+        }
 
         let event = IndexerEvent::BatchFinalizationIndexed(batch_hash, finalized_block);
         Ok(event)

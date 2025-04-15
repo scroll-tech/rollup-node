@@ -7,10 +7,10 @@ use sea_orm::{entity::prelude::*, ActiveValue};
 #[sea_orm(table_name = "batch_to_block")]
 pub struct Model {
     #[sea_orm(primary_key)]
-    batch_index: i64,
-    batch_hash: Vec<u8>,
     block_number: i64,
     block_hash: Vec<u8>,
+    batch_index: i64,
+    batch_hash: Vec<u8>,
 }
 
 impl Model {

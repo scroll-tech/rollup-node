@@ -107,7 +107,7 @@ where
                 // derive the attributes and attach the corresponding batch info.
                 let attrs =
                     derive(batch, provider, database).await.map_err(|err| (info.clone(), err))?;
-                Ok(attrs.into_iter().map(|attr| (attr, info.clone()).into()).collect())
+                Ok(attrs.into_iter().map(|attr| (attr, *info).into()).collect())
             });
             return Some(fut);
         }

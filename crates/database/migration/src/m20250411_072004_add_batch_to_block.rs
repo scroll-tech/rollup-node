@@ -13,10 +13,10 @@ impl MigrationTrait for Migration {
                 Table::create()
                     .table(BatchToBlock::Table)
                     .if_not_exists()
+                    .col(big_unsigned(BatchToBlock::BlockNumber).primary_key())
+                    .col(binary_len(BatchToBlock::BlockHash, 32))
                     .col(big_unsigned(BatchToBlock::BatchIndex))
                     .col(binary_len(BatchToBlock::BatchHash, 32))
-                    .col(big_unsigned(BatchToBlock::BlockNumber))
-                    .col(binary_len(BatchToBlock::BlockHash, 32))
                     .foreign_key(
                         ForeignKey::create()
                             .name("fk_batch_index")
