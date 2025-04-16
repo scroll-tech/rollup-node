@@ -107,7 +107,7 @@ pub trait DatabaseOperations: DatabaseConnectionProvider {
             .map(|res| res.map(Into::into)))
     }
 
-    /// Insert an [`L1MessageWithBlockNumber`] into the database.
+    /// Insert an [`L1MessageEnvelope`] into the database.
     async fn insert_l1_message(&self, l1_message: L1MessageEnvelope) -> Result<(), DatabaseError> {
         tracing::trace!(target: "scroll::db", queue_index = l1_message.transaction.queue_index, "Inserting L1 message into database.");
         let l1_message: models::l1_message::ActiveModel = l1_message.into();
@@ -115,7 +115,7 @@ pub trait DatabaseOperations: DatabaseConnectionProvider {
         Ok(())
     }
 
-    /// Delete all [`L1MessageWithBlockNumber`]s with a block number greater than the provided block
+    /// Delete all [`L1MessageEnvelope`]s with a block number greater than the provided block
     /// number.
     async fn delete_l1_messages_gt(&self, block_number: u64) -> Result<(), DatabaseError> {
         tracing::trace!(target: "scroll::db", block_number, "Deleting L1 messages greater than block number.");
@@ -126,7 +126,7 @@ pub trait DatabaseOperations: DatabaseConnectionProvider {
             .map(|_| ())?)
     }
 
-    /// Get a [`L1MessageWithBlockNumber`] from the database by its message queue index.
+    /// Get a [`L1MessageEnvelope`] from the database by its message queue index.
     async fn get_l1_message(
         &self,
         queue_index: u64,
@@ -137,7 +137,7 @@ pub trait DatabaseOperations: DatabaseConnectionProvider {
             .map(|x| x.map(Into::into))?)
     }
 
-    /// Gets an iterator over all [`L1MessageWithBlockNumber`]s in the database.
+    /// Gets an iterator over all [`L1MessageEnvelope`]s in the database.
     async fn get_l1_messages<'a>(
         &'a self,
     ) -> Result<impl Stream<Item = Result<L1MessageEnvelope, DbErr>> + 'a, DatabaseError> {

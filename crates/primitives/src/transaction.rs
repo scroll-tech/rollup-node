@@ -13,7 +13,7 @@ pub struct L1MessageEnvelope {
 }
 
 impl L1MessageEnvelope {
-    /// Returns a new [`L1MessageWithBlockNumber`].
+    /// Returns a new [`L1MessageEnvelope`].
     pub const fn new(transaction: TxL1Message, block_number: u64, queue_hash: B256) -> Self {
         Self { block_number, transaction, queue_hash }
     }

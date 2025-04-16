@@ -55,4 +55,5 @@ serde = [
     "scroll-wire/serde",
     "secp256k1/serde",
     "alloy-eips/serde",
+    "scroll-alloy-hardforks/serde",
 ]
