@@ -184,8 +184,8 @@ pub trait DatabaseOperations: DatabaseConnectionProvider {
             block_hash = ?block_info.hash,
             "Inserting batch to block into database."
         );
-        let batch_to_block: models::batch_to_block::ActiveModel = (batch_info, block_info).into();
-        models::batch_to_block::Entity::insert(batch_to_block).exec(self.get_connection()).await?;
+        let derived_block: models::derived_block::ActiveModel = (batch_info, block_info).into();
+        derived_block.insert(self.get_connection()).await?;
 
         Ok(())
     }
@@ -205,9 +205,9 @@ pub trait DatabaseOperations: DatabaseConnectionProvider {
             .await?;
 
         if let Some(index) = index {
-            Ok(models::batch_to_block::Entity::find()
-                .filter(models::batch_to_block::Column::BatchIndex.lte(index))
-                .order_by_desc(models::batch_to_block::Column::BlockNumber)
+            Ok(models::derived_block::Entity::find()
+                .filter(models::derived_block::Column::BatchIndex.lte(index))
+                .order_by_desc(models::derived_block::Column::BlockNumber)
                 .one(self.get_connection())
                 .await?
                 .map(|model| model.block_info()))

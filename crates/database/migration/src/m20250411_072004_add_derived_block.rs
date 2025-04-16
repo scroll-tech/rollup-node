@@ -11,16 +11,16 @@ impl MigrationTrait for Migration {
         manager
             .create_table(
                 Table::create()
-                    .table(BatchToBlock::Table)
+                    .table(DerivedBlock::Table)
                     .if_not_exists()
-                    .col(big_unsigned(BatchToBlock::BlockNumber).primary_key())
-                    .col(binary_len(BatchToBlock::BlockHash, 32))
-                    .col(big_unsigned(BatchToBlock::BatchIndex))
-                    .col(binary_len(BatchToBlock::BatchHash, 32))
+                    .col(pk_auto(DerivedBlock::BlockNumber))
+                    .col(binary_len(DerivedBlock::BlockHash, 32))
+                    .col(big_unsigned(DerivedBlock::BatchIndex))
+                    .col(binary_len(DerivedBlock::BatchHash, 32))
                     .foreign_key(
                         ForeignKey::create()
                             .name("fk_batch_index")
-                            .from(BatchToBlock::Table, BatchToBlock::BatchIndex)
+                            .from(DerivedBlock::Table, DerivedBlock::BatchIndex)
                             .to(BatchCommit::Table, BatchCommit::Index)
                             .on_delete(ForeignKeyAction::Cascade)
                             .on_update(ForeignKeyAction::Cascade),
@@ -28,7 +28,7 @@ impl MigrationTrait for Migration {
                     .foreign_key(
                         ForeignKey::create()
                             .name("fk_batch_hash")
-                            .from(BatchToBlock::Table, BatchToBlock::BatchHash)
+                            .from(DerivedBlock::Table, DerivedBlock::BatchHash)
                             .to(BatchCommit::Table, BatchCommit::Hash)
                             .on_delete(ForeignKeyAction::Cascade)
                             .on_update(ForeignKeyAction::Cascade),
@@ -39,12 +39,12 @@ impl MigrationTrait for Migration {
     }
 
     async fn down(&self, manager: &SchemaManager) -> Result<(), DbErr> {
-        manager.drop_table(Table::drop().table(BatchToBlock::Table).to_owned()).await
+        manager.drop_table(Table::drop().table(DerivedBlock::Table).to_owned()).await
     }
 }
 
 #[derive(DeriveIden)]
-enum BatchToBlock {
+enum DerivedBlock {
     Table,
     BatchIndex,
     BatchHash,

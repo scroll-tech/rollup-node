@@ -2,9 +2,9 @@ use alloy_primitives::B256;
 use rollup_node_primitives::{BatchInfo, BlockInfo};
 use sea_orm::{entity::prelude::*, ActiveValue};
 
-/// A database model that represents a batch to block.
+/// A database model that represents a derived block.
 #[derive(Clone, Debug, PartialEq, Eq, DeriveEntityModel)]
-#[sea_orm(table_name = "batch_to_block")]
+#[sea_orm(table_name = "derived_block")]
 pub struct Model {
     #[sea_orm(primary_key)]
     block_number: i64,

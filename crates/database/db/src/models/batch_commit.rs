@@ -20,12 +20,12 @@ pub struct Model {
 /// The relation for the batch input model.
 #[derive(Copy, Clone, Debug, EnumIter, DeriveRelation)]
 pub enum Relation {
-    /// A one-to-many relation with the batch to block table.
-    #[sea_orm(has_many = "super::batch_to_block::Entity")]
+    /// A one-to-many relation with the derived block table.
+    #[sea_orm(has_many = "super::derived_block::Entity")]
     BatchToBlock,
 }
 
-impl Related<super::batch_to_block::Entity> for Entity {
+impl Related<super::derived_block::Entity> for Entity {
     fn to() -> RelationDef {
         Relation::BatchToBlock.def()
     }
