@@ -139,7 +139,7 @@ mod test {
     }
 
     #[tokio::test]
-    async fn test_database_batch_to_block_exists() {
+    async fn test_derived_block_exists() {
         // Set up the test database.
         let db = setup_test_db().await;
 
@@ -157,7 +157,7 @@ mod test {
         for _ in 0..10 {
             let block_info =
                 BlockInfo { number: block_number, hash: B256::arbitrary(&mut u).unwrap() };
-            db.insert_batch_to_block(batch_info, block_info).await.unwrap();
+            db.insert_derived_block(batch_info, block_info).await.unwrap();
             block_number += 1;
         }
 
@@ -168,7 +168,7 @@ mod test {
     }
 
     #[tokio::test]
-    async fn test_database_batch_to_block_missing() {
+    async fn test_derived_block_missing() {
         // Set up the test database.
         let db = setup_test_db().await;
 
@@ -191,7 +191,7 @@ mod test {
         for _ in 0..10 {
             let block_info =
                 BlockInfo { number: block_number, hash: B256::arbitrary(&mut u).unwrap() };
-            db.insert_batch_to_block(first_batch_info, block_info).await.unwrap();
+            db.insert_derived_block(first_batch_info, block_info).await.unwrap();
             block_number += 1;
         }
 

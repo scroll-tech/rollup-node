@@ -50,16 +50,16 @@ impl<ChainSpec: ScrollHardforks + Send + Sync + 'static> Indexer<ChainSpec> {
             pending_futures: Default::default(),
             l1_finalized_block_number: Arc::new(Mutex::new(0)),
             l2_finalized_block_number: Arc::new(Mutex::new(0)),
-            chain_spec
+            chain_spec,
         }
     }
 
     /// Handles a new derived L2 block.
     pub fn handle_derived_block(&mut self, batch_info: BatchInfo, block_info: BlockInfo) {
         let database = self.database.clone();
-        let fut = IndexerFuture::HandleBatchToBlock(Box::pin(async move {
-            database.insert_batch_to_block(batch_info, block_info).await?;
-            Result::<_, IndexerError>::Ok(IndexerEvent::BatchToBlockIndexed(batch_info, block_info))
+        let fut = IndexerFuture::HandleDerivedBlock(Box::pin(async move {
+            database.insert_derived_block(batch_info, block_info).await?;
+            Result::<_, IndexerError>::Ok(IndexerEvent::DerivedBlockIndexed(batch_info, block_info))
         }));
         self.pending_futures.push_back(fut)
     }
@@ -82,13 +82,15 @@ impl<ChainSpec: ScrollHardforks + Send + Sync + 'static> Indexer<ChainSpec> {
             L1Notification::BatchCommit(batch) => IndexerFuture::HandleBatchCommit(Box::pin(
                 Self::handle_batch_commit(self.database.clone(), batch),
             )),
-            L1Notification::L1Message{ message, block_number, block_timestamp } =>                     IndexerFuture::HandleL1Message(Box::pin(Self::handle_l1_message(
-                self.database.clone(),
-                self.chain_spec.clone(),
-                message,
-                block_number,
-                block_timestamp,
-            ))),
+            L1Notification::L1Message { message, block_number, block_timestamp } => {
+                IndexerFuture::HandleL1Message(Box::pin(Self::handle_l1_message(
+                    self.database.clone(),
+                    self.chain_spec.clone(),
+                    message,
+                    block_number,
+                    block_timestamp,
+                )))
+            }
             L1Notification::BatchFinalization { hash, block_number } => {
                 IndexerFuture::HandleBatchFinalization(Box::pin(Self::handle_batch_finalization(
                     self.database.clone(),
@@ -298,7 +300,7 @@ mod test {
         let mut u = Unstructured::new(&bytes);
 
         let message = TxL1Message {
-            queue_index: i64::arbitrary(&mut u).unwrap().abs() as u64,
+            queue_index: i64::arbitrary(&mut u).unwrap().unsigned_abs(),
             ..Arbitrary::arbitrary(&mut u).unwrap()
         };
         let block_number = u64::arbitrary(&mut u).unwrap();

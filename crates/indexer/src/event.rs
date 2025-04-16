@@ -16,6 +16,6 @@ pub enum IndexerEvent {
     L1MessageIndexed(u64),
     /// A `Reorg` event has been indexed returning the reorg block number.
     ReorgIndexed(u64),
-    /// A `BatchToBlock` event has been indexed returning batch and block info.
-    BatchToBlockIndexed(BatchInfo, BlockInfo),
+    /// A `DerivedBlock` event has been indexed returning batch and block info.
+    DerivedBlockIndexed(BatchInfo, BlockInfo),
 }

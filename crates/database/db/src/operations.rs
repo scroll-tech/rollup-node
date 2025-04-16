@@ -166,8 +166,8 @@ pub trait DatabaseOperations: DatabaseConnectionProvider {
             .map(|x| x.map(Into::into))?)
     }
 
-    /// Insert a new batch to block line in the database.
-    async fn insert_batch_to_block(
+    /// Insert a new derived block line in the database.
+    async fn insert_derived_block(
         &self,
         batch_info: BatchInfo,
         block_info: BlockInfo,
@@ -178,7 +178,7 @@ pub trait DatabaseOperations: DatabaseConnectionProvider {
             batch_index = batch_info.index,
             block_number = block_info.number,
             block_hash = ?block_info.hash,
-            "Inserting batch to block into database."
+            "Inserting derived block into database."
         );
         let derived_block: models::derived_block::ActiveModel = (batch_info, block_info).into();
         derived_block.insert(self.get_connection()).await?;

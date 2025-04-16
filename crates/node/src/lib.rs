@@ -264,7 +264,7 @@ where
                     }
 
                     // index the batch to block new entry.
-                    self.indexer.handle_batch_to_block(batch_info, safe_block_info);
+                    self.indexer.handle_derived_block(batch_info, safe_block_info);
                     trace!(target: "scroll::node::manager", new_forkchoice_state = ?self.forkchoice_state, batch_info = ?batch_info, "Handled ScrollPayloadAttributes");
                 }
                 Err(err) => {
