@@ -9563,6 +9563,7 @@ dependencies = [
  "arbitrary",
  "derive_more",
  "scroll-alloy-consensus",
+ "scroll-alloy-rpc-types-engine",
 ]
 
 [[package]]

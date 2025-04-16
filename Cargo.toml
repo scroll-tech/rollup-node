@@ -133,7 +133,7 @@ alloy-transport = { version = "0.14.0", default-features = false }
 scroll-alloy-consensus = { git = "https://github.com/scroll-tech/reth.git", default-features = false }
 scroll-alloy-network = { git = "https://github.com/scroll-tech/reth.git", default-features = false }
 scroll-alloy-provider = { git = "https://github.com/scroll-tech/reth.git", default-features = false }
-scroll-alloy-rpc-types-engine = { git = "https://github.com/scroll-tech/reth.git" }
+scroll-alloy-rpc-types-engine = { git = "https://github.com/scroll-tech/reth.git", default-features = false }
 
 # reth
 reth-e2e-test-utils = { git = "https://github.com/scroll-tech/reth.git" }

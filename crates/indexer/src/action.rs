@@ -13,9 +13,11 @@ type PendingIndexerFuture =
 /// A type that represents a future that is being executed by the indexer.
 pub(super) enum IndexerFuture {
     HandleReorg(PendingIndexerFuture),
+    HandleFinalized(PendingIndexerFuture),
     HandleBatchCommit(PendingIndexerFuture),
     HandleBatchFinalization(PendingIndexerFuture),
     HandleL1Message(PendingIndexerFuture),
+    HandleBatchToBlock(PendingIndexerFuture),
 }
 
 impl IndexerFuture {
@@ -26,9 +28,11 @@ impl IndexerFuture {
     ) -> Poll<Result<IndexerEvent, IndexerError>> {
         match self {
             Self::HandleReorg(fut) |
+            Self::HandleFinalized(fut) |
             Self::HandleBatchCommit(fut) |
             Self::HandleBatchFinalization(fut) |
-            Self::HandleL1Message(fut) => fut.as_mut().poll(cx),
+            Self::HandleL1Message(fut) |
+            Self::HandleBatchToBlock(fut) => fut.as_mut().poll(cx),
         }
     }
 }
@@ -39,9 +43,11 @@ impl fmt::Debug for IndexerFuture {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::HandleReorg(_) => write!(f, "HandleReorg"),
+            Self::HandleFinalized(_) => write!(f, "HandleFinalized"),
             Self::HandleBatchCommit(_) => write!(f, "HandleBatchCommit"),
             Self::HandleBatchFinalization(_) => write!(f, "HandleBatchFinalization"),
             Self::HandleL1Message(_) => write!(f, "HandleL1Message"),
+            Self::HandleBatchToBlock(_) => write!(f, "HandleBatchToBlock"),
         }
     }
 }
