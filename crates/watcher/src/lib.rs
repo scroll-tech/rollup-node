@@ -549,7 +549,7 @@ mod tests {
     fn l1_watcher(
         unfinalized_blocks: Vec<Header>,
         provider_blocks: Vec<Header>,
-        transactions: Vec<alloy_rpc_types_eth::Transaction>,
+        transactions: Vec<Transaction>,
         finalized: Header,
         latest: Header,
     ) -> (L1Watcher<MockProvider>, mpsc::Receiver<Arc<L1Notification>>) {
@@ -804,6 +804,7 @@ mod tests {
         inner_log.data = random!(QueueTransaction).encode_log_data();
         queue_transaction.inner = inner_log;
         queue_transaction.block_number = Some(random!(u64));
+        queue_transaction.block_timestamp = Some(random!(u64));
         logs.push(queue_transaction);
 
         // When
