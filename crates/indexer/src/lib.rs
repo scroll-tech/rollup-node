@@ -55,10 +55,10 @@ impl<ChainSpec: ScrollHardforks + Send + Sync + 'static> Indexer<ChainSpec> {
     }
 
     /// Handles a new derived L2 block.
-    pub fn handle_derived_block(&mut self, batch_info: BatchInfo, block_info: BlockInfo) {
+    pub fn handle_derived_block(&mut self, block_info: BlockInfo, batch_info: BatchInfo) {
         let database = self.database.clone();
         let fut = IndexerFuture::HandleDerivedBlock(Box::pin(async move {
-            database.insert_derived_block(batch_info, block_info).await?;
+            database.insert_derived_block(block_info, batch_info).await?;
             Result::<_, IndexerError>::Ok(IndexerEvent::DerivedBlockIndexed(batch_info, block_info))
         }));
         self.pending_futures.push_back(fut)

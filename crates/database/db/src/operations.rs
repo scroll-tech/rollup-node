@@ -169,8 +169,8 @@ pub trait DatabaseOperations: DatabaseConnectionProvider {
     /// Insert a new derived block line in the database.
     async fn insert_derived_block(
         &self,
-        batch_info: BatchInfo,
         block_info: BlockInfo,
+        batch_info: BatchInfo,
     ) -> Result<(), DatabaseError> {
         tracing::trace!(
             target: "scroll::db",
@@ -180,7 +180,7 @@ pub trait DatabaseOperations: DatabaseConnectionProvider {
             block_hash = ?block_info.hash,
             "Inserting derived block into database."
         );
-        let derived_block: models::derived_block::ActiveModel = (batch_info, block_info).into();
+        let derived_block: models::derived_block::ActiveModel = (block_info, batch_info).into();
         derived_block.insert(self.get_connection()).await?;
 
         Ok(())

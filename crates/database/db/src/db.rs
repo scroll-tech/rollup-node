@@ -157,7 +157,7 @@ mod test {
         for _ in 0..10 {
             let block_info =
                 BlockInfo { number: block_number, hash: B256::arbitrary(&mut u).unwrap() };
-            db.insert_derived_block(batch_info, block_info).await.unwrap();
+            db.insert_derived_block(block_info, batch_info).await.unwrap();
             block_number += 1;
         }
 
@@ -191,7 +191,7 @@ mod test {
         for _ in 0..10 {
             let block_info =
                 BlockInfo { number: block_number, hash: B256::arbitrary(&mut u).unwrap() };
-            db.insert_derived_block(first_batch_info, block_info).await.unwrap();
+            db.insert_derived_block(block_info, first_batch_info).await.unwrap();
             block_number += 1;
         }
 
