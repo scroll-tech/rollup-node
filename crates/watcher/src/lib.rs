@@ -130,11 +130,13 @@ where
             block.header.number
         };
 
+        // fetch l1 state.
         let l1_state = L1State {
             head: fetch_block_number(BlockNumberOrTag::Latest).await,
             finalized: fetch_block_number(BlockNumberOrTag::Finalized).await,
         };
 
+        // init the watcher.
         let watcher = Self {
             execution_provider,
             unfinalized_blocks: BoundedVec::new(HEADER_CAPACITY),
@@ -142,6 +144,11 @@ where
             l1_state,
             sender: tx,
         };
+
+        // notify at spawn.
+        watcher.notify(L1Notification::Finalized(watcher.l1_state.finalized)).await;
+        watcher.notify(L1Notification::NewBlock(watcher.l1_state.head)).await;
+
         tokio::spawn(watcher.run());
 
         rx
@@ -198,6 +205,8 @@ where
     async fn handle_finalized_block(&mut self, finalized: &Header) {
         // update the state and notify on channel.
         if self.l1_state.finalized < finalized.number {
+            tracing::trace!(target: "scroll::watcher", number = finalized.number, hash = ?finalized.hash, "new finalized block");
+
             self.l1_state.finalized = finalized.number;
             self.notify(L1Notification::Finalized(finalized.number)).await;
         }
@@ -314,7 +323,7 @@ where
 
             // notify via channel for each message.
             for (msg, _, _) in group {
-                tracing::trace!(target: "scroll::watcher", l1_message = ?msg, ?block_number);
+                tracing::trace!(target: "scroll::watcher", index = msg.queue_index, ?block_number, "Handled l1 message");
 
                 self.notify(L1Notification::L1Message {
                     message: msg,
@@ -381,6 +390,8 @@ where
                 let batch_index =
                     decoded_log.batch_index.uint_try_to().expect("u256 to u64 conversion error");
 
+                tracing::trace!(target: "scroll::watcher", index = batch_index, hash = ?decoded_log.batch_hash, "Handled batch commit");
+
                 // notify via channel.
                 self.notify(L1Notification::BatchCommit(BatchCommitData {
                     hash: decoded_log.batch_hash,
@@ -406,9 +417,10 @@ where
             });
 
         for (decoded_log, maybe_block_number) in finalize_tx_hashes {
-            // fetch the commit transaction.
+            // fetch the finalize transaction.
             let block_number = maybe_block_number.ok_or(FilterLogError::MissingBlockNumber)?;
-            tracing::trace!(target: "scroll::watcher", finalized_batch = ?decoded_log, ?block_number);
+
+            tracing::trace!(target: "scroll::watcher", index = ?decoded_log.batch_index, hash = ?decoded_log.batch_hash, "Handled batch finalization");
 
             // send the finalization event in the channel.
             let _ = self

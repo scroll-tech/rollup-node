@@ -2,6 +2,22 @@ use std::sync::Arc;
 
 use alloy_primitives::{Bytes, B256};
 
+/// The batch information.
+#[derive(Debug, Copy, Clone, Default, PartialEq, Eq)]
+pub struct BatchInfo {
+    /// The index of the batch.
+    pub index: u64,
+    /// The hash of the batch.
+    pub hash: B256,
+}
+
+impl BatchInfo {
+    /// Returns a new instance of [`BatchInfo`].
+    pub const fn new(index: u64, hash: B256) -> Self {
+        Self { index, hash }
+    }
+}
+
 /// The input data for a batch.
 ///
 /// This is used as input for the derivation pipeline. All data remains in its raw serialized form.
@@ -20,6 +36,12 @@ pub struct BatchCommitData {
     pub calldata: Arc<Bytes>,
     /// The optional blob hash for the commit.
     pub blob_versioned_hash: Option<B256>,
+}
+
+impl From<BatchCommitData> for BatchInfo {
+    fn from(value: BatchCommitData) -> Self {
+        Self { index: value.index, hash: value.hash }
+    }
 }
 
 #[cfg(feature = "arbitrary")]

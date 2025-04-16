@@ -3,7 +3,7 @@ use std::sync::LazyLock;
 use alloy_primitives::{address, Address};
 use alloy_rpc_types_eth::Filter;
 use alloy_sol_types::SolEvent;
-use scroll_l1::abi::logs::{CommitBatch, QueueTransaction};
+use scroll_l1::abi::logs::{CommitBatch, FinalizeBatch, QueueTransaction};
 
 /// The address of the Scroll Rollup contract on the L1.
 pub const ROLLUP_CONTRACT_ADDRESS: Address = address!("0xa13BAF47339d63B743e7Da8741db5456DAc1E556");
@@ -16,5 +16,9 @@ pub const L1_MESSAGE_QUEUE_CONTRACT_ADDRESS: Address =
 pub static L1_WATCHER_LOG_FILTER: LazyLock<Filter> = LazyLock::new(|| {
     Filter::new()
         .address(vec![ROLLUP_CONTRACT_ADDRESS, L1_MESSAGE_QUEUE_CONTRACT_ADDRESS])
-        .event_signature(vec![QueueTransaction::SIGNATURE_HASH, CommitBatch::SIGNATURE_HASH])
+        .event_signature(vec![
+            QueueTransaction::SIGNATURE_HASH,
+            CommitBatch::SIGNATURE_HASH,
+            FinalizeBatch::SIGNATURE_HASH,
+        ])
 });

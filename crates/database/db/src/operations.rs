@@ -4,9 +4,12 @@ use crate::DatabaseConnectionProvider;
 use alloy_eips::{BlockId, BlockNumberOrTag};
 use alloy_primitives::B256;
 use futures::{Stream, StreamExt};
-use rollup_node_primitives::{BatchCommitData, L1MessageEnvelope};
+use rollup_node_primitives::{BatchCommitData, BatchInfo, BlockInfo, L1MessageEnvelope};
 use scroll_alloy_rpc_types_engine::BlockDataHint;
-use sea_orm::{ActiveModelTrait, ColumnTrait, DbErr, EntityTrait, QueryFilter, Set};
+use sea_orm::{
+    ActiveModelTrait, ColumnTrait, Condition, DbErr, EntityTrait, QueryFilter, QueryOrder,
+    QuerySelect, Set,
+};
 
 /// The [`DatabaseOperations`] trait provides methods for interacting with the database.
 #[async_trait::async_trait]
@@ -62,6 +65,26 @@ pub trait DatabaseOperations: DatabaseConnectionProvider {
         .one(self.get_connection())
         .await
         .map(|x| x.map(Into::into))?)
+    }
+
+    /// Get the newest finalized batch hash up to or at the provided height.
+    async fn get_finalized_batch_hash_at_height(
+        &self,
+        height: u64,
+    ) -> Result<Option<B256>, DatabaseError> {
+        Ok(models::batch_commit::Entity::find()
+            .filter(
+                Condition::all()
+                    .add(models::batch_commit::Column::FinalizedBlockNumber.is_not_null())
+                    .add(models::batch_commit::Column::FinalizedBlockNumber.lte(height)),
+            )
+            .order_by_desc(models::batch_commit::Column::Index)
+            .select_only()
+            .column(models::batch_commit::Column::Hash)
+            .into_tuple::<Vec<u8>>()
+            .one(self.get_connection())
+            .await
+            .map(|x| x.map(|x| B256::from_slice(&x)))?)
     }
 
     /// Delete all [`BatchCommitData`]s with a block number greater than the provided block number.
@@ -141,6 +164,52 @@ pub trait DatabaseOperations: DatabaseConnectionProvider {
             .one(self.get_connection())
             .await
             .map(|x| x.map(Into::into))?)
+    }
+
+    /// Insert a new batch to block line in the database.
+    async fn insert_batch_to_block(
+        &self,
+        batch_info: BatchInfo,
+        block_info: BlockInfo,
+    ) -> Result<(), DatabaseError> {
+        tracing::trace!(
+            target: "scroll::db",
+            batch_hash = ?batch_info.hash,
+            batch_index = batch_info.index,
+            block_number = block_info.number,
+            block_hash = ?block_info.hash,
+            "Inserting batch to block into database."
+        );
+        let derived_block: models::derived_block::ActiveModel = (batch_info, block_info).into();
+        derived_block.insert(self.get_connection()).await?;
+
+        Ok(())
+    }
+
+    /// Returns the highest L2 block originating from the provided batch_hash or the highest block
+    /// for the batch's index.
+    async fn get_highest_block_for_batch(
+        &self,
+        batch_hash: B256,
+    ) -> Result<Option<BlockInfo>, DatabaseError> {
+        let index = models::batch_commit::Entity::find()
+            .filter(models::batch_commit::Column::Hash.eq(batch_hash.to_vec()))
+            .select_only()
+            .column(models::batch_commit::Column::Index)
+            .into_tuple::<i32>()
+            .one(self.get_connection())
+            .await?;
+
+        if let Some(index) = index {
+            Ok(models::derived_block::Entity::find()
+                .filter(models::derived_block::Column::BatchIndex.lte(index))
+                .order_by_desc(models::derived_block::Column::BlockNumber)
+                .one(self.get_connection())
+                .await?
+                .map(|model| model.block_info()))
+        } else {
+            Ok(None)
+        }
     }
 }
 

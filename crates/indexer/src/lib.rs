@@ -2,7 +2,7 @@
 
 use alloy_primitives::{b256, keccak256, B256};
 use futures::Stream;
-use rollup_node_primitives::{BatchCommitData, L1MessageEnvelope};
+use rollup_node_primitives::{BatchCommitData, BatchInfo, BlockInfo, L1MessageEnvelope};
 use rollup_node_watcher::L1Notification;
 use scroll_alloy_consensus::TxL1Message;
 use scroll_alloy_hardforks::{ScrollHardfork, ScrollHardforks};
@@ -13,6 +13,7 @@ use std::{
     sync::Arc,
     task::{Context, Poll},
 };
+use tokio::sync::Mutex;
 
 mod action;
 use action::IndexerFuture;
@@ -33,6 +34,10 @@ pub struct Indexer<ChainSpec> {
     database: Arc<Database>,
     /// A queue of pending futures.
     pending_futures: VecDeque<IndexerFuture>,
+    /// The block number of the L1 finalized block.
+    l1_finalized_block_number: Arc<Mutex<u64>>,
+    /// The block number of the L2 finalized block.
+    l2_finalized_block_number: Arc<Mutex<u64>>,
     /// The chain specification for the indexer.
     chain_spec: Arc<ChainSpec>,
 }
@@ -40,36 +45,60 @@ pub struct Indexer<ChainSpec> {
 impl<ChainSpec: ScrollHardforks + Send + Sync + 'static> Indexer<ChainSpec> {
     /// Creates a new indexer with the given [`Database`].
     pub fn new(database: Arc<Database>, chain_spec: Arc<ChainSpec>) -> Self {
-        Self { database, pending_futures: Default::default(), chain_spec }
+        Self {
+            database,
+            pending_futures: Default::default(),
+            l1_finalized_block_number: Arc::new(Mutex::new(0)),
+            l2_finalized_block_number: Arc::new(Mutex::new(0)),
+            chain_spec
+        }
+    }
+
+    /// Handles a new derived L2 block.
+    pub fn handle_derived_block(&mut self, batch_info: BatchInfo, block_info: BlockInfo) {
+        let database = self.database.clone();
+        let fut = IndexerFuture::HandleBatchToBlock(Box::pin(async move {
+            database.insert_batch_to_block(batch_info, block_info).await?;
+            Result::<_, IndexerError>::Ok(IndexerEvent::BatchToBlockIndexed(batch_info, block_info))
+        }));
+        self.pending_futures.push_back(fut)
     }
 
     /// Handles an event from the L1.
     pub fn handle_l1_notification(&mut self, event: L1Notification) {
-        let fut =
-            match event {
-                L1Notification::Reorg(block_number) => IndexerFuture::HandleReorg(Box::pin(
-                    Self::handle_reorg(self.database.clone(), block_number),
-                )),
-                L1Notification::NewBlock(_block_number) |
-                L1Notification::Finalized(_block_number) => return,
-                L1Notification::BatchCommit(batch) => IndexerFuture::HandleBatchCommit(Box::pin(
-                    Self::handle_batch_commit(self.database.clone(), batch),
-                )),
-                L1Notification::L1Message { message, block_number, block_timestamp } => {
-                    IndexerFuture::HandleL1Message(Box::pin(Self::handle_l1_message(
-                        self.database.clone(),
-                        self.chain_spec.clone(),
-                        message,
-                        block_number,
-                        block_timestamp,
-                    )))
-                }
-                L1Notification::BatchFinalization { hash, block_number } => {
-                    IndexerFuture::HandleBatchFinalization(Box::pin(
-                        Self::handle_batch_finalization(self.database.clone(), hash, block_number),
-                    ))
-                }
-            };
+        let fut = match event {
+            L1Notification::Reorg(block_number) => IndexerFuture::HandleReorg(Box::pin(
+                Self::handle_reorg(self.database.clone(), block_number),
+            )),
+            L1Notification::NewBlock(_block_number) => return,
+            L1Notification::Finalized(block_number) => {
+                IndexerFuture::HandleFinalized(Box::pin(Self::handle_finalized(
+                    self.database.clone(),
+                    block_number,
+                    self.l1_finalized_block_number.clone(),
+                    self.l2_finalized_block_number.clone(),
+                )))
+            }
+            L1Notification::BatchCommit(batch) => IndexerFuture::HandleBatchCommit(Box::pin(
+                Self::handle_batch_commit(self.database.clone(), batch),
+            )),
+            L1Notification::L1Message{ message, block_number, block_timestamp } =>                     IndexerFuture::HandleL1Message(Box::pin(Self::handle_l1_message(
+                self.database.clone(),
+                self.chain_spec.clone(),
+                message,
+                block_number,
+                block_timestamp,
+            ))),
+            L1Notification::BatchFinalization { hash, block_number } => {
+                IndexerFuture::HandleBatchFinalization(Box::pin(Self::handle_batch_finalization(
+                    self.database.clone(),
+                    hash,
+                    block_number,
+                    self.l1_finalized_block_number.clone(),
+                    self.l2_finalized_block_number.clone(),
+                )))
+            }
+        };
 
         self.pending_futures.push_back(fut);
     }
@@ -90,6 +119,30 @@ impl<ChainSpec: ScrollHardforks + Send + Sync + 'static> Indexer<ChainSpec> {
         // commit the transaction
         txn.commit().await?;
         Ok(IndexerEvent::ReorgIndexed(block_number))
+    }
+
+    /// Handles a finalized event by updating the indexer L1 finalized block and returning the new
+    /// finalized L2 chain block.
+    async fn handle_finalized(
+        database: Arc<Database>,
+        block_number: u64,
+        l1_block_number: Arc<Mutex<u64>>,
+        l2_block_number: Arc<Mutex<u64>>,
+    ) -> Result<IndexerEvent, IndexerError> {
+        // get the newest finalized batch.
+        let batch_hash = database.get_finalized_batch_hash_at_height(block_number).await?;
+
+        // get the finalized block for the batch.
+        let finalized_block = if let Some(hash) = batch_hash {
+            Self::fetch_highest_finalized_block(database, hash, l2_block_number).await?
+        } else {
+            None
+        };
+
+        // update the indexer l1 block number.
+        *l1_block_number.lock().await = block_number;
+
+        Ok(IndexerEvent::FinalizedIndexed(block_number, finalized_block))
     }
 
     /// Handles an L1 message by inserting it into the database.
@@ -131,7 +184,7 @@ impl<ChainSpec: ScrollHardforks + Send + Sync + 'static> Indexer<ChainSpec> {
         database: Arc<Database>,
         batch: BatchCommitData,
     ) -> Result<IndexerEvent, IndexerError> {
-        let event = IndexerEvent::BatchCommitIndexed(batch.index);
+        let event = IndexerEvent::BatchCommitIndexed(BatchInfo::new(batch.index, batch.hash));
         database.insert_batch(batch).await?;
         Ok(event)
     }
@@ -141,10 +194,40 @@ impl<ChainSpec: ScrollHardforks + Send + Sync + 'static> Indexer<ChainSpec> {
         database: Arc<Database>,
         batch_hash: B256,
         block_number: u64,
+        l1_block_number: Arc<Mutex<u64>>,
+        l2_block_number: Arc<Mutex<u64>>,
     ) -> Result<IndexerEvent, IndexerError> {
-        let event = IndexerEvent::BatchFinalizationIndexed(batch_hash);
+        // finalized the batch.
         database.finalize_batch(batch_hash, block_number).await?;
+
+        // check if the block where the batch was finalized is finalized on L1.
+        let mut finalized_block = None;
+        let l1_block_number = *l1_block_number.lock().await;
+        if l1_block_number > block_number {
+            // fetch the finalized block.
+            finalized_block =
+                Self::fetch_highest_finalized_block(database, batch_hash, l2_block_number).await?;
+        }
+
+        let event = IndexerEvent::BatchFinalizationIndexed(batch_hash, finalized_block);
         Ok(event)
+    }
+
+    /// Returns the highest finalized block for the provided batch hash. Will return [`None`] if the
+    /// block number has already been seen by the indexer.
+    async fn fetch_highest_finalized_block(
+        database: Arc<Database>,
+        batch_hash: B256,
+        l2_block_number: Arc<Mutex<u64>>,
+    ) -> Result<Option<BlockInfo>, IndexerError> {
+        let finalized_block = database.get_highest_block_for_batch(batch_hash).await?;
+        let mut l2_block_number = l2_block_number.lock().await;
+
+        // only return the block if the indexer hasn't seen it.
+        // in which case also update the `l2_finalized_block_number` value.
+        Ok(finalized_block.filter(|info| info.number > *l2_block_number).inspect(|info| {
+            *l2_block_number = info.number;
+        }))
     }
 }
 

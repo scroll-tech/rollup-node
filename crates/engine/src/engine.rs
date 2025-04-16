@@ -108,7 +108,7 @@ where
         fields(
              safe_block_info = ?safe_block_info,
              fcs = ?fcs,
-             payload_attributes = ?payload_attributes
+             payload_attributes = ?payload_attributes.payload_attributes
         )
     )]
     pub async fn handle_payload_attributes(

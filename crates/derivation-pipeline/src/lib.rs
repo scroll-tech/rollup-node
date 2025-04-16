@@ -25,17 +25,21 @@ use core::{
     task::{Context, Poll, Waker},
 };
 use futures::{ready, stream::FuturesOrdered, Stream, StreamExt};
-use rollup_node_primitives::BatchCommitData;
+use rollup_node_primitives::{BatchCommitData, BatchInfo, ScrollPayloadAttributesWithBatchInfo};
 use rollup_node_providers::{BlockDataProvider, L1Provider};
 use scroll_alloy_rpc_types_engine::ScrollPayloadAttributes;
 use scroll_codec::Codec;
 use scroll_db::{Database, DatabaseOperations};
 
-/// A future that resolves to a stream of [`ScrollPayloadAttributes`].
+/// A future that resolves to a stream of [`ScrollPayloadAttributesWithBatchInfo`].
 type DerivationPipelineFuture = Pin<
     Box<
-        dyn Future<Output = Result<Vec<ScrollPayloadAttributes>, (u64, DerivationPipelineError)>>
-            + Send,
+        dyn Future<
+                Output = Result<
+                    Vec<ScrollPayloadAttributesWithBatchInfo>,
+                    (Arc<BatchInfo>, DerivationPipelineError),
+                >,
+            > + Send,
     >,
 >;
 
@@ -52,9 +56,9 @@ pub struct DerivationPipeline<P> {
     /// A L1 provider.
     l1_provider: P,
     /// The queue of batches to handle.
-    batch_index_queue: VecDeque<u64>,
+    batch_queue: VecDeque<Arc<BatchInfo>>,
     /// The queue of polled attributes.
-    attributes_queue: VecDeque<ScrollPayloadAttributes>,
+    attributes_queue: VecDeque<ScrollPayloadAttributesWithBatchInfo>,
     /// The waker for the pipeline.
     waker: Option<Waker>,
 }
@@ -68,7 +72,7 @@ where
         Self {
             database,
             l1_provider,
-            batch_index_queue: Default::default(),
+            batch_queue: Default::default(),
             pipeline_futures: Default::default(),
             attributes_queue: Default::default(),
             waker: None,
@@ -77,8 +81,9 @@ where
 
     /// Handles a new batch commit index by pushing it in its internal queue.
     /// Wakes the waker in order to trigger a call to poll.
-    pub fn handle_batch_commit(&mut self, index: u64) {
-        self.batch_index_queue.push_back(index);
+    pub fn handle_batch_commit(&mut self, batch_info: BatchInfo) {
+        let block_info = Arc::new(batch_info);
+        self.batch_queue.push_back(block_info);
         if let Some(waker) = self.waker.take() {
             waker.wake()
         }
@@ -90,15 +95,19 @@ where
         let database = self.database.clone();
         let provider = self.l1_provider.clone();
 
-        if let Some(index) = self.batch_index_queue.pop_front() {
+        if let Some(info) = self.batch_queue.pop_front() {
             let fut = Box::pin(async move {
+                // get the batch commit data.
                 let batch = database
-                    .get_batch_by_index(index)
+                    .get_batch_by_index(info.index)
                     .await
-                    .map_err(|err| (index, err.into()))?
-                    .ok_or((index, DerivationPipelineError::UnknownBatch(index)))?;
+                    .map_err(|err| (info.clone(), err.into()))?
+                    .ok_or((info.clone(), DerivationPipelineError::UnknownBatch(info.index)))?;
 
-                derive(batch, provider, database).await.map_err(|err| (index, err))
+                // derive the attributes and attach the corresponding batch info.
+                let attrs =
+                    derive(batch, provider, database).await.map_err(|err| (info.clone(), err))?;
+                Ok(attrs.into_iter().map(|attr| (attr, *info).into()).collect())
             });
             return Some(fut);
         }
@@ -110,7 +119,7 @@ impl<P> Stream for DerivationPipeline<P>
 where
     P: L1Provider + Clone + Unpin + Send + Sync + 'static,
 {
-    type Item = ScrollPayloadAttributes;
+    type Item = ScrollPayloadAttributesWithBatchInfo;
 
     fn poll_next(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
         let this = self.get_mut();
@@ -122,7 +131,7 @@ where
 
         // if futures are empty and the batch queue is empty, store the waker
         // and return.
-        if this.pipeline_futures.is_empty() && this.batch_index_queue.is_empty() {
+        if this.pipeline_futures.is_empty() && this.batch_queue.is_empty() {
             this.waker = Some(cx.waker().clone());
             return Poll::Pending
         }
@@ -141,13 +150,12 @@ where
                     this.attributes_queue.extend(attributes);
                     cx.waker().wake_by_ref();
                 }
-                Err((index, err)) => {
-                    tracing::error!(target: "scroll::node::derivation_pipeline", ?index, ?err, "failed to derive payload attributes for batch");
-                    // retry polling the same batch index.
-                    this.batch_index_queue.push_front(index);
-                    if let Some(fut) = this.handle_next_batch() {
-                        this.pipeline_futures.push_front(fut)
-                    }
+                Err((batch_info, err)) => {
+                    tracing::error!(target: "scroll::node::derivation_pipeline", batch_info = ?*batch_info, ?err, "failed to derive payload attributes for batch");
+                    // retry polling the same batch.
+                    this.batch_queue.push_front(batch_info);
+                    let fut = this.handle_next_batch().expect("Pushed batch info into queue");
+                    this.pipeline_futures.push_front(fut);
                 }
             }
         }
@@ -388,14 +396,16 @@ mod tests {
         let mut pipeline = DerivationPipeline::new(mock_l1_provider, db);
 
         // as long as we don't call `handle_commit_batch`, pipeline should not return attributes.
-        pipeline.handle_batch_commit(12);
+        pipeline.handle_batch_commit(BatchInfo { index: 12, hash: Default::default() });
 
         // we should find some attributes now
         assert!(pipeline.next().await.is_some());
 
         // check the correctness of the last attribute.
         let mut attribute = ScrollPayloadAttributes::default();
-        while let Some(a) = pipeline.next().await {
+        while let Some(ScrollPayloadAttributesWithBatchInfo { payload_attributes: a, .. }) =
+            pipeline.next().await
+        {
             if a.payload_attributes.timestamp == 1696935657 {
                 attribute = a;
                 break
