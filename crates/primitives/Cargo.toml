@@ -44,4 +44,5 @@ arbitrary = [
     "alloy-eips/arbitrary",
     "scroll-alloy-rpc-types-engine/arbitrary",
     "reth-scroll-primitives/arbitrary",
+    "reth-scroll-primitives/std",
 ]
