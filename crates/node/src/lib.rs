@@ -181,14 +181,23 @@ where
 
     /// Handles an indexer event.
     fn handle_indexer_event(&mut self, event: IndexerEvent) {
-        trace!(target: "scroll::node::manager", "Received indexer event: {:?}", event);
-        if let IndexerEvent::BatchCommitIndexed(index) = event {
-            self.derivation_pipeline.handle_batch_commit(index)
+        trace!(target: "scroll::node::manager", ?event, "Received indexer event");
+        match event {
+            IndexerEvent::BatchCommitIndexed(batch_info) => {
+                // push the batch info into the derivation pipeline.
+                self.derivation_pipeline.handle_batch_commit(batch_info)
+            }
+            IndexerEvent::BatchFinalizationIndexed(_, Some(finalized_block)) |
+            IndexerEvent::FinalizedIndexed(_, Some(finalized_block)) => {
+                // update the fcs on new finalized block.
+                self.engine.set_finalized_block_info(finalized_block);
+            }
+            _ => (),
         }
     }
 
     /// Handles an engine driver event.
-    fn handle_engine_driver_event(&self, event: EngineDriverEvent) {
+    fn handle_engine_driver_event(&mut self, event: EngineDriverEvent) {
         trace!(target: "scroll::node::manager", ?event, "Received engine driver event");
         match event {
             EngineDriverEvent::BlockImportOutcome(outcome) => {
@@ -199,7 +208,9 @@ where
                 let signature = Signature::from_compact(&[0; 64]).unwrap();
                 self.network.handle().announce_block(payload, signature);
             }
-            EngineDriverEvent::L1BlockConsolidated(block_info) => {
+            EngineDriverEvent::L1BlockConsolidated((block_info, batch_info)) => {
+                self.indexer.handle_batch_to_block(batch_info, block_info);
+
                 if let Some(event_sender) = self.event_sender.as_ref() {
                     event_sender.notify(RollupEvent::L1DerivedBlockConsolidated(block_info));
                 }

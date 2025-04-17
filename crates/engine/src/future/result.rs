@@ -3,7 +3,7 @@ use super::*;
 /// A type that represents the result of the engine driver future.
 pub(crate) enum EngineDriverFutureResult {
     BlockImport(Result<(Option<BlockInfo>, Option<BlockImportOutcome>), EngineDriverError>),
-    L1Consolidation(Result<(BlockInfo, bool), EngineDriverError>),
+    L1Consolidation(Result<(BlockInfo, bool, BatchInfo), EngineDriverError>),
     PayloadBuildingJob(Result<ScrollBlock, EngineDriverError>),
 }
 
@@ -17,8 +17,8 @@ impl From<Result<(Option<BlockInfo>, Option<BlockImportOutcome>), EngineDriverEr
     }
 }
 
-impl From<Result<(BlockInfo, bool), EngineDriverError>> for EngineDriverFutureResult {
-    fn from(value: Result<(BlockInfo, bool), EngineDriverError>) -> Self {
+impl From<Result<(BlockInfo, bool, BatchInfo), EngineDriverError>> for EngineDriverFutureResult {
+    fn from(value: Result<(BlockInfo, bool, BatchInfo), EngineDriverError>) -> Self {
         Self::L1Consolidation(value)
     }
 }

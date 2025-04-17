@@ -11,11 +11,13 @@ workspace = true
 
 [dependencies]
 # alloy
+alloy-eips.workspace = true
 alloy-primitives.workspace = true
 alloy-rpc-types-engine.workspace = true
 
 # scroll
 scroll-alloy-consensus.workspace = true
+scroll-alloy-rpc-types-engine.workspace = true
 
 # reth
 reth-scroll-primitives.workspace = true
@@ -31,11 +33,15 @@ std = [
     "alloy-rpc-types-engine/std",
     "scroll-alloy-consensus/std",
     "derive_more/std",
+    "scroll-alloy-rpc-types-engine/std",
+    "alloy-eips/std",
     "reth-scroll-primitives/std",
 ]
 arbitrary = [
     "dep:arbitrary",
     "alloy-primitives/arbitrary",
     "scroll-alloy-consensus/arbitrary",
+    "alloy-eips/arbitrary",
+    "scroll-alloy-rpc-types-engine/arbitrary",
     "reth-scroll-primitives/arbitrary",
 ]

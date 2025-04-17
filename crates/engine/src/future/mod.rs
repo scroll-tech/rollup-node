@@ -4,10 +4,8 @@ use alloy_rpc_types_engine::{
     ExecutionPayloadV1, ForkchoiceState as AlloyForkchoiceState, PayloadStatusEnum,
 };
 use eyre::Result;
-use reth_payload_primitives::PayloadTypes;
-use reth_scroll_engine_primitives::ScrollEngineTypes;
 use reth_scroll_primitives::ScrollBlock;
-use rollup_node_primitives::BlockInfo;
+use rollup_node_primitives::{BatchInfo, BlockInfo, ScrollPayloadAttributesWithBatchInfo};
 use rollup_node_providers::ExecutionPayloadProvider;
 use scroll_alloy_provider::ScrollEngineApi;
 use scroll_alloy_rpc_types_engine::ScrollPayloadAttributes;
@@ -35,7 +33,7 @@ type BlockImportFuture = Pin<
 
 /// A future that resolves to a tuple of the block info and the block import outcome.
 type L1ConsolidationFuture =
-    Pin<Box<dyn Future<Output = Result<(BlockInfo, bool), EngineDriverError>> + Send>>;
+    Pin<Box<dyn Future<Output = Result<(BlockInfo, bool, BatchInfo), EngineDriverError>> + Send>>;
 
 /// A type alias for the payload building job future.
 type PayloadBuildingJobFuture =
@@ -68,7 +66,7 @@ impl EngineDriverFuture {
         execution_payload_provider: Arc<P>,
         safe_block_info: BlockInfo,
         fcs: AlloyForkchoiceState,
-        payload_attributes: ScrollPayloadAttributes,
+        payload_attributes: ScrollPayloadAttributesWithBatchInfo,
     ) -> Self
     where
         EC: ScrollEngineApi + Unpin + Send + Sync + 'static,
@@ -193,12 +191,15 @@ async fn handle_payload_attributes<EC, P>(
     execution_payload_provider: Arc<P>,
     safe_block_info: BlockInfo,
     mut fcs: AlloyForkchoiceState,
-    mut payload_attributes: <ScrollEngineTypes as PayloadTypes>::PayloadAttributes,
-) -> Result<(BlockInfo, bool), EngineDriverError>
+    payload_attributes: ScrollPayloadAttributesWithBatchInfo,
+) -> Result<(BlockInfo, bool, BatchInfo), EngineDriverError>
 where
     EC: ScrollEngineApi + Unpin + Send + Sync + 'static,
     P: ExecutionPayloadProvider + Unpin + Send + Sync + 'static,
 {
+    let ScrollPayloadAttributesWithBatchInfo { mut payload_attributes, batch_info } =
+        payload_attributes;
+
     let maybe_execution_payload = execution_payload_provider
         .execution_payload_by_block((safe_block_info.number + 1).into())
         .await
@@ -215,8 +216,8 @@ where
         let safe_block_info: BlockInfo =
             maybe_execution_payload.expect("execution payload exists").into();
         fcs.safe_block_hash = safe_block_info.hash;
-        forkchoice_updated(client.clone(), fcs, None).await?;
-        Ok((safe_block_info, false))
+        forkchoice_updated(client, fcs, None).await?;
+        Ok((safe_block_info, false, batch_info))
     } else {
         // Otherwise, we construct a block from the payload attributes on top of the current
         // safe head.
@@ -246,7 +247,7 @@ where
         fcs.safe_block_hash = safe_block_info.hash;
         forkchoice_updated(client, fcs, None).await?;
 
-        Ok((safe_block_info, true))
+        Ok((safe_block_info, true, batch_info))
     }
 }
 

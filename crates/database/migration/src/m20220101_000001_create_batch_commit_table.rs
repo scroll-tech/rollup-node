@@ -15,7 +15,7 @@ impl MigrationTrait for Migration {
                     .table(BatchCommit::Table)
                     .if_not_exists()
                     .col(pk_auto(BatchCommit::Index))
-                    .col(binary_len(BatchCommit::Hash, HASH_LENGTH))
+                    .col(binary_len(BatchCommit::Hash, HASH_LENGTH).unique_key())
                     .col(big_unsigned(BatchCommit::BlockNumber))
                     .col(big_unsigned(BatchCommit::BlockTimestamp))
                     .col(binary(BatchCommit::Calldata))
@@ -32,7 +32,7 @@ impl MigrationTrait for Migration {
 }
 
 #[derive(DeriveIden)]
-enum BatchCommit {
+pub(crate) enum BatchCommit {
     Table,
     Index,
     Hash,

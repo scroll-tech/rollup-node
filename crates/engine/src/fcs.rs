@@ -8,7 +8,7 @@ use rollup_node_primitives::BlockInfo;
 ///
 /// The state is composed of the [`BlockInfo`] for `head`, `safe` block, and the `finalized`
 /// blocks.
-#[derive(Debug, Clone)]
+#[derive(Debug, Default, Clone)]
 pub struct ForkchoiceState {
     head: BlockInfo,
     safe: BlockInfo,

@@ -8,8 +8,8 @@ use sea_orm::{entity::prelude::*, ActiveValue};
 #[sea_orm(table_name = "batch_commit")]
 pub struct Model {
     #[sea_orm(primary_key)]
-    index: i64,
-    hash: Vec<u8>,
+    pub(crate) index: i64,
+    pub(crate) hash: Vec<u8>,
     block_number: i64,
     block_timestamp: i64,
     calldata: Vec<u8>,
@@ -19,7 +19,17 @@ pub struct Model {
 
 /// The relation for the batch input model.
 #[derive(Copy, Clone, Debug, EnumIter, DeriveRelation)]
-pub enum Relation {}
+pub enum Relation {
+    /// A one-to-many relation with the derived block table.
+    #[sea_orm(has_many = "super::derived_block::Entity")]
+    BatchToBlock,
+}
+
+impl Related<super::derived_block::Entity> for Entity {
+    fn to() -> RelationDef {
+        Relation::BatchToBlock.def()
+    }
+}
 
 /// The active model behavior for the batch input model.
 impl ActiveModelBehavior for ActiveModel {}

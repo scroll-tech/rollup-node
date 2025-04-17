@@ -25,17 +25,21 @@ use core::{
     task::{Context, Poll, Waker},
 };
 use futures::{ready, stream::FuturesOrdered, Stream, StreamExt};
-use rollup_node_primitives::BatchCommitData;
-use rollup_node_providers::L1Provider;
+use rollup_node_primitives::{BatchCommitData, BatchInfo, ScrollPayloadAttributesWithBatchInfo};
+use rollup_node_providers::{BlockDataProvider, L1Provider};
 use scroll_alloy_rpc_types_engine::ScrollPayloadAttributes;
 use scroll_codec::Codec;
 use scroll_db::{Database, DatabaseOperations};
 
-/// A future that resolves to a stream of [`ScrollPayloadAttributes`].
+/// A future that resolves to a stream of [`ScrollPayloadAttributesWithBatchInfo`].
 type DerivationPipelineFuture = Pin<
     Box<
-        dyn Future<Output = Result<Vec<ScrollPayloadAttributes>, (u64, DerivationPipelineError)>>
-            + Send,
+        dyn Future<
+                Output = Result<
+                    Vec<ScrollPayloadAttributesWithBatchInfo>,
+                    (Arc<BatchInfo>, DerivationPipelineError),
+                >,
+            > + Send,
     >,
 >;
 
@@ -52,9 +56,9 @@ pub struct DerivationPipeline<P> {
     /// A L1 provider.
     l1_provider: P,
     /// The queue of batches to handle.
-    batch_index_queue: VecDeque<u64>,
+    batch_queue: VecDeque<Arc<BatchInfo>>,
     /// The queue of polled attributes.
-    attributes_queue: VecDeque<ScrollPayloadAttributes>,
+    attributes_queue: VecDeque<ScrollPayloadAttributesWithBatchInfo>,
     /// The waker for the pipeline.
     waker: Option<Waker>,
 }
@@ -68,7 +72,7 @@ where
         Self {
             database,
             l1_provider,
-            batch_index_queue: Default::default(),
+            batch_queue: Default::default(),
             pipeline_futures: Default::default(),
             attributes_queue: Default::default(),
             waker: None,
@@ -77,8 +81,9 @@ where
 
     /// Handles a new batch commit index by pushing it in its internal queue.
     /// Wakes the waker in order to trigger a call to poll.
-    pub fn handle_batch_commit(&mut self, index: u64) {
-        self.batch_index_queue.push_back(index);
+    pub fn handle_batch_commit(&mut self, batch_info: BatchInfo) {
+        let block_info = Arc::new(batch_info);
+        self.batch_queue.push_back(block_info);
         if let Some(waker) = self.waker.take() {
             waker.wake()
         }
@@ -90,15 +95,19 @@ where
         let database = self.database.clone();
         let provider = self.l1_provider.clone();
 
-        if let Some(index) = self.batch_index_queue.pop_front() {
+        if let Some(info) = self.batch_queue.pop_front() {
             let fut = Box::pin(async move {
+                // get the batch commit data.
                 let batch = database
-                    .get_batch_by_index(index)
+                    .get_batch_by_index(info.index)
                     .await
-                    .map_err(|err| (index, err.into()))?
-                    .ok_or((index, DerivationPipelineError::UnknownBatch(index)))?;
+                    .map_err(|err| (info.clone(), err.into()))?
+                    .ok_or((info.clone(), DerivationPipelineError::UnknownBatch(info.index)))?;
 
-                derive(batch, provider).await.map_err(|err| (index, err))
+                // derive the attributes and attach the corresponding batch info.
+                let attrs =
+                    derive(batch, provider, database).await.map_err(|err| (info.clone(), err))?;
+                Ok(attrs.into_iter().map(|attr| (attr, *info).into()).collect())
             });
             return Some(fut);
         }
@@ -110,7 +119,7 @@ impl<P> Stream for DerivationPipeline<P>
 where
     P: L1Provider + Clone + Unpin + Send + Sync + 'static,
 {
-    type Item = ScrollPayloadAttributes;
+    type Item = ScrollPayloadAttributesWithBatchInfo;
 
     fn poll_next(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
         let this = self.get_mut();
@@ -122,7 +131,7 @@ where
 
         // if futures are empty and the batch queue is empty, store the waker
         // and return.
-        if this.pipeline_futures.is_empty() && this.batch_index_queue.is_empty() {
+        if this.pipeline_futures.is_empty() && this.batch_queue.is_empty() {
             this.waker = Some(cx.waker().clone());
             return Poll::Pending
         }
@@ -141,13 +150,12 @@ where
                     this.attributes_queue.extend(attributes);
                     cx.waker().wake_by_ref();
                 }
-                Err((index, err)) => {
-                    tracing::error!(target: "scroll::node::derivation_pipeline", ?index, ?err, "failed to derive payload attributes for batch");
-                    // retry polling the same batch index.
-                    this.batch_index_queue.push_front(index);
-                    if let Some(fut) = this.handle_next_batch() {
-                        this.pipeline_futures.push_front(fut)
-                    }
+                Err((batch_info, err)) => {
+                    tracing::error!(target: "scroll::node::derivation_pipeline", batch_info = ?*batch_info, ?err, "failed to derive payload attributes for batch");
+                    // retry polling the same batch.
+                    this.batch_queue.push_front(batch_info);
+                    let fut = this.handle_next_batch().expect("Pushed batch info into queue");
+                    this.pipeline_futures.push_front(fut);
                 }
             }
         }
@@ -157,9 +165,10 @@ where
 
 /// Returns a vector of [`ScrollPayloadAttributes`] from the [`BatchCommitData`] and a
 /// [`L1Provider`].
-pub async fn derive<P: L1Provider + Sync + Send>(
+pub async fn derive<L1P: L1Provider + Sync + Send, L2P: BlockDataProvider + Sync + Send>(
     batch: BatchCommitData,
-    l1_provider: P,
+    l1_provider: L1P,
+    l2_provider: L2P,
 ) -> Result<Vec<ScrollPayloadAttributes>, DerivationPipelineError> {
     // fetch the blob then decode the input batch.
     let blob = if let Some(hash) = batch.blob_versioned_hash {
@@ -187,7 +196,7 @@ pub async fn derive<P: L1Provider + Sync + Send>(
     let mut attributes = Vec::with_capacity(blocks.len());
     for mut block in blocks {
         // query the appropriate amount of l1 messages.
-        let mut txs = Vec::with_capacity(block.context.num_l1_messages as usize);
+        let mut txs = Vec::with_capacity(block.context.num_transactions as usize);
         for _ in 0..block.context.num_l1_messages {
             let l1_message = l1_provider
                 .next_l1_message()
@@ -202,6 +211,10 @@ pub async fn derive<P: L1Provider + Sync + Send>(
         // add the block transactions.
         txs.append(&mut block.transactions);
 
+        // get the block data for the l2 block.
+        let number = block.context.number;
+        let block_data = l2_provider.block_data(number.into()).await.map_err(Into::into)?;
+
         // construct the payload attributes.
         let attribute = ScrollPayloadAttributes {
             payload_attributes: PayloadAttributes {
@@ -213,7 +226,7 @@ pub async fn derive<P: L1Provider + Sync + Send>(
             },
             transactions: Some(txs),
             no_tx_pool: true,
-            block_data_hint: None,
+            block_data_hint: block_data,
         };
         attributes.push(attribute);
     }
@@ -226,7 +239,7 @@ mod tests {
     use super::*;
     use std::sync::Arc;
 
-    use alloy_eips::eip4844::Blob;
+    use alloy_eips::{eip4844::Blob, BlockId};
     use alloy_primitives::{address, b256, bytes, U256};
     use core::sync::atomic::{AtomicU64, Ordering};
     use rollup_node_primitives::L1MessageWithBlockNumber;
@@ -234,6 +247,7 @@ mod tests {
         DatabaseL1MessageProvider, L1BlobProvider, L1MessageProvider, L1ProviderError,
     };
     use scroll_alloy_consensus::TxL1Message;
+    use scroll_alloy_rpc_types_engine::BlockDataHint;
     use scroll_codec::decoding::test_utils::read_to_bytes;
     use scroll_db::test_utils::setup_test_db;
 
@@ -316,6 +330,20 @@ mod tests {
         }
     }
 
+    struct MockL2Provider;
+
+    #[async_trait::async_trait]
+    impl BlockDataProvider for MockL2Provider {
+        type Error = Infallible;
+
+        async fn block_data(
+            &self,
+            _block_id: BlockId,
+        ) -> Result<Option<BlockDataHint>, Self::Error> {
+            Ok(None)
+        }
+    }
+
     #[tokio::test]
     async fn test_should_stream_payload_attributes() -> eyre::Result<()> {
         // https://etherscan.io/tx/0x8f4f0fcab656aa81589db5b53255094606c4624bfd99702b56b2debaf6211f48
@@ -359,14 +387,16 @@ mod tests {
         let mut pipeline = DerivationPipeline::new(mock_l1_provider, db);
 
         // as long as we don't call `handle_commit_batch`, pipeline should not return attributes.
-        pipeline.handle_batch_commit(12);
+        pipeline.handle_batch_commit(BatchInfo { index: 12, hash: Default::default() });
 
         // we should find some attributes now
         assert!(pipeline.next().await.is_some());
 
         // check the correctness of the last attribute.
         let mut attribute = ScrollPayloadAttributes::default();
-        while let Some(a) = pipeline.next().await {
+        while let Some(ScrollPayloadAttributesWithBatchInfo { payload_attributes: a, .. }) =
+            pipeline.next().await
+        {
             if a.payload_attributes.timestamp == 1696935657 {
                 attribute = a;
                 break
@@ -379,7 +409,7 @@ mod tests {
             },
             transactions: Some(vec![bytes!("f88c8202658417d7840082a4f294530000000000000000000000000000000000000280a4bede39b500000000000000000000000000000000000000000000000000000001669aa2f583104ec4a07461e6555f927393ebdf5f183738450c3842bc3b86a1db7549d9bee21fadd0b1a06d7ba96897bd9fb8e838a327d3ca34be66da11955f10d1fb2264949071e9e8cd")]),
             no_tx_pool: true,
-            block_data_hint: None,
+            block_data_hint: Some(BlockDataHint{ extra_data: bytes!("d883050000846765746888676f312e31392e31856c696e757800000000000000909feed55823062d606d517c3f971201615962991dbc2c1ef5897b3b2c9bd0b93b5bae6e5cedbddfc4bcbbe731477beaca8b3eff111de7ac67a388850405265200"), difficulty: U256::from(2) }),
         };
         assert_eq!(attribute, expected);
 
@@ -414,9 +444,11 @@ mod tests {
             sender: address!("7885BcBd5CeCEf1336b5300fb5186A12DDD8c478"),
             input: bytes!("8ef1332e0000000000000000000000007f2b8c31f88b6006c382775eea88297ec1e3e9050000000000000000000000006ea73e05adc79974b931123675ea8f78ffdacdf000000000000000000000000000000000000000000000000000470de4df820000000000000000000000000000000000000000000000000000000000000000002200000000000000000000000000000000000000000000000000000000000000a000000000000000000000000000000000000000000000000000000000000000a4232e8748000000000000000000000000982fe4a7cbd74bb3422ebe46333c3e8046c12c7f000000000000000000000000982fe4a7cbd74bb3422ebe46333c3e8046c12c7f00000000000000000000000000000000000000000000000000470de4df8200000000000000000000000000000000000000000000000000000000000000000080000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000"),
         }}];
-        let provider = MockL1MessageProvider { messages: Arc::new(l1_messages), index: 0.into() };
+        let l1_provider =
+            MockL1MessageProvider { messages: Arc::new(l1_messages), index: 0.into() };
+        let l2_provider = MockL2Provider;
 
-        let attributes: Vec<_> = derive(batch_data, provider).await?;
+        let attributes: Vec<_> = derive(batch_data, l1_provider, l2_provider).await?;
         let attribute =
             attributes.iter().find(|a| a.payload_attributes.timestamp == 1696935384).unwrap();
 
@@ -427,7 +459,7 @@ mod tests {
             },
             transactions: Some(vec![bytes!("7ef901b7218302904094781e90f1c8fc4611c9b7497c3b47f99ef6969cbc80b901848ef1332e0000000000000000000000007f2b8c31f88b6006c382775eea88297ec1e3e9050000000000000000000000006ea73e05adc79974b931123675ea8f78ffdacdf0000000000000000000000000000000000000000000000000006a94d74f430000000000000000000000000000000000000000000000000000000000000000002100000000000000000000000000000000000000000000000000000000000000a000000000000000000000000000000000000000000000000000000000000000a4232e8748000000000000000000000000ca266224613396a0e8d4c2497dbc4f33dd6cdeff000000000000000000000000ca266224613396a0e8d4c2497dbc4f33dd6cdeff000000000000000000000000000000000000000000000000006a94d74f4300000000000000000000000000000000000000000000000000000000000000000080000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000947885bcbd5cecef1336b5300fb5186a12ddd8c478"), bytes!("7ef901b7228302904094781e90f1c8fc4611c9b7497c3b47f99ef6969cbc80b901848ef1332e0000000000000000000000007f2b8c31f88b6006c382775eea88297ec1e3e9050000000000000000000000006ea73e05adc79974b931123675ea8f78ffdacdf000000000000000000000000000000000000000000000000000470de4df820000000000000000000000000000000000000000000000000000000000000000002200000000000000000000000000000000000000000000000000000000000000a000000000000000000000000000000000000000000000000000000000000000a4232e8748000000000000000000000000982fe4a7cbd74bb3422ebe46333c3e8046c12c7f000000000000000000000000982fe4a7cbd74bb3422ebe46333c3e8046c12c7f00000000000000000000000000000000000000000000000000470de4df8200000000000000000000000000000000000000000000000000000000000000000080000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000947885bcbd5cecef1336b5300fb5186a12ddd8c478")]),
             no_tx_pool: true,
-            block_data_hint: None,
+            block_data_hint: None
         };
         assert_eq!(attribute, &expected);
 
@@ -439,7 +471,7 @@ mod tests {
             },
             transactions: Some(vec![bytes!("f88c8202658417d7840082a4f294530000000000000000000000000000000000000280a4bede39b500000000000000000000000000000000000000000000000000000001669aa2f583104ec4a07461e6555f927393ebdf5f183738450c3842bc3b86a1db7549d9bee21fadd0b1a06d7ba96897bd9fb8e838a327d3ca34be66da11955f10d1fb2264949071e9e8cd")]),
             no_tx_pool: true,
-            block_data_hint: None,
+            block_data_hint: None
         };
         assert_eq!(attribute, &expected);
 

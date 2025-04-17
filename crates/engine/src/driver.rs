@@ -1,7 +1,7 @@
 use super::{future::EngineDriverFuture, ForkchoiceState};
 use crate::{future::EngineDriverFutureResult, EngineDriverEvent};
 use futures::{task::AtomicWaker, Stream};
-use rollup_node_primitives::BlockInfo;
+use rollup_node_primitives::{BlockInfo, ScrollPayloadAttributesWithBatchInfo};
 use rollup_node_providers::ExecutionPayloadProvider;
 use scroll_alloy_provider::ScrollEngineApi;
 use scroll_alloy_rpc_types_engine::ScrollPayloadAttributes;
@@ -26,7 +26,7 @@ pub struct EngineDriver<EC, P> {
     /// Block building duration.
     block_building_duration: Duration,
     /// The pending payload attributes derived from batches on L1.
-    l1_payload_attributes: VecDeque<ScrollPayloadAttributes>,
+    l1_payload_attributes: VecDeque<ScrollPayloadAttributesWithBatchInfo>,
     /// The pending block imports received over the network.
     block_imports: VecDeque<NewBlockWithPeer>,
     /// The payload attributes associated with the next block to be built.
@@ -63,6 +63,11 @@ where
         }
     }
 
+    /// Sets the finalized block info.
+    pub fn set_finalized_block_info(&mut self, block_info: BlockInfo) {
+        self.fcs.update_safe_block_info(block_info);
+    }
+
     /// Sets the payload building duration.
     pub fn set_payload_building_duration(&mut self, block_building_duration: Duration) {
         self.block_building_duration = block_building_duration;
@@ -77,7 +82,7 @@ where
 
     /// Handles a [`ScrollPayloadAttributes`] sourced from L1 by initiating a task sending the
     /// attribute to the EN via the [`EngineDriver`].
-    pub fn handle_l1_consolidation(&mut self, attributes: ScrollPayloadAttributes) {
+    pub fn handle_l1_consolidation(&mut self, attributes: ScrollPayloadAttributesWithBatchInfo) {
         self.l1_payload_attributes.push_back(attributes);
         self.waker.wake();
     }
@@ -123,7 +128,7 @@ where
                 tracing::info!(target: "scroll::engine", ?result, "handling L1 consolidation result");
 
                 match result {
-                    Ok((block_info, reorg)) => {
+                    Ok((block_info, reorg, batch_info)) => {
                         // Update the safe block info and return the block info
                         self.fcs.update_safe_block_info(block_info);
 
@@ -133,7 +138,9 @@ where
                             self.fcs.update_head_block_info(block_info);
                         }
 
-                        return Some(EngineDriverEvent::L1BlockConsolidated(block_info))
+                        return Some(EngineDriverEvent::L1BlockConsolidated((
+                            block_info, batch_info,
+                        )))
                     }
                     Err(err) => {
                         tracing::error!(target: "scroll::engine", ?err, "failed to consolidate block derived from L1")

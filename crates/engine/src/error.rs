@@ -10,4 +10,10 @@ pub enum EngineDriverError {
     /// The execution payload provider is unavailable.
     #[error("Execution payload provider is unavailable")]
     ExecutionPayloadProviderUnavailable,
+    /// The execution payload id is missing.
+    #[error("missing payload id")]
+    MissingExecutionPayloadId,
+    /// The engine driver is syncing.
+    #[error("Engine driver is syncing")]
+    Syncing,
 }
