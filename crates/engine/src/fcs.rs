@@ -1,4 +1,5 @@
 use alloy_chains::NamedChain;
+use alloy_primitives::B256;
 use alloy_rpc_types_engine::ForkchoiceState as AlloyForkchoiceState;
 use reth_scroll_chainspec::{SCROLL_MAINNET_GENESIS_HASH, SCROLL_SEPOLIA_GENESIS_HASH};
 use rollup_node_primitives::BlockInfo;
@@ -21,23 +22,32 @@ impl ForkchoiceState {
     }
 
     /// Creates a new [`ForkchoiceState`] instance.
-    pub const fn new(unsafe_: BlockInfo, safe: BlockInfo, finalized: BlockInfo) -> Self {
-        Self { head: unsafe_, safe, finalized }
+    pub const fn new(head: BlockInfo, safe: BlockInfo, finalized: BlockInfo) -> Self {
+        Self { head, safe, finalized }
+    }
+
+    /// Creates a new [`ForkchoiceState`] instance from the genesis block hash.
+    pub fn from_genesis(genesis: B256) -> Self {
+        Self::new(
+            BlockInfo { hash: genesis, number: 0 },
+            BlockInfo { hash: Default::default(), number: 0 },
+            BlockInfo { hash: Default::default(), number: 0 },
+        )
     }
 
     /// Creates a [`ForkchoiceState`] instance that represents the genesis state of the provided
     /// chain.
-    pub const fn genesis(chain: NamedChain) -> Self {
+    pub fn from_named(chain: NamedChain) -> Self {
         let block_info = match chain {
             NamedChain::Scroll => BlockInfo { hash: SCROLL_MAINNET_GENESIS_HASH, number: 0 },
             NamedChain::ScrollSepolia => BlockInfo { hash: SCROLL_SEPOLIA_GENESIS_HASH, number: 0 },
             _ => panic!("unsupported chain"),
         };
-        Self::new(block_info, block_info, block_info)
+        Self::new(block_info, Default::default(), Default::default())
     }
 
-    /// Updates the `unsafe` block info.
-    pub fn update_unsafe_block_info(&mut self, unsafe_: BlockInfo) {
+    /// Updates the `head` block info.
+    pub fn update_head_block_info(&mut self, unsafe_: BlockInfo) {
         self.head = unsafe_;
     }
 
@@ -51,8 +61,8 @@ impl ForkchoiceState {
         self.finalized = finalized;
     }
 
-    /// Returns the block info for the `unsafe` block.
-    pub const fn unsafe_block_info(&self) -> &BlockInfo {
+    /// Returns the block info for the `head` block.
+    pub const fn head_block_info(&self) -> &BlockInfo {
         &self.head
     }
 
