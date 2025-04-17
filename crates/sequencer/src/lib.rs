@@ -19,8 +19,6 @@ use std::task::{Context, Poll, Waker};
 mod error;
 pub use error::SequencerError;
 
-mod provider;
-
 /// A type alias for the payload building job future.
 pub type PayloadBuildingJobFuture =
     Pin<Box<dyn Future<Output = Result<ScrollPayloadAttributes, SequencerError>> + Send>>;
