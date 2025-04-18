@@ -101,7 +101,8 @@ where
             auth_secret,
             self.config.engine_api_url.unwrap_or(format!("http://localhost:{auth_port}").parse()?),
         );
-        let fcs = ForkchoiceState::from_genesis(ctx.config().chain.genesis_header().hash_slow());
+        let fcs =
+            ForkchoiceState::head_from_genesis(ctx.config().chain.genesis_header().hash_slow());
         let engine = EngineDriver::new(
             Arc::new(engine_api),
             Arc::new(payload_provider),

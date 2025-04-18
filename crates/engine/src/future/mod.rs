@@ -22,7 +22,7 @@ use tracing::instrument;
 mod result;
 pub(crate) use result::EngineDriverFutureResult;
 
-/// A future that resolves to a tuple of the block info and the block import outcome.
+/// A future that represents a block import job.
 type BlockImportFuture = Pin<
     Box<
         dyn Future<
@@ -31,15 +31,16 @@ type BlockImportFuture = Pin<
     >,
 >;
 
-/// A future that resolves to a tuple of the block info and the block import outcome.
+/// A future that represents an L1 consolidation job.
 type L1ConsolidationFuture =
     Pin<Box<dyn Future<Output = Result<(BlockInfo, bool, BatchInfo), EngineDriverError>> + Send>>;
 
-/// A type alias for the payload building job future.
+/// A future that represents a payload building job.
 type PayloadBuildingJobFuture =
     Pin<Box<dyn Future<Output = Result<ScrollBlock, EngineDriverError>> + Send>>;
 
-/// A future that resolves to a tuple of the block info and the block import outcome.
+/// An enum that represents the different types of futures that can be executed by the engine
+/// driver. It can be a block import job, an L1 consolidation job, or a payload building job.
 pub(crate) enum EngineDriverFuture {
     BlockImport(BlockImportFuture),
     L1Consolidation(L1ConsolidationFuture),
@@ -56,8 +57,7 @@ impl EngineDriverFuture {
     where
         EC: ScrollEngineApi + Unpin + Send + Sync + 'static,
     {
-        let fut = Box::pin(handle_execution_payload(client, block_with_peer, fcs));
-        Self::BlockImport(fut)
+        Self::BlockImport(Box::pin(handle_execution_payload(client, block_with_peer, fcs)))
     }
 
     /// Creates a new [`EngineDriverFuture::L1Consolidation`] future from the provided parameters.
@@ -72,14 +72,13 @@ impl EngineDriverFuture {
         EC: ScrollEngineApi + Unpin + Send + Sync + 'static,
         P: ExecutionPayloadProvider + Unpin + Send + Sync + 'static,
     {
-        let fut = Box::pin(handle_payload_attributes(
+        Self::L1Consolidation(Box::pin(handle_payload_attributes(
             client,
             execution_payload_provider,
             safe_block_info,
             fcs,
             payload_attributes,
-        ));
-        Self::L1Consolidation(fut)
+        )))
     }
 
     /// Creates a new [`EngineDriverFuture::PayloadBuildingJob`] future from the provided
@@ -93,14 +92,18 @@ impl EngineDriverFuture {
     where
         EC: ScrollEngineApi + Unpin + Send + Sync + 'static,
     {
-        let fut =
-            Box::pin(build_new_payload(client, fcs, block_building_duration, payload_attributes));
-        Self::PayloadBuildingJob(fut)
+        Self::PayloadBuildingJob(Box::pin(build_new_payload(
+            client,
+            fcs,
+            block_building_duration,
+            payload_attributes,
+        )))
     }
 }
 
 impl EngineDriverFuture {
-    /// Polls the [`EngineDriverFuture`].
+    /// Polls the [`EngineDriverFuture`] and upon completion, returns the result of the
+    /// corresponding future by converting it into an [`EngineDriverFutureResult`].
     pub(super) fn poll(&mut self, cx: &mut Context<'_>) -> Poll<EngineDriverFutureResult> {
         match self {
             Self::BlockImport(fut) => fut.as_mut().poll(cx).map(Into::into),
@@ -128,6 +131,8 @@ async fn handle_execution_payload<EC>(
 where
     EC: ScrollEngineApi + Unpin + Send + Sync + 'static,
 {
+    tracing::trace!(target: "scroll::engine::future", ?fcs, ?block_with_peer, "handling execution payload");
+
     // Unpack the block with peer.
     let NewBlockWithPeer { peer_id, block, signature } = block_with_peer;
 
@@ -197,6 +202,8 @@ where
     EC: ScrollEngineApi + Unpin + Send + Sync + 'static,
     P: ExecutionPayloadProvider + Unpin + Send + Sync + 'static,
 {
+    tracing::trace!(target: "scroll::engine::future", ?fcs, ?payload_attributes, "handling payload attributes");
+
     let ScrollPayloadAttributesWithBatchInfo { mut payload_attributes, batch_info } =
         payload_attributes;
 
@@ -261,7 +268,7 @@ async fn build_new_payload<EC>(
 where
     EC: ScrollEngineApi + Unpin + Send + Sync + 'static,
 {
-    tracing::trace!(target: "scroll::engine::driver", ?payload_attributes, "building new payload");
+    tracing::trace!(target: "scroll::engine::future", ?payload_attributes, "building new payload");
 
     // start a payload building job on top of the current unsafe head.
     let fc_updated = forkchoice_updated(client.clone(), fcs, Some(payload_attributes)).await?;

@@ -11,10 +11,10 @@ use std::{
 use alloy_eips::eip2718::Encodable2718;
 use alloy_primitives::Address;
 use alloy_rpc_types_engine::PayloadAttributes;
-use futures::Stream;
+use futures::{task::AtomicWaker, Stream};
 use rollup_node_providers::{L1MessageDelayProvider, L1MessageProvider};
 use scroll_alloy_rpc_types_engine::ScrollPayloadAttributes;
-use std::task::{Context, Poll, Waker};
+use std::task::{Context, Poll};
 
 mod error;
 pub use error::SequencerError;
@@ -38,7 +38,7 @@ pub struct Sequencer<SMP> {
     /// The inflight payload attributes job
     payload_attributes_job: Option<PayloadBuildingJobFuture>,
     /// A waker to notify when the Sequencer should be polled.
-    waker: Option<Waker>,
+    waker: AtomicWaker,
 }
 
 impl<SMP> Sequencer<SMP>
@@ -52,11 +52,12 @@ where
             fee_recipient,
             max_l1_messages_per_block,
             payload_attributes_job: None,
-            waker: None,
+            waker: AtomicWaker::new(),
         }
     }
 
-    /// Creates a new block using the pending transactions from the
+    /// Creates a new block using the pending transactions from the message queue and
+    /// the transaction pool.
     pub fn build_payload_attributes(&mut self) {
         tracing::info!(target: "rollup_node::sequencer", "New payload attributes request received.");
 
@@ -83,9 +84,7 @@ where
             build_payload_attributes(database, max_l1_messages, payload_attributes).await
         }));
 
-        if let Some(waker) = self.waker.take() {
-            waker.wake();
-        }
+        self.waker.wake();
     }
 
     /// Handle a reorg event.
@@ -100,6 +99,34 @@ where
     }
 }
 
+/// A stream that produces payload attributes.
+impl<SMP> Stream for Sequencer<SMP> {
+    type Item = ScrollPayloadAttributes;
+
+    fn poll_next(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
+        self.waker.register(cx.waker());
+
+        if let Some(payload_building_job) = self.payload_attributes_job.as_mut() {
+            match payload_building_job.as_mut().poll(cx) {
+                Poll::Ready(Ok(block)) => {
+                    self.payload_attributes_job = None;
+                    Poll::Ready(Some(block))
+                }
+                Poll::Ready(Err(_)) => {
+                    self.payload_attributes_job = None;
+                    Poll::Ready(None)
+                }
+                Poll::Pending => Poll::Pending,
+            }
+        } else {
+            Poll::Pending
+        }
+    }
+}
+
+/// Builds the payload attributes for the sequencer using the given L1 message provider.
+/// It collects the L1 messages to include in the payload and returns a `ScrollPayloadAttributes`
+/// instance.
 async fn build_payload_attributes<
     SMP: SequencerL1MessageProvider + Unpin + Send + Sync + 'static,
 >(
@@ -136,28 +163,5 @@ impl<SMP> std::fmt::Debug for Sequencer<SMP> {
             .field("payload_building_job", &"PayloadBuildingJob")
             .field("l1_message_per_block", &self.max_l1_messages_per_block)
             .finish()
-    }
-}
-
-impl<SMP> Stream for Sequencer<SMP> {
-    type Item = ScrollPayloadAttributes;
-
-    fn poll_next(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
-        if let Some(payload_building_job) = self.payload_attributes_job.as_mut() {
-            match payload_building_job.as_mut().poll(cx) {
-                Poll::Ready(Ok(block)) => {
-                    self.payload_attributes_job = None;
-                    Poll::Ready(Some(block))
-                }
-                Poll::Ready(Err(_)) => {
-                    self.payload_attributes_job = None;
-                    Poll::Ready(None)
-                }
-                Poll::Pending => Poll::Pending,
-            }
-        } else {
-            self.waker = Some(cx.waker().clone());
-            Poll::Pending
-        }
     }
 }

@@ -26,8 +26,9 @@ impl ForkchoiceState {
         Self { head, safe, finalized }
     }
 
-    /// Creates a new [`ForkchoiceState`] instance from the genesis block hash.
-    pub fn from_genesis(genesis: B256) -> Self {
+    /// Creates a new [`ForkchoiceState`] instance setting the `head` block info to the
+    /// provided `genesis` hash and the `safe` and `finalized` block info to the default values.
+    pub fn head_from_genesis(genesis: B256) -> Self {
         Self::new(
             BlockInfo { hash: genesis, number: 0 },
             BlockInfo { hash: Default::default(), number: 0 },
@@ -35,9 +36,9 @@ impl ForkchoiceState {
         )
     }
 
-    /// Creates a [`ForkchoiceState`] instance that represents the genesis state of the provided
-    /// chain.
-    pub fn from_named(chain: NamedChain) -> Self {
+    /// Creates a [`ForkchoiceState`] instance setting the `head` block info to the
+    /// provided `genesis` hash and the `safe` and `finalized` block info to the default values.
+    pub fn head_from_named_chain(chain: NamedChain) -> Self {
         let block_info = match chain {
             NamedChain::Scroll => BlockInfo { hash: SCROLL_MAINNET_GENESIS_HASH, number: 0 },
             NamedChain::ScrollSepolia => BlockInfo { hash: SCROLL_SEPOLIA_GENESIS_HASH, number: 0 },

@@ -101,6 +101,8 @@ where
         self.waker.wake();
     }
 
+    /// This function is called when a future completes and is responsible for
+    /// processing the result and returning an event if applicable.
     fn handle_future_result(
         &mut self,
         result: EngineDriverFutureResult,
@@ -113,6 +115,7 @@ where
                     Ok((block_info, block_import_outcome)) => {
                         // Update the unsafe block info
                         if let Some(block_info) = block_info {
+                            tracing::trace!(target: "scroll::engine", ?block_info, "updating unsafe block info");
                             self.fcs.update_head_block_info(block_info);
                         };
 
@@ -130,11 +133,12 @@ where
                 match result {
                     Ok((block_info, reorg, batch_info)) => {
                         // Update the safe block info and return the block info
+                        tracing::trace!(target: "scroll::engine", ?block_info, "updating safe block info from block derived from L1");
                         self.fcs.update_safe_block_info(block_info);
 
                         // If we reorged, update the head block info
                         if reorg {
-                            tracing::info!(target: "scroll::engine", ?block_info, "reorging head to l1 derived block");
+                            tracing::warn!(target: "scroll::engine", ?block_info, "reorging head to l1 derived block");
                             self.fcs.update_head_block_info(block_info);
                         }
 
@@ -153,6 +157,7 @@ where
                 match result {
                     Ok(block) => {
                         // Update the unsafe block info and return the block
+                        tracing::trace!(target: "scroll::engine", ?block, "updating unsafe block info from new payload");
                         let block_info = BlockInfo::new(block.number, block.hash_slow());
                         self.fcs.update_head_block_info(block_info);
                         return Some(EngineDriverEvent::NewPayload(block))

@@ -86,9 +86,9 @@ impl<C: Debug, EC: Debug, P: Debug, L1P: Debug, SMP: Debug> Debug
             .field("indexer", &self.indexer)
             .field("consensus", &self.consensus)
             .field("new_block_rx", &self.new_block_rx)
-            .field("pending_engine_tasks", &"[ ... ]")
             .field("event_sender", &self.event_sender)
             .field("sequencer", &self.sequencer)
+            .field("block_building_trigger", &self.block_building_trigger)
             .finish()
     }
 }
