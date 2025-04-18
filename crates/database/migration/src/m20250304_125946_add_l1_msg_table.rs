@@ -12,7 +12,7 @@ impl MigrationTrait for Migration {
                     .table(L1Message::Table)
                     .if_not_exists()
                     .col(pk_auto(L1Message::QueueIndex))
-                    .col(binary_len(L1Message::QueueHash, 32))
+                    .col(binary_len_null(L1Message::QueueHash, 32))
                     .col(unsigned(L1Message::BlockNumber))
                     .col(text(L1Message::GasLimit))
                     .col(binary_len(L1Message::To, 20))

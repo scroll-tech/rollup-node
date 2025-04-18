@@ -1,7 +1,7 @@
 //! e2e tests for the sequencer.
 
 use alloy_consensus::BlockHeader;
-use alloy_primitives::{Address, B256, U256};
+use alloy_primitives::{Address, U256};
 use alloy_rpc_types_engine::ForkchoiceState;
 use futures::stream::StreamExt;
 use reth_e2e_test_utils::transaction::TransactionTestContext;
@@ -78,7 +78,7 @@ async fn can_build_blocks() {
     let wallet_lock = wallet.lock().await;
     let l1_message = L1MessageEnvelope {
         block_number: 1,
-        queue_hash: B256::ZERO,
+        queue_hash: None,
         transaction: TxL1Message {
             queue_index: 0,
             gas_limit: 21000,

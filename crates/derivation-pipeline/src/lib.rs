@@ -363,7 +363,7 @@ mod tests {
         let l1_messages = vec![
             L1MessageEnvelope {
                 block_number: 717,
-                queue_hash: B256::ZERO,
+                queue_hash: None,
                 transaction: TxL1Message {
                     queue_index: 33,
                     gas_limit: 168000,
@@ -375,7 +375,7 @@ mod tests {
             },
             L1MessageEnvelope {
                 block_number: 717,
-                queue_hash: B256::ZERO,
+                queue_hash: None,
                 transaction: TxL1Message {
                     queue_index: 34,
                     gas_limit: 168000,
@@ -441,7 +441,7 @@ mod tests {
         let l1_messages = vec![
             L1MessageEnvelope {
                 block_number: 5,
-                queue_hash: B256::ZERO,
+                queue_hash: None,
                 transaction: TxL1Message {
                     queue_index: 33,
                     gas_limit: 168000,
@@ -453,7 +453,7 @@ mod tests {
             },
             L1MessageEnvelope {
                 block_number: 10,
-                queue_hash: B256::ZERO,
+                queue_hash: None,
                 transaction: TxL1Message {
                     queue_index: 34,
                     gas_limit: 168000,

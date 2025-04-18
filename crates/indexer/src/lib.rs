@@ -169,11 +169,11 @@ impl<ChainSpec: ScrollHardforks + Send + Sync + 'static> Indexer<ChainSpec> {
                 .map(|m| m.queue_hash)
                 .ok_or(DatabaseError::L1MessageNotFound(index))?;
 
-            let mut input = prev_queue_hash.to_vec();
+            let mut input = prev_queue_hash.unwrap_or_default().to_vec();
             input.append(&mut l1_message.tx_hash().to_vec());
-            keccak256(input) & L1_MESSAGE_QUEUE_HASH_MASK
+            Some(keccak256(input) & L1_MESSAGE_QUEUE_HASH_MASK)
         } else {
-            B256::ZERO
+            None
         };
 
         let l1_message = L1MessageEnvelope::new(l1_message, block_number, queue_hash);
@@ -313,7 +313,7 @@ mod test {
         let _ = indexer.next().await;
 
         let l1_message_result = db.get_l1_message(message.queue_index).await.unwrap().unwrap();
-        let l1_message = L1MessageEnvelope::new(message, block_number, B256::ZERO);
+        let l1_message = L1MessageEnvelope::new(message, block_number, None);
 
         assert_eq!(l1_message, l1_message_result);
     }
@@ -352,7 +352,7 @@ mod test {
 
         assert_eq!(
             b256!("5e48ae1092c7f912849b9935f4e66870d2034b24fb2016f506e6754900000000"),
-            l1_message_result.queue_hash
+            l1_message_result.queue_hash.unwrap()
         );
     }
 
@@ -386,17 +386,17 @@ mod test {
 
         // Generate 3 random L1 messages and set their block numbers
         let mut l1_message_block_1 =
-            L1MessageEnvelope { queue_hash: B256::ZERO, ..Arbitrary::arbitrary(&mut u).unwrap() };
+            L1MessageEnvelope { queue_hash: None, ..Arbitrary::arbitrary(&mut u).unwrap() };
         l1_message_block_1.block_number = 1;
         let l1_message_block_1 = l1_message_block_1;
 
         let mut l1_message_block_20 =
-            L1MessageEnvelope { queue_hash: B256::ZERO, ..Arbitrary::arbitrary(&mut u).unwrap() };
+            L1MessageEnvelope { queue_hash: None, ..Arbitrary::arbitrary(&mut u).unwrap() };
         l1_message_block_20.block_number = 20;
         let l1_message_block_20 = l1_message_block_20;
 
         let mut l1_message_block_30 =
-            L1MessageEnvelope { queue_hash: B256::ZERO, ..Arbitrary::arbitrary(&mut u).unwrap() };
+            L1MessageEnvelope { queue_hash: None, ..Arbitrary::arbitrary(&mut u).unwrap() };
         l1_message_block_30.block_number = 30;
         let l1_message_block_30 = l1_message_block_30;
 
