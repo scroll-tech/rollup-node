@@ -55,7 +55,7 @@ mod test {
     use arbitrary::{Arbitrary, Unstructured};
     use futures::StreamExt;
     use rand::Rng;
-    use rollup_node_primitives::{BatchCommitData, BatchInfo, BlockInfo, L1MessageWithBlockNumber};
+    use rollup_node_primitives::{BatchCommitData, BatchInfo, BlockInfo, L1MessageEnvelope};
     use sea_orm::{ColumnTrait, EntityTrait, QueryFilter};
 
     #[tokio::test]
@@ -119,13 +119,16 @@ mod test {
         let mut u = Unstructured::new(&bytes);
 
         // Generate a random L1Message.
-        let l1_message = L1MessageWithBlockNumber::arbitrary(&mut u).unwrap();
+        let l1_message = L1MessageEnvelope::arbitrary(&mut u).unwrap();
 
         // Round trip the L1Message through the database.
         db.insert_l1_message(l1_message.clone()).await.unwrap();
-        let l1_message_from_db =
-            db.get_l1_message(l1_message.transaction.queue_index).await.unwrap().unwrap();
-        assert_eq!(l1_message, l1_message_from_db);
+        let l1_message_from_db_index =
+            db.get_l1_message_by_index(l1_message.transaction.queue_index).await.unwrap().unwrap();
+        let l1_message_from_db_hash =
+            db.get_l1_message_by_hash(l1_message.queue_hash.unwrap()).await.unwrap().unwrap();
+        assert_eq!(l1_message, l1_message_from_db_index);
+        assert_eq!(l1_message, l1_message_from_db_hash);
     }
 
     #[tokio::test]
@@ -139,7 +142,7 @@ mod test {
     }
 
     #[tokio::test]
-    async fn test_database_batch_to_block_exists() {
+    async fn test_derived_block_exists() {
         // Set up the test database.
         let db = setup_test_db().await;
 
@@ -157,7 +160,7 @@ mod test {
         for _ in 0..10 {
             let block_info =
                 BlockInfo { number: block_number, hash: B256::arbitrary(&mut u).unwrap() };
-            db.insert_batch_to_block(batch_info, block_info).await.unwrap();
+            db.insert_derived_block(block_info, batch_info).await.unwrap();
             block_number += 1;
         }
 
@@ -168,7 +171,7 @@ mod test {
     }
 
     #[tokio::test]
-    async fn test_database_batch_to_block_missing() {
+    async fn test_derived_block_missing() {
         // Set up the test database.
         let db = setup_test_db().await;
 
@@ -191,7 +194,7 @@ mod test {
         for _ in 0..10 {
             let block_info =
                 BlockInfo { number: block_number, hash: B256::arbitrary(&mut u).unwrap() };
-            db.insert_batch_to_block(first_batch_info, block_info).await.unwrap();
+            db.insert_derived_block(block_info, first_batch_info).await.unwrap();
             block_number += 1;
         }
 
@@ -256,8 +259,8 @@ mod test {
         let mut u = Unstructured::new(&bytes);
 
         // Generate 2 random L1Messages.
-        let l1_message_1 = L1MessageWithBlockNumber::arbitrary(&mut u).unwrap();
-        let l1_message_2 = L1MessageWithBlockNumber::arbitrary(&mut u).unwrap();
+        let l1_message_1 = L1MessageEnvelope::arbitrary(&mut u).unwrap();
+        let l1_message_2 = L1MessageEnvelope::arbitrary(&mut u).unwrap();
 
         // Insert the L1Messages into the database in a transaction.
         let tx = db.tx().await.unwrap();
@@ -266,11 +269,17 @@ mod test {
         tx.commit().await.unwrap();
 
         // Check that the L1Messages are in the database.
-        let l1_message_1_from_db =
-            db.get_l1_message(l1_message_1.transaction.queue_index).await.unwrap().unwrap();
+        let l1_message_1_from_db = db
+            .get_l1_message_by_index(l1_message_1.transaction.queue_index)
+            .await
+            .unwrap()
+            .unwrap();
         assert_eq!(l1_message_1, l1_message_1_from_db);
-        let l1_message_2_from_db =
-            db.get_l1_message(l1_message_2.transaction.queue_index).await.unwrap().unwrap();
+        let l1_message_2_from_db = db
+            .get_l1_message_by_index(l1_message_2.transaction.queue_index)
+            .await
+            .unwrap()
+            .unwrap();
         assert_eq!(l1_message_2, l1_message_2_from_db);
     }
 
@@ -285,8 +294,8 @@ mod test {
         let mut u = Unstructured::new(&bytes);
 
         // Generate 2 random L1Messages.
-        let l1_message_1 = L1MessageWithBlockNumber::arbitrary(&mut u).unwrap();
-        let l1_message_2 = L1MessageWithBlockNumber::arbitrary(&mut u).unwrap();
+        let l1_message_1 = L1MessageEnvelope::arbitrary(&mut u).unwrap();
+        let l1_message_2 = L1MessageEnvelope::arbitrary(&mut u).unwrap();
 
         // Insert the L1Messages into the database.
         db.insert_l1_message(l1_message_1.clone()).await.unwrap();

@@ -1,7 +1,7 @@
 use crate::L1ProviderError;
 
 use alloy_primitives::B256;
-use rollup_node_primitives::L1MessageWithBlockNumber;
+use rollup_node_primitives::L1MessageEnvelope;
 use scroll_alloy_consensus::TxL1Message;
 use scroll_db::{DatabaseConnectionProvider, DatabaseOperations};
 
@@ -14,21 +14,20 @@ pub use database::{
 /// provider using the queue index or hash and then call
 /// [`L1MessageProvider::next_l1_message_with_block_number`] to iterate the queue.
 #[async_trait::async_trait]
-#[auto_impl::auto_impl(Arc)]
 pub trait L1MessageProvider {
     /// The error type for the provider.
-    type Error: Into<L1ProviderError>;
+    type Error: Into<L1ProviderError> + Send;
 
     /// Returns the L1 message with block number at the current cursor.
     /// This method does not advance the cursor.
     async fn get_l1_message_with_block_number(
         &self,
-    ) -> Result<Option<L1MessageWithBlockNumber>, Self::Error>;
+    ) -> Result<Option<L1MessageEnvelope>, Self::Error>;
 
     /// Returns the L1 message with block number at the current cursor and advances the cursor.
     async fn next_l1_message_with_block_number(
         &self,
-    ) -> Result<Option<L1MessageWithBlockNumber>, Self::Error> {
+    ) -> Result<Option<L1MessageEnvelope>, Self::Error> {
         if let Some(message) = self.get_l1_message_with_block_number().await? {
             self.increment_cursor();
             Ok(Some(message))
@@ -52,7 +51,7 @@ pub trait L1MessageProvider {
     /// Set the index cursor for the provider.
     fn set_index_cursor(&self, index: u64);
     /// Set the hash cursor for the provider.
-    fn set_hash_cursor(&self, hash: B256);
+    async fn set_hash_cursor(&self, hash: B256);
     /// Increment cursor index.
     fn increment_cursor(&self);
 }

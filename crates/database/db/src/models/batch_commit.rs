@@ -22,12 +22,12 @@ pub struct Model {
 pub enum Relation {
     /// A one-to-many relation with the derived block table.
     #[sea_orm(has_many = "super::derived_block::Entity")]
-    BatchToBlock,
+    DerivedBlock,
 }
 
 impl Related<super::derived_block::Entity> for Entity {
     fn to() -> RelationDef {
-        Relation::BatchToBlock.def()
+        Relation::DerivedBlock.def()
     }
 }
 

@@ -42,17 +42,17 @@ impl Related<super::batch_commit::Entity> for Entity {
 /// The active model behavior for the batch input model.
 impl ActiveModelBehavior for ActiveModel {}
 
-impl From<(BatchInfo, BlockInfo)> for ActiveModel {
-    fn from((batch_info, block_info): (BatchInfo, BlockInfo)) -> Self {
+impl From<(BlockInfo, BatchInfo)> for ActiveModel {
+    fn from((block_info, batch_info): (BlockInfo, BatchInfo)) -> Self {
         Self {
-            batch_index: ActiveValue::Set(
-                batch_info.index.try_into().expect("index should fit in i64"),
-            ),
-            batch_hash: ActiveValue::Set(batch_info.hash.to_vec()),
             block_number: ActiveValue::Set(
                 block_info.number.try_into().expect("block number should fit in i64"),
             ),
             block_hash: ActiveValue::Set(block_info.hash.to_vec()),
+            batch_index: ActiveValue::Set(
+                batch_info.index.try_into().expect("index should fit in i64"),
+            ),
+            batch_hash: ActiveValue::Set(batch_info.hash.to_vec()),
         }
     }
 }

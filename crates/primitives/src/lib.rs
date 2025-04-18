@@ -16,5 +16,5 @@ mod batch;
 pub use bounded_vec::BoundedVec;
 mod bounded_vec;
 
-pub use transaction::L1MessageWithBlockNumber;
+pub use transaction::L1MessageEnvelope;
 mod transaction;
