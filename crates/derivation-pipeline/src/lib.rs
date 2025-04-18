@@ -182,9 +182,9 @@ pub async fn derive<L1P: L1Provider + Sync + Send, L2P: BlockDataProvider + Sync
     // set the cursor for the l1 provider.
     let data = &decoded.data;
     if let Some(index) = data.queue_index_start() {
-        l1_provider.set_index_cursor(index)
+        l1_provider.set_index_cursor(index);
     } else if let Some(hash) = data.prev_l1_message_queue_hash() {
-        l1_provider.set_hash_cursor(*hash);
+        l1_provider.set_hash_cursor(*hash).await;
         // we skip the first l1 message, as we are interested in the one starting after
         // prev_l1_message_queue_hash.
         let _ = l1_provider.next_l1_message().await.map_err(Into::into)?;
@@ -287,7 +287,7 @@ mod tests {
 
         fn set_index_cursor(&self, _index: u64) {}
 
-        fn set_hash_cursor(&self, _hash: B256) {}
+        async fn set_hash_cursor(&self, _hash: B256) {}
 
         fn increment_cursor(&self) {
             self.index.fetch_add(1, Ordering::Relaxed);
@@ -311,7 +311,7 @@ mod tests {
     }
 
     #[async_trait::async_trait]
-    impl<P: L1MessageProvider + Sync> L1MessageProvider for MockL1Provider<P> {
+    impl<P: L1MessageProvider + Send + Sync> L1MessageProvider for MockL1Provider<P> {
         type Error = P::Error;
 
         async fn get_l1_message_with_block_number(
@@ -322,8 +322,8 @@ mod tests {
         fn set_index_cursor(&self, index: u64) {
             self.l1_messages_provider.set_index_cursor(index);
         }
-        fn set_hash_cursor(&self, hash: B256) {
-            self.l1_messages_provider.set_hash_cursor(hash)
+        async fn set_hash_cursor(&self, hash: B256) {
+            self.l1_messages_provider.set_hash_cursor(hash).await
         }
         fn increment_cursor(&self) {
             self.l1_messages_provider.increment_cursor()

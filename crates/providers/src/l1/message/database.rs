@@ -1,5 +1,9 @@
 use super::*;
-use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::{
+    atomic::{AtomicU64, Ordering},
+    Arc,
+};
+use tokio::sync::Mutex;
 
 /// Implements [`L1MessageProvider`] via a database connection.
 #[derive(Debug)]
@@ -8,12 +12,18 @@ pub struct DatabaseL1MessageProvider<DB> {
     database_connection: DB,
     /// The current L1 message index.
     index: AtomicU64,
+    /// The current queue hash.
+    queue_hash: Arc<Mutex<Option<B256>>>,
 }
 
 impl<DB> DatabaseL1MessageProvider<DB> {
     /// Returns a new instance of the [`DatabaseL1MessageProvider`].
-    pub const fn new(db: DB, index: u64) -> Self {
-        Self { database_connection: db, index: AtomicU64::new(index) }
+    pub fn new(db: DB, index: u64) -> Self {
+        Self {
+            database_connection: db,
+            index: AtomicU64::new(index),
+            queue_hash: Default::default(),
+        }
     }
 }
 
@@ -21,28 +31,41 @@ impl<DB> DatabaseL1MessageProvider<DB> {
 /// u64 atomic.
 impl<DB: Clone> Clone for DatabaseL1MessageProvider<DB> {
     fn clone(&self) -> Self {
-        Self { database_connection: self.database_connection.clone(), index: AtomicU64::new(0) }
+        Self {
+            database_connection: self.database_connection.clone(),
+            index: AtomicU64::new(0),
+            queue_hash: Default::default(),
+        }
     }
 }
 
 #[async_trait::async_trait]
-impl<DB: DatabaseConnectionProvider + Sync> L1MessageProvider for DatabaseL1MessageProvider<DB> {
+impl<DB: DatabaseConnectionProvider + Send + Sync> L1MessageProvider
+    for DatabaseL1MessageProvider<DB>
+{
     type Error = L1ProviderError;
 
     async fn get_l1_message_with_block_number(
         &self,
     ) -> Result<Option<L1MessageEnvelope>, Self::Error> {
-        let index = self.index.load(Ordering::Relaxed);
-        Ok(self.database_connection.get_l1_message(index).await?)
+        if let Some(hash) = self.queue_hash.lock().await.take() {
+            let message = self.database_connection.get_l1_message_by_hash(hash).await?;
+            if let Some(message) = &message {
+                self.index.store(message.transaction.queue_index, Ordering::Relaxed);
+            }
+            Ok(message)
+        } else {
+            let index = self.index.load(Ordering::Relaxed);
+            Ok(self.database_connection.get_l1_message_by_index(index).await?)
+        }
     }
 
     fn set_index_cursor(&self, index: u64) {
         self.index.store(index, Ordering::Relaxed);
     }
 
-    fn set_hash_cursor(&self, _hash: B256) {
-        // TODO: issue 43
-        todo!()
+    async fn set_hash_cursor(&self, hash: B256) {
+        *self.queue_hash.lock().await = Some(hash);
     }
 
     fn increment_cursor(&self) {
@@ -94,7 +117,7 @@ impl<DB> L1MessageDelayProvider for DatabaseL1MessageDelayProvider<DB> {
 impl<DB> L1MessageDelayProvider for DatabaseL1MessageProvider<DB> {}
 
 #[async_trait::async_trait]
-impl<DB: DatabaseConnectionProvider + Sync> L1MessageProvider
+impl<DB: DatabaseConnectionProvider + Send + Sync> L1MessageProvider
     for DatabaseL1MessageDelayProvider<DB>
 {
     type Error = L1ProviderError;
@@ -102,11 +125,11 @@ impl<DB: DatabaseConnectionProvider + Sync> L1MessageProvider
     async fn get_l1_message_with_block_number(
         &self,
     ) -> Result<Option<L1MessageEnvelope>, Self::Error> {
-        let msg_w_bn = self.l1_message_provider.get_l1_message_with_block_number().await?;
-        let result = if let Some(msg_w_bn) = msg_w_bn {
-            let tx_block_number = msg_w_bn.block_number;
+        let msg = self.l1_message_provider.get_l1_message_with_block_number().await?;
+        let result = if let Some(msg) = msg {
+            let tx_block_number = msg.block_number;
             let depth = self.l1_tip.load(Ordering::Relaxed) - tx_block_number;
-            (depth >= self.l1_message_delay).then_some(msg_w_bn)
+            (depth >= self.l1_message_delay).then_some(msg)
         } else {
             None
         };
@@ -118,9 +141,8 @@ impl<DB: DatabaseConnectionProvider + Sync> L1MessageProvider
         self.l1_message_provider.set_index_cursor(index);
     }
 
-    fn set_hash_cursor(&self, _hash: B256) {
-        // TODO: issue 43
-        todo!()
+    async fn set_hash_cursor(&self, hash: B256) {
+        self.l1_message_provider.set_hash_cursor(hash).await;
     }
 
     fn increment_cursor(&self) {

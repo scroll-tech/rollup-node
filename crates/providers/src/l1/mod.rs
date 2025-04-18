@@ -138,7 +138,7 @@ impl<L1P: Sync, BP: BeaconProvider + Sync> L1BlobProvider for OnlineL1Provider<L
 }
 
 #[async_trait::async_trait]
-impl<L1P: L1MessageProvider + Sync, BP: Sync + Send> L1MessageProvider
+impl<L1P: L1MessageProvider + Send + Sync, BP: Sync + Send> L1MessageProvider
     for OnlineL1Provider<L1P, BP>
 {
     type Error = <L1P>::Error;
@@ -150,11 +150,11 @@ impl<L1P: L1MessageProvider + Sync, BP: Sync + Send> L1MessageProvider
     }
 
     fn set_index_cursor(&self, index: u64) {
-        self.l1_message_provider.set_index_cursor(index)
+        self.l1_message_provider.set_index_cursor(index);
     }
 
-    fn set_hash_cursor(&self, hash: B256) {
-        self.l1_message_provider.set_hash_cursor(hash)
+    async fn set_hash_cursor(&self, hash: B256) {
+        self.l1_message_provider.set_hash_cursor(hash).await
     }
 
     fn increment_cursor(&self) {

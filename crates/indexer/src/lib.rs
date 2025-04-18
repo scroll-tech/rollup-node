@@ -164,7 +164,7 @@ impl<ChainSpec: ScrollHardforks + Send + Sync + 'static> Indexer<ChainSpec> {
         {
             let index = l1_message.queue_index - 1;
             let prev_queue_hash = database
-                .get_l1_message(index)
+                .get_l1_message_by_index(index)
                 .await?
                 .map(|m| m.queue_hash)
                 .ok_or(DatabaseError::L1MessageNotFound(index))?;
@@ -312,7 +312,8 @@ mod test {
 
         let _ = indexer.next().await;
 
-        let l1_message_result = db.get_l1_message(message.queue_index).await.unwrap().unwrap();
+        let l1_message_result =
+            db.get_l1_message_by_index(message.queue_index).await.unwrap().unwrap();
         let l1_message = L1MessageEnvelope::new(message, block_number, None);
 
         assert_eq!(l1_message, l1_message_result);
@@ -348,7 +349,8 @@ mod test {
 
         let _ = indexer.next().await.unwrap().unwrap();
 
-        let l1_message_result = db.get_l1_message(message.queue_index).await.unwrap().unwrap();
+        let l1_message_result =
+            db.get_l1_message_by_index(message.queue_index).await.unwrap().unwrap();
 
         assert_eq!(
             b256!("5e48ae1092c7f912849b9935f4e66870d2034b24fb2016f506e6754900000000"),

@@ -127,11 +127,27 @@ pub trait DatabaseOperations: DatabaseConnectionProvider {
     }
 
     /// Get a [`L1MessageEnvelope`] from the database by its message queue index.
-    async fn get_l1_message(
+    async fn get_l1_message_by_index(
         &self,
         queue_index: u64,
     ) -> Result<Option<L1MessageEnvelope>, DatabaseError> {
         Ok(models::l1_message::Entity::find_by_id(queue_index as i64)
+            .one(self.get_connection())
+            .await
+            .map(|x| x.map(Into::into))?)
+    }
+
+    /// Get a [`L1MessageEnvelope`] from the database by its message queue hash.
+    async fn get_l1_message_by_hash(
+        &self,
+        queue_hash: B256,
+    ) -> Result<Option<L1MessageEnvelope>, DatabaseError> {
+        Ok(models::l1_message::Entity::find()
+            .filter(
+                Condition::all()
+                    .add(models::l1_message::Column::QueueHash.is_not_null())
+                    .add(models::l1_message::Column::QueueHash.eq(queue_hash.to_vec())),
+            )
             .one(self.get_connection())
             .await
             .map(|x| x.map(Into::into))?)

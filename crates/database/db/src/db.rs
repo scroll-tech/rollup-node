@@ -123,9 +123,12 @@ mod test {
 
         // Round trip the L1Message through the database.
         db.insert_l1_message(l1_message.clone()).await.unwrap();
-        let l1_message_from_db =
-            db.get_l1_message(l1_message.transaction.queue_index).await.unwrap().unwrap();
-        assert_eq!(l1_message, l1_message_from_db);
+        let l1_message_from_db_index =
+            db.get_l1_message_by_index(l1_message.transaction.queue_index).await.unwrap().unwrap();
+        let l1_message_from_db_hash =
+            db.get_l1_message_by_hash(l1_message.queue_hash.unwrap()).await.unwrap().unwrap();
+        assert_eq!(l1_message, l1_message_from_db_index);
+        assert_eq!(l1_message, l1_message_from_db_hash);
     }
 
     #[tokio::test]
@@ -266,11 +269,17 @@ mod test {
         tx.commit().await.unwrap();
 
         // Check that the L1Messages are in the database.
-        let l1_message_1_from_db =
-            db.get_l1_message(l1_message_1.transaction.queue_index).await.unwrap().unwrap();
+        let l1_message_1_from_db = db
+            .get_l1_message_by_index(l1_message_1.transaction.queue_index)
+            .await
+            .unwrap()
+            .unwrap();
         assert_eq!(l1_message_1, l1_message_1_from_db);
-        let l1_message_2_from_db =
-            db.get_l1_message(l1_message_2.transaction.queue_index).await.unwrap().unwrap();
+        let l1_message_2_from_db = db
+            .get_l1_message_by_index(l1_message_2.transaction.queue_index)
+            .await
+            .unwrap()
+            .unwrap();
         assert_eq!(l1_message_2, l1_message_2_from_db);
     }
 
