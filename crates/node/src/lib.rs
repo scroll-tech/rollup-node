@@ -3,7 +3,7 @@
 use futures::StreamExt;
 use reth_tokio_util::{EventSender, EventStream};
 use rollup_node_indexer::{Indexer, IndexerEvent};
-use rollup_node_sequencer::{Sequencer, SequencerL1MessageProvider};
+use rollup_node_sequencer::Sequencer;
 use rollup_node_watcher::L1Notification;
 use scroll_alloy_provider::ScrollEngineApi;
 use scroll_engine::{EngineDriver, EngineDriverEvent};
@@ -31,7 +31,7 @@ pub use consensus::PoAConsensus;
 mod consensus;
 
 use consensus::Consensus;
-use rollup_node_providers::{ExecutionPayloadProvider, L1Provider};
+use rollup_node_providers::{ExecutionPayloadProvider, L1MessageProvider, L1Provider};
 use scroll_db::Database;
 use scroll_derivation_pipeline::DerivationPipeline;
 
@@ -51,7 +51,7 @@ const EVENT_CHANNEL_SIZE: usize = 100;
 /// - `forkchoice_state`: The forkchoice state of the rollup node.
 /// - `pending_block_imports`: A collection of pending block imports.
 /// - `event_sender`: An event sender for sending events to subscribers of the rollup node manager.
-pub struct RollupNodeManager<C, EC, P, L1P, SMP> {
+pub struct RollupNodeManager<C, EC, P, L1P, L1MP> {
     /// The network manager that manages the scroll p2p network.
     network: NetworkManager,
     /// The engine driver used to communicate with the engine.
@@ -69,13 +69,13 @@ pub struct RollupNodeManager<C, EC, P, L1P, SMP> {
     /// An event sender for sending events to subscribers of the rollup node manager.
     event_sender: Option<EventSender<RollupEvent>>,
     /// The sequencer which is responsible for sequencing transactions and producing new blocks.
-    sequencer: Option<Sequencer<SMP>>,
+    sequencer: Option<Sequencer<L1MP>>,
     /// The trigger for the block building process.
     block_building_trigger: Option<Interval>,
 }
 
-impl<C: Debug, EC: Debug, P: Debug, L1P: Debug, SMP: Debug> Debug
-    for RollupNodeManager<C, EC, P, L1P, SMP>
+impl<C: Debug, EC: Debug, P: Debug, L1P: Debug, L1MP: Debug> Debug
+    for RollupNodeManager<C, EC, P, L1P, L1MP>
 {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         f.debug_struct("RollupNodeManager")
@@ -93,13 +93,13 @@ impl<C: Debug, EC: Debug, P: Debug, L1P: Debug, SMP: Debug> Debug
     }
 }
 
-impl<C, EC, P, L1P, SMP> RollupNodeManager<C, EC, P, L1P, SMP>
+impl<C, EC, P, L1P, L1MP> RollupNodeManager<C, EC, P, L1P, L1MP>
 where
     C: Consensus + Unpin,
     EC: ScrollEngineApi + Unpin + Sync + Send + 'static,
     P: ExecutionPayloadProvider + Unpin + Send + Sync + 'static,
     L1P: L1Provider + Clone + Send + Sync + 'static,
-    SMP: SequencerL1MessageProvider + Unpin + Send + Sync + 'static,
+    L1MP: L1MessageProvider + Unpin + Send + Sync + 'static,
 {
     /// Create a new [`RollupNodeManager`] instance.
     #[allow(clippy::too_many_arguments)]
@@ -111,7 +111,7 @@ where
         l1_notification_rx: Option<Receiver<Arc<L1Notification>>>,
         consensus: C,
         new_block_rx: Option<UnboundedReceiver<NewBlockWithPeer>>,
-        sequencer: Option<Sequencer<SMP>>,
+        sequencer: Option<Sequencer<L1MP>>,
         block_time: Option<u64>,
     ) -> Self {
         let indexer = Indexer::new(database.clone());
@@ -224,13 +224,13 @@ where
     }
 }
 
-impl<C, EC, P, L1P, SMP> Future for RollupNodeManager<C, EC, P, L1P, SMP>
+impl<C, EC, P, L1P, L1MP> Future for RollupNodeManager<C, EC, P, L1P, L1MP>
 where
     C: Consensus + Unpin,
     EC: ScrollEngineApi + Unpin + Sync + Send + 'static,
     P: ExecutionPayloadProvider + Unpin + Send + Sync + 'static,
     L1P: L1Provider + Clone + Unpin + Send + Sync + 'static,
-    SMP: SequencerL1MessageProvider + Unpin + Send + Sync + 'static,
+    L1MP: L1MessageProvider + Unpin + Send + Sync + 'static,
 {
     type Output = ();
 
