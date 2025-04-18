@@ -26,6 +26,7 @@ reth-scroll-primitives.workspace = true
 # rollup-node
 scroll-db = { workspace = true }
 rollup-node-providers.workspace = true
+rollup-node-primitives.workspace = true
 
 # misc
 futures.workspace = true
