@@ -1,4 +1,5 @@
 use crate::constants;
+use alloy_primitives::Address;
 use std::path::PathBuf;
 
 /// A struct that represents the arguments for the rollup node.
@@ -20,6 +21,9 @@ pub struct ScrollRollupNodeArgs {
     /// The provider arguments
     #[command(flatten)]
     pub l1_provider_args: L1ProviderArgs,
+    /// The sequencer arguments
+    #[command(flatten)]
+    pub sequencer_args: Option<SequencerArgs>,
 }
 
 #[derive(Debug, clap::Args)]
@@ -39,4 +43,20 @@ pub struct L1ProviderArgs {
     /// The initial backoff for the provider.
     #[arg(long, default_value_t = constants::PROVIDER_INITIAL_BACKOFF)]
     pub initial_backoff: u64,
+}
+
+#[derive(Debug, clap::Args)]
+pub struct SequencerArgs {
+    /// The block time for the sequencer.
+    #[arg(long)]
+    pub block_time: u64,
+    /// The payload building duration for the sequencer (milliseconds)
+    #[arg(long)]
+    pub payload_building_duration: u64,
+    /// The max L1 messages per block for the sequencer.
+    #[arg(long)]
+    pub max_l1_messages_per_block: u64,
+    /// The fee recipient for the sequencer.
+    #[arg(long)]
+    pub fee_recipient: Option<Address>,
 }
