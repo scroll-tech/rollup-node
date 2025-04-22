@@ -7,9 +7,6 @@ pub enum EngineDriverError {
     /// The execution payload is invalid.
     #[error("Invalid execution payload")]
     InvalidExecutionPayload,
-    /// The engine failed to execute the fork choice update.
-    #[error("Failed to execute fork choice update")]
-    InvalidFcu,
     /// The execution payload provider is unavailable.
     #[error("Execution payload provider is unavailable")]
     ExecutionPayloadProviderUnavailable,
