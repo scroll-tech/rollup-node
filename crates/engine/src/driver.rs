@@ -92,7 +92,12 @@ where
     pub fn handle_build_new_payload(&mut self, attributes: ScrollPayloadAttributes) {
         tracing::info!(target: "scroll::engine", ?attributes, "new payload attributes request received");
 
-        if self.sequencer_payload_attributes.is_some() {
+        if self.sequencer_payload_attributes.is_some() ||
+            self.future
+                .as_ref()
+                .map(|fut| matches!(fut, EngineDriverFuture::PayloadBuildingJob(_)))
+                .unwrap_or(false)
+        {
             tracing::error!(target: "scroll::engine", "a payload building job is already in progress");
             return;
         }

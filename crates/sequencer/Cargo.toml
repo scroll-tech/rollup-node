@@ -44,16 +44,16 @@ alloy-primitives.workspace = true
 scroll-alloy-consensus.workspace = true
 
 # reth
-reth-db = { git = "https://github.com/scroll-tech/reth.git" }
+reth-db = { git = "https://github.com/scroll-tech/reth.git", branch = "fix/dev-genesis-hash" }
 reth-e2e-test-utils.workspace = true
-reth-node-builder = { git = "https://github.com/scroll-tech/reth.git", features = ["test-utils"] }
-reth-node-core = { git = "https://github.com/scroll-tech/reth.git" }
+reth-node-builder = { git = "https://github.com/scroll-tech/reth.git", branch = "fix/dev-genesis-hash", features = ["test-utils"] }
+reth-node-core = { git = "https://github.com/scroll-tech/reth.git", branch = "fix/dev-genesis-hash" }
 reth-provider = { workspace = true, features = ["test-utils"] }
-reth-revm = { git = "https://github.com/scroll-tech/reth.git", features = ["test-utils"] }
-reth-rpc-api = { git = "https://github.com/scroll-tech/reth.git" }
-reth-rpc-layer = { git = "https://github.com/scroll-tech/reth.git" }
+reth-revm = { git = "https://github.com/scroll-tech/reth.git", branch = "fix/dev-genesis-hash", features = ["test-utils"] }
+reth-rpc-api = { git = "https://github.com/scroll-tech/reth.git", branch = "fix/dev-genesis-hash" }
+reth-rpc-layer = { git = "https://github.com/scroll-tech/reth.git", branch = "fix/dev-genesis-hash" }
 reth-tasks.workspace = true
-reth-tracing = { git = "https://github.com/scroll-tech/reth.git" }
+reth-tracing = { git = "https://github.com/scroll-tech/reth.git", branch = "fix/dev-genesis-hash" }
 
 # reth-scroll
 reth-scroll-node = { workspace = true, features = ["test-utils"] }

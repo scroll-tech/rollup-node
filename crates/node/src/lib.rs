@@ -57,7 +57,7 @@ pub struct RollupNodeManager<C, EC, P, L1P, L1MP> {
     /// The engine driver used to communicate with the engine.
     engine: EngineDriver<EC, P>,
     /// The derivation pipeline, used to derive payload attributes from batches.
-    derivation_pipeline: DerivationPipeline<L1P>,
+    derivation_pipeline: Option<DerivationPipeline<L1P>>,
     /// A receiver for [`L1Notification`]s from the [`rollup_node_watcher::L1Watcher`].
     l1_notification_rx: Option<ReceiverStream<Arc<L1Notification>>>,
     /// An indexer used to index data for the rollup node.
@@ -106,7 +106,7 @@ where
     pub fn new(
         network: NetworkManager,
         engine: EngineDriver<EC, P>,
-        l1_provider: L1P,
+        l1_provider: Option<L1P>,
         database: Arc<Database>,
         l1_notification_rx: Option<Receiver<Arc<L1Notification>>>,
         consensus: C,
@@ -115,7 +115,8 @@ where
         block_time: Option<u64>,
     ) -> Self {
         let indexer = Indexer::new(database.clone());
-        let derivation_pipeline = DerivationPipeline::new(l1_provider, database);
+        let derivation_pipeline =
+            l1_provider.map(|provider| DerivationPipeline::new(provider, database));
         Self {
             network,
             engine,
@@ -185,7 +186,9 @@ where
         match event {
             IndexerEvent::BatchCommitIndexed(batch_info) => {
                 // push the batch info into the derivation pipeline.
-                self.derivation_pipeline.handle_batch_commit(batch_info)
+                if let Some(pipeline) = &mut self.derivation_pipeline {
+                    pipeline.handle_batch_commit(batch_info);
+                }
             }
             IndexerEvent::BatchFinalizationIndexed(_, Some(finalized_block)) |
             IndexerEvent::FinalizedIndexed(_, Some(finalized_block)) => {
@@ -275,7 +278,9 @@ where
         }
 
         // Poll Derivation Pipeline and push attribute in queue if any.
-        while let Poll::Ready(Some(attributes)) = this.derivation_pipeline.poll_next_unpin(cx) {
+        while let Some(Poll::Ready(Some(attributes))) =
+            this.derivation_pipeline.as_mut().map(|f| f.poll_next_unpin(cx))
+        {
             this.engine.handle_l1_consolidation(attributes)
         }
 

@@ -28,11 +28,11 @@ impl ForkchoiceState {
 
     /// Creates a new [`ForkchoiceState`] instance setting the `head` block info to the
     /// provided `genesis` hash and the `safe` and `finalized` block info to the default values.
-    pub fn head_from_genesis(genesis: B256) -> Self {
+    pub const fn head_from_genesis(genesis: B256) -> Self {
         Self::new(
             BlockInfo { hash: genesis, number: 0 },
-            BlockInfo { hash: Default::default(), number: 0 },
-            BlockInfo { hash: Default::default(), number: 0 },
+            BlockInfo { hash: B256::ZERO, number: 0 },
+            BlockInfo { hash: B256::ZERO, number: 0 },
         )
     }
 
@@ -48,8 +48,8 @@ impl ForkchoiceState {
     }
 
     /// Updates the `head` block info.
-    pub fn update_head_block_info(&mut self, unsafe_: BlockInfo) {
-        self.head = unsafe_;
+    pub fn update_head_block_info(&mut self, head: BlockInfo) {
+        self.head = head;
     }
 
     /// Updates the `safe` block info.
