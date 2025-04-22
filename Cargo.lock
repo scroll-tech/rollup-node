@@ -2925,7 +2925,7 @@ dependencies = [
  "k256",
  "log",
  "rand 0.8.5",
- "secp256k1 0.30.0",
+ "secp256k1",
  "serde",
  "sha3",
  "zeroize",
@@ -6528,7 +6528,7 @@ dependencies = [
  "reth-static-file-types",
  "reth-trie",
  "reth-trie-db",
- "secp256k1 0.30.0",
+ "secp256k1",
  "serde",
  "serde_json",
  "tokio",
@@ -6558,7 +6558,7 @@ dependencies = [
  "libc",
  "rand 0.8.5",
  "reth-fs-util",
- "secp256k1 0.30.0",
+ "secp256k1",
  "serde",
  "thiserror 2.0.12",
 ]
@@ -6773,7 +6773,7 @@ dependencies = [
  "reth-net-nat",
  "reth-network-peers",
  "schnellru",
- "secp256k1 0.30.0",
+ "secp256k1",
  "serde",
  "thiserror 2.0.12",
  "tokio",
@@ -6799,7 +6799,7 @@ dependencies = [
  "reth-ethereum-forks",
  "reth-metrics",
  "reth-network-peers",
- "secp256k1 0.30.0",
+ "secp256k1",
  "thiserror 2.0.12",
  "tokio",
  "tracing",
@@ -6820,7 +6820,7 @@ dependencies = [
  "reth-network-peers",
  "reth-tokio-util",
  "schnellru",
- "secp256k1 0.30.0",
+ "secp256k1",
  "serde",
  "serde_with",
  "thiserror 2.0.12",
@@ -6931,7 +6931,7 @@ dependencies = [
  "pin-project",
  "rand 0.8.5",
  "reth-network-peers",
- "secp256k1 0.30.0",
+ "secp256k1",
  "sha2 0.10.8",
  "sha3",
  "thiserror 2.0.12",
@@ -7251,7 +7251,7 @@ dependencies = [
  "reth-primitives-traits",
  "reth-zstd-compressors",
  "revm-context",
- "secp256k1 0.30.0",
+ "secp256k1",
  "serde",
  "serde_with",
 ]
@@ -7556,7 +7556,7 @@ dependencies = [
  "reth-transaction-pool",
  "rustc-hash 2.1.1",
  "schnellru",
- "secp256k1 0.30.0",
+ "secp256k1",
  "serde",
  "smallvec",
  "thiserror 2.0.12",
@@ -7620,7 +7620,7 @@ dependencies = [
  "alloy-primitives",
  "alloy-rlp",
  "enr",
- "secp256k1 0.30.0",
+ "secp256k1",
  "serde_with",
  "thiserror 2.0.12",
  "tokio",
@@ -7739,7 +7739,7 @@ dependencies = [
  "reth-tokio-util",
  "reth-tracing",
  "reth-transaction-pool",
- "secp256k1 0.30.0",
+ "secp256k1",
  "tokio",
  "tokio-stream",
  "tracing",
@@ -7784,7 +7784,7 @@ dependencies = [
  "reth-storage-errors",
  "reth-tracing",
  "reth-transaction-pool",
- "secp256k1 0.30.0",
+ "secp256k1",
  "serde",
  "shellexpand",
  "strum 0.27.1",
@@ -7910,7 +7910,7 @@ dependencies = [
  "reth-primitives-traits",
  "reth-zstd-compressors",
  "revm-context",
- "secp256k1 0.30.0",
+ "secp256k1",
  "serde",
  "serde_with",
 ]
@@ -8031,7 +8031,7 @@ dependencies = [
  "revm-primitives",
  "revm-state",
  "scroll-alloy-consensus",
- "secp256k1 0.30.0",
+ "secp256k1",
  "serde",
  "serde_with",
  "thiserror 2.0.12",
@@ -8675,7 +8675,7 @@ dependencies = [
  "revm-scroll",
  "scroll-alloy-consensus",
  "scroll-alloy-evm",
- "secp256k1 0.30.0",
+ "secp256k1",
  "serde",
 ]
 
@@ -8933,7 +8933,7 @@ dependencies = [
  "rand 0.9.0",
  "reth-primitives",
  "reth-primitives-traits",
- "secp256k1 0.30.0",
+ "secp256k1",
 ]
 
 [[package]]
@@ -9288,7 +9288,7 @@ dependencies = [
  "p256",
  "revm-primitives",
  "ripemd",
- "secp256k1 0.30.0",
+ "secp256k1",
  "sha2 0.10.8",
 ]
 
@@ -9505,7 +9505,6 @@ dependencies = [
  "scroll-migration",
  "scroll-network",
  "scroll-wire",
- "secp256k1 0.29.1",
  "serde_json",
  "tokio",
  "tracing",
@@ -9531,15 +9530,19 @@ dependencies = [
 name = "rollup-node-manager"
 version = "0.0.1"
 dependencies = [
+ "alloy-consensus",
  "alloy-eips",
+ "alloy-primitives",
  "alloy-rpc-types-engine",
  "futures",
+ "reth-primitives-traits",
  "reth-scroll-primitives",
  "reth-tokio-util",
  "rollup-node-indexer",
  "rollup-node-primitives",
  "rollup-node-providers",
  "rollup-node-watcher",
+ "scroll-alloy-consensus",
  "scroll-alloy-provider",
  "scroll-alloy-rpc-types-engine",
  "scroll-db",
@@ -9547,7 +9550,6 @@ dependencies = [
  "scroll-engine",
  "scroll-network",
  "scroll-wire",
- "secp256k1 0.29.1",
  "tokio",
  "tokio-stream",
  "tracing",
@@ -10189,7 +10191,6 @@ dependencies = [
  "reth-scroll-primitives",
  "reth-storage-api",
  "scroll-wire",
- "secp256k1 0.29.1",
  "tokio",
  "tokio-stream",
  "tracing",
@@ -10206,7 +10207,6 @@ dependencies = [
  "reth-network",
  "reth-network-api",
  "reth-scroll-primitives",
- "secp256k1 0.29.1",
  "tokio",
  "tokio-stream",
  "tracing",
@@ -10390,17 +10390,6 @@ dependencies = [
  "serdect",
  "subtle",
  "zeroize",
-]
-
-[[package]]
-name = "secp256k1"
-version = "0.29.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "9465315bc9d4566e1724f0fffcbcc446268cb522e60f9a27bcded6b19c108113"
-dependencies = [
- "rand 0.8.5",
- "secp256k1-sys",
- "serde",
 ]
 
 [[package]]

@@ -1,8 +1,8 @@
+use alloy_primitives::Signature;
 use reth_network::import::{BlockImport as RethBlockImport, NewBlockEvent};
 use reth_network_peers::PeerId;
 use reth_scroll_primitives::ScrollBlock;
 use scroll_network::NewBlockWithPeer;
-use secp256k1::ecdsa::Signature;
 use std::{
     sync::Arc,
     task::{Context, Poll},
@@ -10,7 +10,7 @@ use std::{
 use tokio::sync::mpsc::UnboundedSender;
 use tracing::{trace, warn};
 
-const ECDSA_SIGNATURE_LEN: usize = 64;
+const ECDSA_SIGNATURE_LEN: usize = 65;
 
 /// A block import implementation for the eth-wire protocol that sends block to the scroll-wire
 /// protocol.
@@ -42,7 +42,7 @@ impl BridgeBlockImport {
         if let Some(signature) = extra_data
             .len()
             .checked_sub(ECDSA_SIGNATURE_LEN)
-            .and_then(|i| Signature::from_compact(&extra_data[i..]).ok())
+            .and_then(|i| Signature::from_raw(&extra_data[i..]).ok())
         {
             let block = block.block.clone();
             trace!(target: "scroll::bridge::import", peer_id = %peer_id, block = ?block.hash_slow(), "Received new block from eth-wire protocol");

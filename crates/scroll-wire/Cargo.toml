@@ -24,7 +24,6 @@ reth-scroll-primitives = { workspace = true }
 
 # misc
 futures.workspace = true
-secp256k1 = { workspace = true, features = ["global-context", "recovery"] }
 tokio = { workspace = true, features = ["full"] }
 tokio-stream.workspace = true
 tracing.workspace = true
@@ -36,5 +35,4 @@ serde = [
     "reth-network/serde",
     "reth-network-api/serde",
     "reth-scroll-primitives/serde",
-    "secp256k1/serde",
 ]

@@ -1,5 +1,6 @@
 //! This library contains the main manager for the rollup node.
 
+use alloy_primitives::bytes::Bytes;
 use alloy_rpc_types_engine::{
     ExecutionPayload, ExecutionPayloadV1, ForkchoiceState as AlloyForkchoiceState,
     PayloadStatusEnum,
@@ -212,7 +213,7 @@ where
                         Some(Ok(BlockValidation::ValidBlock {
                             new_block: NewBlock {
                                 block,
-                                signature: signature.serialize_compact().to_vec().into(),
+                                signature: Bytes::from(Into::<Vec<u8>>::into(signature)),
                             },
                         })),
                     ),
