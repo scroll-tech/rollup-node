@@ -19,6 +19,7 @@ alloy-provider.workspace = true
 alloy-rpc-types-engine.workspace = true
 
 # scroll-alloy
+scroll-alloy-hardforks.workspace = true
 scroll-alloy-provider.workspace = true
 
 # reth
@@ -62,6 +63,7 @@ serde = [
     "scroll-network/serde",
     "scroll-wire/serde",
     "alloy-eips/serde",
+    "scroll-alloy-hardforks/serde",
     "alloy-chains/serde",
     "alloy-consensus/serde",
     "alloy-primitives/serde",

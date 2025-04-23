@@ -131,6 +131,7 @@ alloy-transport = { version = "0.14.0", default-features = false }
 
 # scroll-alloy
 scroll-alloy-consensus = { git = "https://github.com/scroll-tech/reth.git", default-features = false }
+scroll-alloy-hardforks = { git = "https://github.com/scroll-tech/reth.git", default-features = false }
 scroll-alloy-network = { git = "https://github.com/scroll-tech/reth.git", default-features = false }
 scroll-alloy-provider = { git = "https://github.com/scroll-tech/reth.git", default-features = false }
 scroll-alloy-rpc-types-engine = { git = "https://github.com/scroll-tech/reth.git", default-features = false }
@@ -150,6 +151,7 @@ reth-tokio-util = { git = "https://github.com/scroll-tech/reth.git", default-fea
 # reth-scroll
 reth-scroll-chainspec = { git = "https://github.com/scroll-tech/reth.git", default-features = false }
 reth-scroll-engine-primitives = { git = "https://github.com/scroll-tech/reth.git", default-features = false }
+reth-scroll-forks = { git = "https://github.com/scroll-tech/reth.git", default-features = false }
 reth-scroll-node = { git = "https://github.com/scroll-tech/reth.git", default-features = false }
 reth-scroll-primitives = { git = "https://github.com/scroll-tech/reth.git", default-features = false }
 

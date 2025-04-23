@@ -17,7 +17,7 @@ pub(super) enum IndexerFuture {
     HandleBatchCommit(PendingIndexerFuture),
     HandleBatchFinalization(PendingIndexerFuture),
     HandleL1Message(PendingIndexerFuture),
-    HandleBatchToBlock(PendingIndexerFuture),
+    HandleDerivedBlock(PendingIndexerFuture),
 }
 
 impl IndexerFuture {
@@ -32,7 +32,7 @@ impl IndexerFuture {
             Self::HandleBatchCommit(fut) |
             Self::HandleBatchFinalization(fut) |
             Self::HandleL1Message(fut) |
-            Self::HandleBatchToBlock(fut) => fut.as_mut().poll(cx),
+            Self::HandleDerivedBlock(fut) => fut.as_mut().poll(cx),
         }
     }
 }
@@ -47,7 +47,7 @@ impl fmt::Debug for IndexerFuture {
             Self::HandleBatchCommit(_) => write!(f, "HandleBatchCommit"),
             Self::HandleBatchFinalization(_) => write!(f, "HandleBatchFinalization"),
             Self::HandleL1Message(_) => write!(f, "HandleL1Message"),
-            Self::HandleBatchToBlock(_) => write!(f, "HandleBatchToBlock"),
+            Self::HandleDerivedBlock(_) => write!(f, "HandleDerivedBlock"),
         }
     }
 }
