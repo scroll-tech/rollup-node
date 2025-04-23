@@ -279,16 +279,9 @@ where
     // retrieve the execution payload
     let execution_payload = get_payload(
         client.clone(),
-        fc_updated.payload_id.ok_or(EngineDriverError::MissingExecutionPayloadId).inspect_err(|e| {
-            tracing::error!(target: "scroll::engine::future", "Error retrieving execution payload: {:?}", e);
-        })?,
+        fc_updated.payload_id.expect("payload attributes has been set"),
     )
     .await?;
-    tracing::trace!(target: "scroll::engine::future", "Successfully retrieved execution payload: {:?}", execution_payload);
-
-    // provide this payload to the EN.
-    let result = new_payload(client.clone(), execution_payload.clone().into_v1()).await?;
-    tracing::trace!(target: "scroll::engine::future", "Successfully issued new payload to the EN: {:?}", result);
 
     // update the head block hash to the new payload block hash.
     fcs.head_block_hash = execution_payload.block_hash();
@@ -297,5 +290,5 @@ where
     forkchoice_updated(client, fcs, None).await?;
 
     // convert the payload into a block.
-    execution_payload.try_into().map_err(|err| EngineDriverError::InvalidExecutionPayload(err))
+    execution_payload.try_into().map_err(|_| EngineDriverError::InvalidExecutionPayload)
 }

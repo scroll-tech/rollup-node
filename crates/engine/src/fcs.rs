@@ -28,28 +28,29 @@ impl ForkchoiceState {
 
     /// Creates a new [`ForkchoiceState`] instance setting the `head` block info to the
     /// provided `genesis` hash and the `safe` and `finalized` block info to the default values.
-    pub const fn head_from_genesis(genesis: B256) -> Self {
+    pub fn head_from_genesis(genesis: B256) -> Self {
         Self::new(
             BlockInfo { hash: genesis, number: 0 },
-            BlockInfo { hash: B256::ZERO, number: 0 },
-            BlockInfo { hash: B256::ZERO, number: 0 },
+            BlockInfo { hash: Default::default(), number: 0 },
+            BlockInfo { hash: Default::default(), number: 0 },
         )
     }
 
-    /// Creates a [`ForkchoiceState`] instance setting the `head` block info to the
-    /// provided `genesis` hash and the `safe` and `finalized` block info to the default values.
+    /// Creates a [`ForkchoiceState`] instance setting the `head` hash to the
+    ///  `genesis` hash of the [`NamedChain`] and the `safe` and `finalized` block info to the
+    /// default values.
     pub fn head_from_named_chain(chain: NamedChain) -> Self {
-        let block_info = match chain {
-            NamedChain::Scroll => BlockInfo { hash: SCROLL_MAINNET_GENESIS_HASH, number: 0 },
-            NamedChain::ScrollSepolia => BlockInfo { hash: SCROLL_SEPOLIA_GENESIS_HASH, number: 0 },
+        let genesis_hash = match chain {
+            NamedChain::Scroll => SCROLL_MAINNET_GENESIS_HASH,
+            NamedChain::ScrollSepolia => SCROLL_SEPOLIA_GENESIS_HASH,
             _ => panic!("unsupported chain"),
         };
-        Self::new(block_info, Default::default(), Default::default())
+        Self::head_from_genesis(genesis_hash)
     }
 
     /// Updates the `head` block info.
-    pub fn update_head_block_info(&mut self, head: BlockInfo) {
-        self.head = head;
+    pub fn update_head_block_info(&mut self, unsafe_: BlockInfo) {
+        self.head = unsafe_;
     }
 
     /// Updates the `safe` block info.

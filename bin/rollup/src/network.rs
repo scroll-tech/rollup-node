@@ -144,7 +144,7 @@ where
         };
 
         // Construct the l1 provider.
-        let l1_messages_provider = Arc::new(DatabaseL1MessageProvider::new(db.clone(), 0));
+        let l1_messages_provider = DatabaseL1MessageProvider::new(db.clone(), 0);
         let l1_provider = if let Some(url) = self.config.l1_provider_args.beacon_rpc_url {
             let beacon_provider = beacon_provider(url.to_string());
             let l1_provider = OnlineL1Provider::new(
@@ -162,13 +162,27 @@ where
         let (sequencer, block_time) = if self.config.sequencer_args.scroll_sequencer_enabled {
             let args = &self.config.sequencer_args;
             let sequencer = Sequencer::new(
-                l1_messages_provider,
+                Arc::new(l1_messages_provider),
                 args.fee_recipient,
                 args.max_l1_messages_per_block,
                 0,
                 0,
             );
             (Some(sequencer), Some(args.scroll_block_time))
+        } else {
+            (None, None)
+        };
+
+        // Construct the Sequencer.
+        let (sequencer, block_time) = if let Some(args) = self.config.sequencer_args {
+            let sequencer = Sequencer::new(
+                Arc::new(l1_messages_provider),
+                args.fee_recipient.unwrap_or_default(),
+                args.max_l1_messages_per_block,
+                0,
+                0,
+            );
+            (Some(sequencer), Some(args.block_time))
         } else {
             (None, None)
         };

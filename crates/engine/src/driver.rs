@@ -1,6 +1,6 @@
 use super::{future::EngineDriverFuture, ForkchoiceState};
 use crate::{future::EngineDriverFutureResult, EngineDriverEvent};
-use futures::{task::AtomicWaker, Stream};
+use futures::{ready, task::AtomicWaker, Stream};
 use rollup_node_primitives::{BlockInfo, ScrollPayloadAttributesWithBatchInfo};
 use rollup_node_providers::ExecutionPayloadProvider;
 use scroll_alloy_provider::ScrollEngineApi;
@@ -92,12 +92,7 @@ where
     pub fn handle_build_new_payload(&mut self, attributes: ScrollPayloadAttributes) {
         tracing::info!(target: "scroll::engine", ?attributes, "new payload attributes request received");
 
-        if self.sequencer_payload_attributes.is_some() ||
-            self.future
-                .as_ref()
-                .map(|fut| matches!(fut, EngineDriverFuture::PayloadBuildingJob(_)))
-                .unwrap_or(false)
-        {
+        if self.sequencer_payload_attributes.is_some() {
             tracing::error!(target: "scroll::engine", "a payload building job is already in progress");
             return;
         }
@@ -193,14 +188,10 @@ where
 
         // If we have a future, poll it.
         if let Some(future) = this.future.as_mut() {
-            match future.poll(cx) {
-                Poll::Ready(result) => {
-                    this.future = None;
-                    if let Some(event) = this.handle_future_result(result) {
-                        return Poll::Ready(Some(event));
-                    }
-                }
-                Poll::Pending => return Poll::Pending,
+            let result = ready!(future.poll(cx));
+            this.future = None;
+            if let Some(event) = this.handle_future_result(result) {
+                return Poll::Ready(Some(event));
             }
         };
 
