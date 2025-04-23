@@ -28,7 +28,7 @@ impl ForkchoiceState {
 
     /// Creates a new [`ForkchoiceState`] instance setting the `head`, `safe` and `finalized` block
     /// info to the provided `genesis` hash.
-    pub fn head_from_genesis(genesis: B256) -> Self {
+    pub const fn head_from_genesis(genesis: B256) -> Self {
         Self::new(
             BlockInfo { hash: genesis, number: 0 },
             BlockInfo { hash: genesis, number: 0 },
