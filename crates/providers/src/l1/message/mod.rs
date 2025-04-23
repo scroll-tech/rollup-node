@@ -38,8 +38,8 @@ pub trait L1MessageProvider {
     /// the predicate is satisfied.
     async fn next_l1_message_with_block_number_and_predicate(
         &self,
-        predicate: impl Fn(L1MessageWithBlockNumber) -> bool + Send,
-    ) -> Result<Option<L1MessageWithBlockNumber>, Self::Error> {
+        predicate: impl Fn(L1MessageEnvelope) -> bool + Send,
+    ) -> Result<Option<L1MessageEnvelope>, Self::Error> {
         match self.get_l1_message_with_block_number().await? {
             Some(message) if predicate(message.clone()) => {
                 self.increment_cursor();
@@ -59,7 +59,7 @@ pub trait L1MessageProvider {
     /// the predicate is satisfied.
     async fn next_l1_message_with_predicate(
         &self,
-        predicate: impl Fn(L1MessageWithBlockNumber) -> bool + Send,
+        predicate: impl Fn(L1MessageEnvelope) -> bool + Send,
     ) -> Result<Option<TxL1Message>, Self::Error> {
         let message = self.next_l1_message_with_block_number_and_predicate(predicate).await?;
         Ok(message.map(|message| message.transaction))
