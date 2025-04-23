@@ -173,20 +173,6 @@ where
             (None, None)
         };
 
-        // Construct the Sequencer.
-        let (sequencer, block_time) = if let Some(args) = self.config.sequencer_args {
-            let sequencer = Sequencer::new(
-                Arc::new(l1_messages_provider),
-                args.fee_recipient.unwrap_or_default(),
-                args.max_l1_messages_per_block,
-                0,
-                0,
-            );
-            (Some(sequencer), Some(args.block_time))
-        } else {
-            (None, None)
-        };
-
         // Spawn the rollup node manager
         let rollup_node_manager = RollupNodeManager::new(
             scroll_network_manager,
