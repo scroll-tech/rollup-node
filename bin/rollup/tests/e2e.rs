@@ -145,6 +145,7 @@ pub async fn build_bridge_node(
             initial_backoff: 100,
         },
         engine_api_url: None,
+        sequencer_args: None,
     };
     let node = ScrollNode;
     let NodeHandle { node, node_exit_future: _ } = NodeBuilder::new(node_config.clone())

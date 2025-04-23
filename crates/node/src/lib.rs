@@ -1,21 +1,15 @@
 //! This library contains the main manager for the rollup node.
 
-use alloy_rpc_types_engine::{
-    ExecutionPayload, ExecutionPayloadV1, ForkchoiceState as AlloyForkchoiceState,
-    PayloadStatusEnum,
-};
-use futures::{stream::FuturesOrdered, FutureExt, StreamExt};
+use futures::StreamExt;
 use reth_tokio_util::{EventSender, EventStream};
 use rollup_node_indexer::{Indexer, IndexerEvent};
+use rollup_node_sequencer::Sequencer;
 use rollup_node_watcher::L1Notification;
 use scroll_alloy_hardforks::ScrollHardforks;
 use scroll_alloy_provider::ScrollEngineApi;
-use scroll_engine::{EngineDriver, EngineDriverError, ForkchoiceState};
-use scroll_network::{
-    BlockImportError, BlockImportOutcome, BlockValidation, BlockValidationError, NetworkManager,
-    NetworkManagerEvent, NewBlockWithPeer,
-};
-use scroll_wire::NewBlock;
+use scroll_engine::{EngineDriver, EngineDriverEvent};
+use scroll_network::{BlockImportOutcome, NetworkManager, NetworkManagerEvent, NewBlockWithPeer};
+use secp256k1::ecdsa::Signature;
 use std::{
     fmt,
     fmt::{Debug, Formatter},
@@ -24,7 +18,10 @@ use std::{
     sync::Arc,
     task::{Context, Poll},
 };
-use tokio::sync::mpsc::{Receiver, UnboundedReceiver};
+use tokio::{
+    sync::mpsc::{Receiver, UnboundedReceiver},
+    time::Interval,
+};
 use tokio_stream::wrappers::{ReceiverStream, UnboundedReceiverStream};
 use tracing::{error, trace};
 
@@ -35,21 +32,12 @@ pub use consensus::PoAConsensus;
 mod consensus;
 
 use consensus::Consensus;
-use rollup_node_primitives::{BatchInfo, BlockInfo, ScrollPayloadAttributesWithBatchInfo};
-use rollup_node_providers::{ExecutionPayloadProvider, L1Provider};
+use rollup_node_providers::{ExecutionPayloadProvider, L1MessageProvider, L1Provider};
 use scroll_db::Database;
 use scroll_derivation_pipeline::DerivationPipeline;
 
 /// The size of the event channel.
 const EVENT_CHANNEL_SIZE: usize = 100;
-
-/// A future that resolves to a tuple of the block info and the block import outcome.
-type PendingBlockImportFuture =
-    Pin<Box<dyn Future<Output = (Option<BlockInfo>, Option<BlockImportOutcome>)> + Send>>;
-
-/// A future that resolves to a tuple of the block info and the block import outcome.
-type EngineDriverFuture =
-    Pin<Box<dyn Future<Output = Result<(BlockInfo, bool, BatchInfo), EngineDriverError>> + Send>>;
 
 /// The main manager for the rollup node.
 ///
@@ -64,11 +52,11 @@ type EngineDriverFuture =
 /// - `forkchoice_state`: The forkchoice state of the rollup node.
 /// - `pending_block_imports`: A collection of pending block imports.
 /// - `event_sender`: An event sender for sending events to subscribers of the rollup node manager.
-pub struct RollupNodeManager<C, EC, P, L1P, CS> {
+pub struct RollupNodeManager<C, EC, P, L1P, L1MP, CS> {
     /// The network manager that manages the scroll p2p network.
     network: NetworkManager,
     /// The engine driver used to communicate with the engine.
-    engine: Arc<EngineDriver<EC, P>>,
+    engine: EngineDriver<EC, P>,
     /// The derivation pipeline, used to derive payload attributes from batches.
     derivation_pipeline: DerivationPipeline<L1P>,
     /// A receiver for [`L1Notification`]s from the [`rollup_node_watcher::L1Watcher`].
@@ -79,18 +67,16 @@ pub struct RollupNodeManager<C, EC, P, L1P, CS> {
     consensus: C,
     /// The receiver for new blocks received from the network (used to bridge from eth-wire).
     new_block_rx: Option<UnboundedReceiverStream<NewBlockWithPeer>>,
-    /// The forkchoice state of the rollup node.
-    forkchoice_state: ForkchoiceState,
-    /// A collection of pending block imports.
-    pending_block_imports: FuturesOrdered<PendingBlockImportFuture>,
-    /// A pending engine driver task.
-    pending_engine_task: Option<EngineDriverFuture>,
     /// An event sender for sending events to subscribers of the rollup node manager.
     event_sender: Option<EventSender<RollupEvent>>,
+    /// The sequencer which is responsible for sequencing transactions and producing new blocks.
+    sequencer: Option<Sequencer<L1MP>>,
+    /// The trigger for the block building process.
+    block_building_trigger: Option<Interval>,
 }
 
-impl<C: Debug, EC: Debug, P: Debug, L1P: Debug, CS: Debug> Debug
-    for RollupNodeManager<C, EC, P, L1P, CS>
+impl<C: Debug, EC: Debug, P: Debug, L1P: Debug, L1MP: Debug, CS: Debug> Debug
+    for RollupNodeManager<C, EC, P, L1P, L1MP, CS>
 {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         f.debug_struct("RollupNodeManager")
@@ -101,23 +87,20 @@ impl<C: Debug, EC: Debug, P: Debug, L1P: Debug, CS: Debug> Debug
             .field("indexer", &self.indexer)
             .field("consensus", &self.consensus)
             .field("new_block_rx", &self.new_block_rx)
-            .field("forkchoice_state", &self.forkchoice_state)
-            .field("pending_block_imports", &self.pending_block_imports)
-            .field(
-                "pending_engine_task",
-                &self.pending_engine_task.as_ref().map(|_| "Some( ... )").unwrap_or("None"),
-            )
             .field("event_sender", &self.event_sender)
+            .field("sequencer", &self.sequencer)
+            .field("block_building_trigger", &self.block_building_trigger)
             .finish()
     }
 }
 
-impl<C, EC, P, L1P, CS> RollupNodeManager<C, EC, P, L1P, CS>
+impl<C, EC, P, L1P, L1MP, CS> RollupNodeManager<C, EC, P, L1P, L1MP, CS>
 where
     C: Consensus + Unpin,
     EC: ScrollEngineApi + Unpin + Sync + Send + 'static,
     P: ExecutionPayloadProvider + Unpin + Send + Sync + 'static,
     L1P: L1Provider + Clone + Send + Sync + 'static,
+    L1MP: L1MessageProvider + Unpin + Send + Sync + 'static,
     CS: ScrollHardforks + Send + Sync + 'static,
 {
     /// Create a new [`RollupNodeManager`] instance.
@@ -128,25 +111,26 @@ where
         l1_provider: L1P,
         database: Arc<Database>,
         l1_notification_rx: Option<Receiver<Arc<L1Notification>>>,
-        forkchoice_state: ForkchoiceState,
         consensus: C,
         chain_spec: Arc<CS>,
         new_block_rx: Option<UnboundedReceiver<NewBlockWithPeer>>,
+        sequencer: Option<Sequencer<L1MP>>,
+        block_time: Option<u64>,
     ) -> Self {
         let indexer = Indexer::new(database.clone(), chain_spec);
         let derivation_pipeline = DerivationPipeline::new(l1_provider, database);
         Self {
             network,
-            engine: Arc::new(engine),
+            engine,
             derivation_pipeline,
             l1_notification_rx: l1_notification_rx.map(Into::into),
             indexer,
             consensus,
             new_block_rx: new_block_rx.map(Into::into),
-            forkchoice_state,
-            pending_block_imports: FuturesOrdered::new(),
-            pending_engine_task: None,
             event_sender: None,
+            sequencer,
+            block_building_trigger: block_time
+                .map(|time| tokio::time::interval(tokio::time::Duration::from_millis(time))),
         }
     }
 
@@ -167,126 +151,34 @@ where
     ///
     /// We will first validate the consensus of the block, then we will send the block to the engine
     /// to validate the correctness of the block.
-    pub fn handle_new_block(&mut self, block_with_peer: NewBlockWithPeer, cx: &mut Context<'_>) {
+    pub fn handle_new_block(&mut self, block_with_peer: NewBlockWithPeer) {
+        trace!(target: "scroll::node::manager", "Received new block from peer {:?} - hash {:?}", block_with_peer.peer_id, block_with_peer.block.hash_slow());
         if let Some(event_sender) = self.event_sender.as_ref() {
             event_sender.notify(RollupEvent::NewBlockReceived(block_with_peer.clone()));
         }
 
-        let NewBlockWithPeer { peer_id: peer, block, signature } = block_with_peer;
-        trace!(target: "scroll::node::manager", "Received new block from peer {:?} - hash {:?}", peer, block.hash_slow());
-
         // Validate the consensus of the block.
         // TODO: Should we spawn a task to validate the consensus of the block?
         //       Is the consensus validation blocking?
-        if let Err(err) = self.consensus.validate_new_block(&block, &signature) {
-            error!(target: "scroll::node::manager", ?err, "consensus checks failed on block {:?} from peer {:?}", block.hash_slow(), peer);
-            self.network
-                .handle()
-                .block_import_outcome(BlockImportOutcome { peer, result: Err(err.into()) });
-            return;
+        if let Err(err) =
+            self.consensus.validate_new_block(&block_with_peer.block, &block_with_peer.signature)
+        {
+            error!(target: "scroll::node::manager", ?err, "consensus checks failed on block {:?} from peer {:?}", block_with_peer.block.hash_slow(), block_with_peer.peer_id);
+            self.network.handle().block_import_outcome(BlockImportOutcome {
+                peer: block_with_peer.peer_id,
+                result: Err(err.into()),
+            });
+        } else {
+            self.engine.handle_block_import(block_with_peer);
         }
-
-        // If the forkchoice state is at genesis, update the forkchoice state with the parent of the
-        // block.
-        if self.forkchoice_state.is_genesis() {
-            self.forkchoice_state.update_unsafe_block_info(block.parent_num_hash().into());
-        }
-
-        // Send the block to the engine to validate the correctness of the block.
-        let mut fcs = self.get_alloy_fcs();
-        let engine: Arc<EngineDriver<EC, P>> = self.engine.clone();
-        let future = Box::pin(async move {
-            trace!(target: "scroll::node::manager", "handling block import future for block {:?}", block.hash_slow());
-
-            // convert the block to an execution payload and update the forkchoice state
-            let execution_payload: ExecutionPayload =
-                ExecutionPayloadV1::from_block_slow(&block).into();
-            let unsafe_block_info: BlockInfo = (&execution_payload).into();
-            fcs.head_block_hash = unsafe_block_info.hash;
-
-            // process the execution payload
-            // TODO: needs testing
-            let (unsafe_block_info, import_outcome) =
-                match engine.handle_execution_payload(execution_payload, fcs).await {
-                    Err(EngineDriverError::InvalidExecutionPayload) => (
-                        Some(unsafe_block_info),
-                        Some(Err(BlockImportError::Validation(BlockValidationError::InvalidBlock))),
-                    ),
-                    Ok((PayloadStatusEnum::Valid, PayloadStatusEnum::Valid)) => (
-                        Some(unsafe_block_info),
-                        Some(Ok(BlockValidation::ValidBlock {
-                            new_block: NewBlock {
-                                block,
-                                signature: signature.serialize_compact().to_vec().into(),
-                            },
-                        })),
-                    ),
-                    _ => (None, None),
-                };
-
-            (unsafe_block_info, import_outcome.map(|result| BlockImportOutcome { peer, result }))
-        });
-
-        self.pending_block_imports.push_back(future);
-        cx.waker().wake_by_ref();
-    }
-
-    /// Handles a [`ScrollPayloadAttributesWithBatchInfo`] by initiating a task sending the
-    /// attribute to the EN via the [`EngineDriver`].
-    fn handle_payload_attribute(&mut self, attribute: ScrollPayloadAttributesWithBatchInfo) {
-        let engine = self.engine.clone();
-        let safe_block_info = *self.forkchoice_state.safe_block_info();
-        let fcs = self.get_alloy_fcs();
-
-        trace!(target: "scroll::node::manager", payload = ?attribute.payload_attributes.payload_attributes, "New engine driver task");
-        let fut = Box::pin(async move {
-            // attach the batch info the engine future.
-            let attributes = attribute.payload_attributes;
-            let batch_info = attribute.batch_info;
-            engine
-                .handle_payload_attributes(safe_block_info, fcs, attributes)
-                .await
-                .map(|(info, b)| (info, b, batch_info))
-        });
-        self.pending_engine_task.replace(fut);
-    }
-
-    /// Handles a [`EngineDriverFuture`] by polling it and updating the forkchoice state if it
-    /// resolves.
-    fn handle_engine_driver_future(&mut self, mut fut: EngineDriverFuture, cx: &mut Context<'_>) {
-        match fut.poll_unpin(cx) {
-            Poll::Ready(result) => match result {
-                Ok((safe_block_info, should_update_unsafe_head, batch_info)) => {
-                    // update the safe and unsafe head if necessary.
-                    self.forkchoice_state.update_safe_block_info(safe_block_info);
-                    if should_update_unsafe_head {
-                        self.forkchoice_state.update_unsafe_block_info(safe_block_info);
-                    }
-
-                    // index the batch to block new entry.
-                    self.indexer.handle_derived_block(safe_block_info, batch_info);
-                    trace!(target: "scroll::node::manager", new_forkchoice_state = ?self.forkchoice_state, batch_info = ?batch_info, "Handled ScrollPayloadAttributes");
-                }
-                Err(err) => {
-                    error!(target: "scroll::node::manager", ?err, "Engine driver failed to handle attribute")
-                }
-            },
-            Poll::Pending => {
-                self.pending_engine_task.replace(fut);
-            }
-        }
-    }
-
-    const fn get_alloy_fcs(&self) -> AlloyForkchoiceState {
-        self.forkchoice_state.get_alloy_fcs()
     }
 
     /// Handles a network manager event.
     ///
-    /// Currently, the network manager only emits a `NewBlock` event.
-    fn handle_network_manager_event(&mut self, event: NetworkManagerEvent, cx: &mut Context<'_>) {
+    /// Currently the network manager only emits a `NewBlock` event.
+    fn handle_network_manager_event(&mut self, event: NetworkManagerEvent) {
         match event {
-            NetworkManagerEvent::NewBlock(block) => self.handle_new_block(block, cx),
+            NetworkManagerEvent::NewBlock(block) => self.handle_new_block(block),
         }
     }
 
@@ -301,28 +193,31 @@ where
             IndexerEvent::BatchFinalizationIndexed(_, Some(finalized_block)) |
             IndexerEvent::FinalizedIndexed(_, Some(finalized_block)) => {
                 // update the fcs on new finalized block.
-                self.forkchoice_state.update_finalized_block_info(finalized_block);
+                self.engine.set_finalized_block_info(finalized_block);
             }
             _ => (),
         }
     }
 
-    /// Handles a block import outcome.
-    fn handle_block_import_outcome(
-        &mut self,
-        unsafe_block_info: Option<BlockInfo>,
-        outcome: Option<BlockImportOutcome>,
-    ) {
-        trace!(target: "scroll::node::manager", ?outcome, "handling block import outcome");
+    /// Handles an engine driver event.
+    fn handle_engine_driver_event(&mut self, event: EngineDriverEvent) {
+        trace!(target: "scroll::node::manager", ?event, "Received engine driver event");
+        match event {
+            EngineDriverEvent::BlockImportOutcome(outcome) => {
+                self.network.handle().block_import_outcome(outcome);
+            }
+            EngineDriverEvent::NewPayload(payload) => {
+                // TODO: sign blocks before sending them to the network.
+                let signature = Signature::from_compact(&[0; 64]).unwrap();
+                self.network.handle().announce_block(payload, signature);
+            }
+            EngineDriverEvent::L1BlockConsolidated((block_info, batch_info)) => {
+                self.indexer.handle_batch_to_block(batch_info, block_info);
 
-        // If we have an unsafe block info, update the forkchoice state.
-        if let Some(unsafe_block_info) = unsafe_block_info {
-            self.forkchoice_state.update_unsafe_block_info(unsafe_block_info);
-        }
-
-        // If we have an outcome, send it to the network manager.
-        if let Some(outcome) = outcome {
-            self.network.handle().block_import_outcome(outcome);
+                if let Some(event_sender) = self.event_sender.as_ref() {
+                    event_sender.notify(RollupEvent::L1DerivedBlockConsolidated(block_info));
+                }
+            }
         }
     }
 
@@ -332,12 +227,13 @@ where
     }
 }
 
-impl<C, EC, P, L1P, CS> Future for RollupNodeManager<C, EC, P, L1P, CS>
+impl<C, EC, P, L1P, L1MP, CS> Future for RollupNodeManager<C, EC, P, L1P, L1MP, CS>
 where
     C: Consensus + Unpin,
     EC: ScrollEngineApi + Unpin + Sync + Send + 'static,
     P: ExecutionPayloadProvider + Unpin + Send + Sync + 'static,
     L1P: L1Provider + Clone + Unpin + Send + Sync + 'static,
+    L1MP: L1MessageProvider + Unpin + Send + Sync + 'static,
     CS: ScrollHardforks + Unpin + Send + Sync + 'static,
 {
     type Output = ();
@@ -345,11 +241,16 @@ where
     fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
         let this = self.get_mut();
 
-        // Handle pending block imports.
-        while let Poll::Ready(Some((block_info, outcome))) =
-            this.pending_block_imports.poll_next_unpin(cx)
+        // Handle new block production.
+        if let Some(Poll::Ready(Some(attributes))) =
+            this.sequencer.as_mut().map(|x| x.poll_next_unpin(cx))
         {
-            this.handle_block_import_outcome(block_info, outcome);
+            this.engine.handle_build_new_payload(attributes);
+        }
+
+        // Drain all EngineDriver events.
+        while let Poll::Ready(Some(event)) = this.engine.poll_next_unpin(cx) {
+            this.handle_engine_driver_event(event);
         }
 
         // Drain all L1 notifications.
@@ -369,28 +270,29 @@ where
             }
         }
 
-        // Handle payload attribute if engine task is empty.
-        if this.pending_engine_task.is_none() {
-            if let Poll::Ready(Some(attributes)) = this.derivation_pipeline.poll_next_unpin(cx) {
-                this.handle_payload_attribute(attributes)
+        // Check if we need to trigger the build of a new payload.
+        if let Some(Poll::Ready(_)) = this.block_building_trigger.as_mut().map(|x| x.poll_tick(cx))
+        {
+            if let Some(sequencer) = this.sequencer.as_mut() {
+                sequencer.build_payload_attributes();
             }
         }
 
-        // Poll Engine Driver tasks.
-        if let Some(fut) = this.pending_engine_task.take() {
-            this.handle_engine_driver_future(fut, cx);
+        // Poll Derivation Pipeline and push attribute in queue if any.
+        while let Poll::Ready(Some(attributes)) = this.derivation_pipeline.poll_next_unpin(cx) {
+            this.engine.handle_l1_consolidation(attributes)
         }
 
         // Handle blocks received from the eth-wire protocol.
         while let Some(Poll::Ready(Some(block))) =
             this.new_block_rx.as_mut().map(|new_block_rx| new_block_rx.poll_next_unpin(cx))
         {
-            this.handle_new_block(block, cx);
+            this.handle_new_block(block);
         }
 
         // Handle network manager events.
         while let Poll::Ready(Some(event)) = this.network.poll_next_unpin(cx) {
-            this.handle_network_manager_event(event, cx);
+            this.handle_network_manager_event(event);
         }
 
         Poll::Pending

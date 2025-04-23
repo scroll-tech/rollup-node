@@ -22,6 +22,7 @@ scroll-alloy-provider.workspace = true
 scroll-alloy-rpc-types-engine.workspace = true
 
 # reth
+reth-network-api.workspace = true
 reth-payload-primitives = { git = "https://github.com/scroll-tech/reth.git" }
 reth-primitives = { workspace = true }
 
@@ -34,9 +35,13 @@ reth-scroll-engine-primitives = { git = "https://github.com/scroll-tech/reth.git
 rollup-node-primitives.workspace = true
 rollup-node-providers.workspace = true
 
+# scroll
+scroll-network.workspace = true
+
 # misc
 async-trait.workspace = true
 eyre.workspace = true
+futures.workspace = true
 thiserror.workspace = true
 tokio.workspace = true
 tracing.workspace = true
@@ -71,4 +76,6 @@ serde = [
     "reth-scroll-primitives/serde",
     "scroll-alloy-rpc-types-engine/serde",
     "alloy-chains/serde",
+    "reth-network-api/serde",
+    "scroll-network/serde",
 ]

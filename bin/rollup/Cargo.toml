@@ -10,6 +10,7 @@ exclude.workspace = true
 # alloy
 alloy-chains.workspace = true
 alloy-provider.workspace = true
+alloy-primitives.workspace = true
 alloy-rpc-types-engine.workspace = true
 alloy-rpc-client.workspace = true
 alloy-transport.workspace = true
@@ -50,6 +51,7 @@ scroll-wire.workspace = true
 # rollup-node
 rollup-node-manager.workspace = true
 rollup-node-providers.workspace = true
+rollup-node-sequencer.workspace = true
 rollup-node-watcher.workspace = true
 
 # misc

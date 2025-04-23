@@ -12,13 +12,14 @@ use reth_scroll_primitives::ScrollPrimitives;
 use reth_transaction_pool::{PoolTransaction, TransactionPool};
 use rollup_node_manager::{PoAConsensus, RollupNodeManager};
 use rollup_node_providers::{beacon_provider, DatabaseL1MessageProvider, OnlineL1Provider};
+use rollup_node_sequencer::Sequencer;
 use rollup_node_watcher::L1Watcher;
 use scroll_alloy_provider::ScrollAuthEngineApiProvider;
 use scroll_db::{Database, DatabaseConnectionProvider};
 use scroll_engine::{test_utils::NoopExecutionPayloadProvider, EngineDriver, ForkchoiceState};
 use scroll_network::NetworkManager as ScrollNetworkManager;
 use scroll_wire::{ProtocolHandler, ScrollWireConfig};
-use std::sync::Arc;
+use std::{sync::Arc, time::Duration};
 use tracing::info;
 
 use crate::{
@@ -26,7 +27,7 @@ use crate::{
     WATCHER_START_BLOCK_NUMBER,
 };
 
-/// The network builder for the eth-wire to scroll-wire bridge.
+/// The network builder for the scroll rollup.
 #[derive(Debug)]
 pub struct ScrollRollupNetworkBuilder {
     config: ScrollRollupNodeArgs,
@@ -100,7 +101,20 @@ where
             auth_secret,
             self.config.engine_api_url.unwrap_or(format!("http://localhost:{auth_port}").parse()?),
         );
-        let engine = EngineDriver::new(engine_api, payload_provider);
+        let fcs =
+            ForkchoiceState::head_from_genesis(ctx.config().chain.genesis_header().hash_slow());
+        let engine = EngineDriver::new(
+            Arc::new(engine_api),
+            Arc::new(payload_provider),
+            fcs,
+            Duration::from_millis(
+                self.config
+                    .sequencer_args
+                    .as_ref()
+                    .map(|args| args.payload_building_duration)
+                    .unwrap_or(0),
+            ),
+        );
 
         // Instantiate the database
         let database_path = if let Some(db_path) = self.config.database_path {
@@ -143,9 +157,26 @@ where
         // Construct the l1 provider.
         let beacon_provider = beacon_provider(l1_provider_args.beacon_rpc_url.to_string());
         let l1_messages_provider = DatabaseL1MessageProvider::new(db.clone(), 0);
-        let l1_provider =
-            OnlineL1Provider::new(beacon_provider, PROVIDER_BLOB_CACHE_SIZE, l1_messages_provider)
-                .await;
+        let l1_provider = OnlineL1Provider::new(
+            beacon_provider,
+            PROVIDER_BLOB_CACHE_SIZE,
+            l1_messages_provider.clone(),
+        )
+        .await;
+
+        // Construct the Sequencer.
+        let (sequencer, block_time) = if let Some(args) = self.config.sequencer_args {
+            let sequencer = Sequencer::new(
+                Arc::new(l1_messages_provider),
+                args.fee_recipient.unwrap_or_default(),
+                args.max_l1_messages_per_block,
+                0,
+                0,
+            );
+            (Some(sequencer), Some(args.block_time))
+        } else {
+            (None, None)
+        };
 
         // Spawn the rollup node manager
         let rollup_node_manager = RollupNodeManager::new(
@@ -154,12 +185,11 @@ where
             l1_provider,
             db,
             l1_notification_rx,
-            // initiating the safe and finalized block info with a null hash triggers a backfill
-            // using the unsafe head at the EN.
-            ForkchoiceState::default(),
             consensus,
             chain_spec,
             block_rx,
+            sequencer,
+            block_time,
         );
 
         ctx.task_executor().spawn(rollup_node_manager);

@@ -6,9 +6,7 @@ use scroll_alloy_consensus::TxL1Message;
 use scroll_db::{DatabaseConnectionProvider, DatabaseOperations};
 
 mod database;
-pub use database::{
-    DatabaseL1MessageDelayProvider, DatabaseL1MessageProvider, L1MessageDelayProvider,
-};
+pub use database::DatabaseL1MessageProvider;
 
 /// An instance of the trait can provide L1 messages using a cursor approach. Set the cursor for the
 /// provider using the queue index or hash and then call
@@ -36,9 +34,34 @@ pub trait L1MessageProvider {
         }
     }
 
+    /// Returns the L1 message with block number at the current cursor and advances the cursor if
+    /// the predicate is satisfied.
+    async fn next_l1_message_with_block_number_and_predicate(
+        &self,
+        predicate: impl Fn(L1MessageWithBlockNumber) -> bool + Send,
+    ) -> Result<Option<L1MessageWithBlockNumber>, Self::Error> {
+        match self.get_l1_message_with_block_number().await? {
+            Some(message) if predicate(message.clone()) => {
+                self.increment_cursor();
+                Ok(Some(message))
+            }
+            _ => Ok(None),
+        }
+    }
+
     /// Returns the L1 message with block number at the current cursor and advances the cursor.
     async fn next_l1_message(&self) -> Result<Option<TxL1Message>, Self::Error> {
         let message = self.next_l1_message_with_block_number().await?;
+        Ok(message.map(|message| message.transaction))
+    }
+
+    /// Returns the L1 message with block number at the current cursor and advances the cursor if
+    /// the predicate is satisfied.
+    async fn next_l1_message_with_predicate(
+        &self,
+        predicate: impl Fn(L1MessageWithBlockNumber) -> bool + Send,
+    ) -> Result<Option<TxL1Message>, Self::Error> {
+        let message = self.next_l1_message_with_block_number_and_predicate(predicate).await?;
         Ok(message.map(|message| message.transaction))
     }
 
