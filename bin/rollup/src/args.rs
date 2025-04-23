@@ -45,7 +45,7 @@ pub struct L1ProviderArgs {
     pub initial_backoff: u64,
 }
 
-#[derive(Debug, clap::Args)]
+#[derive(Debug, Clone, clap::Args)]
 pub struct SequencerArgs {
     /// The block time for the sequencer.
     #[arg(long)]

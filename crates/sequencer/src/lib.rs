@@ -12,7 +12,8 @@ use alloy_eips::eip2718::Encodable2718;
 use alloy_primitives::Address;
 use alloy_rpc_types_engine::PayloadAttributes;
 use futures::{task::AtomicWaker, Stream};
-use rollup_node_providers::{L1MessageDelayProvider, L1MessageProvider};
+use rollup_node_primitives::L1MessageWithBlockNumber;
+use rollup_node_providers::L1MessageProvider;
 use scroll_alloy_rpc_types_engine::ScrollPayloadAttributes;
 use std::task::{Context, Poll};
 
@@ -23,34 +24,42 @@ pub use error::SequencerError;
 pub type PayloadBuildingJobFuture =
     Pin<Box<dyn Future<Output = Result<ScrollPayloadAttributes, SequencerError>> + Send>>;
 
-/// A trait used to define the L1 message provider for the sequencer.
-pub trait SequencerL1MessageProvider: L1MessageProvider + L1MessageDelayProvider {}
-impl<T> SequencerL1MessageProvider for T where T: L1MessageProvider + L1MessageDelayProvider {}
-
 /// The sequencer is responsible for sequencing transactions and producing new blocks.
-pub struct Sequencer<SMP> {
+pub struct Sequencer<P> {
     /// A reference to the database
-    provider: Arc<SMP>,
+    provider: Arc<P>,
     /// The fee recipient
     fee_recipient: Address,
     /// The number of L1 messages to include in each block.
     max_l1_messages_per_block: u64,
+    /// The current l1 block number.
+    l1_block_number: u64,
+    /// The L1 block depth at which L1 messages should be included in the payload.
+    l1_block_depth: u64,
     /// The inflight payload attributes job
     payload_attributes_job: Option<PayloadBuildingJobFuture>,
     /// A waker to notify when the Sequencer should be polled.
     waker: AtomicWaker,
 }
 
-impl<SMP> Sequencer<SMP>
+impl<P> Sequencer<P>
 where
-    SMP: SequencerL1MessageProvider + Unpin + Send + Sync + 'static,
+    P: L1MessageProvider + Unpin + Send + Sync + 'static,
 {
     /// Creates a new sequencer.
-    pub fn new(provider: Arc<SMP>, fee_recipient: Address, max_l1_messages_per_block: u64) -> Self {
+    pub fn new(
+        provider: Arc<P>,
+        fee_recipient: Address,
+        max_l1_messages_per_block: u64,
+        l1_block_number: u64,
+        l1_block_depth: u64,
+    ) -> Self {
         Self {
             provider,
             fee_recipient,
             max_l1_messages_per_block,
+            l1_block_number,
+            l1_block_depth,
             payload_attributes_job: None,
             waker: AtomicWaker::new(),
         }
@@ -79,23 +88,32 @@ where
         };
         let max_l1_messages = self.max_l1_messages_per_block;
         let database = self.provider.clone();
+        let l1_block_number = self.l1_block_number;
+        let l1_block_depth = self.l1_block_depth;
 
         self.payload_attributes_job = Some(Box::pin(async move {
-            build_payload_attributes(database, max_l1_messages, payload_attributes).await
+            build_payload_attributes(
+                database,
+                max_l1_messages,
+                payload_attributes,
+                l1_block_number,
+                l1_block_depth,
+            )
+            .await
         }));
 
         self.waker.wake();
     }
 
     /// Handle a reorg event.
-    pub fn handle_reorg(&mut self, queue_index: u64, block_number: u64) {
+    pub fn handle_reorg(&mut self, queue_index: u64, l1_block_number: u64) {
         self.provider.set_index_cursor(queue_index);
-        self.provider.set_l1_head(block_number);
+        self.l1_block_number = l1_block_number;
     }
 
     /// Handle a new L1 block.
     pub fn handle_new_l1_block(&mut self, block_number: u64) {
-        self.provider.set_l1_head(block_number);
+        self.l1_block_number = block_number;
     }
 }
 
@@ -127,17 +145,21 @@ impl<SMP> Stream for Sequencer<SMP> {
 /// Builds the payload attributes for the sequencer using the given L1 message provider.
 /// It collects the L1 messages to include in the payload and returns a `ScrollPayloadAttributes`
 /// instance.
-async fn build_payload_attributes<
-    SMP: SequencerL1MessageProvider + Unpin + Send + Sync + 'static,
->(
-    provider: Arc<SMP>,
+async fn build_payload_attributes<P: L1MessageProvider + Unpin + Send + Sync + 'static>(
+    provider: Arc<P>,
     max_l1_messages: u64,
     payload_attributes: PayloadAttributes,
+    current_l1_block_number: u64,
+    l1_block_depth: u64,
 ) -> Result<ScrollPayloadAttributes, SequencerError> {
+    let predicate = |message: L1MessageWithBlockNumber| {
+        message.block_number + l1_block_depth <= current_l1_block_number
+    };
+
     // Collect L1 messages to include in payload.
     let mut l1_messages = vec![];
     for _ in 0..max_l1_messages {
-        match provider.next_l1_message().await.map_err(Into::into)? {
+        match provider.next_l1_message_with_predicate(predicate).await.map_err(Into::into)? {
             Some(l1_message) => {
                 l1_messages.push(l1_message.encoded_2718().into());
             }
