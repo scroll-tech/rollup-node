@@ -21,25 +21,25 @@ scroll-alloy-provider.workspace = true
 scroll-alloy-rpc-types-engine.workspace = true
 
 # reth
-reth-cli-util = { git = "https://github.com/scroll-tech/reth.git", branch = "fix/dev-genesis-hash" }
+reth-cli-util = { git = "https://github.com/scroll-tech/reth.git" }
 # keep this import as it is needed for correct compilation.
-reth-engine-local = { git = "https://github.com/scroll-tech/reth.git", branch = "fix/dev-genesis-hash", features = ["scroll-alloy-traits"] }
+reth-engine-local = { git = "https://github.com/scroll-tech/reth.git", features = ["scroll-alloy-traits"] }
 reth-eth-wire-types.workspace = true
 reth-network.workspace = true
 reth-network-peers.workspace = true
-reth-node-api = { git = "https://github.com/scroll-tech/reth.git", branch = "fix/dev-genesis-hash" }
-reth-node-builder = { git = "https://github.com/scroll-tech/reth.git", branch = "fix/dev-genesis-hash", features = ["skip-state-root-validation"] }
-reth-node-core = { git = "https://github.com/scroll-tech/reth.git", branch = "fix/dev-genesis-hash" }
-reth-node-types = { git = "https://github.com/scroll-tech/reth.git", branch = "fix/dev-genesis-hash" }
+reth-node-api = { git = "https://github.com/scroll-tech/reth.git" }
+reth-node-builder = { git = "https://github.com/scroll-tech/reth.git", features = ["skip-state-root-validation"] }
+reth-node-core = { git = "https://github.com/scroll-tech/reth.git" }
+reth-node-types = { git = "https://github.com/scroll-tech/reth.git" }
 reth-primitives.workspace = true
 reth-provider = { workspace = true, features = ["skip-state-root-validation"] }
-reth-rpc-builder = { git = "https://github.com/scroll-tech/reth.git", branch = "fix/dev-genesis-hash" }
-reth-transaction-pool = { git = "https://github.com/scroll-tech/reth.git", branch = "fix/dev-genesis-hash" }
+reth-rpc-builder = { git = "https://github.com/scroll-tech/reth.git" }
+reth-transaction-pool = { git = "https://github.com/scroll-tech/reth.git" }
 
 # scroll
 reth-scroll-chainspec.workspace = true
-reth-scroll-cli = { git = "https://github.com/scroll-tech/reth.git", branch = "fix/dev-genesis-hash" }
-reth-scroll-engine-primitives = { git = "https://github.com/scroll-tech/reth.git", branch = "fix/dev-genesis-hash" }
+reth-scroll-cli = { git = "https://github.com/scroll-tech/reth.git" }
+reth-scroll-engine-primitives = { git = "https://github.com/scroll-tech/reth.git" }
 reth-scroll-node = { workspace = true, features = ["skip-state-root-validation"] }
 reth-scroll-primitives = { workspace = true }
 scroll-db = { workspace = true }
@@ -69,10 +69,10 @@ alloy-rpc-types-engine.workspace = true
 
 # reth
 reth-e2e-test-utils.workspace = true
-reth-payload-builder = { git = "https://github.com/scroll-tech/reth.git", branch = "fix/dev-genesis-hash" }
-reth-rpc-server-types = { git = "https://github.com/scroll-tech/reth.git", branch = "fix/dev-genesis-hash" }
+reth-payload-builder = { git = "https://github.com/scroll-tech/reth.git" }
+reth-rpc-server-types = { git = "https://github.com/scroll-tech/reth.git" }
 reth-tasks.workspace = true
-reth-tracing = { git = "https://github.com/scroll-tech/reth.git", branch = "fix/dev-genesis-hash" }
+reth-tracing = { git = "https://github.com/scroll-tech/reth.git" }
 
 # misc
 futures.workspace = true
