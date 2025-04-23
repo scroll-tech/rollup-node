@@ -91,9 +91,6 @@ where
         let scroll_network_manager = ScrollNetworkManager::from_parts(handle.clone(), events);
 
         // Spawn the scroll network manager.
-        let consensus = PoAConsensus::new(vec![]);
-        let payload_provider = NoopExecutionPayloadProvider;
-
         let auth_port = ctx.config().rpc.auth_port;
         let auth_secret = ctx.config().rpc.auth_jwt_secret(ctx.config().datadir().jwt())?;
 
@@ -101,6 +98,7 @@ where
             auth_secret,
             self.config.engine_api_url.unwrap_or(format!("http://localhost:{auth_port}").parse()?),
         );
+        let payload_provider = NoopExecutionPayloadProvider;
         let fcs =
             ForkchoiceState::head_from_genesis(ctx.config().chain.genesis_header().hash_slow());
         let engine = EngineDriver::new(
@@ -133,23 +131,29 @@ where
         // Wrap the database in an Arc
         let db = Arc::new(db);
 
-        // Spawn the L1Watcher
+        // Get a L1 provider.
         let l1_provider_args = self.config.l1_provider_args;
-        let l1_notification_rx = if let Some(l1_rpc_url) = l1_provider_args.l1_rpc_url {
-            let L1ProviderArgs { max_retries, initial_backoff, compute_units_per_second, .. } =
-                l1_provider_args;
-            let client = RpcClient::builder()
-                .layer(RetryBackoffLayer::new(
-                    max_retries,
-                    initial_backoff,
-                    compute_units_per_second,
-                ))
-                .http(l1_rpc_url);
-            let provider = ProviderBuilder::new().on_client(client);
-            Some(L1Watcher::spawn(provider, WATCHER_START_BLOCK_NUMBER).await)
-        } else {
-            None
-        };
+        let L1ProviderArgs {
+            max_retries,
+            initial_backoff,
+            compute_units_per_second,
+            l1_rpc_url,
+            ..
+        } = l1_provider_args;
+        let client = RpcClient::builder()
+            .layer(RetryBackoffLayer::new(max_retries, initial_backoff, compute_units_per_second))
+            .http(l1_rpc_url);
+        let provider = ProviderBuilder::new().on_client(client);
+
+        // Spawn the L1Watcher
+        let l1_notification_rx =
+            L1Watcher::spawn(provider.clone(), WATCHER_START_BLOCK_NUMBER).await;
+
+        // Initialize the consensus.
+        let mut consensus = PoAConsensus::new(vec![]);
+        consensus
+            .initialize(provider, ctx.config().chain.chain.named().expect("expected named chain"))
+            .await;
 
         // Construct the l1 provider.
         let beacon_provider = beacon_provider(l1_provider_args.beacon_rpc_url.to_string());

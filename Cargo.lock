@@ -9531,9 +9531,11 @@ dependencies = [
 name = "rollup-node-manager"
 version = "0.0.1"
 dependencies = [
+ "alloy-chains",
  "alloy-consensus",
  "alloy-eips",
  "alloy-primitives",
+ "alloy-provider",
  "alloy-rpc-types-engine",
  "futures",
  "reth-primitives-traits",

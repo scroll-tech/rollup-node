@@ -59,7 +59,7 @@ pub struct RollupNodeManager<C, EC, P, L1P, L1MP> {
     /// The derivation pipeline, used to derive payload attributes from batches.
     derivation_pipeline: DerivationPipeline<L1P>,
     /// A receiver for [`L1Notification`]s from the [`rollup_node_watcher::L1Watcher`].
-    l1_notification_rx: Option<ReceiverStream<Arc<L1Notification>>>,
+    l1_notification_rx: ReceiverStream<Arc<L1Notification>>,
     /// An indexer used to index data for the rollup node.
     indexer: Indexer,
     /// The consensus algorithm used by the rollup node.
@@ -108,7 +108,7 @@ where
         engine: EngineDriver<EC, P>,
         l1_provider: L1P,
         database: Arc<Database>,
-        l1_notification_rx: Option<Receiver<Arc<L1Notification>>>,
+        l1_notification_rx: Receiver<Arc<L1Notification>>,
         consensus: C,
         new_block_rx: Option<UnboundedReceiver<NewBlockWithPeer>>,
         sequencer: Option<Sequencer<L1MP>>,
@@ -120,7 +120,7 @@ where
             network,
             engine,
             derivation_pipeline,
-            l1_notification_rx: l1_notification_rx.map(Into::into),
+            l1_notification_rx: l1_notification_rx.into(),
             indexer,
             consensus,
             new_block_rx: new_block_rx.map(Into::into),
@@ -250,9 +250,7 @@ where
         }
 
         // Drain all L1 notifications.
-        while let Some(Poll::Ready(Some(event))) =
-            this.l1_notification_rx.as_mut().map(|x| x.poll_next_unpin(cx))
-        {
+        while let Poll::Ready(Some(event)) = this.l1_notification_rx.poll_next_unpin(cx) {
             this.handle_l1_notification((*event).clone());
         }
 

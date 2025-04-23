@@ -30,7 +30,7 @@ pub struct ScrollRollupNodeArgs {
 pub struct L1ProviderArgs {
     /// The URL for the L1 RPC URL.
     #[arg(long)]
-    pub l1_rpc_url: Option<reqwest::Url>,
+    pub l1_rpc_url: reqwest::Url,
     /// The URL for the Beacon RPC URL.
     #[arg(long)]
     pub beacon_rpc_url: reqwest::Url,
@@ -46,17 +46,18 @@ pub struct L1ProviderArgs {
 }
 
 #[derive(Debug, Clone, clap::Args)]
+#[group(requires_all = ["block_time", "payload_building_duration", "max_l1_messages_per_block"])]
 pub struct SequencerArgs {
     /// The block time for the sequencer.
-    #[arg(long)]
+    #[arg(long, required = false)]
     pub block_time: u64,
     /// The payload building duration for the sequencer (milliseconds)
-    #[arg(long)]
+    #[arg(long, required = false)]
     pub payload_building_duration: u64,
     /// The max L1 messages per block for the sequencer.
-    #[arg(long)]
+    #[arg(long, required = false)]
     pub max_l1_messages_per_block: u64,
     /// The fee recipient for the sequencer.
-    #[arg(long)]
+    #[arg(long, required = false)]
     pub fee_recipient: Option<Address>,
 }

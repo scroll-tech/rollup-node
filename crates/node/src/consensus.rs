@@ -1,11 +1,24 @@
+use alloy_chains::NamedChain;
 use alloy_consensus::Header;
 use alloy_primitives::{
-    keccak256,
+    address, keccak256,
     private::{alloy_rlp, alloy_rlp::Encodable},
     Address, Signature, B256, U256,
 };
+use alloy_provider::Provider;
 use reth_scroll_primitives::ScrollBlock;
 use scroll_network::ConsensusError;
+
+/// The address of the system contract on Sepolia.
+const SEPOLIA_SYSTEM_CONTRAT_ADDRESS: Address =
+    address!("C706Ba9fa4fedF4507CB7A898b4766c1bbf9be57");
+
+/// The address of the system contract on Mainnet.
+const MAINNET_SYSTEM_CONTRAT_ADDRESS: Address =
+    address!("8432728A257646449245558B8b7Dbe51A16c7a4D");
+
+/// The storage slot of the authorized signer.
+const AUTHORIZED_SIGNER_STORAGE_SLOT: U256 = U256::from_limbs([0x67, 0x0, 0x0, 0x0]);
 
 /// A trait for consensus implementations.
 pub trait Consensus {
@@ -27,6 +40,22 @@ impl PoAConsensus {
     /// Creates a new [`PoAConsensus`] consensus instance with the given authorized signers.
     pub const fn new(authorized_signers: Vec<Address>) -> Self {
         Self { authorized_signers }
+    }
+
+    /// Initialize the [`PoAConsensus`] by fetching the authorized signers from L1 system contract.
+    pub async fn initialize<P: Provider>(&mut self, provider: P, chain: NamedChain) {
+        let system_contract_address = match chain {
+            NamedChain::Scroll => MAINNET_SYSTEM_CONTRAT_ADDRESS,
+            NamedChain::ScrollSepolia => SEPOLIA_SYSTEM_CONTRAT_ADDRESS,
+            _ => panic!("unsupported chain"),
+        };
+        let authorized_signer = provider
+            .get_storage_at(system_contract_address, AUTHORIZED_SIGNER_STORAGE_SLOT)
+            .await
+            .expect("failed to fetch PoAConsensus authorized signer");
+
+        let authorized_signer = Address::from_slice(&authorized_signer.to_be_bytes::<32>()[12..]);
+        self.authorized_signers.push(authorized_signer);
     }
 }
 
