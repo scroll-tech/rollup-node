@@ -20,7 +20,7 @@ use alloy_provider::{Network, Provider};
 use alloy_rpc_types_eth::{BlockNumberOrTag, Log, TransactionTrait};
 use error::L1WatcherResult;
 use itertools::Itertools;
-use rollup_node_primitives::{BatchCommitData, BoundedVec, L1MessageWithBlockNumber};
+use rollup_node_primitives::{BatchCommitData, BoundedVec};
 use scroll_alloy_consensus::TxL1Message;
 use scroll_l1::abi::logs::{try_decode_log, CommitBatch, FinalizeBatch, QueueTransaction};
 use tokio::sync::mpsc;
@@ -91,7 +91,14 @@ pub enum L1Notification {
         block_number: BlockNumber,
     },
     /// A new `L1Message` has been added to the L1 message queue.
-    L1Message(L1MessageWithBlockNumber),
+    L1Message {
+        /// The L1 message.
+        message: TxL1Message,
+        /// The block number at which the L1 message was emitted.
+        block_number: u64,
+        /// The timestamp at which the L1 message was emitted.
+        block_timestamp: u64,
+    },
     /// A new block has been added to the L1.
     NewBlock(u64),
     /// A block has been finalized on the L1.
@@ -286,18 +293,45 @@ where
     /// Filters the logs into L1 messages and sends them over the channel.
     #[tracing::instrument(skip_all)]
     async fn handle_l1_messages(&self, logs: &[Log]) -> L1WatcherResult<()> {
-        let l1_messages =
-            logs.iter().map(|l| (&l.inner, l.block_number)).filter_map(|(log, bn)| {
+        let mut l1_messages = logs
+            .iter()
+            .map(|l| (&l.inner, l.block_number, l.block_timestamp))
+            .filter_map(|(log, bn, ts)| {
                 try_decode_log::<QueueTransaction>(log)
-                    .map(|log| (Into::<TxL1Message>::into(log.data), bn))
-            });
+                    .map(|log| (Into::<TxL1Message>::into(log.data), bn, ts))
+            })
+            .collect::<Vec<_>>();
 
-        for (msg, bn) in l1_messages {
+        // sort the message by index and group by block number.
+        l1_messages.sort_by(|(m1, _, _), (m2, _, _)| m1.queue_index.cmp(&m2.queue_index));
+        let groups = l1_messages.into_iter().chunk_by(|(_, bn, _)| *bn);
+        let groups: Vec<_> =
+            groups.into_iter().map(|(bn, group)| (bn, group.collect::<Vec<_>>())).collect();
+
+        for (bn, group) in groups {
             let block_number = bn.ok_or(FilterLogError::MissingBlockNumber)?;
-            tracing::trace!(target: "scroll::watcher", index = msg.queue_index, ?block_number, "Handled l1 message");
+            // fetch the timestamp if missing from the log.
+            let block_timestamp = if let Some(ts) = group.first().and_then(|(_, _, ts)| *ts) {
+                ts
+            } else {
+                self.execution_provider
+                    .get_block(block_number.into())
+                    .await?
+                    .map(|b| b.header.timestamp)
+                    .ok_or(FilterLogError::MissingBlockTimestamp)?
+            };
 
-            let notification = L1MessageWithBlockNumber::new(block_number, msg);
-            self.notify(L1Notification::L1Message(notification)).await;
+            // notify via channel for each message.
+            for (msg, _, _) in group {
+                tracing::trace!(target: "scroll::watcher", index = msg.queue_index, ?block_number, "Handled l1 message");
+
+                self.notify(L1Notification::L1Message {
+                    message: msg,
+                    block_number,
+                    block_timestamp,
+                })
+                .await;
+            }
         }
         Ok(())
     }
@@ -515,7 +549,7 @@ mod tests {
     fn l1_watcher(
         unfinalized_blocks: Vec<Header>,
         provider_blocks: Vec<Header>,
-        transactions: Vec<alloy_rpc_types_eth::Transaction>,
+        transactions: Vec<Transaction>,
         finalized: Header,
         latest: Header,
     ) -> (L1Watcher<MockProvider>, mpsc::Receiver<Arc<L1Notification>>) {
@@ -770,6 +804,7 @@ mod tests {
         inner_log.data = random!(QueueTransaction).encode_log_data();
         queue_transaction.inner = inner_log;
         queue_transaction.block_number = Some(random!(u64));
+        queue_transaction.block_timestamp = Some(random!(u64));
         logs.push(queue_transaction);
 
         // When
@@ -777,7 +812,7 @@ mod tests {
 
         // Then
         let notification = receiver.recv().await.unwrap();
-        assert!(matches!(*notification, L1Notification::L1Message(_)));
+        assert!(matches!(*notification, L1Notification::L1Message { .. }));
 
         Ok(())
     }

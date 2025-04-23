@@ -4,7 +4,7 @@ use crate::DatabaseConnectionProvider;
 use alloy_eips::{BlockId, BlockNumberOrTag};
 use alloy_primitives::B256;
 use futures::{Stream, StreamExt};
-use rollup_node_primitives::{BatchCommitData, BatchInfo, BlockInfo, L1MessageWithBlockNumber};
+use rollup_node_primitives::{BatchCommitData, BatchInfo, BlockInfo, L1MessageEnvelope};
 use scroll_alloy_rpc_types_engine::BlockDataHint;
 use sea_orm::{
     ActiveModelTrait, ColumnTrait, Condition, DbErr, EntityTrait, QueryFilter, QueryOrder,
@@ -107,18 +107,15 @@ pub trait DatabaseOperations: DatabaseConnectionProvider {
             .map(|res| res.map(Into::into)))
     }
 
-    /// Insert an [`L1MessageWithBlockNumber`] into the database.
-    async fn insert_l1_message(
-        &self,
-        l1_message: L1MessageWithBlockNumber,
-    ) -> Result<(), DatabaseError> {
+    /// Insert an [`L1MessageEnvelope`] into the database.
+    async fn insert_l1_message(&self, l1_message: L1MessageEnvelope) -> Result<(), DatabaseError> {
         tracing::trace!(target: "scroll::db", queue_index = l1_message.transaction.queue_index, "Inserting L1 message into database.");
         let l1_message: models::l1_message::ActiveModel = l1_message.into();
         l1_message.insert(self.get_connection()).await?;
         Ok(())
     }
 
-    /// Delete all [`L1MessageWithBlockNumber`]s with a block number greater than the provided block
+    /// Delete all [`L1MessageEnvelope`]s with a block number greater than the provided block
     /// number.
     async fn delete_l1_messages_gt(&self, block_number: u64) -> Result<(), DatabaseError> {
         tracing::trace!(target: "scroll::db", block_number, "Deleting L1 messages greater than block number.");
@@ -129,22 +126,37 @@ pub trait DatabaseOperations: DatabaseConnectionProvider {
             .map(|_| ())?)
     }
 
-    /// Get a [`L1MessageWithBlockNumber`] from the database by its message queue index.
-    async fn get_l1_message(
+    /// Get a [`L1MessageEnvelope`] from the database by its message queue index.
+    async fn get_l1_message_by_index(
         &self,
         queue_index: u64,
-    ) -> Result<Option<L1MessageWithBlockNumber>, DatabaseError> {
+    ) -> Result<Option<L1MessageEnvelope>, DatabaseError> {
         Ok(models::l1_message::Entity::find_by_id(queue_index as i64)
             .one(self.get_connection())
             .await
             .map(|x| x.map(Into::into))?)
     }
 
-    /// Gets an iterator over all [`L1MessageWithBlockNumber`]s in the database.
+    /// Get a [`L1MessageEnvelope`] from the database by its message queue hash.
+    async fn get_l1_message_by_hash(
+        &self,
+        queue_hash: B256,
+    ) -> Result<Option<L1MessageEnvelope>, DatabaseError> {
+        Ok(models::l1_message::Entity::find()
+            .filter(
+                Condition::all()
+                    .add(models::l1_message::Column::QueueHash.is_not_null())
+                    .add(models::l1_message::Column::QueueHash.eq(queue_hash.to_vec())),
+            )
+            .one(self.get_connection())
+            .await
+            .map(|x| x.map(Into::into))?)
+    }
+
+    /// Gets an iterator over all [`L1MessageEnvelope`]s in the database.
     async fn get_l1_messages<'a>(
         &'a self,
-    ) -> Result<impl Stream<Item = Result<L1MessageWithBlockNumber, DbErr>> + 'a, DatabaseError>
-    {
+    ) -> Result<impl Stream<Item = Result<L1MessageEnvelope, DbErr>> + 'a, DatabaseError> {
         Ok(models::l1_message::Entity::find()
             .stream(self.get_connection())
             .await?
@@ -170,11 +182,11 @@ pub trait DatabaseOperations: DatabaseConnectionProvider {
             .map(|x| x.map(Into::into))?)
     }
 
-    /// Insert a new batch to block line in the database.
-    async fn insert_batch_to_block(
+    /// Insert a new derived block line in the database.
+    async fn insert_derived_block(
         &self,
-        batch_info: BatchInfo,
         block_info: BlockInfo,
+        batch_info: BatchInfo,
     ) -> Result<(), DatabaseError> {
         tracing::trace!(
             target: "scroll::db",
@@ -182,9 +194,9 @@ pub trait DatabaseOperations: DatabaseConnectionProvider {
             batch_index = batch_info.index,
             block_number = block_info.number,
             block_hash = ?block_info.hash,
-            "Inserting batch to block into database."
+            "Inserting derived block into database."
         );
-        let derived_block: models::derived_block::ActiveModel = (batch_info, block_info).into();
+        let derived_block: models::derived_block::ActiveModel = (block_info, batch_info).into();
         derived_block.insert(self.get_connection()).await?;
 
         Ok(())

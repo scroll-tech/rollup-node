@@ -15,6 +15,7 @@ alloy-eips.workspace = true
 alloy-rpc-types-engine.workspace = true
 
 # scroll-alloy
+scroll-alloy-hardforks.workspace = true
 scroll-alloy-provider.workspace = true
 
 # reth
@@ -55,4 +56,5 @@ serde = [
     "scroll-wire/serde",
     "secp256k1/serde",
     "alloy-eips/serde",
+    "scroll-alloy-hardforks/serde",
 ]

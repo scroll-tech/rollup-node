@@ -133,6 +133,9 @@ where
         // Wrap the database in an Arc
         let db = Arc::new(db);
 
+        // Get the chain specification
+        let chain_spec = ctx.chain_spec();
+
         // Spawn the L1Watcher
         let l1_provider_args = self.config.l1_provider_args;
         let l1_notification_rx = if let Some(l1_rpc_url) = l1_provider_args.l1_rpc_url {
@@ -183,6 +186,7 @@ where
             db,
             l1_notification_rx,
             consensus,
+            chain_spec,
             block_rx,
             sequencer,
             block_time,

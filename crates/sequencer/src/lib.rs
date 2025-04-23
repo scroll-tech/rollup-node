@@ -12,7 +12,7 @@ use alloy_eips::eip2718::Encodable2718;
 use alloy_primitives::Address;
 use alloy_rpc_types_engine::PayloadAttributes;
 use futures::{task::AtomicWaker, Stream};
-use rollup_node_primitives::L1MessageWithBlockNumber;
+use rollup_node_primitives::L1MessageEnvelope;
 use rollup_node_providers::L1MessageProvider;
 use scroll_alloy_rpc_types_engine::ScrollPayloadAttributes;
 use std::task::{Context, Poll};
@@ -152,7 +152,7 @@ async fn build_payload_attributes<P: L1MessageProvider + Unpin + Send + Sync + '
     current_l1_block_number: u64,
     l1_block_depth: u64,
 ) -> Result<ScrollPayloadAttributes, SequencerError> {
-    let predicate = |message: L1MessageWithBlockNumber| {
+    let predicate = |message: L1MessageEnvelope| {
         message.block_number + l1_block_depth <= current_l1_block_number
     };
 

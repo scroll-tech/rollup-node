@@ -18,6 +18,10 @@ scroll-db.workspace = true
 rollup-node-primitives.workspace = true
 rollup-node-watcher.workspace = true
 
+# scroll
+scroll-alloy-consensus.workspace = true
+scroll-alloy-hardforks.workspace = true
+
 # misc
 futures.workspace = true
 thiserror.workspace = true
@@ -30,6 +34,10 @@ alloy-primitives = { workspace = true, features = ["arbitrary"] }
 # rollup-node
 scroll-db = { workspace = true, features = ["test-utils"] }
 rollup-node-primitives = { workspace = true, features = ["arbitrary"] }
+
+# scroll
+reth-scroll-chainspec.workspace = true
+reth-scroll-forks.workspace = true
 
 # misc
 arbitrary.workspace = true
