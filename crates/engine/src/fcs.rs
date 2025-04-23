@@ -8,7 +8,7 @@ use rollup_node_primitives::BlockInfo;
 ///
 /// The state is composed of the [`BlockInfo`] for `head`, `safe` block, and the `finalized`
 /// blocks.
-#[derive(Debug, Default, Clone)]
+#[derive(Debug, Clone)]
 pub struct ForkchoiceState {
     head: BlockInfo,
     safe: BlockInfo,
@@ -26,13 +26,13 @@ impl ForkchoiceState {
         Self { head, safe, finalized }
     }
 
-    /// Creates a new [`ForkchoiceState`] instance setting the `head` block info to the
-    /// provided `genesis` hash and the `safe` and `finalized` block info to the default values.
+    /// Creates a new [`ForkchoiceState`] instance setting the `head`, `safe` and `finalized` block
+    /// info to the provided `genesis` hash.
     pub fn head_from_genesis(genesis: B256) -> Self {
         Self::new(
             BlockInfo { hash: genesis, number: 0 },
-            BlockInfo { hash: Default::default(), number: 0 },
-            BlockInfo { hash: Default::default(), number: 0 },
+            BlockInfo { hash: genesis, number: 0 },
+            BlockInfo { hash: genesis, number: 0 },
         )
     }
 

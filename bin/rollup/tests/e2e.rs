@@ -133,6 +133,7 @@ pub async fn build_bridge_node(
     // Create the node for a bridge node that will bridge messages from the eth-wire protocol
     // to the scroll-wire protocol.
     let node_args = ScrollRollupNodeArgs {
+        dev: true,
         enable_eth_scroll_wire_bridge: true,
         enable_scroll_wire: true,
         database_path: Some(PathBuf::from("sqlite::memory:")),

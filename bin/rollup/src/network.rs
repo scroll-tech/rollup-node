@@ -10,7 +10,7 @@ use reth_rpc_builder::config::RethRpcServerConfig;
 use reth_scroll_chainspec::ScrollChainSpec;
 use reth_scroll_primitives::ScrollPrimitives;
 use reth_transaction_pool::{PoolTransaction, TransactionPool};
-use rollup_node_manager::{PoAConsensus, RollupNodeManager};
+use rollup_node_manager::{Consensus, NoopConsensus, PoAConsensus, RollupNodeManager};
 use rollup_node_providers::{beacon_provider, DatabaseL1MessageProvider, OnlineL1Provider};
 use rollup_node_sequencer::Sequencer;
 use rollup_node_watcher::L1Watcher;
@@ -90,7 +90,7 @@ where
         // Create the scroll network manager.
         let scroll_network_manager = ScrollNetworkManager::from_parts(handle.clone(), events);
 
-        // Spawn the scroll network manager.
+        // Spawn the engine driver.
         let auth_port = ctx.config().rpc.auth_port;
         let auth_secret = ctx.config().rpc.auth_jwt_secret(ctx.config().datadir().jwt())?;
 
@@ -99,8 +99,13 @@ where
             self.config.engine_api_url.unwrap_or(format!("http://localhost:{auth_port}").parse()?),
         );
         let payload_provider = NoopExecutionPayloadProvider;
-        let fcs =
-            ForkchoiceState::head_from_genesis(ctx.config().chain.genesis_header().hash_slow());
+
+        let chain = ctx.config().chain.clone();
+        let fcs = if let Some(named) = chain.chain.named() {
+            ForkchoiceState::head_from_named_chain(named)
+        } else {
+            ForkchoiceState::head_from_genesis(ctx.config().chain.genesis_header().hash_slow())
+        };
         let engine = EngineDriver::new(
             Arc::new(engine_api),
             Arc::new(payload_provider),
@@ -133,27 +138,43 @@ where
 
         // Get a L1 provider.
         let l1_provider_args = self.config.l1_provider_args;
-        let L1ProviderArgs {
-            max_retries,
-            initial_backoff,
-            compute_units_per_second,
-            l1_rpc_url,
-            ..
-        } = l1_provider_args;
-        let client = RpcClient::builder()
-            .layer(RetryBackoffLayer::new(max_retries, initial_backoff, compute_units_per_second))
-            .http(l1_rpc_url);
-        let provider = ProviderBuilder::new().on_client(client);
+        let provider = if let Some(url) = l1_provider_args.l1_rpc_url {
+            let L1ProviderArgs { max_retries, initial_backoff, compute_units_per_second, .. } =
+                l1_provider_args;
+            let client = RpcClient::builder()
+                .layer(RetryBackoffLayer::new(
+                    max_retries,
+                    initial_backoff,
+                    compute_units_per_second,
+                ))
+                .http(url);
+            Some(ProviderBuilder::new().on_client(client))
+        } else {
+            None
+        };
 
-        // Spawn the L1Watcher
-        let l1_notification_rx =
-            L1Watcher::spawn(provider.clone(), WATCHER_START_BLOCK_NUMBER).await;
+        // Create the consensus.
+        let consensus: Box<dyn Consensus + Send> = if self.config.dev {
+            Box::new(NoopConsensus::default())
+        } else {
+            let mut poa = PoAConsensus::new(vec![]);
+            if let Some(ref provider) = provider {
+                // Initialize the consensus
+                poa.initialize(
+                    provider,
+                    ctx.config().chain.chain.named().expect("expected named chain"),
+                )
+                .await;
+            }
+            Box::new(poa)
+        };
 
-        // Initialize the consensus.
-        let mut consensus = PoAConsensus::new(vec![]);
-        consensus
-            .initialize(provider, ctx.config().chain.chain.named().expect("expected named chain"))
-            .await;
+        let l1_notification_rx = if let Some(provider) = provider {
+            // Spawn the L1Watcher
+            Some(L1Watcher::spawn(provider, WATCHER_START_BLOCK_NUMBER).await)
+        } else {
+            None
+        };
 
         // Construct the l1 provider.
         let beacon_provider = beacon_provider(l1_provider_args.beacon_rpc_url.to_string());

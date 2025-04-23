@@ -5,6 +5,9 @@ use std::path::PathBuf;
 /// A struct that represents the arguments for the rollup node.
 #[derive(Debug, clap::Args)]
 pub struct ScrollRollupNodeArgs {
+    /// Whether the sequencer should be run in dev mode.
+    #[arg(long)]
+    pub dev: bool,
     /// A bool to represent if new blocks should be bridged from the eth wire protocol to the
     /// scroll wire protocol.
     #[arg(long, default_value_t = false)]
@@ -30,7 +33,7 @@ pub struct ScrollRollupNodeArgs {
 pub struct L1ProviderArgs {
     /// The URL for the L1 RPC URL.
     #[arg(long)]
-    pub l1_rpc_url: reqwest::Url,
+    pub l1_rpc_url: Option<reqwest::Url>,
     /// The URL for the Beacon RPC URL.
     #[arg(long)]
     pub beacon_rpc_url: reqwest::Url,

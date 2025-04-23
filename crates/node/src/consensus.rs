@@ -30,6 +30,21 @@ pub trait Consensus {
     ) -> Result<(), ConsensusError>;
 }
 
+/// A no-op consensus instance.
+#[non_exhaustive]
+#[derive(Debug, Default)]
+pub struct NoopConsensus;
+
+impl Consensus for NoopConsensus {
+    fn validate_new_block(
+        &self,
+        _block: &ScrollBlock,
+        _signature: &Signature,
+    ) -> Result<(), ConsensusError> {
+        Ok(())
+    }
+}
+
 /// A Proof of Authority consensus instance.
 #[derive(Debug)]
 pub struct PoAConsensus {
@@ -43,7 +58,7 @@ impl PoAConsensus {
     }
 
     /// Initialize the [`PoAConsensus`] by fetching the authorized signers from L1 system contract.
-    pub async fn initialize<P: Provider>(&mut self, provider: P, chain: NamedChain) {
+    pub async fn initialize<P: Provider>(&mut self, provider: &P, chain: NamedChain) {
         let system_contract_address = match chain {
             NamedChain::Scroll => MAINNET_SYSTEM_CONTRAT_ADDRESS,
             NamedChain::ScrollSepolia => SEPOLIA_SYSTEM_CONTRAT_ADDRESS,
