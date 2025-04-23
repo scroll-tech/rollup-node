@@ -1,4 +1,6 @@
+use alloy_primitives::bytes::Bytes;
 use reth_network_peers::PeerId;
+use reth_scroll_primitives::ScrollBlock;
 use scroll_wire::NewBlock;
 
 pub type BlockImportResult = Result<BlockValidation, BlockImportError>;
@@ -10,6 +12,22 @@ pub struct BlockImportOutcome {
     pub peer: PeerId,
     /// The result of the block import operation.
     pub result: BlockImportResult,
+}
+
+impl BlockImportOutcome {
+    /// Creates a new `BlockImportOutcome` instance for an invalid block with the given peer ID.
+    pub fn invalid_block(peer: PeerId) -> Self {
+        Self { peer, result: Err(BlockImportError::Validation(BlockValidationError::InvalidBlock)) }
+    }
+
+    /// Creates a new `BlockImportOutcome` instance for a valid block header with the given peer ID
+    /// and new block.
+    pub fn valid_block(peer: PeerId, block: ScrollBlock, signature: Bytes) -> Self {
+        Self {
+            peer,
+            result: Ok(BlockValidation::ValidBlock { new_block: NewBlock { signature, block } }),
+        }
+    }
 }
 
 /// The result of a block validation operation.

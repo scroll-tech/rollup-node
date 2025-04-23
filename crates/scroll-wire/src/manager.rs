@@ -86,6 +86,9 @@ impl Future for ScrollWireManager {
                     to_connection,
                 }) => {
                     trace!(
+                        target: "scroll::wire::manager",
+                        peer_id = %peer_id,
+                        direction = ?direction,
                         "Established connection with peer: {:?} for direction: {:?}",
                         peer_id,
                         direction
