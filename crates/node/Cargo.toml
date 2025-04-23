@@ -62,4 +62,9 @@ serde = [
     "scroll-network/serde",
     "scroll-wire/serde",
     "alloy-eips/serde",
+    "alloy-chains/serde",
+    "alloy-consensus/serde",
+    "alloy-primitives/serde",
+    "reth-primitives-traits/serde",
+    "scroll-alloy-consensus/serde",
 ]

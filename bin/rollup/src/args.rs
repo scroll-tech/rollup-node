@@ -5,7 +5,7 @@ use std::path::PathBuf;
 /// A struct that represents the arguments for the rollup node.
 #[derive(Debug, clap::Args)]
 pub struct ScrollRollupNodeArgs {
-    /// Whether the sequencer should be run in dev mode.
+    /// Whether the rollup node should be run in dev mode.
     #[arg(long)]
     pub dev: bool,
     /// A bool to represent if new blocks should be bridged from the eth wire protocol to the
