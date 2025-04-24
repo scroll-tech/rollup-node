@@ -2,14 +2,30 @@ use alloy_primitives::{Bytes, B256, U256};
 use sea_orm::{prelude::*, ActiveValue};
 use sea_orm_migration::{prelude::*, seaql_migrations::Relation};
 
+use crate::GetBlockDataUrl;
+
 const BLOCK_DATA_CSV: &str = include_str!("../migration-data/block_data.csv");
 
-#[derive(DeriveMigrationName)]
-pub struct Migration;
+#[derive(Default)]
+pub struct Migration<GBD: GetBlockDataUrl>(std::marker::PhantomData<GBD>);
+
+impl<GBD: GetBlockDataUrl> Migration<GBD> {
+    pub fn new() -> Self {
+        Self(std::marker::PhantomData)
+    }
+}
+
+impl<GBD: GetBlockDataUrl> MigrationName for Migration<GBD> {
+    fn name(&self) -> &str {
+        "m20250408_150338_seed_block_data_table"
+    }
+}
 
 #[async_trait::async_trait]
-impl MigrationTrait for Migration {
+impl<GBD: GetBlockDataUrl> MigrationTrait for Migration<GBD> {
     async fn up(&self, manager: &SchemaManager) -> Result<(), DbErr> {
+        let url = GBD::get_block_data_url();
+        // fetch the CSV file from the URL
         let mut rdr = csv::Reader::from_reader(BLOCK_DATA_CSV.as_bytes());
 
         let db = manager.get_connection();
