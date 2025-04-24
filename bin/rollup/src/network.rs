@@ -110,7 +110,13 @@ where
             Arc::new(engine_api),
             Arc::new(payload_provider),
             fcs,
-            Duration::from_millis(self.config.sequencer_args.payload_building_duration),
+            Duration::from_millis(
+                self.config
+                    .sequencer_args
+                    .as_ref()
+                    .map(|args| args.payload_building_duration)
+                    .unwrap_or_default(),
+            ),
         );
 
         // Instantiate the database
@@ -188,8 +194,7 @@ where
         };
 
         // Construct the Sequencer.
-        let (sequencer, block_time) = if self.config.sequencer_args.scroll_sequencer_enabled {
-            let args = &self.config.sequencer_args;
+        let (sequencer, block_time) = if let Some(args) = self.config.sequencer_args {
             let sequencer = Sequencer::new(
                 Arc::new(l1_messages_provider),
                 args.fee_recipient,

@@ -14,7 +14,7 @@ use reth_scroll_chainspec::ScrollChainSpec;
 use reth_scroll_engine_primitives::ScrollPayloadBuilderAttributes;
 use reth_scroll_node::{ScrollNetworkPrimitives, ScrollNode};
 use reth_tasks::TaskManager;
-use rollup_node::{L1ProviderArgs, ScrollRollupNodeArgs, SequencerArgs};
+use rollup_node::{L1ProviderArgs, ScrollRollupNodeArgs};
 use scroll_alloy_rpc_types_engine::ScrollPayloadAttributes;
 use scroll_network::{NewBlockWithPeer, SCROLL_MAINNET};
 use scroll_wire::ScrollWireConfig;
@@ -145,10 +145,7 @@ pub async fn build_bridge_node(
             initial_backoff: 100,
         },
         engine_api_url: None,
-        sequencer_args: SequencerArgs {
-            scroll_sequencer_enabled: false,
-            ..SequencerArgs::default()
-        },
+        sequencer_args: None,
     };
     let node = ScrollNode;
     let NodeHandle { node, node_exit_future: _ } = NodeBuilder::new(node_config.clone())
