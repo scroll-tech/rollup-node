@@ -171,6 +171,12 @@ where
 
         None
     }
+
+    /// A helper function to check if a payload building job is in progress.
+    pub const fn is_payload_building_in_progress(&self) -> bool {
+        self.sequencer_payload_attributes.is_some() ||
+            matches!(self.future, Some(EngineDriverFuture::PayloadBuildingJob(_)))
+    }
 }
 
 impl<EC, P> Stream for EngineDriver<EC, P>
@@ -250,5 +256,60 @@ impl<EC, P> std::fmt::Debug for EngineDriver<EC, P> {
             .field("fcs", &self.fcs)
             .field("future", &"EngineDriverFuture")
             .finish()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use scroll_engine::test_utils::{NoopExecutionPayloadProvider, PanicEngineClient};
+
+    impl<EC, P> EngineDriver<EC, P> {
+        fn with_future(&mut self, future: EngineDriverFuture) {
+            self.future = Some(future);
+        }
+    }
+
+    #[tokio::test]
+    async fn test_is_payload_building_in_progress() {
+        let client = Arc::new(PanicEngineClient);
+        let payload_provider = Arc::new(NoopExecutionPayloadProvider);
+        let fcs = ForkchoiceState::default(); // Or use a mock if needed
+        let duration = Duration::from_secs(2);
+
+        let mut driver = EngineDriver::new(client, payload_provider, fcs, duration);
+
+        // Initially, it should be false
+        assert!(!driver.is_payload_building_in_progress());
+
+        // Simulate a payload building job invocation
+        driver.handle_build_new_payload(Default::default());
+
+        // Now, it should return true
+        assert!(driver.is_payload_building_in_progress());
+    }
+
+    #[tokio::test]
+    async fn test_is_payload_building_in_progress_with_future() {
+        let client = Arc::new(PanicEngineClient);
+        let payload_provider = Arc::new(NoopExecutionPayloadProvider);
+        let fcs = ForkchoiceState::default(); // Or use a mock if needed
+        let duration = Duration::from_secs(2);
+
+        let mut driver = EngineDriver::new(client.clone(), payload_provider, fcs, duration);
+
+        // Initially, it should be false
+        assert!(!driver.is_payload_building_in_progress());
+
+        // Set a future to simulate an ongoing job
+        driver.with_future(EngineDriverFuture::payload_building_job(
+            client,
+            Default::default(),
+            Default::default(),
+            Default::default(),
+        ));
+
+        // Now, it should return true
+        assert!(driver.is_payload_building_in_progress());
     }
 }
