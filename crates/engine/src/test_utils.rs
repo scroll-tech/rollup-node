@@ -29,7 +29,7 @@ impl ExecutionPayloadProvider for NoopExecutionPayloadProvider {
     }
 }
 
-/// A no-op engine client that panics when any method is called.
+/// A [`ScrollEngineApi`] implementation that panics when any method is called.
 #[derive(Debug)]
 pub struct PanicEngineClient;
 
