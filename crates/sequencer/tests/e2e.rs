@@ -6,7 +6,7 @@ use futures::stream::StreamExt;
 use reth_e2e_test_utils::transaction::TransactionTestContext;
 use reth_node_core::primitives::SignedTransaction;
 use reth_scroll_node::test_utils::setup;
-use rollup_node_primitives::{BlockInfo, L1MessageWithBlockNumber};
+use rollup_node_primitives::{BlockInfo, L1MessageEnvelope};
 use rollup_node_providers::DatabaseL1MessageProvider;
 use rollup_node_sequencer::Sequencer;
 use scroll_alloy_consensus::TxL1Message;
@@ -88,8 +88,9 @@ async fn can_build_blocks() {
 
     // now lets add an L1 message to the database
     let wallet_lock = wallet.lock().await;
-    let l1_message = L1MessageWithBlockNumber {
+    let l1_message = L1MessageEnvelope {
         block_number: 1,
+        queue_hash: None,
         transaction: TxL1Message {
             queue_index: 0,
             gas_limit: 21000,
@@ -165,7 +166,7 @@ async fn can_build_blocks_with_delayed_l1_messages() {
     // now lets add an L1 message to the database (this transaction should not be included until the
     // l1 block number is 3)
     let wallet_lock = wallet.lock().await;
-    let l1_message = L1MessageWithBlockNumber {
+    let l1_message = L1MessageEnvelope {
         block_number: 1,
         transaction: TxL1Message {
             queue_index: 0,
@@ -175,6 +176,7 @@ async fn can_build_blocks_with_delayed_l1_messages() {
             sender: wallet_lock.inner.address(),
             input: vec![].into(),
         },
+        queue_hash: None,
     };
     drop(wallet_lock);
     let l1_message_hash = l1_message.transaction.tx_hash();

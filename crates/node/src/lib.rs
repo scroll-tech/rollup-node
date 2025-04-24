@@ -5,6 +5,7 @@ use reth_tokio_util::{EventSender, EventStream};
 use rollup_node_indexer::{Indexer, IndexerEvent};
 use rollup_node_sequencer::Sequencer;
 use rollup_node_watcher::L1Notification;
+use scroll_alloy_hardforks::ScrollHardforks;
 use scroll_alloy_provider::ScrollEngineApi;
 use scroll_engine::{EngineDriver, EngineDriverEvent};
 use scroll_network::{BlockImportOutcome, NetworkManager, NetworkManagerEvent, NewBlockWithPeer};
@@ -51,7 +52,7 @@ const EVENT_CHANNEL_SIZE: usize = 100;
 /// - `forkchoice_state`: The forkchoice state of the rollup node.
 /// - `pending_block_imports`: A collection of pending block imports.
 /// - `event_sender`: An event sender for sending events to subscribers of the rollup node manager.
-pub struct RollupNodeManager<C, EC, P, L1P, L1MP> {
+pub struct RollupNodeManager<C, EC, P, L1P, L1MP, CS> {
     /// The network manager that manages the scroll p2p network.
     network: NetworkManager,
     /// The engine driver used to communicate with the engine.
@@ -61,7 +62,7 @@ pub struct RollupNodeManager<C, EC, P, L1P, L1MP> {
     /// A receiver for [`L1Notification`]s from the [`rollup_node_watcher::L1Watcher`].
     l1_notification_rx: Option<ReceiverStream<Arc<L1Notification>>>,
     /// An indexer used to index data for the rollup node.
-    indexer: Indexer,
+    indexer: Indexer<CS>,
     /// The consensus algorithm used by the rollup node.
     consensus: C,
     /// The receiver for new blocks received from the network (used to bridge from eth-wire).
@@ -74,8 +75,8 @@ pub struct RollupNodeManager<C, EC, P, L1P, L1MP> {
     block_building_trigger: Option<Interval>,
 }
 
-impl<C: Debug, EC: Debug, P: Debug, L1P: Debug, L1MP: Debug> Debug
-    for RollupNodeManager<C, EC, P, L1P, L1MP>
+impl<C: Debug, EC: Debug, P: Debug, L1P: Debug, L1MP: Debug, CS: Debug> Debug
+    for RollupNodeManager<C, EC, P, L1P, L1MP, CS>
 {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         f.debug_struct("RollupNodeManager")
@@ -93,13 +94,14 @@ impl<C: Debug, EC: Debug, P: Debug, L1P: Debug, L1MP: Debug> Debug
     }
 }
 
-impl<C, EC, P, L1P, L1MP> RollupNodeManager<C, EC, P, L1P, L1MP>
+impl<C, EC, P, L1P, L1MP, CS> RollupNodeManager<C, EC, P, L1P, L1MP, CS>
 where
     C: Consensus + Unpin,
     EC: ScrollEngineApi + Unpin + Sync + Send + 'static,
     P: ExecutionPayloadProvider + Unpin + Send + Sync + 'static,
     L1P: L1Provider + Clone + Send + Sync + 'static,
     L1MP: L1MessageProvider + Unpin + Send + Sync + 'static,
+    CS: ScrollHardforks + Send + Sync + 'static,
 {
     /// Create a new [`RollupNodeManager`] instance.
     #[allow(clippy::too_many_arguments)]
@@ -110,11 +112,12 @@ where
         database: Arc<Database>,
         l1_notification_rx: Option<Receiver<Arc<L1Notification>>>,
         consensus: C,
+        chain_spec: Arc<CS>,
         new_block_rx: Option<UnboundedReceiver<NewBlockWithPeer>>,
         sequencer: Option<Sequencer<L1MP>>,
         block_time: Option<u64>,
     ) -> Self {
-        let indexer = Indexer::new(database.clone());
+        let indexer = Indexer::new(database.clone(), chain_spec);
         let derivation_pipeline =
             l1_provider.map(|provider| DerivationPipeline::new(provider, database));
         Self {
@@ -212,7 +215,7 @@ where
                 self.network.handle().announce_block(payload, signature);
             }
             EngineDriverEvent::L1BlockConsolidated((block_info, batch_info)) => {
-                self.indexer.handle_batch_to_block(batch_info, block_info);
+                self.indexer.handle_derived_block(block_info, batch_info);
 
                 if let Some(event_sender) = self.event_sender.as_ref() {
                     event_sender.notify(RollupEvent::L1DerivedBlockConsolidated(block_info));
@@ -227,13 +230,14 @@ where
     }
 }
 
-impl<C, EC, P, L1P, L1MP> Future for RollupNodeManager<C, EC, P, L1P, L1MP>
+impl<C, EC, P, L1P, L1MP, CS> Future for RollupNodeManager<C, EC, P, L1P, L1MP, CS>
 where
     C: Consensus + Unpin,
     EC: ScrollEngineApi + Unpin + Sync + Send + 'static,
     P: ExecutionPayloadProvider + Unpin + Send + Sync + 'static,
     L1P: L1Provider + Clone + Unpin + Send + Sync + 'static,
     L1MP: L1MessageProvider + Unpin + Send + Sync + 'static,
+    CS: ScrollHardforks + Unpin + Send + Sync + 'static,
 {
     type Output = ();
 
