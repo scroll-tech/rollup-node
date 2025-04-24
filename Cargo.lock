@@ -9578,6 +9578,7 @@ version = "0.0.1"
 dependencies = [
  "alloy-eips",
  "alloy-primitives",
+ "alloy-provider",
  "alloy-rpc-types-beacon",
  "alloy-rpc-types-engine",
  "alloy-serde",

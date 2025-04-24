@@ -7,7 +7,7 @@ mod beacon;
 pub use block::BlockDataProvider;
 mod block;
 
-pub use execution_payload::ExecutionPayloadProvider;
+pub use execution_payload::{AlloyExecutionPayloadProvider, ExecutionPayloadProvider};
 mod execution_payload;
 
 pub use l1::{
