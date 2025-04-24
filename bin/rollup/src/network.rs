@@ -149,7 +149,7 @@ where
         };
 
         // Create the consensus.
-        let consensus: Box<dyn Consensus + Send> = if self.config.test {
+        let consensus: Box<dyn Consensus> = if self.config.test {
             Box::new(NoopConsensus::default())
         } else {
             let mut poa = PoAConsensus::new(vec![]);
