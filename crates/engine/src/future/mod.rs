@@ -31,9 +31,13 @@ type BlockImportFuture = Pin<
     >,
 >;
 
+// A boolean type indicating if the L1 consolidation job resulted in a reorg.
+type IsReorg = bool;
+
 /// A future that represents an L1 consolidation job.
-type L1ConsolidationFuture =
-    Pin<Box<dyn Future<Output = Result<(BlockInfo, bool, BatchInfo), EngineDriverError>> + Send>>;
+type L1ConsolidationFuture = Pin<
+    Box<dyn Future<Output = Result<(BlockInfo, IsReorg, BatchInfo), EngineDriverError>> + Send>,
+>;
 
 /// A future that represents a payload building job.
 type PayloadBuildingJobFuture =
@@ -197,7 +201,7 @@ async fn handle_payload_attributes<EC, P>(
     safe_block_info: BlockInfo,
     mut fcs: AlloyForkchoiceState,
     payload_attributes: ScrollPayloadAttributesWithBatchInfo,
-) -> Result<(BlockInfo, bool, BatchInfo), EngineDriverError>
+) -> Result<(BlockInfo, IsReorg, BatchInfo), EngineDriverError>
 where
     EC: ScrollEngineApi + Unpin + Send + Sync + 'static,
     P: ExecutionPayloadProvider + Unpin + Send + Sync + 'static,
