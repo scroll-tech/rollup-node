@@ -63,7 +63,7 @@ impl Stream for ScrollWireConnection {
         loop {
             // We send all the messages in the outbound channel to the peer.
             if let Poll::Ready(Some(msg)) = this.outbound.poll_next_unpin(cx) {
-                println!("broadcasting message: {:?}", msg);
+                trace!(target: "scroll::wire::connection", peer_id = %this.peer_id, ?msg, "broadcasting message");
                 return Poll::Ready(Some(msg.encoded()));
             }
 

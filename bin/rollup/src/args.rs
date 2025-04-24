@@ -1,5 +1,6 @@
 use crate::constants;
 use alloy_primitives::Address;
+use reth_scroll_chainspec::SCROLL_FEE_VAULT_ADDRESS;
 use std::path::PathBuf;
 
 /// A struct that represents the arguments for the rollup node.
@@ -36,9 +37,9 @@ pub struct L1ProviderArgs {
     pub l1_rpc_url: Option<reqwest::Url>,
     /// The URL for the Beacon RPC URL.
     #[arg(long)]
-    pub beacon_rpc_url: reqwest::Url,
+    pub beacon_rpc_url: Option<reqwest::Url>,
     /// The compute units per second for the provider.
-    #[arg(long)]
+    #[arg(long, default_value_t = constants::PROVIDER_COMPUTE_UNITS_PER_SECOND)]
     pub compute_units_per_second: u64,
     /// The max amount of retries for the provider.
     #[arg(long, default_value_t = constants::PROVIDER_MAX_RETRIES)]
@@ -48,19 +49,19 @@ pub struct L1ProviderArgs {
     pub initial_backoff: u64,
 }
 
-#[derive(Debug, Clone, clap::Args)]
-#[group(requires_all = ["block_time", "payload_building_duration", "max_l1_messages_per_block"])]
+#[derive(Debug, Clone, Default, clap::Args)]
+#[group(requires_all = ["block_time", "payload_building_duration", "max_l1_messages_per_block", "fee_recipient"])]
 pub struct SequencerArgs {
     /// The block time for the sequencer.
-    #[arg(long, required = false)]
-    pub block_time: u64,
+    #[arg(long, default_value_t = constants::DEFAULT_BLOCK_TIME, required = false)]
+    pub scroll_block_time: u64,
     /// The payload building duration for the sequencer (milliseconds)
-    #[arg(long, required = false)]
+    #[arg(long, default_value_t = constants::DEFAULT_PAYLOAD_BUILDING_DURATION, required = false)]
     pub payload_building_duration: u64,
     /// The max L1 messages per block for the sequencer.
-    #[arg(long, required = false)]
+    #[arg(long, default_value_t = constants::DEFAULT_MAX_L1_MESSAGES_PER_BLOCK, required = false)]
     pub max_l1_messages_per_block: u64,
     /// The fee recipient for the sequencer.
-    #[arg(long, required = false)]
-    pub fee_recipient: Option<Address>,
+    #[arg(long, default_value_t = SCROLL_FEE_VAULT_ADDRESS, required = false)]
+    pub fee_recipient: Address,
 }

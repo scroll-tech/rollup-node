@@ -290,5 +290,5 @@ where
     forkchoice_updated(client, fcs, None).await?;
 
     // convert the payload into a block.
-    execution_payload.try_into().map_err(|_| EngineDriverError::InvalidExecutionPayload)
+    execution_payload.try_into().map_err(EngineDriverError::InvalidExecutionPayload)
 }

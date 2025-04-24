@@ -80,6 +80,7 @@ serde_json = { version = "1.0.94", default-features = false, features = ["alloc"
 tokio = { workspace = true, features = ["full"] }
 
 [features]
+default = ["serde"]
 test-utils = [
     "reth-network/test-utils",
     "reth-node-builder/test-utils",
@@ -116,4 +117,3 @@ serde = [
 [[bin]]
 name = "rollup-node"
 path = "src/main.rs"
-required-features = ["serde"]
