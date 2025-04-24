@@ -100,8 +100,7 @@ where
         );
         let payload_provider = NoopExecutionPayloadProvider;
 
-        let chain = ctx.config().chain.clone();
-        let fcs = if let Some(named) = chain.chain.named() {
+        let fcs = if let Some(named) = ctx.config().chain.chain.named() {
             ForkchoiceState::head_from_named_chain(named)
         } else {
             ForkchoiceState::head_from_genesis(ctx.config().chain.genesis_header().hash_slow())
@@ -110,13 +109,7 @@ where
             Arc::new(engine_api),
             Arc::new(payload_provider),
             fcs,
-            Duration::from_millis(
-                self.config
-                    .sequencer_args
-                    .as_ref()
-                    .map(|args| args.payload_building_duration)
-                    .unwrap_or_default(),
-            ),
+            Duration::from_millis(self.config.sequencer_args.payload_building_duration),
         );
 
         // Instantiate the database
@@ -156,7 +149,7 @@ where
         };
 
         // Create the consensus.
-        let consensus: Box<dyn Consensus + Send> = if self.config.dev {
+        let consensus: Box<dyn Consensus + Send> = if self.config.test {
             Box::new(NoopConsensus::default())
         } else {
             let mut poa = PoAConsensus::new(vec![]);
@@ -194,7 +187,8 @@ where
         };
 
         // Construct the Sequencer.
-        let (sequencer, block_time) = if let Some(args) = self.config.sequencer_args {
+        let (sequencer, block_time) = if self.config.sequencer_args.scroll_sequencer_enabled {
+            let args = &self.config.sequencer_args;
             let sequencer = Sequencer::new(
                 Arc::new(l1_messages_provider),
                 args.fee_recipient,
