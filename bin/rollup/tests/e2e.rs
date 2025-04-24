@@ -138,7 +138,6 @@ pub async fn build_bridge_node(
         database_path: Some(PathBuf::from("sqlite::memory:")),
         l1_provider_args: L1ProviderArgs {
             l1_rpc_url: None,
-            // <https://docs.arbitrum.io/run-arbitrum-node/l1-ethereum-beacon-chain-rpc-providers>
             beacon_rpc_url: None,
             compute_units_per_second: 100,
             max_retries: 10,

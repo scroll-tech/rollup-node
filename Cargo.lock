@@ -9515,7 +9515,7 @@ dependencies = [
  "alloy-primitives",
  "arbitrary",
  "futures",
- "rand 0.9.0",
+ "rand 0.9.1",
  "reth-scroll-chainspec",
  "reth-scroll-forks",
  "rollup-node-primitives",

@@ -10,7 +10,7 @@ pub const PROVIDER_MAX_RETRIES: u32 = 10;
 /// The initial backoff for the L1 provider.
 pub const PROVIDER_INITIAL_BACKOFF: u64 = 100;
 
-/// The max L1 messages per block for the sequencer.
+/// The default provider compute units per second.
 pub const PROVIDER_COMPUTE_UNITS_PER_SECOND: u64 = 50;
 
 /// The default block time in milliseconds for the sequencer.
