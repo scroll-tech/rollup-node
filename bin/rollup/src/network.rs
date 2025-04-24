@@ -101,19 +101,12 @@ where
             auth_secret,
             self.config.engine_api_url.unwrap_or(format!("http://localhost:{auth_port}").parse()?),
         );
-        let fcs =
-            ForkchoiceState::head_from_genesis(ctx.config().chain.genesis_header().hash_slow());
+        let fcs = ForkchoiceState::head_from_genesis(ctx.config().chain.genesis_hash());
         let engine = EngineDriver::new(
             Arc::new(engine_api),
             Arc::new(payload_provider),
             fcs,
-            Duration::from_millis(
-                self.config
-                    .sequencer_args
-                    .as_ref()
-                    .map(|args| args.payload_building_duration)
-                    .unwrap_or(0),
-            ),
+            Duration::from_millis(self.config.sequencer_args.payload_building_duration),
         );
 
         // Instantiate the database
@@ -137,10 +130,9 @@ where
         let chain_spec = ctx.chain_spec();
 
         // Spawn the L1Watcher
-        let l1_provider_args = self.config.l1_provider_args;
-        let l1_notification_rx = if let Some(l1_rpc_url) = l1_provider_args.l1_rpc_url {
+        let l1_notification_rx = if let Some(l1_rpc_url) = self.config.l1_provider_args.l1_rpc_url {
             let L1ProviderArgs { max_retries, initial_backoff, compute_units_per_second, .. } =
-                l1_provider_args;
+                self.config.l1_provider_args;
             let client = RpcClient::builder()
                 .layer(RetryBackoffLayer::new(
                     max_retries,
@@ -155,25 +147,31 @@ where
         };
 
         // Construct the l1 provider.
-        let beacon_provider = beacon_provider(l1_provider_args.beacon_rpc_url.to_string());
         let l1_messages_provider = DatabaseL1MessageProvider::new(db.clone(), 0);
-        let l1_provider = OnlineL1Provider::new(
-            beacon_provider,
-            PROVIDER_BLOB_CACHE_SIZE,
-            l1_messages_provider.clone(),
-        )
-        .await;
+        let l1_provider = if let Some(url) = self.config.l1_provider_args.beacon_rpc_url {
+            let beacon_provider = beacon_provider(url.to_string());
+            let l1_provider = OnlineL1Provider::new(
+                beacon_provider,
+                PROVIDER_BLOB_CACHE_SIZE,
+                l1_messages_provider.clone(),
+            )
+            .await;
+            Some(l1_provider)
+        } else {
+            None
+        };
 
         // Construct the Sequencer.
-        let (sequencer, block_time) = if let Some(args) = self.config.sequencer_args {
+        let (sequencer, block_time) = if self.config.sequencer_args.scroll_sequencer_enabled {
+            let args = &self.config.sequencer_args;
             let sequencer = Sequencer::new(
                 Arc::new(l1_messages_provider),
-                args.fee_recipient.unwrap_or_default(),
+                args.fee_recipient,
                 args.max_l1_messages_per_block,
                 0,
                 0,
             );
-            (Some(sequencer), Some(args.block_time))
+            (Some(sequencer), Some(args.scroll_block_time))
         } else {
             (None, None)
         };
@@ -192,7 +190,7 @@ where
             block_time,
         );
 
-        ctx.task_executor().spawn(rollup_node_manager);
+        ctx.task_executor().spawn_critical("rollup_node_manager", rollup_node_manager);
 
         info!(target: "scroll::reth::cli", enode=%handle.local_node_record(), "P2P networking initialized");
         Ok(handle)
