@@ -6,6 +6,9 @@ use std::path::PathBuf;
 /// A struct that represents the arguments for the rollup node.
 #[derive(Debug, clap::Args)]
 pub struct ScrollRollupNodeArgs {
+    /// Whether the rollup node should be run in test mode.
+    #[arg(long)]
+    pub test: bool,
     /// A bool to represent if new blocks should be bridged from the eth wire protocol to the
     /// scroll wire protocol.
     #[arg(long, default_value_t = false)]

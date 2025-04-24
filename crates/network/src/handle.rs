@@ -1,8 +1,8 @@
+use alloy_primitives::Signature;
 use reth_network::{config::SecretKey, NetworkHandle as RethNetworkHandle, PeersInfo};
 use reth_network_peers::PeerId;
 use reth_scroll_node::ScrollNetworkPrimitives;
 use reth_scroll_primitives::ScrollBlock;
-use secp256k1::ecdsa::Signature;
 use std::sync::Arc;
 use tokio::sync::{mpsc::UnboundedSender, oneshot};
 

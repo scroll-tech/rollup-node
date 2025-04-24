@@ -1,7 +1,9 @@
-use alloy_primitives::bytes::{Buf, BufMut, Bytes, BytesMut};
+use alloy_primitives::{
+    bytes::{Buf, BufMut, Bytes, BytesMut},
+    Signature,
+};
 use alloy_rlp::{Decodable, Encodable, RlpDecodable, RlpEncodable};
 use reth_eth_wire::{protocol::Protocol, Capability};
-use secp256k1::ecdsa::Signature;
 
 /// The message IDs for messages sent over the scroll wire protocol.
 /// This is used to identify the type of message being sent or received
@@ -30,7 +32,7 @@ pub struct NewBlock {
 impl NewBlock {
     /// Returns a [`NewBlock`] instance with the provided signature and block.
     pub fn new(signature: Signature, block: reth_scroll_primitives::ScrollBlock) -> Self {
-        Self { signature: Bytes::from(signature.serialize_compact().to_vec()), block }
+        Self { signature: Bytes::from(Into::<Vec<u8>>::into(signature)), block }
     }
 }
 

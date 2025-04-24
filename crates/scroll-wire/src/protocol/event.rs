@@ -1,7 +1,7 @@
 use crate::protocol::ScrollMessage;
+use alloy_primitives::Signature;
 use reth_network::Direction;
 use reth_network_api::PeerId;
-use secp256k1::ecdsa::Signature;
 use tokio::sync::mpsc::UnboundedSender;
 
 /// The events that can be emitted by the scroll wire protocol.

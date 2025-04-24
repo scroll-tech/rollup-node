@@ -1,5 +1,6 @@
 //! This library contains the main manager for the rollup node.
 
+use alloy_primitives::Signature;
 use futures::StreamExt;
 use reth_tokio_util::{EventSender, EventStream};
 use rollup_node_indexer::{Indexer, IndexerEvent};
@@ -9,7 +10,6 @@ use scroll_alloy_hardforks::ScrollHardforks;
 use scroll_alloy_provider::ScrollEngineApi;
 use scroll_engine::{EngineDriver, EngineDriverEvent};
 use scroll_network::{BlockImportOutcome, NetworkManager, NetworkManagerEvent, NewBlockWithPeer};
-use secp256k1::ecdsa::Signature;
 use std::{
     fmt,
     fmt::{Debug, Formatter},
@@ -28,10 +28,9 @@ use tracing::{error, trace};
 pub use event::RollupEvent;
 mod event;
 
-pub use consensus::PoAConsensus;
+pub use consensus::{Consensus, NoopConsensus, PoAConsensus};
 mod consensus;
 
-use consensus::Consensus;
 use rollup_node_providers::{ExecutionPayloadProvider, L1MessageProvider, L1Provider};
 use scroll_db::Database;
 use scroll_derivation_pipeline::DerivationPipeline;
@@ -52,7 +51,7 @@ const EVENT_CHANNEL_SIZE: usize = 100;
 /// - `forkchoice_state`: The forkchoice state of the rollup node.
 /// - `pending_block_imports`: A collection of pending block imports.
 /// - `event_sender`: An event sender for sending events to subscribers of the rollup node manager.
-pub struct RollupNodeManager<C, EC, P, L1P, L1MP, CS> {
+pub struct RollupNodeManager<EC, P, L1P, L1MP, CS> {
     /// The network manager that manages the scroll p2p network.
     network: NetworkManager,
     /// The engine driver used to communicate with the engine.
@@ -64,7 +63,7 @@ pub struct RollupNodeManager<C, EC, P, L1P, L1MP, CS> {
     /// An indexer used to index data for the rollup node.
     indexer: Indexer<CS>,
     /// The consensus algorithm used by the rollup node.
-    consensus: C,
+    consensus: Box<dyn Consensus>,
     /// The receiver for new blocks received from the network (used to bridge from eth-wire).
     new_block_rx: Option<UnboundedReceiverStream<NewBlockWithPeer>>,
     /// An event sender for sending events to subscribers of the rollup node manager.
@@ -75,8 +74,8 @@ pub struct RollupNodeManager<C, EC, P, L1P, L1MP, CS> {
     block_building_trigger: Option<Interval>,
 }
 
-impl<C: Debug, EC: Debug, P: Debug, L1P: Debug, L1MP: Debug, CS: Debug> Debug
-    for RollupNodeManager<C, EC, P, L1P, L1MP, CS>
+impl<EC: Debug, P: Debug, L1P: Debug, L1MP: Debug, CS: Debug> Debug
+    for RollupNodeManager<EC, P, L1P, L1MP, CS>
 {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         f.debug_struct("RollupNodeManager")
@@ -94,9 +93,8 @@ impl<C: Debug, EC: Debug, P: Debug, L1P: Debug, L1MP: Debug, CS: Debug> Debug
     }
 }
 
-impl<C, EC, P, L1P, L1MP, CS> RollupNodeManager<C, EC, P, L1P, L1MP, CS>
+impl<EC, P, L1P, L1MP, CS> RollupNodeManager<EC, P, L1P, L1MP, CS>
 where
-    C: Consensus + Unpin,
     EC: ScrollEngineApi + Unpin + Sync + Send + 'static,
     P: ExecutionPayloadProvider + Unpin + Send + Sync + 'static,
     L1P: L1Provider + Clone + Send + Sync + 'static,
@@ -111,7 +109,7 @@ where
         l1_provider: Option<L1P>,
         database: Arc<Database>,
         l1_notification_rx: Option<Receiver<Arc<L1Notification>>>,
-        consensus: C,
+        consensus: Box<dyn Consensus>,
         chain_spec: Arc<CS>,
         new_block_rx: Option<UnboundedReceiver<NewBlockWithPeer>>,
         sequencer: Option<Sequencer<L1MP>>,
@@ -211,7 +209,7 @@ where
             }
             EngineDriverEvent::NewPayload(payload) => {
                 // TODO: sign blocks before sending them to the network.
-                let signature = Signature::from_compact(&[0; 64]).unwrap();
+                let signature = Signature::from_raw(&[0; 65]).unwrap();
                 self.network.handle().announce_block(payload, signature);
             }
             EngineDriverEvent::L1BlockConsolidated((block_info, batch_info)) => {
@@ -230,9 +228,8 @@ where
     }
 }
 
-impl<C, EC, P, L1P, L1MP, CS> Future for RollupNodeManager<C, EC, P, L1P, L1MP, CS>
+impl<EC, P, L1P, L1MP, CS> Future for RollupNodeManager<EC, P, L1P, L1MP, CS>
 where
-    C: Consensus + Unpin,
     EC: ScrollEngineApi + Unpin + Sync + Send + 'static,
     P: ExecutionPayloadProvider + Unpin + Send + Sync + 'static,
     L1P: L1Provider + Clone + Unpin + Send + Sync + 'static,
@@ -258,7 +255,7 @@ where
 
         // Drain all L1 notifications.
         while let Some(Poll::Ready(Some(event))) =
-            this.l1_notification_rx.as_mut().map(|x| x.poll_next_unpin(cx))
+            this.l1_notification_rx.as_mut().map(|rx| rx.poll_next_unpin(cx))
         {
             this.handle_l1_notification((*event).clone());
         }

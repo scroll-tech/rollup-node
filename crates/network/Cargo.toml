@@ -27,7 +27,6 @@ scroll-wire.workspace = true
 # misc
 futures.workspace = true
 parking_lot.workspace = true
-secp256k1 = { workspace = true, features = ["global-context", "rand-std", "recovery"] }
 tokio = { workspace = true, features = ["full"] }
 tokio-stream.workspace = true
 tracing.workspace = true
@@ -42,5 +41,4 @@ serde = [
     "reth-network-types/serde",
     "reth-scroll-primitives/serde",
     "scroll-wire/serde",
-    "secp256k1/serde",
 ]

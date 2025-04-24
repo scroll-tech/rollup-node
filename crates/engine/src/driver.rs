@@ -65,7 +65,7 @@ where
 
     /// Sets the finalized block info.
     pub fn set_finalized_block_info(&mut self, block_info: BlockInfo) {
-        self.fcs.update_safe_block_info(block_info);
+        self.fcs.update_finalized_block_info(block_info);
     }
 
     /// Sets the payload building duration.

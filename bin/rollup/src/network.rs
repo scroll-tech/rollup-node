@@ -10,7 +10,7 @@ use reth_rpc_builder::config::RethRpcServerConfig;
 use reth_scroll_chainspec::ScrollChainSpec;
 use reth_scroll_primitives::ScrollPrimitives;
 use reth_transaction_pool::{PoolTransaction, TransactionPool};
-use rollup_node_manager::{PoAConsensus, RollupNodeManager};
+use rollup_node_manager::{Consensus, NoopConsensus, PoAConsensus, RollupNodeManager};
 use rollup_node_providers::{beacon_provider, DatabaseL1MessageProvider, OnlineL1Provider};
 use rollup_node_sequencer::Sequencer;
 use rollup_node_watcher::L1Watcher;
@@ -90,10 +90,7 @@ where
         // Create the scroll network manager.
         let scroll_network_manager = ScrollNetworkManager::from_parts(handle.clone(), events);
 
-        // Spawn the scroll network manager.
-        let consensus = PoAConsensus::new(vec![]);
-        let payload_provider = NoopExecutionPayloadProvider;
-
+        // Spawn the engine driver.
         let auth_port = ctx.config().rpc.auth_port;
         let auth_secret = ctx.config().rpc.auth_jwt_secret(ctx.config().datadir().jwt())?;
 
@@ -101,7 +98,13 @@ where
             auth_secret,
             self.config.engine_api_url.unwrap_or(format!("http://localhost:{auth_port}").parse()?),
         );
-        let fcs = ForkchoiceState::head_from_genesis(ctx.config().chain.genesis_hash());
+        let payload_provider = NoopExecutionPayloadProvider;
+
+        let fcs = if let Some(named) = ctx.config().chain.chain.named() {
+            ForkchoiceState::head_from_named_chain(named)
+        } else {
+            ForkchoiceState::head_from_genesis(ctx.config().chain.genesis_header().hash_slow())
+        };
         let engine = EngineDriver::new(
             Arc::new(engine_api),
             Arc::new(payload_provider),
@@ -130,7 +133,7 @@ where
         let chain_spec = ctx.chain_spec();
 
         // Spawn the L1Watcher
-        let l1_notification_rx = if let Some(l1_rpc_url) = self.config.l1_provider_args.l1_rpc_url {
+        let provider = if let Some(url) = self.config.l1_provider_args.l1_rpc_url {
             let L1ProviderArgs { max_retries, initial_backoff, compute_units_per_second, .. } =
                 self.config.l1_provider_args;
             let client = RpcClient::builder()
@@ -139,8 +142,30 @@ where
                     initial_backoff,
                     compute_units_per_second,
                 ))
-                .http(l1_rpc_url);
-            let provider = ProviderBuilder::new().on_client(client);
+                .http(url);
+            Some(ProviderBuilder::new().on_client(client))
+        } else {
+            None
+        };
+
+        // Create the consensus.
+        let consensus: Box<dyn Consensus> = if self.config.test {
+            Box::new(NoopConsensus::default())
+        } else {
+            let mut poa = PoAConsensus::new(vec![]);
+            if let Some(ref provider) = provider {
+                // Initialize the consensus
+                poa.initialize(
+                    provider,
+                    ctx.config().chain.chain.named().expect("expected named chain"),
+                )
+                .await;
+            }
+            Box::new(poa)
+        };
+
+        let l1_notification_rx = if let Some(provider) = provider {
+            // Spawn the L1Watcher
             Some(L1Watcher::spawn(provider, WATCHER_START_BLOCK_NUMBER).await)
         } else {
             None

@@ -11,7 +11,11 @@ workspace = true
 
 [dependencies]
 # alloy
+alloy-chains.workspace = true
+alloy-consensus.workspace = true
 alloy-eips.workspace = true
+alloy-primitives.workspace = true
+alloy-provider.workspace = true
 alloy-rpc-types-engine.workspace = true
 
 # scroll-alloy
@@ -22,6 +26,7 @@ scroll-alloy-provider.workspace = true
 reth-tokio-util.workspace = true
 
 # reth-scroll
+reth-primitives-traits.workspace = true
 reth-scroll-primitives.workspace = true
 
 # scroll
@@ -41,10 +46,13 @@ rollup-node-watcher.workspace = true
 
 # misc
 futures.workspace = true
-secp256k1 = { workspace = true, features = ["global-context", "rand-std", "recovery"] }
 tokio-stream.workspace = true
 tokio.workspace = true
 tracing.workspace = true
+
+[dev-dependencies]
+alloy-consensus.workspace = true
+scroll-alloy-consensus.workspace = true
 
 [features]
 serde = [
@@ -54,7 +62,11 @@ serde = [
     "scroll-engine/serde",
     "scroll-network/serde",
     "scroll-wire/serde",
-    "secp256k1/serde",
     "alloy-eips/serde",
     "scroll-alloy-hardforks/serde",
+    "alloy-chains/serde",
+    "alloy-consensus/serde",
+    "alloy-primitives/serde",
+    "reth-primitives-traits/serde",
+    "scroll-alloy-consensus/serde",
 ]

@@ -170,7 +170,7 @@ where
             Some(BlockImportOutcome::valid_block(
                 peer_id,
                 block,
-                signature.serialize_compact().to_vec().into(),
+                Into::<Vec<u8>>::into(signature).into(),
             )),
         )),
         _ => Ok((None, None)),

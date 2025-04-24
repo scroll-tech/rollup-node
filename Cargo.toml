@@ -143,6 +143,7 @@ reth-network = { git = "https://github.com/scroll-tech/reth.git", default-featur
 reth-network-api = { git = "https://github.com/scroll-tech/reth.git", default-features = false }
 reth-network-peers = { git = "https://github.com/scroll-tech/reth.git", default-features = false }
 reth-primitives = { git = "https://github.com/scroll-tech/reth.git", default-features = false }
+reth-primitives-traits = { git = "https://github.com/scroll-tech/reth.git", default-features = false }
 reth-provider = { git = "https://github.com/scroll-tech/reth.git", default-features = false }
 reth-tasks = { git = "https://github.com/scroll-tech/reth.git" }
 reth-tokio-util = { git = "https://github.com/scroll-tech/reth.git", default-features = false }
@@ -180,7 +181,6 @@ futures = { version = "0.3", default-features = false }
 parking_lot = "0.12"
 rand = { version = "0.9" }
 reqwest = "0.12"
-secp256k1 = { version = "0.29", default-features = false }
 serde = { version = "1.0" }
 sea-orm = { version = "1.1.0" }
 thiserror = "2.0"

@@ -2,12 +2,12 @@ use crate::{
     protocol::{ProtocolState, ScrollMessage, ScrollMessagePayload, ScrollWireEvent},
     ScrollWireConfig,
 };
+use alloy_primitives::Signature;
 use alloy_rlp::BytesMut;
 use futures::{Stream, StreamExt};
 use reth_eth_wire::multiplex::ProtocolConnection;
 use reth_network::Direction;
 use reth_network_api::PeerId;
-use secp256k1::ecdsa::Signature;
 use std::{
     pin::Pin,
     task::{ready, Context, Poll},
@@ -82,7 +82,7 @@ impl Stream for ScrollWireConnection {
                 ScrollMessagePayload::NewBlock(new_block) => {
                     // If the signature can be decoded then we send a new block event.
                     trace!(target: "scroll::wire::connection", peer_id = %this.peer_id, block = ?new_block.block.hash_slow(), "Received new block from peer");
-                    if let Ok(signature) = Signature::from_compact(&new_block.signature[..]) {
+                    if let Ok(signature) = Signature::from_raw(&new_block.signature[..]) {
                         this.events
                             .send(ScrollWireEvent::NewBlock {
                                 block: new_block.block,
