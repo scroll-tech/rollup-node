@@ -9,7 +9,7 @@ use alloy_transport::{RpcError, TransportErrorKind};
 pub enum ExecutionPayloadProviderError {
     /// An error occurred at the transport layer.
     #[error("transport error: {0}")]
-    Transport(#[from] RpcError<TransportErrorKind>),
+    Rpc(#[from] RpcError<TransportErrorKind>),
 }
 
 /// Implementers of the trait can provide the L2 execution payload for a block id.
