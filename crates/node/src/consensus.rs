@@ -8,6 +8,7 @@ use alloy_primitives::{
 use alloy_provider::Provider;
 use reth_scroll_primitives::ScrollBlock;
 use scroll_network::ConsensusError;
+use std::fmt::Debug;
 
 /// The address of the system contract on Sepolia.
 const SEPOLIA_SYSTEM_CONTRAT_ADDRESS: Address =
@@ -21,7 +22,7 @@ const MAINNET_SYSTEM_CONTRAT_ADDRESS: Address =
 const AUTHORIZED_SIGNER_STORAGE_SLOT: U256 = U256::from_limbs([0x67, 0x0, 0x0, 0x0]);
 
 /// A trait for consensus implementations.
-pub trait Consensus {
+pub trait Consensus: Send + Debug {
     /// Validates a new block with the given signature.
     fn validate_new_block(
         &self,

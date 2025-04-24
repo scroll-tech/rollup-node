@@ -63,7 +63,7 @@ pub struct RollupNodeManager<EC, P, L1P, L1MP, CS> {
     /// An indexer used to index data for the rollup node.
     indexer: Indexer<CS>,
     /// The consensus algorithm used by the rollup node.
-    consensus: Box<dyn Consensus + Send>,
+    consensus: Box<dyn Consensus>,
     /// The receiver for new blocks received from the network (used to bridge from eth-wire).
     new_block_rx: Option<UnboundedReceiverStream<NewBlockWithPeer>>,
     /// An event sender for sending events to subscribers of the rollup node manager.
@@ -84,7 +84,7 @@ impl<EC: Debug, P: Debug, L1P: Debug, L1MP: Debug, CS: Debug> Debug
             .field("derivation_pipeline", &self.derivation_pipeline)
             .field("l1_notification_rx", &self.l1_notification_rx)
             .field("indexer", &self.indexer)
-            .field("consensus", &"Consensus")
+            .field("consensus", &self.consensus)
             .field("new_block_rx", &self.new_block_rx)
             .field("event_sender", &self.event_sender)
             .field("sequencer", &self.sequencer)
@@ -109,7 +109,7 @@ where
         l1_provider: Option<L1P>,
         database: Arc<Database>,
         l1_notification_rx: Option<Receiver<Arc<L1Notification>>>,
-        consensus: Box<dyn Consensus + Send>,
+        consensus: Box<dyn Consensus>,
         chain_spec: Arc<CS>,
         new_block_rx: Option<UnboundedReceiver<NewBlockWithPeer>>,
         sequencer: Option<Sequencer<L1MP>>,
