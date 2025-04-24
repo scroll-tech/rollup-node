@@ -2,7 +2,6 @@ use super::{transaction::DatabaseTransaction, DatabaseConnectionProvider};
 use crate::error::DatabaseError;
 
 use sea_orm::{Database as SeaOrmDatabase, DatabaseConnection, TransactionTrait};
-use std::path::Path;
 
 /// The [`Database`] struct is responsible for interacting with the database.
 ///
@@ -20,39 +19,7 @@ pub struct Database {
 impl Database {
     /// Creates a new [`Database`] instance associated with the provided database URL.
     pub async fn new(database_url: &str) -> Result<Self, DatabaseError> {
-        // Ensure the parent directory exists for file-based databases
-        if database_url.starts_with("sqlite://") && !database_url.contains(":memory:") {
-            // Extract the file path portion from the URL
-            let file_path = &database_url["sqlite://".len()..];
-            if !file_path.is_empty() {
-                // Create the parent directory if it doesn't exist
-                if let Some(parent_dir) = Path::new(file_path).parent() {
-                    if !parent_dir.exists() {
-                        tracing::info!(target: "scroll::db", "Creating database directory: {:?}", parent_dir);
-                        std::fs::create_dir_all(parent_dir).map_err(|e| {
-                            DatabaseError::DatabaseError(sea_orm::DbErr::Custom(format!(
-                                "Failed to create database directory: {}",
-                                e
-                            )))
-                        })?;
-                    }
-                }
-            }
-        }
-
-        // Connect to the database
         let connection = SeaOrmDatabase::connect(database_url).await?;
-        
-        // Run migrations to ensure the schema is up to date
-        tracing::info!(target: "scroll::db", "Running database migrations");
-        migration::Migrator::up(&connection, None).await.map_err(|e| {
-            DatabaseError::DatabaseError(sea_orm::DbErr::Custom(format!(
-                "Failed to apply database migrations: {}",
-                e
-            )))
-        })?;
-        tracing::info!(target: "scroll::db", "Database migrations complete");
-
         Ok(Self { connection })
     }
 
