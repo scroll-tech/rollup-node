@@ -43,14 +43,14 @@ reth-scroll-engine-primitives = { git = "https://github.com/scroll-tech/reth.git
 reth-scroll-node = { workspace = true, features = ["skip-state-root-validation"] }
 reth-scroll-primitives = { workspace = true }
 scroll-db = { workspace = true }
-scroll-engine = { workspace = true, features = ["test-utils"] }
+scroll-engine.workspace = true
 scroll-migration.workspace = true
 scroll-network.workspace = true
 scroll-wire.workspace = true
 
 # rollup-node
 rollup-node-manager.workspace = true
-rollup-node-providers.workspace = true
+rollup-node-providers = { workspace = true, features = ["test-utils"] }
 rollup-node-sequencer.workspace = true
 rollup-node-watcher.workspace = true
 
@@ -87,7 +87,6 @@ test-utils = [
     "reth-primitives/test-utils",
     "reth-provider/test-utils",
     "reth-transaction-pool/test-utils",
-    "scroll-engine/test-utils",
     "reth-payload-builder/test-utils",
     "reth-payload-builder/test-utils",
     "reth-scroll-node/test-utils",

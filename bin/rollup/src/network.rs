@@ -11,12 +11,15 @@ use reth_scroll_chainspec::ScrollChainSpec;
 use reth_scroll_primitives::ScrollPrimitives;
 use reth_transaction_pool::{PoolTransaction, TransactionPool};
 use rollup_node_manager::{Consensus, NoopConsensus, PoAConsensus, RollupNodeManager};
-use rollup_node_providers::{beacon_provider, DatabaseL1MessageProvider, OnlineL1Provider};
+use rollup_node_providers::{
+    beacon_provider, test_utils::NoopExecutionPayloadProvider, DatabaseL1MessageProvider,
+    OnlineL1Provider,
+};
 use rollup_node_sequencer::Sequencer;
 use rollup_node_watcher::L1Watcher;
 use scroll_alloy_provider::ScrollAuthEngineApiProvider;
 use scroll_db::{Database, DatabaseConnectionProvider};
-use scroll_engine::{test_utils::NoopExecutionPayloadProvider, EngineDriver, ForkchoiceState};
+use scroll_engine::{EngineDriver, ForkchoiceState};
 use scroll_network::NetworkManager as ScrollNetworkManager;
 use scroll_wire::{ProtocolHandler, ScrollWireConfig};
 use std::{sync::Arc, time::Duration};

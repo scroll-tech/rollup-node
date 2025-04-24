@@ -7,14 +7,12 @@ use reth_e2e_test_utils::transaction::TransactionTestContext;
 use reth_node_core::primitives::SignedTransaction;
 use reth_scroll_node::test_utils::setup;
 use rollup_node_primitives::{BlockInfo, L1MessageEnvelope};
-use rollup_node_providers::DatabaseL1MessageProvider;
+use rollup_node_providers::{test_utils::NoopExecutionPayloadProvider, DatabaseL1MessageProvider};
 use rollup_node_sequencer::Sequencer;
 use scroll_alloy_consensus::TxL1Message;
 use scroll_alloy_provider::ScrollAuthApiEngineClient;
 use scroll_db::{test_utils::setup_test_db, DatabaseOperations};
-use scroll_engine::{
-    test_utils::NoopExecutionPayloadProvider, EngineDriver, EngineDriverEvent, ForkchoiceState,
-};
+use scroll_engine::{EngineDriver, EngineDriverEvent, ForkchoiceState};
 use std::sync::Arc;
 use tokio::{sync::Mutex, time::Duration};
 
