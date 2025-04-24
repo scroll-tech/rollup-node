@@ -122,7 +122,7 @@ where
         } else {
             // append the path using strings as using `join(...)` overwrites "sqlite://"
             // if the path is absolute.
-            let path = ctx.config().datadir().db().join("scroll.db");
+            let path = ctx.config().datadir().db().join("scroll.db?mode=rwc");
             "sqlite://".to_string() + &*path.to_string_lossy()
         };
         let db = Database::new(&database_path).await?;
