@@ -9582,6 +9582,7 @@ dependencies = [
  "alloy-rpc-types-beacon",
  "alloy-rpc-types-engine",
  "alloy-serde",
+ "alloy-transport",
  "async-trait",
  "auto_impl",
  "eyre",
@@ -9594,6 +9595,7 @@ dependencies = [
  "serde",
  "thiserror 2.0.12",
  "tokio",
+ "tracing",
 ]
 
 [[package]]

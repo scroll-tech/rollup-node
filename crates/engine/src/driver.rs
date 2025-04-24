@@ -20,7 +20,7 @@ pub struct EngineDriver<EC, P> {
     /// The engine API client.
     client: Arc<EC>,
     /// The execution payload provider
-    execution_payload_provider: Arc<P>,
+    execution_payload_provider: P,
     /// The fork choice state of the engine.
     fcs: ForkchoiceState,
     /// Block building duration.
@@ -46,7 +46,7 @@ where
     /// [`ExecutionPayloadProvider`].
     pub const fn new(
         client: Arc<EC>,
-        execution_payload_provider: Arc<P>,
+        execution_payload_provider: P,
         fcs: ForkchoiceState,
         block_building_duration: Duration,
     ) -> Self {
@@ -176,7 +176,7 @@ where
 impl<EC, P> Stream for EngineDriver<EC, P>
 where
     EC: ScrollEngineApi + Unpin + Send + Sync + 'static,
-    P: ExecutionPayloadProvider + Unpin + Send + Sync + 'static,
+    P: ExecutionPayloadProvider + Clone + Unpin + Send + Sync + 'static,
 {
     type Item = EngineDriverEvent;
 

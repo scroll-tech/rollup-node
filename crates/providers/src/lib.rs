@@ -18,5 +18,5 @@ pub use l1::{
 mod l1;
 
 /// Test utils related to providers.
-#[cfg(feature = "test-utils")]
+#[cfg(any(test, feature = "test-utils"))]
 pub mod test_utils;

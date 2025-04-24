@@ -40,7 +40,7 @@ async fn can_build_blocks() {
     let engine_client = ScrollAuthApiEngineClient::new(auth_client);
     let mut engine_driver = EngineDriver::new(
         Arc::new(engine_client),
-        Arc::new(NoopExecutionPayloadProvider),
+        NoopExecutionPayloadProvider,
         fcs,
         BLOCK_BUILDING_DURATION,
     );
@@ -149,7 +149,7 @@ async fn can_build_blocks_with_delayed_l1_messages() {
     let engine_client = ScrollAuthApiEngineClient::new(auth_client);
     let mut engine_driver = EngineDriver::new(
         Arc::new(engine_client),
-        Arc::new(NoopExecutionPayloadProvider),
+        NoopExecutionPayloadProvider,
         fcs,
         BLOCK_BUILDING_DURATION,
     );
