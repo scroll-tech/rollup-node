@@ -9635,6 +9635,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "rollup-node-signer"
+version = "0.0.1"
+dependencies = [
+ "alloy-signer",
+ "futures",
+ "reth-scroll-primitives",
+ "thiserror 2.0.12",
+ "tokio",
+ "tokio-stream",
+ "tracing",
+]
+
+[[package]]
 name = "rollup-node-watcher"
 version = "0.0.1"
 dependencies = [

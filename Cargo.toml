@@ -22,6 +22,7 @@ members = [
     "crates/scroll-wire",
     "crates/sequencer",
     "crates/watcher",
+    "crates/signer",
 ]
 
 resolver = "2"
@@ -127,6 +128,7 @@ alloy-rpc-client = { version = "0.14.0", default-features = false }
 alloy-rpc-types-engine = { version = "0.14.0", default-features = false }
 alloy-rpc-types-eth = { version = "0.14.0", default-features = false }
 alloy-sol-types = { version = "1.0.0", default-features = false }
+alloy-signer = { version = "0.14.0", default-features = false }
 alloy-transport = { version = "0.14.0", default-features = false }
 
 # scroll-alloy
