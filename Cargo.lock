@@ -10153,6 +10153,7 @@ dependencies = [
  "scroll-alloy-network",
  "scroll-alloy-provider",
  "scroll-alloy-rpc-types-engine",
+ "scroll-engine",
  "scroll-network",
  "thiserror 2.0.12",
  "tokio",

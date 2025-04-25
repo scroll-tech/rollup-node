@@ -23,7 +23,7 @@ use tokio::{
     time::Interval,
 };
 use tokio_stream::wrappers::{ReceiverStream, UnboundedReceiverStream};
-use tracing::{error, trace};
+use tracing::{error, trace, warn};
 
 pub use event::RollupEvent;
 mod event;
@@ -271,11 +271,21 @@ where
         }
 
         // Check if we need to trigger the build of a new payload.
-        if let Some(Poll::Ready(_)) = this.block_building_trigger.as_mut().map(|x| x.poll_tick(cx))
-        {
-            if let Some(sequencer) = this.sequencer.as_mut() {
-                sequencer.build_payload_attributes();
+        match (
+            this.block_building_trigger.as_mut().map(|x| x.poll_tick(cx)),
+            this.engine.is_payload_building_in_progress(),
+        ) {
+            (Some(Poll::Ready(_)), false) => {
+                if let Some(sequencer) = this.sequencer.as_mut() {
+                    sequencer.build_payload_attributes();
+                }
             }
+            (Some(Poll::Ready(_)), true) => {
+                // If the sequencer is already building a payload, we don't need to trigger it
+                // again.
+                warn!(target: "scroll::node::manager", "Payload building is already in progress skipping slot");
+            }
+            _ => {}
         }
 
         // Poll Derivation Pipeline and push attribute in queue if any.
