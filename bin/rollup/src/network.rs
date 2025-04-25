@@ -29,6 +29,7 @@ use scroll_engine::{EngineDriver, ForkchoiceState};
 use scroll_network::NetworkManager as ScrollNetworkManager;
 use scroll_wire::{ProtocolHandler, ScrollWireConfig};
 use tracing::info;
+use url::Url;
 
 /// The network builder for the scroll rollup.
 #[derive(Debug)]
@@ -103,7 +104,7 @@ where
         );
 
         // Get a provider
-        let provider = if let Some(url) = self.config.l1_provider_args.l1_rpc_url {
+        let provider = if let Some(url) = self.config.l1_provider_args.url {
             let L1ProviderArgs { max_retries, initial_backoff, compute_units_per_second, .. } =
                 self.config.l1_provider_args;
             let client = RpcClient::builder()
@@ -119,13 +120,22 @@ where
         };
 
         // Get a payload provider
-        let payload_provider: Arc<dyn ExecutionPayloadProvider> = if self.config.test {
-            Arc::new(NoopExecutionPayloadProvider)
-        } else if let Some(ref provider) = provider {
-            Arc::new(AlloyExecutionPayloadProvider::new(provider.clone()))
-        } else {
-            Arc::new(NoopExecutionPayloadProvider)
-        };
+        let payload_provider: Arc<dyn ExecutionPayloadProvider> =
+            if self.config.test || !ctx.config().rpc.http {
+                Arc::new(NoopExecutionPayloadProvider)
+            } else {
+                let l2_provider_url =
+                    format!("http://{}:{}", ctx.config().rpc.http_addr, ctx.config().rpc.http_port);
+                let client = RpcClient::builder()
+                    .layer(RetryBackoffLayer::new(
+                        self.config.l2_provider_args.max_retries,
+                        self.config.l2_provider_args.initial_backoff,
+                        self.config.l2_provider_args.compute_units_per_second,
+                    ))
+                    .http(Url::parse(&l2_provider_url)?);
+                let provider = ProviderBuilder::new().on_client(client);
+                Arc::new(AlloyExecutionPayloadProvider::new(provider))
+            };
 
         let fcs = if let Some(named) = ctx.config().chain.chain.named() {
             ForkchoiceState::head_from_named_chain(named)
@@ -184,7 +194,7 @@ where
 
         // Construct the l1 provider.
         let l1_messages_provider = DatabaseL1MessageProvider::new(db.clone(), 0);
-        let l1_provider = if let Some(url) = self.config.l1_provider_args.beacon_rpc_url {
+        let l1_provider = if let Some(url) = self.config.beacon_provider_args.url {
             let beacon_provider = beacon_provider(url.to_string());
             let l1_provider = OnlineL1Provider::new(
                 beacon_provider,
