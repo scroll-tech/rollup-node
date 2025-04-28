@@ -13,6 +13,7 @@ members = [
     "crates/database/migration",
     "crates/derivation-pipeline",
     "crates/engine",
+    "crates/e2e-test-utils",
     "crates/indexer",
     "crates/l1",
     "crates/node",
@@ -142,9 +143,12 @@ reth-eth-wire-types = { git = "https://github.com/scroll-tech/reth.git", default
 reth-network = { git = "https://github.com/scroll-tech/reth.git", default-features = false }
 reth-network-api = { git = "https://github.com/scroll-tech/reth.git", default-features = false }
 reth-network-peers = { git = "https://github.com/scroll-tech/reth.git", default-features = false }
+reth-node-builder = { git = "https://github.com/scroll-tech/reth.git", default-features = false }
+reth-node-core = { git = "https://github.com/scroll-tech/reth.git" }
 reth-primitives = { git = "https://github.com/scroll-tech/reth.git", default-features = false }
 reth-primitives-traits = { git = "https://github.com/scroll-tech/reth.git", default-features = false }
 reth-provider = { git = "https://github.com/scroll-tech/reth.git", default-features = false }
+reth-rpc-server-types = { git = "https://github.com/scroll-tech/reth.git" }
 reth-tasks = { git = "https://github.com/scroll-tech/reth.git" }
 reth-tokio-util = { git = "https://github.com/scroll-tech/reth.git", default-features = false }
 
@@ -156,6 +160,7 @@ reth-scroll-node = { git = "https://github.com/scroll-tech/reth.git", default-fe
 reth-scroll-primitives = { git = "https://github.com/scroll-tech/reth.git", default-features = false }
 
 # rollup node
+rollup-node-e2e-test-utils = { path = "crates/e2e-test-utils" }
 rollup-node-indexer = { path = "crates/indexer" }
 rollup-node-manager = { path = "crates/node" }
 rollup-node-primitives = { path = "crates/primitives" }

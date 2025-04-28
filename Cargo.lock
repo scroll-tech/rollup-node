@@ -9488,6 +9488,7 @@ dependencies = [
  "reth-tasks",
  "reth-tracing",
  "reth-transaction-pool",
+ "rollup-node-e2e-test-utils",
  "rollup-node-manager",
  "rollup-node-providers",
  "rollup-node-sequencer",
@@ -9504,6 +9505,25 @@ dependencies = [
  "tokio",
  "tracing",
  "url",
+]
+
+[[package]]
+name = "rollup-node-e2e-test-utils"
+version = "0.0.1"
+dependencies = [
+ "alloy-primitives",
+ "eyre",
+ "reth-db",
+ "reth-db-api",
+ "reth-e2e-test-utils",
+ "reth-network-peers",
+ "reth-node-builder",
+ "reth-node-core",
+ "reth-provider",
+ "reth-scroll-chainspec",
+ "reth-scroll-node",
+ "reth-tasks",
+ "scroll-alloy-rpc-types-engine",
 ]
 
 [[package]]
@@ -9589,10 +9609,15 @@ dependencies = [
  "eyre",
  "lru 0.13.0",
  "reqwest",
+ "reth-node-builder",
+ "reth-node-core",
+ "reth-rpc-server-types",
+ "reth-scroll-node",
  "rollup-node-primitives",
  "scroll-alloy-consensus",
  "scroll-alloy-rpc-types-engine",
  "scroll-db",
+ "scroll-network",
  "serde",
  "thiserror 2.0.12",
  "tokio",

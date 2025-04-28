@@ -39,7 +39,12 @@ tracing.workspace = true
 
 [dev-dependencies]
 eyre.workspace = true
+reth-scroll-node.workspace = true
+reth-node-builder.workspace = true
+reth-node-core.workspace = true
+reth-rpc-server-types.workspace = true
 scroll-db = { workspace = true, features = ["test-utils"] }
+scroll-network.workspace = true
 tokio = { workspace = true, features = ["macros"] }
 
 [features]

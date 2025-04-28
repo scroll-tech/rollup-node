@@ -1,23 +1,18 @@
 #![cfg(feature = "test-utils")]
 
-use alloy_primitives::B256;
 use futures::StreamExt;
-use reth_e2e_test_utils::{node::NodeTestContext, NodeHelperType};
+use reth_e2e_test_utils::NodeHelperType;
 use reth_network::{NetworkConfigBuilder, PeersInfo};
 use reth_network_peers::PeerId;
-use reth_node_api::PayloadBuilderAttributes;
-use reth_node_builder::{Node, NodeBuilder, NodeConfig, NodeHandle};
 use reth_node_core::args::{DiscoveryArgs, NetworkArgs, RpcServerArgs};
-use reth_provider::providers::BlockchainProvider;
 use reth_rpc_server_types::RpcModuleSelection;
 use reth_scroll_chainspec::ScrollChainSpec;
-use reth_scroll_engine_primitives::ScrollPayloadBuilderAttributes;
 use reth_scroll_node::{ScrollNetworkPrimitives, ScrollNode};
 use reth_tasks::TaskManager;
 use rollup_node::{
     BeaconProviderArgs, L1ProviderArgs, L2ProviderArgs, ScrollRollupNodeArgs, SequencerArgs,
 };
-use scroll_alloy_rpc_types_engine::ScrollPayloadAttributes;
+use rollup_node_e2e_test_utils::node::build_node;
 use scroll_network::{NewBlockWithPeer, SCROLL_MAINNET};
 use scroll_wire::ScrollWireConfig;
 use std::{path::PathBuf, sync::Arc};
@@ -110,10 +105,6 @@ async fn can_bridge_blocks() {
 pub async fn build_bridge_node(
     chain_spec: Arc<ScrollChainSpec>,
 ) -> eyre::Result<(NodeHelperType<ScrollNode>, TaskManager, PeerId)> {
-    // Create a [`TaskManager`] to manage the tasks.
-    let tasks = TaskManager::current();
-    let exec = tasks.executor();
-
     // Define the network configuration with discovery disabled.
     let network_config = NetworkArgs {
         discovery: DiscoveryArgs { disable_discovery: true, ..DiscoveryArgs::default() },
@@ -121,16 +112,9 @@ pub async fn build_bridge_node(
     };
 
     // Create the node config
-    let node_config = NodeConfig::new(chain_spec.clone())
-        .with_network(network_config.clone())
-        .with_rpc({
-            let mut args =
-                RpcServerArgs::default().with_http().with_http_api(RpcModuleSelection::All);
-            args.auth_jwtsecret =
-                Some(PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("assets/jwt.hex"));
-            args
-        })
-        .set_dev(false);
+    let mut rpc_args = RpcServerArgs::default().with_http().with_http_api(RpcModuleSelection::All);
+    rpc_args.auth_jwtsecret =
+        Some(PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("assets/jwt.hex"));
 
     // Create the node for a bridge node that will bridge messages from the eth-wire protocol
     // to the scroll-wire protocol.
@@ -148,25 +132,8 @@ pub async fn build_bridge_node(
         beacon_provider_args: BeaconProviderArgs::default(),
         l2_provider_args: L2ProviderArgs::default(),
     };
-    let node = ScrollNode;
-    let NodeHandle { node, node_exit_future: _ } = NodeBuilder::new(node_config.clone())
-        .testing_node(exec.clone())
-        .with_types_and_provider::<ScrollNode, BlockchainProvider<_>>()
-        .with_components(
-            node.components_builder()
-                .network(rollup_node::ScrollRollupNetworkBuilder::new(node_args)),
-        )
-        .with_add_ons(node.add_ons())
-        .launch()
-        .await?;
-    let peer_id = *node.network.peer_id();
-    let node = NodeTestContext::new(node, scroll_payload_attributes).await?;
 
-    Ok((node, tasks, peer_id))
-}
+    let network_extension = rollup_node::ScrollRollupNetworkBuilder::new(node_args);
 
-/// Helper function to create a new eth payload attributes
-fn scroll_payload_attributes(_timestamp: u64) -> ScrollPayloadBuilderAttributes {
-    let attributes = ScrollPayloadAttributes::default();
-    ScrollPayloadBuilderAttributes::try_new(B256::ZERO, attributes, 0).unwrap()
+    build_node(chain_spec, network_config, rpc_args, network_extension).await
 }
