@@ -14,10 +14,10 @@ workspace = true
 alloy-signer.workspace = true
 
 # scroll
-reth-scroll-primitives.workspace = true
+reth-scroll-primitives = { workspace = true, features = ["std"] }
 
 # misc
-futures.workspace = true
+futures = { workspace = true, features = ["std"] }
 thiserror.workspace = true
 tokio = { workspace = true, features = ["full"] }
 tokio-stream.workspace = true
@@ -27,8 +27,4 @@ tracing.workspace = true
 alloy-signer-local.workspace = true
 
 [features]
-default = ["std"]
-std = [
-    "futures/std",
-    "reth-scroll-primitives/std",
-]
+default = []

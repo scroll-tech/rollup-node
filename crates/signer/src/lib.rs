@@ -6,11 +6,6 @@
 //! Currently it only supports signing L2 blocks, however it can be extended to
 //! support signing other artifacts in the future such as pre-commitments.
 
-#![cfg_attr(not(feature = "std"), no_std)]
-
-#[cfg(not(feature = "std"))]
-extern crate alloc as std;
-
 use futures::stream::{FuturesOrdered, StreamExt};
 use std::sync::Arc;
 use tokio::sync::mpsc::UnboundedSender;
