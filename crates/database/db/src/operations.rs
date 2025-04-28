@@ -7,8 +7,8 @@ use futures::{Stream, StreamExt};
 use rollup_node_primitives::{BatchCommitData, BatchInfo, BlockInfo, L1MessageEnvelope};
 use scroll_alloy_rpc_types_engine::BlockDataHint;
 use sea_orm::{
-    ActiveModelTrait, ColumnTrait, Condition, DbErr, EntityTrait, QueryFilter, QueryOrder,
-    QuerySelect, Set,
+    ActiveModelTrait, ColumnTrait, Condition, EntityTrait, QueryFilter, QueryOrder, QuerySelect,
+    Set,
 };
 
 /// The [`DatabaseOperations`] trait provides methods for interacting with the database.
@@ -100,11 +100,12 @@ pub trait DatabaseOperations: DatabaseConnectionProvider {
     /// Get an iterator over all [`BatchCommitData`]s in the database.
     async fn get_batches<'a>(
         &'a self,
-    ) -> Result<impl Stream<Item = Result<BatchCommitData, DbErr>> + 'a, DbErr> {
+    ) -> Result<impl Stream<Item = Result<BatchCommitData, DatabaseError>> + 'a, DatabaseError>
+    {
         Ok(models::batch_commit::Entity::find()
             .stream(self.get_connection())
             .await?
-            .map(|res| res.map(Into::into)))
+            .map(|res| Ok(res.map(Into::into)?)))
     }
 
     /// Insert an [`L1MessageEnvelope`] into the database.
@@ -156,11 +157,12 @@ pub trait DatabaseOperations: DatabaseConnectionProvider {
     /// Gets an iterator over all [`L1MessageEnvelope`]s in the database.
     async fn get_l1_messages<'a>(
         &'a self,
-    ) -> Result<impl Stream<Item = Result<L1MessageEnvelope, DbErr>> + 'a, DatabaseError> {
+    ) -> Result<impl Stream<Item = Result<L1MessageEnvelope, DatabaseError>> + 'a, DatabaseError>
+    {
         Ok(models::l1_message::Entity::find()
             .stream(self.get_connection())
             .await?
-            .map(|res| res.map(Into::into)))
+            .map(|res| Ok(res.map(Into::into)?)))
     }
 
     /// Get the extra data for the provided [`BlockId`].
