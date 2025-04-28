@@ -19,6 +19,16 @@ reth-scroll-primitives.workspace = true
 # misc
 futures.workspace = true
 thiserror.workspace = true
-tokio.workspace = true
+tokio = { workspace = true, features = ["full"] }
 tokio-stream.workspace = true
 tracing.workspace = true
+
+[dev-dependencies]
+alloy-signer-local.workspace = true
+
+[features]
+default = ["std"]
+std = [
+    "futures/std",
+    "reth-scroll-primitives/std",
+]

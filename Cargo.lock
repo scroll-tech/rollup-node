@@ -9545,6 +9545,7 @@ dependencies = [
  "rollup-node-primitives",
  "rollup-node-providers",
  "rollup-node-sequencer",
+ "rollup-node-signer",
  "rollup-node-watcher",
  "scroll-alloy-consensus",
  "scroll-alloy-hardforks",
@@ -9639,6 +9640,7 @@ name = "rollup-node-signer"
 version = "0.0.1"
 dependencies = [
  "alloy-signer",
+ "alloy-signer-local",
  "futures",
  "reth-scroll-primitives",
  "thiserror 2.0.12",

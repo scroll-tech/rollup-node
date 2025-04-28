@@ -5,5 +5,10 @@ use reth_scroll_primitives::ScrollBlock;
 #[derive(Debug)]
 pub enum SignerEvent {
     /// A block has been signed by the signer.
-    SignedBlock((ScrollBlock, Signature)),
+    SignedBlock {
+        /// The signed block.
+        block: ScrollBlock,
+        /// The signature of the block.
+        signature: Signature,
+    },
 }

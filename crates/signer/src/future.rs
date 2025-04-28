@@ -11,7 +11,9 @@ pub fn sign_block(
     signer: Arc<Box<dyn alloy_signer::Signer + Send + Sync>>,
 ) -> SignerFuture {
     Box::pin(async move {
+        // TODO: Are we happy to sign the hash directly or do we want to use EIP-191
+        // (`signer.sign_message`)?
         let signature = signer.sign_hash(&block.hash_slow()).await?;
-        Ok(SignerEvent::SignedBlock((block, signature)))
+        Ok(SignerEvent::SignedBlock { block, signature })
     })
 }

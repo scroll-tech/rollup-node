@@ -42,6 +42,7 @@ rollup-node-indexer.workspace = true
 rollup-node-primitives.workspace = true
 rollup-node-providers.workspace = true
 rollup-node-sequencer.workspace = true
+rollup-node-signer.workspace = true
 rollup-node-watcher.workspace = true
 
 # misc

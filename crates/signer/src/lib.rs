@@ -6,6 +6,11 @@
 //! Currently it only supports signing L2 blocks, however it can be extended to
 //! support signing other artifacts in the future such as pre-commitments.
 
+#![cfg_attr(not(feature = "std"), no_std)]
+
+#[cfg(not(feature = "std"))]
+extern crate alloc as std;
+
 use futures::stream::{FuturesOrdered, StreamExt};
 use std::sync::Arc;
 use tokio::sync::mpsc::UnboundedSender;
@@ -89,5 +94,32 @@ impl std::fmt::Debug for Signer {
             .field("in_progress", &self.in_progress)
             .field("sender", &self.sender)
             .finish()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use alloy_signer_local::PrivateKeySigner;
+    use reth_scroll_primitives::ScrollBlock;
+
+    #[tokio::test]
+    async fn test_signer_local() {
+        let signer = PrivateKeySigner::random();
+        let mut handle = Signer::spawn(Box::new(signer.clone())).await;
+
+        // Test sending a request
+        let block = ScrollBlock::default();
+        handle.sign_block(block).unwrap();
+
+        // Test receiving an event
+        let event = handle.next().await.unwrap();
+        let (block, signature) = match event {
+            SignerEvent::SignedBlock { block, signature } => (block, signature),
+        };
+        let recovered_address = signature.recover_address_from_prehash(&block.hash_slow()).unwrap();
+
+        assert_eq!(block, block);
+        assert_eq!(recovered_address, signer.address());
     }
 }
