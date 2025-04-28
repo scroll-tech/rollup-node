@@ -48,4 +48,8 @@ scroll-network.workspace = true
 tokio = { workspace = true, features = ["macros"] }
 
 [features]
-test-utils = ["scroll-db/test-utils"]
+test-utils = [
+    "scroll-db/test-utils",
+    "reth-scroll-node/test-utils",
+    "reth-scroll-node/test-utils",
+]

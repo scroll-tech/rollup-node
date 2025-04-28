@@ -10134,6 +10134,7 @@ dependencies = [
  "alloy-primitives",
  "alloy-rpc-types-engine",
  "arbitrary",
+ "async-trait",
  "eyre",
  "futures",
  "reth-network-api",

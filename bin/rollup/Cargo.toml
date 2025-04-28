@@ -97,6 +97,8 @@ test-utils = [
     "reth-scroll-node/test-utils",
     "reth-scroll-node/test-utils",
     "rollup-node-providers/test-utils",
+    "scroll-engine/test-utils",
+    "scroll-engine/test-utils",
 ]
 serde = [
     "alloy-primitives/serde",
@@ -112,6 +114,7 @@ serde = [
     "rollup-node-manager/serde",
     "alloy-chains/serde",
     "reth-transaction-pool/serde",
+    "url/serde",
 ]
 
 [[bin]]

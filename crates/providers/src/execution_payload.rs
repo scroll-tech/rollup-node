@@ -86,7 +86,7 @@ mod tests {
 
         // Fetch the execution payload for the first block.
         let payload = execution_payload_provider.execution_payload_by_block(0.into()).await?;
-        assert!(!payload.is_none());
+        assert!(payload.is_some());
 
         Ok(())
     }

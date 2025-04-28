@@ -262,7 +262,8 @@ impl<EC, P> std::fmt::Debug for EngineDriver<EC, P> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use scroll_engine::test_utils::{NoopExecutionPayloadProvider, PanicEngineClient};
+    use rollup_node_providers::test_utils::NoopExecutionPayloadProvider;
+    use scroll_engine::test_utils::PanicEngineClient;
 
     impl<EC, P> EngineDriver<EC, P> {
         fn with_future(&mut self, future: EngineDriverFuture) {

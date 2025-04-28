@@ -1,5 +1,13 @@
 //! Test utilities for the engine crate.
 
+use alloy_primitives::{BlockHash, U64};
+use alloy_rpc_types_engine::{
+    ClientVersionV1, ExecutionPayloadBodiesV1, ExecutionPayloadV1, ForkchoiceState,
+    ForkchoiceUpdated, PayloadId, PayloadStatus,
+};
+use scroll_alloy_provider::{ScrollEngineApi, ScrollEngineApiResult};
+use scroll_alloy_rpc_types_engine::ScrollPayloadAttributes;
+
 /// A [`ScrollEngineApi`] implementation that panics when any method is called.
 #[derive(Debug)]
 pub struct PanicEngineClient;
