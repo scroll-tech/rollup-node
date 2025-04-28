@@ -274,7 +274,8 @@ mod tests {
     async fn test_is_payload_building_in_progress() {
         let client = Arc::new(PanicEngineClient);
         let payload_provider = Arc::new(NoopExecutionPayloadProvider);
-        let fcs = ForkchoiceState::default(); // Or use a mock if needed
+        let fcs =
+            ForkchoiceState::from_block_info(BlockInfo { number: 0, hash: Default::default() });
         let duration = Duration::from_secs(2);
 
         let mut driver = EngineDriver::new(client, payload_provider, fcs, duration);
@@ -293,7 +294,8 @@ mod tests {
     async fn test_is_payload_building_in_progress_with_future() {
         let client = Arc::new(PanicEngineClient);
         let payload_provider = Arc::new(NoopExecutionPayloadProvider);
-        let fcs = ForkchoiceState::default(); // Or use a mock if needed
+        let fcs =
+            ForkchoiceState::from_block_info(BlockInfo { number: 0, hash: Default::default() });
         let duration = Duration::from_secs(2);
 
         let mut driver = EngineDriver::new(client.clone(), payload_provider, fcs, duration);
