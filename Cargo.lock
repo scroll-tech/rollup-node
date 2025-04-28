@@ -9488,7 +9488,6 @@ dependencies = [
  "reth-tasks",
  "reth-tracing",
  "reth-transaction-pool",
- "rollup-node-e2e-test-utils",
  "rollup-node-manager",
  "rollup-node-providers",
  "rollup-node-sequencer",
@@ -9505,25 +9504,6 @@ dependencies = [
  "tokio",
  "tracing",
  "url",
-]
-
-[[package]]
-name = "rollup-node-e2e-test-utils"
-version = "0.0.1"
-dependencies = [
- "alloy-primitives",
- "eyre",
- "reth-db",
- "reth-db-api",
- "reth-e2e-test-utils",
- "reth-network-peers",
- "reth-node-builder",
- "reth-node-core",
- "reth-provider",
- "reth-scroll-chainspec",
- "reth-scroll-node",
- "reth-tasks",
- "scroll-alloy-rpc-types-engine",
 ]
 
 [[package]]
@@ -9600,6 +9580,7 @@ dependencies = [
  "alloy-eips",
  "alloy-primitives",
  "alloy-provider",
+ "alloy-rpc-client",
  "alloy-rpc-types-beacon",
  "alloy-rpc-types-engine",
  "alloy-serde",
@@ -9609,9 +9590,8 @@ dependencies = [
  "eyre",
  "lru 0.13.0",
  "reqwest",
- "reth-node-builder",
- "reth-node-core",
- "reth-rpc-server-types",
+ "reth-e2e-test-utils",
+ "reth-payload-primitives",
  "reth-scroll-node",
  "rollup-node-primitives",
  "scroll-alloy-consensus",
@@ -10158,14 +10138,12 @@ dependencies = [
  "futures",
  "reth-network-api",
  "reth-payload-primitives",
- "reth-primitives",
  "reth-scroll-chainspec",
  "reth-scroll-engine-primitives",
  "reth-scroll-primitives",
  "reth-testing-utils",
  "rollup-node-primitives",
  "rollup-node-providers",
- "scroll-alloy-network",
  "scroll-alloy-provider",
  "scroll-alloy-rpc-types-engine",
  "scroll-network",

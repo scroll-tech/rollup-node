@@ -56,46 +56,44 @@ impl<P: Provider> ExecutionPayloadProvider for AlloyExecutionPayloadProvider<P> 
     }
 }
 
-// #[cfg(test)]
-// mod tests {
-//     use super::*;
-//     use alloy_primitives::B256;
-//     use reth_node_builder::{NodeBuilder, NodeConfig};
-//     use reth_node_core::args::RpcServerArgs;
-//     use reth_rpc_server_types::RpcModuleSelection;
-//     use reth_scroll_node::ScrollNode;
-//     use scroll_alloy_rpc_types_engine::ScrollPayloadAttributes;
-//     use scroll_network::SCROLL_MAINNET;
-//     use std::path::PathBuf;
-//
-//     #[tokio::test]
-//     async fn test_should_get_execution_payload() -> eyre::Result<()> {
-//         let chain_spec = (*SCROLL_MAINNET).clone();
-//
-//         // Create the node config
-//         let node_config = NodeConfig::new(chain_spec)
-//             .with_rpc({
-//                 let mut args = RpcServerArgs::default()
-//                     .with_http()
-//                     .with_http_api(RpcModuleSelection::Standard);
-//                 args
-//             })
-//             .set_dev(false);
-//
-//         let node = ScrollNode;
-//         let handle = NodeBuilder::new(node_config.clone())
-//             .testing_node(exec.clone())
-//             .with_types_and_provider::<ScrollNode, BlockchainProvider<_>>()
-//             .with_components(
-//                 node.components_builder()
-//                     .network(rollup_node::ScrollRollupNetworkBuilder::new(node_args)),
-//             )
-//             .with_add_ons(node.add_ons())
-//             .launch()
-//             .await?;
-//         let peer_id = *node.network.peer_id();
-//         let node = NodeTestContext::new(node, scroll_payload_attributes).await?;
-//
-//         Ok(())
-//     }
-// }
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use alloy_primitives::B256;
+    use alloy_provider::ProviderBuilder;
+    use alloy_rpc_client::RpcClient;
+    use reth_e2e_test_utils::setup_engine;
+    use reth_payload_primitives::PayloadBuilderAttributes;
+    use reth_scroll_node::{ScrollNode, ScrollPayloadBuilderAttributes};
+    use scroll_alloy_rpc_types_engine::ScrollPayloadAttributes;
+    use scroll_network::SCROLL_MAINNET;
+
+    #[tokio::test]
+    async fn test_should_get_execution_payload() -> eyre::Result<()> {
+        let chain_spec = (*SCROLL_MAINNET).clone();
+
+        // Get a test node.
+        let (mut node, _tasks, _wallet) =
+            setup_engine::<ScrollNode>(1, chain_spec, false, scroll_payload_attributes).await?;
+        let node = node.pop().unwrap();
+
+        // Get a provider to the node.
+        let url = node.rpc_url();
+        let client = RpcClient::new_http(url);
+        let provider = ProviderBuilder::new().on_client(client);
+
+        let execution_payload_provider = AlloyExecutionPayloadProvider::new(provider);
+
+        // Fetch the execution payload for the first block.
+        let payload = execution_payload_provider.execution_payload_by_block(0.into()).await?;
+        assert!(!payload.is_none());
+
+        Ok(())
+    }
+
+    /// Helper function to create a new eth payload attributes
+    fn scroll_payload_attributes(_timestamp: u64) -> ScrollPayloadBuilderAttributes {
+        let attributes = ScrollPayloadAttributes::default();
+        ScrollPayloadBuilderAttributes::try_new(B256::ZERO, attributes, 0).unwrap()
+    }
+}

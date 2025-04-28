@@ -13,7 +13,6 @@ members = [
     "crates/database/migration",
     "crates/derivation-pipeline",
     "crates/engine",
-    "crates/e2e-test-utils",
     "crates/indexer",
     "crates/l1",
     "crates/node",
@@ -145,6 +144,7 @@ reth-network-api = { git = "https://github.com/scroll-tech/reth.git", default-fe
 reth-network-peers = { git = "https://github.com/scroll-tech/reth.git", default-features = false }
 reth-node-builder = { git = "https://github.com/scroll-tech/reth.git", default-features = false }
 reth-node-core = { git = "https://github.com/scroll-tech/reth.git" }
+reth-payload-primitives = { git = "https://github.com/scroll-tech/reth.git" }
 reth-primitives = { git = "https://github.com/scroll-tech/reth.git", default-features = false }
 reth-primitives-traits = { git = "https://github.com/scroll-tech/reth.git", default-features = false }
 reth-provider = { git = "https://github.com/scroll-tech/reth.git", default-features = false }
@@ -160,7 +160,6 @@ reth-scroll-node = { git = "https://github.com/scroll-tech/reth.git", default-fe
 reth-scroll-primitives = { git = "https://github.com/scroll-tech/reth.git", default-features = false }
 
 # rollup node
-rollup-node-e2e-test-utils = { path = "crates/e2e-test-utils" }
 rollup-node-indexer = { path = "crates/indexer" }
 rollup-node-manager = { path = "crates/node" }
 rollup-node-primitives = { path = "crates/primitives" }
@@ -192,4 +191,3 @@ thiserror = "2.0"
 tokio = { version = "1.39", default-features = false }
 tokio-stream = { version = "0.1", default-features = false }
 tracing = "0.1.0"
-jsonrpsee = "0.24.9"

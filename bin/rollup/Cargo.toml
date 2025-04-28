@@ -74,9 +74,6 @@ reth-rpc-server-types.workspace = true
 reth-tasks.workspace = true
 reth-tracing = { git = "https://github.com/scroll-tech/reth.git" }
 
-# scroll
-rollup-node-e2e-test-utils.workspace = true
-
 # misc
 futures.workspace = true
 reqwest.workspace = true
