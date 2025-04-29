@@ -9565,6 +9565,7 @@ dependencies = [
 name = "rollup-node-primitives"
 version = "0.0.1"
 dependencies = [
+ "alloy-consensus",
  "alloy-eips",
  "alloy-primitives",
  "alloy-rpc-types-engine",
@@ -9643,6 +9644,7 @@ dependencies = [
  "alloy-signer-local",
  "futures",
  "reth-scroll-primitives",
+ "rollup-node-primitives",
  "thiserror 2.0.12",
  "tokio",
  "tokio-stream",

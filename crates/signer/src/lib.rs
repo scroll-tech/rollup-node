@@ -29,7 +29,7 @@ pub use requests::SignerRequest;
 /// The signer instance is responsible for signing artifacts for the rollup node.
 pub struct Signer {
     // The signer instance.
-    signer: Arc<Box<dyn alloy_signer::Signer + Send + Sync>>,
+    signer: Arc<dyn alloy_signer::Signer + Send + Sync>,
     // A stream of pending signing requests.
     requests: UnboundedReceiverStream<SignerRequest>,
     // In progress signing requests.
@@ -40,7 +40,7 @@ pub struct Signer {
 
 impl Signer {
     /// Creates a new `Signer` instance.
-    pub async fn spawn(signer: Box<dyn alloy_signer::Signer + Send + Sync>) -> SignerHandle {
+    pub async fn spawn(signer: impl alloy_signer::Signer + Send + Sync + 'static) -> SignerHandle {
         let (req_tx, req_rx) = tokio::sync::mpsc::unbounded_channel();
         let (event_tx, event_rx) = tokio::sync::mpsc::unbounded_channel();
         let signer = Self {
@@ -97,6 +97,7 @@ mod tests {
     use super::*;
     use alloy_signer_local::PrivateKeySigner;
     use reth_scroll_primitives::ScrollBlock;
+    use rollup_node_primitives::sig_encode_hash;
 
     #[tokio::test]
     async fn test_signer_local() {
@@ -105,16 +106,17 @@ mod tests {
 
         // Test sending a request
         let block = ScrollBlock::default();
-        handle.sign_block(block).unwrap();
+        handle.sign_block(block.clone()).unwrap();
 
         // Test receiving an event
         let event = handle.next().await.unwrap();
-        let (block, signature) = match event {
+        let (event_block, signature) = match event {
             SignerEvent::SignedBlock { block, signature } => (block, signature),
         };
-        let recovered_address = signature.recover_address_from_prehash(&block.hash_slow()).unwrap();
+        let hash = sig_encode_hash(&event_block);
+        let recovered_address = signature.recover_address_from_prehash(&hash).unwrap();
 
-        assert_eq!(block, block);
+        assert_eq!(event_block, block);
         assert_eq!(recovered_address, signer.address());
     }
 }

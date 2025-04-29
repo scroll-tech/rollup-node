@@ -13,8 +13,11 @@ workspace = true
 # alloy
 alloy-signer.workspace = true
 
-# scroll
+# reth-scroll
 reth-scroll-primitives = { workspace = true, features = ["std"] }
+
+# rollup-node
+rollup-node-primitives.workspace = true
 
 # misc
 futures = { workspace = true, features = ["std"] }
