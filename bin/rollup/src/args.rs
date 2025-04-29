@@ -22,30 +22,62 @@ pub struct ScrollRollupNodeArgs {
     /// The EngineAPI URL.
     #[arg(long)]
     pub engine_api_url: Option<reqwest::Url>,
-    /// The provider arguments
+    /// The beacon provider arguments.
+    #[command(flatten)]
+    pub beacon_provider_args: BeaconProviderArgs,
+    /// The L1 provider arguments
     #[command(flatten)]
     pub l1_provider_args: L1ProviderArgs,
+    /// The L2 provider arguments
+    #[command(flatten)]
+    pub l2_provider_args: L2ProviderArgs,
     /// The sequencer arguments
     #[command(flatten)]
     pub sequencer_args: SequencerArgs,
 }
 
-#[derive(Debug, clap::Args)]
+#[derive(Debug, Default, clap::Args)]
 pub struct L1ProviderArgs {
-    /// The URL for the L1 RPC URL.
-    #[arg(long)]
-    pub l1_rpc_url: Option<reqwest::Url>,
-    /// The URL for the Beacon RPC URL.
-    #[arg(long)]
-    pub beacon_rpc_url: Option<reqwest::Url>,
+    /// The URL for the L1 RPC.
+    #[arg(long = "l1.url", id = "l1_url", value_name = "L1_URL")]
+    pub url: Option<reqwest::Url>,
     /// The compute units per second for the provider.
-    #[arg(long, default_value_t = constants::PROVIDER_COMPUTE_UNITS_PER_SECOND)]
+    #[arg(long = "l1.cups", id = "l1_compute_units_per_second", value_name = "L1_COMPUTE_UNITS_PER_SECOND", default_value_t = constants::PROVIDER_COMPUTE_UNITS_PER_SECOND)]
     pub compute_units_per_second: u64,
     /// The max amount of retries for the provider.
-    #[arg(long, default_value_t = constants::PROVIDER_MAX_RETRIES)]
+    #[arg(long = "l1.max-retries", id = "l1_max_retries", value_name = "L1_MAX_RETRIES", default_value_t = constants::PROVIDER_MAX_RETRIES)]
     pub max_retries: u32,
     /// The initial backoff for the provider.
-    #[arg(long, default_value_t = constants::PROVIDER_INITIAL_BACKOFF)]
+    #[arg(long = "l1.initial-backoff", id = "l1_initial_backoff", value_name = "L1_INITIAL_BACKOFF", default_value_t = constants::PROVIDER_INITIAL_BACKOFF)]
+    pub initial_backoff: u64,
+}
+
+#[derive(Debug, Default, clap::Args)]
+pub struct BeaconProviderArgs {
+    /// The URL for the Beacon chain.
+    #[arg(long = "beacon.url", id = "beacon_url", value_name = "BEACON_URL")]
+    pub url: Option<reqwest::Url>,
+    /// The compute units per second for the provider.
+    #[arg(long = "beacon.cups", id = "beacon_compute_units_per_second", value_name = "BEACON_COMPUTE_UNITS_PER_SECOND", default_value_t = constants::PROVIDER_COMPUTE_UNITS_PER_SECOND)]
+    pub compute_units_per_second: u64,
+    /// The max amount of retries for the provider.
+    #[arg(long = "beacon.max-retries", id = "beacon_max_retries", value_name = "BEACON_MAX_RETRIES", default_value_t = constants::PROVIDER_MAX_RETRIES)]
+    pub max_retries: u32,
+    /// The initial backoff for the provider.
+    #[arg(long = "beacon.initial-backoff", id = "beacon_initial_backoff", value_name = "BEACON_INITIAL_BACKOFF", default_value_t = constants::PROVIDER_INITIAL_BACKOFF)]
+    pub initial_backoff: u64,
+}
+
+#[derive(Debug, Default, clap::Args)]
+pub struct L2ProviderArgs {
+    /// The compute units per second for the provider.
+    #[arg(long = "l2.cups",  id = "l2_compute_units_per_second", value_name = "L2_COMPUTE_UNITS_PER_SECOND", default_value_t = constants::PROVIDER_COMPUTE_UNITS_PER_SECOND)]
+    pub compute_units_per_second: u64,
+    /// The max amount of retries for the provider.
+    #[arg(long = "l2.max-retries", id = "l2_max_retries", value_name = "L2_MAX_RETRIES", default_value_t = constants::PROVIDER_MAX_RETRIES)]
+    pub max_retries: u32,
+    /// The initial backoff for the provider.
+    #[arg(long = "l2.initial-backoff", id = "l2_initial_back_off", value_name = "L2_INITIAL_BACKOFF", default_value_t = constants::PROVIDER_INITIAL_BACKOFF)]
     pub initial_backoff: u64,
 }
 

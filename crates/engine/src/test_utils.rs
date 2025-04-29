@@ -1,33 +1,12 @@
 //! Test utilities for the engine crate.
 
-use core::panic;
-
-use crate::EngineDriverError;
-
 use alloy_primitives::{BlockHash, U64};
 use alloy_rpc_types_engine::{
-    ClientVersionV1, ExecutionPayload, ExecutionPayloadBodiesV1, ExecutionPayloadV1,
-    ForkchoiceState, ForkchoiceUpdated, PayloadId, PayloadStatus,
+    ClientVersionV1, ExecutionPayloadBodiesV1, ExecutionPayloadV1, ForkchoiceState,
+    ForkchoiceUpdated, PayloadId, PayloadStatus,
 };
-use rollup_node_providers::ExecutionPayloadProvider;
 use scroll_alloy_provider::{ScrollEngineApi, ScrollEngineApiResult};
 use scroll_alloy_rpc_types_engine::ScrollPayloadAttributes;
-
-/// A default execution payload for testing that returns `Ok(None)` for all block IDs.
-#[derive(Debug)]
-pub struct NoopExecutionPayloadProvider;
-
-#[async_trait::async_trait]
-impl ExecutionPayloadProvider for NoopExecutionPayloadProvider {
-    type Error = EngineDriverError;
-
-    async fn execution_payload_by_block(
-        &self,
-        _block_id: alloy_eips::BlockId,
-    ) -> Result<Option<ExecutionPayload>, Self::Error> {
-        Ok(None)
-    }
-}
 
 /// A [`ScrollEngineApi`] implementation that panics when any method is called.
 #[derive(Debug)]

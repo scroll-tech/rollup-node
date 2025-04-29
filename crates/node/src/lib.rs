@@ -235,7 +235,7 @@ where
 impl<EC, P, L1P, L1MP, CS> Future for RollupNodeManager<EC, P, L1P, L1MP, CS>
 where
     EC: ScrollEngineApi + Unpin + Sync + Send + 'static,
-    P: ExecutionPayloadProvider + Unpin + Send + Sync + 'static,
+    P: ExecutionPayloadProvider + Clone + Unpin + Send + Sync + 'static,
     L1P: L1Provider + Clone + Unpin + Send + Sync + 'static,
     L1MP: L1MessageProvider + Unpin + Send + Sync + 'static,
     CS: ScrollHardforks + Unpin + Send + Sync + 'static,

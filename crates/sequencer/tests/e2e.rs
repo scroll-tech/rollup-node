@@ -12,9 +12,7 @@ use rollup_node_sequencer::Sequencer;
 use scroll_alloy_consensus::TxL1Message;
 use scroll_alloy_provider::ScrollAuthApiEngineClient;
 use scroll_db::{test_utils::setup_test_db, DatabaseOperations};
-use scroll_engine::{
-    test_utils::NoopExecutionPayloadProvider, EngineDriver, EngineDriverEvent, ForkchoiceState,
-};
+use scroll_engine::{EngineDriver, EngineDriverEvent, ForkchoiceState};
 use std::sync::Arc;
 use tokio::{sync::Mutex, time::Duration};
 
@@ -40,12 +38,8 @@ async fn can_build_blocks() {
     // create the engine driver connected to the node
     let auth_client = node.inner.engine_http_client();
     let engine_client = ScrollAuthApiEngineClient::new(auth_client);
-    let mut engine_driver = EngineDriver::new(
-        Arc::new(engine_client),
-        Arc::new(NoopExecutionPayloadProvider),
-        fcs,
-        BLOCK_BUILDING_DURATION,
-    );
+    let mut engine_driver =
+        EngineDriver::new(Arc::new(engine_client), None::<()>, fcs, BLOCK_BUILDING_DURATION);
 
     // create a test database
     let database = Arc::new(setup_test_db().await);
@@ -149,12 +143,8 @@ async fn can_build_blocks_with_delayed_l1_messages() {
     // create the engine driver connected to the node
     let auth_client = node.inner.engine_http_client();
     let engine_client = ScrollAuthApiEngineClient::new(auth_client);
-    let mut engine_driver = EngineDriver::new(
-        Arc::new(engine_client),
-        Arc::new(NoopExecutionPayloadProvider),
-        fcs,
-        BLOCK_BUILDING_DURATION,
-    );
+    let mut engine_driver =
+        EngineDriver::new(Arc::new(engine_client), None::<()>, fcs, BLOCK_BUILDING_DURATION);
 
     // create a test database
     let database = Arc::new(setup_test_db().await);

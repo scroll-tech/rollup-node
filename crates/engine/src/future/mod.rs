@@ -67,7 +67,7 @@ impl EngineDriverFuture {
     /// Creates a new [`EngineDriverFuture::L1Consolidation`] future from the provided parameters.
     pub(crate) fn l1_consolidation<EC, P>(
         client: Arc<EC>,
-        execution_payload_provider: Arc<P>,
+        execution_payload_provider: P,
         safe_block_info: BlockInfo,
         fcs: AlloyForkchoiceState,
         payload_attributes: ScrollPayloadAttributesWithBatchInfo,
@@ -197,7 +197,7 @@ where
     )]
 async fn handle_payload_attributes<EC, P>(
     client: Arc<EC>,
-    execution_payload_provider: Arc<P>,
+    execution_payload_provider: P,
     safe_block_info: BlockInfo,
     mut fcs: AlloyForkchoiceState,
     payload_attributes: ScrollPayloadAttributesWithBatchInfo,
@@ -212,7 +212,7 @@ where
         payload_attributes;
 
     let maybe_execution_payload = execution_payload_provider
-        .execution_payload_by_block((safe_block_info.number + 1).into())
+        .execution_payload_for_block((safe_block_info.number + 1).into())
         .await
         .map_err(|_| EngineDriverError::ExecutionPayloadProviderUnavailable)?;
     let payload_attributes_already_inserted_in_chain = maybe_execution_payload
