@@ -18,8 +18,7 @@ use reth_scroll_primitives::ScrollPrimitives;
 use reth_transaction_pool::{PoolTransaction, TransactionPool};
 use rollup_node_manager::{Consensus, NoopConsensus, PoAConsensus, RollupNodeManager};
 use rollup_node_providers::{
-    beacon_provider, test_utils::NoopExecutionPayloadProvider, AlloyExecutionPayloadProvider,
-    DatabaseL1MessageProvider, ExecutionPayloadProvider, OnlineL1Provider,
+    beacon_provider, AlloyExecutionPayloadProvider, DatabaseL1MessageProvider, OnlineL1Provider,
 };
 use rollup_node_sequencer::Sequencer;
 use rollup_node_watcher::L1Watcher;
@@ -120,22 +119,21 @@ where
         };
 
         // Get a payload provider
-        let payload_provider: Arc<dyn ExecutionPayloadProvider> =
-            if self.config.test || !ctx.config().rpc.http {
-                Arc::new(NoopExecutionPayloadProvider)
-            } else {
-                let l2_provider_url =
-                    format!("http://{}:{}", ctx.config().rpc.http_addr, ctx.config().rpc.http_port);
-                let client = RpcClient::builder()
-                    .layer(RetryBackoffLayer::new(
-                        self.config.l2_provider_args.max_retries,
-                        self.config.l2_provider_args.initial_backoff,
-                        self.config.l2_provider_args.compute_units_per_second,
-                    ))
-                    .http(Url::parse(&l2_provider_url)?);
-                let provider = ProviderBuilder::new().on_client(client);
-                Arc::new(AlloyExecutionPayloadProvider::new(provider))
-            };
+        let payload_provider = if self.config.test || !ctx.config().rpc.http {
+            None
+        } else {
+            let l2_provider_url =
+                format!("http://{}:{}", ctx.config().rpc.http_addr, ctx.config().rpc.http_port);
+            let client = RpcClient::builder()
+                .layer(RetryBackoffLayer::new(
+                    self.config.l2_provider_args.max_retries,
+                    self.config.l2_provider_args.initial_backoff,
+                    self.config.l2_provider_args.compute_units_per_second,
+                ))
+                .http(Url::parse(&l2_provider_url)?);
+            let provider = ProviderBuilder::new().on_client(client);
+            Some(AlloyExecutionPayloadProvider::new(provider))
+        };
 
         let fcs = if let Some(named) = ctx.config().chain.chain.named() {
             ForkchoiceState::head_from_named_chain(named)

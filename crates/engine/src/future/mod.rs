@@ -212,7 +212,7 @@ where
         payload_attributes;
 
     let maybe_execution_payload = execution_payload_provider
-        .execution_payload_by_block((safe_block_info.number + 1).into())
+        .execution_payload_for_block((safe_block_info.number + 1).into())
         .await
         .map_err(|_| EngineDriverError::ExecutionPayloadProviderUnavailable)?;
     let payload_attributes_already_inserted_in_chain = maybe_execution_payload

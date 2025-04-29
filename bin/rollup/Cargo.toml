@@ -98,7 +98,6 @@ test-utils = [
     "reth-scroll-node/test-utils",
     "rollup-node-providers/test-utils",
     "scroll-engine/test-utils",
-    "scroll-engine/test-utils",
 ]
 serde = [
     "alloy-primitives/serde",

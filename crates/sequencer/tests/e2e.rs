@@ -7,7 +7,7 @@ use reth_e2e_test_utils::transaction::TransactionTestContext;
 use reth_node_core::primitives::SignedTransaction;
 use reth_scroll_node::test_utils::setup;
 use rollup_node_primitives::{BlockInfo, L1MessageEnvelope};
-use rollup_node_providers::{test_utils::NoopExecutionPayloadProvider, DatabaseL1MessageProvider};
+use rollup_node_providers::DatabaseL1MessageProvider;
 use rollup_node_sequencer::Sequencer;
 use scroll_alloy_consensus::TxL1Message;
 use scroll_alloy_provider::ScrollAuthApiEngineClient;
@@ -38,12 +38,8 @@ async fn can_build_blocks() {
     // create the engine driver connected to the node
     let auth_client = node.inner.engine_http_client();
     let engine_client = ScrollAuthApiEngineClient::new(auth_client);
-    let mut engine_driver = EngineDriver::new(
-        Arc::new(engine_client),
-        NoopExecutionPayloadProvider,
-        fcs,
-        BLOCK_BUILDING_DURATION,
-    );
+    let mut engine_driver =
+        EngineDriver::new(Arc::new(engine_client), None::<()>, fcs, BLOCK_BUILDING_DURATION);
 
     // create a test database
     let database = Arc::new(setup_test_db().await);
@@ -147,12 +143,8 @@ async fn can_build_blocks_with_delayed_l1_messages() {
     // create the engine driver connected to the node
     let auth_client = node.inner.engine_http_client();
     let engine_client = ScrollAuthApiEngineClient::new(auth_client);
-    let mut engine_driver = EngineDriver::new(
-        Arc::new(engine_client),
-        NoopExecutionPayloadProvider,
-        fcs,
-        BLOCK_BUILDING_DURATION,
-    );
+    let mut engine_driver =
+        EngineDriver::new(Arc::new(engine_client), None::<()>, fcs, BLOCK_BUILDING_DURATION);
 
     // create a test database
     let database = Arc::new(setup_test_db().await);

@@ -14,13 +14,22 @@ pub enum ExecutionPayloadProviderError {
 
 /// Implementers of the trait can provide the L2 execution payload for a block id.
 #[async_trait::async_trait]
-#[auto_impl::auto_impl(Arc)]
 pub trait ExecutionPayloadProvider: Sync + Send {
     /// Returns the [`ExecutionPayload`] for the provided [`BlockId`], or [None].
-    async fn execution_payload_by_block(
+    async fn execution_payload_for_block(
         &self,
         block_id: BlockId,
     ) -> Result<Option<ExecutionPayload>, ExecutionPayloadProviderError>;
+}
+
+#[async_trait::async_trait]
+impl ExecutionPayloadProvider for () {
+    async fn execution_payload_for_block(
+        &self,
+        _block_id: BlockId,
+    ) -> Result<Option<ExecutionPayload>, ExecutionPayloadProviderError> {
+        Ok(None)
+    }
 }
 
 /// The provider uses an [`Provider`] internally to implement the [`ExecutionPayloadProvider`]
@@ -40,7 +49,7 @@ impl<P: Provider> AlloyExecutionPayloadProvider<P> {
 
 #[async_trait::async_trait]
 impl<P: Provider> ExecutionPayloadProvider for AlloyExecutionPayloadProvider<P> {
-    async fn execution_payload_by_block(
+    async fn execution_payload_for_block(
         &self,
         block_id: BlockId,
     ) -> Result<Option<ExecutionPayload>, ExecutionPayloadProviderError> {
@@ -85,7 +94,7 @@ mod tests {
         let execution_payload_provider = AlloyExecutionPayloadProvider::new(provider);
 
         // Fetch the execution payload for the first block.
-        let payload = execution_payload_provider.execution_payload_by_block(0.into()).await?;
+        let payload = execution_payload_provider.execution_payload_for_block(0.into()).await?;
         assert!(payload.is_some());
 
         Ok(())

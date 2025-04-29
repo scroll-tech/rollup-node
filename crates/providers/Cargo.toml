@@ -51,5 +51,4 @@ tokio = { workspace = true, features = ["macros"] }
 test-utils = [
     "scroll-db/test-utils",
     "reth-scroll-node/test-utils",
-    "reth-scroll-node/test-utils",
 ]
