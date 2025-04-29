@@ -4,6 +4,7 @@ use alloy_primitives::{
     private::{alloy_rlp, alloy_rlp::Encodable},
     B256, U256,
 };
+use std::vec::Vec;
 
 /// Encode and hash the header for signature. The function is similar to `Header::encode` but skips
 /// the `extra_data` field.

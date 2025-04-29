@@ -37,6 +37,7 @@ std = [
     "scroll-alloy-rpc-types-engine/std",
     "alloy-eips/std",
     "reth-scroll-primitives/std",
+    "alloy-consensus/std",
 ]
 arbitrary = [
     "dep:arbitrary",
@@ -46,4 +47,5 @@ arbitrary = [
     "scroll-alloy-rpc-types-engine/arbitrary",
     "reth-scroll-primitives/arbitrary",
     "reth-scroll-primitives/std",
+    "alloy-consensus/arbitrary",
 ]
