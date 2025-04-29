@@ -1,0 +1,33 @@
+[package]
+name = "rollup-node-signer"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+exclude.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+# alloy
+alloy-signer.workspace = true
+
+# reth-scroll
+reth-scroll-primitives = { workspace = true, features = ["std"] }
+
+# rollup-node
+rollup-node-primitives.workspace = true
+
+# misc
+futures = { workspace = true, features = ["std"] }
+thiserror.workspace = true
+tokio = { workspace = true, features = ["full"] }
+tokio-stream.workspace = true
+tracing.workspace = true
+
+[dev-dependencies]
+alloy-signer-local.workspace = true
+
+[features]
+default = []

@@ -212,6 +212,7 @@ where
             chain_spec,
             block_rx,
             sequencer,
+            None,
             block_time,
         );
 

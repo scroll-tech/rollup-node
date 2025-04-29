@@ -1,10 +1,10 @@
 //! This library contains the main manager for the rollup node.
 
-use alloy_primitives::Signature;
 use futures::StreamExt;
 use reth_tokio_util::{EventSender, EventStream};
 use rollup_node_indexer::{Indexer, IndexerEvent};
 use rollup_node_sequencer::Sequencer;
+use rollup_node_signer::{SignerEvent, SignerHandle};
 use rollup_node_watcher::L1Notification;
 use scroll_alloy_hardforks::ScrollHardforks;
 use scroll_alloy_provider::ScrollEngineApi;
@@ -70,6 +70,8 @@ pub struct RollupNodeManager<EC, P, L1P, L1MP, CS> {
     event_sender: Option<EventSender<RollupEvent>>,
     /// The sequencer which is responsible for sequencing transactions and producing new blocks.
     sequencer: Option<Sequencer<L1MP>>,
+    /// The signer handle used to sign artifacts.
+    signer: Option<SignerHandle>,
     /// The trigger for the block building process.
     block_building_trigger: Option<Interval>,
 }
@@ -113,6 +115,7 @@ where
         chain_spec: Arc<CS>,
         new_block_rx: Option<UnboundedReceiver<NewBlockWithPeer>>,
         sequencer: Option<Sequencer<L1MP>>,
+        signer: Option<SignerHandle>,
         block_time: Option<u64>,
     ) -> Self {
         let indexer = Indexer::new(database.clone(), chain_spec);
@@ -128,6 +131,7 @@ where
             new_block_rx: new_block_rx.map(Into::into),
             event_sender: None,
             sequencer,
+            signer,
             block_building_trigger: block_time
                 .map(|time| tokio::time::interval(tokio::time::Duration::from_millis(time))),
         }
@@ -208,9 +212,9 @@ where
                 self.network.handle().block_import_outcome(outcome);
             }
             EngineDriverEvent::NewPayload(payload) => {
-                // TODO: sign blocks before sending them to the network.
-                let signature = Signature::from_raw(&[0; 65]).unwrap();
-                self.network.handle().announce_block(payload, signature);
+                if let Some(signer) = self.signer.as_mut() {
+                    let _ = signer.sign_block(payload).inspect_err(|err| tracing::error!(target: "scroll::node::manager", ?err, "Failed to send new payload to signer"));
+                }
             }
             EngineDriverEvent::L1BlockConsolidated((block_info, batch_info)) => {
                 self.indexer.handle_derived_block(block_info, batch_info);
@@ -266,6 +270,18 @@ where
                 Ok(event) => this.handle_indexer_event(event),
                 Err(err) => {
                     error!(target: "scroll::node::manager", ?err, "Error occurred at indexer level")
+                }
+            }
+        }
+
+        // Drain all signer events.
+        while let Some(Poll::Ready(Some(event))) =
+            this.signer.as_mut().map(|s| s.poll_next_unpin(cx))
+        {
+            match event {
+                SignerEvent::SignedBlock { block, signature } => {
+                    trace!(target: "scroll::node::manager", ?block, ?signature, "Received signed block from signer, announcing to the network");
+                    this.network.handle().announce_block(block, signature);
                 }
             }
         }

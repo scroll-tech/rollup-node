@@ -22,6 +22,7 @@ members = [
     "crates/scroll-wire",
     "crates/sequencer",
     "crates/watcher",
+    "crates/signer",
 ]
 
 resolver = "2"
@@ -127,6 +128,8 @@ alloy-rpc-client = { version = "0.14.0", default-features = false }
 alloy-rpc-types-engine = { version = "0.14.0", default-features = false }
 alloy-rpc-types-eth = { version = "0.14.0", default-features = false }
 alloy-sol-types = { version = "1.0.0", default-features = false }
+alloy-signer = { version = "0.14.0", default-features = false }
+alloy-signer-local = { version = "0.14.0", default-features = false }
 alloy-transport = { version = "0.14.0", default-features = false }
 
 # scroll-alloy
@@ -161,6 +164,7 @@ rollup-node-manager = { path = "crates/node" }
 rollup-node-primitives = { path = "crates/primitives" }
 rollup-node-providers = { path = "crates/providers" }
 rollup-node-sequencer = { path = "crates/sequencer" }
+rollup-node-signer = { path = "crates/signer" }
 rollup-node-watcher = { path = "crates/watcher" }
 scroll-codec = { path = "crates/codec" }
 scroll-db = { path = "crates/database/db" }
