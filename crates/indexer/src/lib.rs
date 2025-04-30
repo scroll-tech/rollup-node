@@ -520,7 +520,20 @@ mod test {
             blocks.push(l2_block);
         }
 
-        // Reorg at block 20
+        // First we assert that we dont reorg the L2 or message queue hash for a higher block
+        // reorg.
+        indexer.handle_l1_notification(L1Notification::Reorg(30));
+        let event = indexer.next().await.unwrap().unwrap();
+        assert_eq!(
+            event,
+            IndexerEvent::ReorgIndexed {
+                l1_block_number: 30,
+                queue_index: None,
+                l2_block_info: None
+            }
+        );
+
+        // Reorg at block
         indexer.handle_l1_notification(L1Notification::Reorg(17));
         let event = indexer.next().await.unwrap().unwrap();
 
