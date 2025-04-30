@@ -196,6 +196,17 @@ where
                 // update the fcs on new finalized block.
                 self.engine.set_finalized_block_info(finalized_block);
             }
+            IndexerEvent::ReorgIndexed { l1_block_number, queue_index, l2_block_info } => {
+                // Update the [`EngineDriver`] fork choice state with the new L2 head info.
+                if let Some(l2_block_info) = l2_block_info {
+                    self.engine.set_head_block_info(l2_block_info);
+                }
+
+                // Update the [`Sequencer`] with the new L2 head info.
+                if let Some(sequencer) = self.sequencer.as_mut() {
+                    sequencer.handle_reorg(queue_index, l1_block_number);
+                }
+            }
             _ => (),
         }
     }
@@ -205,15 +216,19 @@ where
         trace!(target: "scroll::node::manager", ?event, "Received engine driver event");
         match event {
             EngineDriverEvent::BlockImportOutcome(outcome) => {
+                if let Some(block) = outcome.block() {
+                    self.indexer.handle_block(block.into(), None);
+                }
                 self.network.handle().block_import_outcome(outcome);
             }
             EngineDriverEvent::NewPayload(payload) => {
                 // TODO: sign blocks before sending them to the network.
                 let signature = Signature::from_raw(&[0; 65]).unwrap();
+                self.indexer.handle_block(payload.clone().into(), None);
                 self.network.handle().announce_block(payload, signature);
             }
             EngineDriverEvent::L1BlockConsolidated((block_info, batch_info)) => {
-                self.indexer.handle_derived_block(block_info, batch_info);
+                self.indexer.handle_block(block_info.clone(), Some(batch_info));
 
                 if let Some(event_sender) = self.event_sender.as_ref() {
                     event_sender.notify(RollupEvent::L1DerivedBlockConsolidated(block_info));

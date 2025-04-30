@@ -1,10 +1,12 @@
 use super::{models, DatabaseError};
 use crate::DatabaseConnectionProvider;
-
 use alloy_eips::{BlockId, BlockNumberOrTag};
 use alloy_primitives::B256;
 use futures::{Stream, StreamExt};
-use rollup_node_primitives::{BatchCommitData, BatchInfo, BlockInfo, L1MessageEnvelope};
+use migration::{Expr, OnConflict};
+use rollup_node_primitives::{
+    BatchCommitData, BatchInfo, BlockInfo, L1MessageEnvelope, L2BlockInfoWithL1Messages,
+};
 use scroll_alloy_rpc_types_engine::BlockDataHint;
 use sea_orm::{
     ActiveModelTrait, ColumnTrait, Condition, EntityTrait, QueryFilter, QueryOrder, QuerySelect,
@@ -117,14 +119,27 @@ pub trait DatabaseOperations: DatabaseConnectionProvider {
     }
 
     /// Delete all [`L1MessageEnvelope`]s with a block number greater than the provided block
-    /// number.
-    async fn delete_l1_messages_gt(&self, block_number: u64) -> Result<(), DatabaseError> {
-        tracing::trace!(target: "scroll::db", block_number, "Deleting L1 messages greater than block number.");
-        Ok(models::l1_message::Entity::delete_many()
-            .filter(models::l1_message::Column::BlockNumber.gt(block_number as i64))
+    /// number and return them.
+    async fn delete_l1_messages_gt(
+        &self,
+        l1_block_number: u64,
+    ) -> Result<Vec<L1MessageEnvelope>, DatabaseError> {
+        tracing::trace!(
+            target: "scroll::db",
+            l1_block_number,
+            "Fetching L1 messages to delete with block number greater than provided."
+        );
+
+        let removed_messages = models::l1_message::Entity::find()
+            .filter(models::l1_message::Column::L1BlockNumber.gt(l1_block_number as i64))
+            .all(self.get_connection())
+            .await?;
+        models::l1_message::Entity::delete_many()
+            .filter(models::l1_message::Column::L1BlockNumber.gt(l1_block_number as i64))
             .exec(self.get_connection())
-            .await
-            .map(|_| ())?)
+            .await?;
+
+        Ok(removed_messages.into_iter().map(Into::into).collect())
     }
 
     /// Get a [`L1MessageEnvelope`] from the database by its message queue index.
@@ -166,7 +181,7 @@ pub trait DatabaseOperations: DatabaseConnectionProvider {
     }
 
     /// Get the extra data for the provided [`BlockId`].
-    async fn get_block_data(
+    async fn get_l2_block_data_hint(
         &self,
         block_id: BlockId,
     ) -> Result<Option<BlockDataHint>, DatabaseError> {
@@ -184,22 +199,68 @@ pub trait DatabaseOperations: DatabaseConnectionProvider {
             .map(|x| x.map(Into::into))?)
     }
 
-    /// Insert a new derived block line in the database.
-    async fn insert_derived_block(
+    /// Get a [`BlockInfo`] from the database by its block number.
+    async fn get_l2_block_info_by_number(
         &self,
-        block_info: BlockInfo,
-        batch_info: BatchInfo,
+        block_number: u64,
+    ) -> Result<Option<BlockInfo>, DatabaseError> {
+        Ok(models::l2_block::Entity::find()
+            .filter(models::l2_block::Column::BlockNumber.eq(block_number as i64))
+            .one(self.get_connection())
+            .await
+            .map(|x| {
+                x.map(|x| {
+                    let (block_info, _maybe_batch_info): (BlockInfo, Option<BatchInfo>) = x.into();
+                    block_info
+                })
+            })?)
+    }
+
+    /// Insert a new derived block line in the database.
+    async fn insert_block(
+        &self,
+        block_info: L2BlockInfoWithL1Messages,
+        batch_info: Option<BatchInfo>,
     ) -> Result<(), DatabaseError> {
         tracing::trace!(
             target: "scroll::db",
-            batch_hash = ?batch_info.hash,
-            batch_index = batch_info.index,
-            block_number = block_info.number,
-            block_hash = ?block_info.hash,
+            batch_hash = ?batch_info.as_ref().map(|b| b.hash),
+            batch_index = batch_info.as_ref().map(|b| b.index),
+            block_number = block_info.block_info.number,
+            block_hash = ?block_info.block_info.hash,
             "Inserting derived block into database."
         );
-        let derived_block: models::derived_block::ActiveModel = (block_info, batch_info).into();
-        derived_block.insert(self.get_connection()).await?;
+        let l2_block: models::l2_block::ActiveModel =
+            (block_info.block_info, batch_info.unwrap_or_default()).into();
+        models::l2_block::Entity::insert(l2_block)
+            .on_conflict(
+                OnConflict::column(models::l2_block::Column::BlockNumber)
+                    .update_columns([
+                        models::l2_block::Column::BatchHash,
+                        models::l2_block::Column::BatchIndex,
+                    ])
+                    .to_owned(),
+            )
+            .exec(self.get_connection())
+            .await?;
+
+        tracing::trace!(
+            target: "scroll::db",
+            block_number = block_info.block_info.number,
+            l1_messages = ?block_info.l1_messages,
+            "Updating executed L1 messages from derived block with L2 block number in the database."
+        );
+        models::l1_message::Entity::update_many()
+            .col_expr(
+                models::l1_message::Column::L2BlockNumber,
+                Expr::value(block_info.block_info.number as i64),
+            )
+            .filter(
+                models::l1_message::Column::Hash
+                    .is_in(block_info.l1_messages.iter().map(|x| x.to_vec())),
+            )
+            .exec(self.get_connection())
+            .await?;
 
         Ok(())
     }
@@ -219,9 +280,9 @@ pub trait DatabaseOperations: DatabaseConnectionProvider {
             .await?;
 
         if let Some(index) = index {
-            Ok(models::derived_block::Entity::find()
-                .filter(models::derived_block::Column::BatchIndex.lte(index))
-                .order_by_desc(models::derived_block::Column::BlockNumber)
+            Ok(models::l2_block::Entity::find()
+                .filter(models::l2_block::Column::BatchIndex.lte(index))
+                .order_by_desc(models::l2_block::Column::BlockNumber)
                 .one(self.get_connection())
                 .await?
                 .map(|model| model.block_info()))

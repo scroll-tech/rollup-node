@@ -106,8 +106,10 @@ where
     }
 
     /// Handle a reorg event.
-    pub fn handle_reorg(&mut self, queue_index: u64, l1_block_number: u64) {
-        self.provider.set_index_cursor(queue_index);
+    pub fn handle_reorg(&mut self, queue_index: Option<u64>, l1_block_number: u64) {
+        if let Some(index) = queue_index {
+            self.provider.set_queue_index_cursor(index);
+        }
         self.l1_block_number = l1_block_number;
     }
 
@@ -153,7 +155,7 @@ async fn build_payload_attributes<P: L1MessageProvider + Unpin + Send + Sync + '
     l1_block_depth: u64,
 ) -> Result<ScrollPayloadAttributes, SequencerError> {
     let predicate = |message: L1MessageEnvelope| {
-        message.block_number + l1_block_depth <= current_l1_block_number
+        message.l1_block_number + l1_block_depth <= current_l1_block_number
     };
 
     // Collect L1 messages to include in payload.

@@ -147,6 +147,7 @@ reth-primitives-traits = { git = "https://github.com/scroll-tech/reth.git", defa
 reth-provider = { git = "https://github.com/scroll-tech/reth.git", default-features = false }
 reth-tasks = { git = "https://github.com/scroll-tech/reth.git" }
 reth-tokio-util = { git = "https://github.com/scroll-tech/reth.git", default-features = false }
+reth-tracing = { git = "https://github.com/scroll-tech/reth.git", default-features = false }
 
 # reth-scroll
 reth-scroll-chainspec = { git = "https://github.com/scroll-tech/reth.git", default-features = false }

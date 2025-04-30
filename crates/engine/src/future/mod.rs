@@ -5,7 +5,9 @@ use alloy_rpc_types_engine::{
 };
 use eyre::Result;
 use reth_scroll_primitives::ScrollBlock;
-use rollup_node_primitives::{BatchInfo, BlockInfo, ScrollPayloadAttributesWithBatchInfo};
+use rollup_node_primitives::{
+    BatchInfo, BlockInfo, L2BlockInfoWithL1Messages, ScrollPayloadAttributesWithBatchInfo,
+};
 use rollup_node_providers::ExecutionPayloadProvider;
 use scroll_alloy_provider::ScrollEngineApi;
 use scroll_alloy_rpc_types_engine::ScrollPayloadAttributes;
@@ -36,7 +38,11 @@ type IsReorg = bool;
 
 /// A future that represents an L1 consolidation job.
 type L1ConsolidationFuture = Pin<
-    Box<dyn Future<Output = Result<(BlockInfo, IsReorg, BatchInfo), EngineDriverError>> + Send>,
+    Box<
+        dyn Future<
+                Output = Result<(L2BlockInfoWithL1Messages, IsReorg, BatchInfo), EngineDriverError>,
+            > + Send,
+    >,
 >;
 
 /// A future that represents a payload building job.
@@ -201,7 +207,7 @@ async fn handle_payload_attributes<EC, P>(
     safe_block_info: BlockInfo,
     mut fcs: AlloyForkchoiceState,
     payload_attributes: ScrollPayloadAttributesWithBatchInfo,
-) -> Result<(BlockInfo, IsReorg, BatchInfo), EngineDriverError>
+) -> Result<(L2BlockInfoWithL1Messages, IsReorg, BatchInfo), EngineDriverError>
 where
     EC: ScrollEngineApi + Unpin + Send + Sync + 'static,
     P: ExecutionPayloadProvider + Unpin + Send + Sync + 'static,
@@ -214,19 +220,17 @@ where
     let maybe_execution_payload = execution_payload_provider
         .execution_payload_by_block((safe_block_info.number + 1).into())
         .await
-        .map_err(|_| EngineDriverError::ExecutionPayloadProviderUnavailable)?;
-    let payload_attributes_already_inserted_in_chain = maybe_execution_payload
-        .as_ref()
-        .is_some_and(|ep| matching_payloads(&payload_attributes, ep, safe_block_info.hash));
+        .map_err(|_| EngineDriverError::ExecutionPayloadProviderUnavailable)?
+        .filter(|ep| matching_payloads(&payload_attributes, ep, safe_block_info.hash));
 
-    if payload_attributes_already_inserted_in_chain {
+    if let Some(execution_payload) = maybe_execution_payload {
         // if the payload attributes match the execution payload at block safe + 1,
         // this payload has already been passed to the EN in the form of a P2P gossiped
         // execution payload. We can advance the safe head by one by issuing a
         // forkchoiceUpdated.
-        let safe_block_info: BlockInfo =
-            maybe_execution_payload.expect("execution payload exists").into();
-        fcs.safe_block_hash = safe_block_info.hash;
+        let safe_block_info: L2BlockInfoWithL1Messages =
+            execution_payload.try_into().map_err(EngineDriverError::InvalidExecutionPayload)?;
+        fcs.safe_block_hash = safe_block_info.block_info.hash;
         forkchoice_updated(client, fcs, None).await?;
         Ok((safe_block_info, false, batch_info))
     } else {
@@ -244,9 +248,9 @@ where
             fc_updated.payload_id.expect("payload attributes has been set"),
         )
         .await?;
-
         // issue the execution payload to the EL
-        let safe_block_info: BlockInfo = (&execution_payload).into();
+        // TODO: remove clone
+        let safe_block_info: L2BlockInfoWithL1Messages = execution_payload.clone().try_into()?;
         let result = new_payload(client.clone(), execution_payload.into_v1()).await?;
 
         // we should only have a valid payload when deriving from payload attributes (should not
@@ -254,8 +258,8 @@ where
         debug_assert!(result.is_valid());
 
         // update the fork choice state with the new block hash.
-        fcs.head_block_hash = safe_block_info.hash;
-        fcs.safe_block_hash = safe_block_info.hash;
+        fcs.head_block_hash = safe_block_info.block_info.hash;
+        fcs.safe_block_hash = safe_block_info.block_info.hash;
         forkchoice_updated(client, fcs, None).await?;
 
         Ok((safe_block_info, true, batch_info))

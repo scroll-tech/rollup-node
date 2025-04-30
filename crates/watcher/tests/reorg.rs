@@ -7,12 +7,6 @@ use rand::Rng;
 use rollup_node_watcher::{
     random, test_utils::provider::MockProvider, Block, L1Notification, L1Watcher,
 };
-use tracing::{subscriber::set_global_default, Level};
-
-fn setup() {
-    let sub = tracing_subscriber::FmtSubscriber::builder().with_max_level(Level::TRACE).finish();
-    let _ = set_global_default(sub);
-}
 
 // Generate a set blocks that will be fed to the l1 watcher.
 // Every fork_cycle blocks, generates a small reorg.
@@ -47,8 +41,9 @@ fn generate_chain_with_reorgs(len: usize, fork_cycle: usize, max_fork_depth: usi
 
 #[tokio::test]
 async fn test_reorg_detection() -> eyre::Result<()> {
+    reth_tracing::init_test_tracing();
+
     // Given
-    setup();
     let blocks = generate_chain_with_reorgs(1000, 10, 5);
     let latest_blocks = blocks.clone();
 
@@ -111,8 +106,9 @@ async fn test_reorg_detection() -> eyre::Result<()> {
 
 #[tokio::test]
 async fn test_gap() -> eyre::Result<()> {
+    reth_tracing::init_test_tracing();
+
     // Given
-    setup();
     let mut blocks = vec![random!(Header)];
     for i in 1..1000 {
         let mut next = random!(Header);

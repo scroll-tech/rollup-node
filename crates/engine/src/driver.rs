@@ -1,6 +1,6 @@
 use super::{future::EngineDriverFuture, ForkchoiceState};
 use crate::{future::EngineDriverFutureResult, EngineDriverEvent};
-use futures::{ready, task::AtomicWaker, Stream};
+use futures::{task::AtomicWaker, Stream};
 use rollup_node_primitives::{BlockInfo, ScrollPayloadAttributesWithBatchInfo};
 use rollup_node_providers::ExecutionPayloadProvider;
 use scroll_alloy_provider::ScrollEngineApi;
@@ -66,6 +66,11 @@ where
     /// Sets the finalized block info.
     pub fn set_finalized_block_info(&mut self, block_info: BlockInfo) {
         self.fcs.update_finalized_block_info(block_info);
+    }
+
+    /// Sets the head block info.
+    pub fn set_head_block_info(&mut self, block_info: BlockInfo) {
+        self.fcs.update_head_block_info(block_info);
     }
 
     /// Sets the payload building duration.
@@ -134,12 +139,12 @@ where
                     Ok((block_info, reorg, batch_info)) => {
                         // Update the safe block info and return the block info
                         tracing::trace!(target: "scroll::engine", ?block_info, "updating safe block info from block derived from L1");
-                        self.fcs.update_safe_block_info(block_info);
+                        self.fcs.update_safe_block_info(block_info.block_info);
 
                         // If we reorged, update the head block info
                         if reorg {
                             tracing::warn!(target: "scroll::engine", ?block_info, "reorging head to l1 derived block");
-                            self.fcs.update_head_block_info(block_info);
+                            self.fcs.update_head_block_info(block_info.block_info);
                         }
 
                         return Some(EngineDriverEvent::L1BlockConsolidated((
@@ -194,10 +199,11 @@ where
 
         // If we have a future, poll it.
         if let Some(future) = this.future.as_mut() {
-            let result = ready!(future.poll(cx));
-            this.future = None;
-            if let Some(event) = this.handle_future_result(result) {
-                return Poll::Ready(Some(event));
+            if let Poll::Ready(result) = future.poll(cx) {
+                this.future = None;
+                if let Some(event) = this.handle_future_result(result) {
+                    return Poll::Ready(Some(event));
+                }
             }
         };
 

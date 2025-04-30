@@ -2,7 +2,9 @@
 
 use alloy_primitives::{b256, keccak256, B256};
 use futures::Stream;
-use rollup_node_primitives::{BatchCommitData, BatchInfo, BlockInfo, L1MessageEnvelope};
+use rollup_node_primitives::{
+    BatchCommitData, BatchInfo, BlockInfo, L1MessageEnvelope, L2BlockInfoWithL1Messages,
+};
 use rollup_node_watcher::L1Notification;
 use scroll_alloy_consensus::TxL1Message;
 use scroll_alloy_hardforks::{ScrollHardfork, ScrollHardforks};
@@ -54,12 +56,17 @@ impl<ChainSpec: ScrollHardforks + Send + Sync + 'static> Indexer<ChainSpec> {
         }
     }
 
-    /// Handles a new derived L2 block.
-    pub fn handle_derived_block(&mut self, block_info: BlockInfo, batch_info: BatchInfo) {
+    /// Handles an L2 block.
+    pub fn handle_block(
+        &mut self,
+        block_info: L2BlockInfoWithL1Messages,
+        batch_info: Option<BatchInfo>,
+    ) {
         let database = self.database.clone();
         let fut = IndexerFuture::HandleDerivedBlock(Box::pin(async move {
-            database.insert_derived_block(block_info, batch_info).await?;
-            Result::<_, IndexerError>::Ok(IndexerEvent::DerivedBlockIndexed(batch_info, block_info))
+            let tx = database.tx().await?;
+            tx.insert_block(block_info.clone(), batch_info).await?;
+            Result::<_, IndexerError>::Ok(IndexerEvent::BlockIndexed(block_info, batch_info))
         }));
         self.pending_futures.push_back(fut)
     }
@@ -116,11 +123,33 @@ impl<ChainSpec: ScrollHardforks + Send + Sync + 'static> Indexer<ChainSpec> {
 
         // delete batch inputs and l1 messages
         txn.delete_batches_gt(block_number).await?;
-        txn.delete_l1_messages_gt(block_number).await?;
+        let deleted_messages = txn.delete_l1_messages_gt(block_number).await?;
+
+        // determine if we need to reorg the L2
+        let mut queue_indices: Vec<_> = deleted_messages
+            .into_iter()
+            .filter_map(|x| (x.l2_block_number.is_some()).then_some(x))
+            .collect();
+        queue_indices.sort_by(|a, b| a.transaction.queue_index.cmp(&b.transaction.queue_index));
+
+        let l2_reorg_info = if let Some(msg) = queue_indices.first() {
+            let l2_reorg_block_number = msg.l2_block_number.unwrap() - 1;
+            let l2_block_hash = database
+                .get_l2_block_info_by_number(l2_reorg_block_number)
+                .await?
+                .ok_or(IndexerError::L2BlockNotFound(l2_reorg_block_number))?;
+            Some((msg.transaction.queue_index, l2_block_hash))
+        } else {
+            None
+        };
 
         // commit the transaction
         txn.commit().await?;
-        Ok(IndexerEvent::ReorgIndexed(block_number))
+        Ok(IndexerEvent::ReorgIndexed {
+            l1_block_number: block_number,
+            queue_index: l2_reorg_info.map(|(index, _)| index),
+            l2_block_info: l2_reorg_info.map(|(_, info)| info),
+        })
     }
 
     /// Handles a finalized event by updating the indexer L1 finalized block and returning the new
@@ -152,7 +181,7 @@ impl<ChainSpec: ScrollHardforks + Send + Sync + 'static> Indexer<ChainSpec> {
         database: Arc<Database>,
         chain_spec: Arc<ChainSpec>,
         l1_message: TxL1Message,
-        block_number: u64,
+        l1_block_number: u64,
         block_timestamp: u64,
     ) -> Result<IndexerEvent, IndexerError> {
         let event = IndexerEvent::L1MessageIndexed(l1_message.queue_index);
@@ -160,7 +189,7 @@ impl<ChainSpec: ScrollHardforks + Send + Sync + 'static> Indexer<ChainSpec> {
         // TODO(greg): update to Euclid.
         let queue_hash = if chain_spec
             .scroll_fork_activation(ScrollHardfork::DarwinV2)
-            .active_at_timestamp_or_number(block_timestamp, block_number)
+            .active_at_timestamp_or_number(block_timestamp, l1_block_number)
         {
             let index = l1_message.queue_index - 1;
             let prev_queue_hash = database
@@ -176,7 +205,7 @@ impl<ChainSpec: ScrollHardforks + Send + Sync + 'static> Indexer<ChainSpec> {
             None
         };
 
-        let l1_message = L1MessageEnvelope::new(l1_message, block_number, queue_hash);
+        let l1_message = L1MessageEnvelope::new(l1_message, l1_block_number, None, queue_hash);
         database.insert_l1_message(l1_message).await?;
         Ok(event)
     }
@@ -314,7 +343,7 @@ mod test {
 
         let l1_message_result =
             db.get_l1_message_by_index(message.queue_index).await.unwrap().unwrap();
-        let l1_message = L1MessageEnvelope::new(message, block_number, None);
+        let l1_message = L1MessageEnvelope::new(message, block_number, None, None);
 
         assert_eq!(l1_message, l1_message_result);
     }
@@ -387,35 +416,39 @@ mod test {
         indexer.handle_l1_notification(L1Notification::BatchCommit(batch_commit_block_30.clone()));
 
         // Generate 3 random L1 messages and set their block numbers
-        let mut l1_message_block_1 =
-            L1MessageEnvelope { queue_hash: None, ..Arbitrary::arbitrary(&mut u).unwrap() };
-        l1_message_block_1.block_number = 1;
-        let l1_message_block_1 = l1_message_block_1;
-
-        let mut l1_message_block_20 =
-            L1MessageEnvelope { queue_hash: None, ..Arbitrary::arbitrary(&mut u).unwrap() };
-        l1_message_block_20.block_number = 20;
-        let l1_message_block_20 = l1_message_block_20;
-
-        let mut l1_message_block_30 =
-            L1MessageEnvelope { queue_hash: None, ..Arbitrary::arbitrary(&mut u).unwrap() };
-        l1_message_block_30.block_number = 30;
-        let l1_message_block_30 = l1_message_block_30;
+        let l1_message_block_1 = L1MessageEnvelope {
+            queue_hash: None,
+            l1_block_number: 1,
+            l2_block_number: None,
+            ..Arbitrary::arbitrary(&mut u).unwrap()
+        };
+        let l1_message_block_20 = L1MessageEnvelope {
+            queue_hash: None,
+            l1_block_number: 20,
+            l2_block_number: None,
+            ..Arbitrary::arbitrary(&mut u).unwrap()
+        };
+        let l1_message_block_30 = L1MessageEnvelope {
+            queue_hash: None,
+            l1_block_number: 30,
+            l2_block_number: None,
+            ..Arbitrary::arbitrary(&mut u).unwrap()
+        };
 
         // Index L1 messages
         indexer.handle_l1_notification(L1Notification::L1Message {
             message: l1_message_block_1.clone().transaction,
-            block_number: l1_message_block_1.clone().block_number,
+            block_number: l1_message_block_1.clone().l1_block_number,
             block_timestamp: 0,
         });
         indexer.handle_l1_notification(L1Notification::L1Message {
             message: l1_message_block_20.clone().transaction,
-            block_number: l1_message_block_20.clone().block_number,
+            block_number: l1_message_block_20.clone().l1_block_number,
             block_timestamp: 0,
         });
         indexer.handle_l1_notification(L1Notification::L1Message {
             message: l1_message_block_30.clone().transaction,
-            block_number: l1_message_block_30.clone().block_number,
+            block_number: l1_message_block_30.clone().l1_block_number,
             block_timestamp: 0,
         });
 

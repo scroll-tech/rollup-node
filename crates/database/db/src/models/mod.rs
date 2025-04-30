@@ -2,7 +2,7 @@
 pub mod batch_commit;
 
 /// This module contains the derived block model.
-pub mod derived_block;
+pub mod l2_block;
 
 /// This module contains the block data database model.
 pub mod block_data;

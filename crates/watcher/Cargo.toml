@@ -45,7 +45,7 @@ arbitrary.workspace = true
 eyre.workspace = true
 rand.workspace = true
 scroll-l1 = { workspace = true, features = ["test-utils"] }
-tracing-subscriber = "0.3"
+reth-tracing.workspace = true
 
 [features]
 test-utils = ["arbitrary", "rand", "scroll-l1/test-utils"]

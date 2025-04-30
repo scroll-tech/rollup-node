@@ -1,4 +1,4 @@
-use rollup_node_primitives::BlockInfo;
+use rollup_node_primitives::L2BlockInfoWithL1Messages;
 use scroll_network::NewBlockWithPeer;
 
 /// An event that can be emitted by the rollup node manager.
@@ -9,5 +9,5 @@ pub enum RollupEvent {
     /// New Block Sequenced.
     NewBlockSequenced(NewBlockWithPeer),
     /// Consolidated block derived from L1.
-    L1DerivedBlockConsolidated(BlockInfo),
+    L1DerivedBlockConsolidated(L2BlockInfoWithL1Messages),
 }

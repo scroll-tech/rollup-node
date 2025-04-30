@@ -72,7 +72,7 @@ pub trait L1MessageProvider {
         Ok(message.map(|message| message.transaction))
     }
     /// Set the index cursor for the provider.
-    fn set_index_cursor(&self, index: u64);
+    fn set_queue_index_cursor(&self, index: u64);
     /// Set the hash cursor for the provider.
     async fn set_hash_cursor(&self, hash: B256);
     /// Increment cursor index.

@@ -8,14 +8,16 @@ use sea_orm::{entity::prelude::*, ActiveValue};
 #[sea_orm(table_name = "l1_message")]
 pub struct Model {
     #[sea_orm(primary_key)]
-    queue_index: i64,
+    pub(crate) queue_index: i64,
     queue_hash: Option<Vec<u8>>,
-    block_number: i64,
+    hash: Vec<u8>,
+    l1_block_number: i64,
     gas_limit: String,
     to: Vec<u8>,
     value: Vec<u8>,
     sender: Vec<u8>,
     input: Vec<u8>,
+    pub(crate) l2_block_number: Option<i64>,
 }
 
 /// The relation for the L1 message model.
@@ -30,12 +32,14 @@ impl From<L1MessageEnvelope> for ActiveModel {
         Self {
             queue_index: ActiveValue::Set(value.transaction.queue_index as i64),
             queue_hash: ActiveValue::Set(value.queue_hash.map(|q| q.to_vec())),
-            block_number: ActiveValue::Set(value.block_number as i64),
+            hash: ActiveValue::Set(value.transaction.tx_hash().to_vec()),
+            l1_block_number: ActiveValue::Set(value.l1_block_number as i64),
             gas_limit: ActiveValue::Set(value.transaction.gas_limit.to_string()),
             to: ActiveValue::Set(value.transaction.to.to_vec()),
             value: ActiveValue::Set(value.transaction.value.to_le_bytes_vec()),
             sender: ActiveValue::Set(value.transaction.sender.to_vec()),
             input: ActiveValue::Set(value.transaction.input.to_vec()),
+            l2_block_number: ActiveValue::Set(value.l2_block_number.map(|b| b as i64)),
         }
     }
 }
@@ -43,7 +47,8 @@ impl From<L1MessageEnvelope> for ActiveModel {
 impl From<Model> for L1MessageEnvelope {
     fn from(value: Model) -> Self {
         Self {
-            block_number: value.block_number as u64,
+            l1_block_number: value.l1_block_number as u64,
+            l2_block_number: value.l2_block_number.map(|b| b as u64),
             queue_hash: value.queue_hash.map(|q| B256::from_slice(&q)),
             transaction: TxL1Message {
                 queue_index: value.queue_index as u64,
