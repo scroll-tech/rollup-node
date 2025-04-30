@@ -44,9 +44,19 @@ impl From<&ScrollBlock> for BlockInfo {
     }
 }
 
+#[cfg(feature = "arbitrary")]
+impl arbitrary::Arbitrary<'_> for BlockInfo {
+    fn arbitrary(u: &mut arbitrary::Unstructured<'_>) -> arbitrary::Result<Self> {
+        let number = u.int_in_range(0..=u32::MAX)?;
+        let hash = B256::arbitrary(u)?;
+        Ok(Self { number: number as u64, hash })
+    }
+}
+
 /// This struct represents an L2 block with a vector the hashes of the L1 messages included in the
 /// block.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
+#[cfg_attr(any(test, feature = "arbitrary"), derive(arbitrary::Arbitrary))]
 pub struct L2BlockInfoWithL1Messages {
     /// The block info.
     pub block_info: BlockInfo,

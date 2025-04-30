@@ -2,7 +2,7 @@ use alloy_primitives::B256;
 use rollup_node_primitives::{BatchInfo, BlockInfo, L2BlockInfoWithL1Messages};
 
 /// An event emitted by the indexer.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum IndexerEvent {
     /// A `BatchCommit` event has been indexed returning the batch info.
     BatchCommitIndexed(BatchInfo),

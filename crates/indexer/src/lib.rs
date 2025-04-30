@@ -64,8 +64,7 @@ impl<ChainSpec: ScrollHardforks + Send + Sync + 'static> Indexer<ChainSpec> {
     ) {
         let database = self.database.clone();
         let fut = IndexerFuture::HandleDerivedBlock(Box::pin(async move {
-            let tx = database.tx().await?;
-            tx.insert_block(block_info.clone(), batch_info).await?;
+            database.insert_block(block_info.clone(), batch_info).await?;
             Result::<_, IndexerError>::Ok(IndexerEvent::BlockIndexed(block_info, batch_info))
         }));
         self.pending_futures.push_back(fut)
@@ -116,40 +115,38 @@ impl<ChainSpec: ScrollHardforks + Send + Sync + 'static> Indexer<ChainSpec> {
     /// provided block number.
     async fn handle_reorg(
         database: Arc<Database>,
-        block_number: u64,
+        l1_block_number: u64,
     ) -> Result<IndexerEvent, IndexerError> {
         // create a database transaction so this operation is atomic
         let txn = database.tx().await?;
 
         // delete batch inputs and l1 messages
-        txn.delete_batches_gt(block_number).await?;
-        let deleted_messages = txn.delete_l1_messages_gt(block_number).await?;
+        txn.delete_batches_gt(l1_block_number).await?;
+        let deleted_messages = txn.delete_l1_messages_gt(l1_block_number).await?;
 
         // determine if we need to reorg the L2
         let mut queue_indices: Vec<_> = deleted_messages
             .into_iter()
-            .filter_map(|x| (x.l2_block_number.is_some()).then_some(x))
+            .filter_map(|x| {
+                (x.l1_block_number > l1_block_number && x.l2_block_number.is_some()).then_some(x)
+            })
             .collect();
         queue_indices.sort_by(|a, b| a.transaction.queue_index.cmp(&b.transaction.queue_index));
 
-        let l2_reorg_info = if let Some(msg) = queue_indices.first() {
+        let (queue_index, l2_block_info) = if let Some(msg) = queue_indices.first() {
             let l2_reorg_block_number = msg.l2_block_number.unwrap() - 1;
-            let l2_block_hash = database
+            let l2_block_info = txn
                 .get_l2_block_info_by_number(l2_reorg_block_number)
                 .await?
                 .ok_or(IndexerError::L2BlockNotFound(l2_reorg_block_number))?;
-            Some((msg.transaction.queue_index, l2_block_hash))
+            (Some(msg.transaction.queue_index), Some(l2_block_info))
         } else {
-            None
+            (None, None)
         };
 
         // commit the transaction
         txn.commit().await?;
-        Ok(IndexerEvent::ReorgIndexed {
-            l1_block_number: block_number,
-            queue_index: l2_reorg_info.map(|(index, _)| index),
-            l2_block_info: l2_reorg_info.map(|(_, info)| info),
-        })
+        Ok(IndexerEvent::ReorgIndexed { l1_block_number, queue_index, l2_block_info })
     }
 
     /// Handles a finalized event by updating the indexer L1 finalized block and returning the new
@@ -473,5 +470,67 @@ mod test {
         assert_eq!(2, l1_messages.len());
         assert!(l1_messages.contains(&l1_message_block_1));
         assert!(l1_messages.contains(&l1_message_block_20));
+    }
+
+    #[tokio::test]
+    async fn test_handle_reorg_executed_l1_messages() {
+        // Instantiate indexer and db
+        let (mut indexer, _db) = setup_test_indexer().await;
+
+        // Generate unstructured bytes.
+        let mut bytes = [0u8; 4096];
+        rand::rng().fill(bytes.as_mut_slice());
+        let mut u = Unstructured::new(&bytes);
+
+        const UNITS_FOR_TESTING: u64 = 20;
+        const L1_MESSAGE_EXECUTED_COUNT: u64 = 7;
+        let mut l1_messages = Vec::with_capacity(UNITS_FOR_TESTING as usize);
+        for l1_message_que_index in 0..UNITS_FOR_TESTING {
+            let l1_message = L1MessageEnvelope {
+                queue_hash: None,
+                l1_block_number: l1_message_que_index,
+                l2_block_number: (UNITS_FOR_TESTING - l1_message_que_index >
+                    L1_MESSAGE_EXECUTED_COUNT)
+                    .then_some(l1_message_que_index),
+                transaction: TxL1Message {
+                    queue_index: l1_message_que_index,
+                    ..Arbitrary::arbitrary(&mut u).unwrap()
+                },
+            };
+            indexer.handle_l1_notification(L1Notification::L1Message {
+                message: l1_message.transaction.clone(),
+                block_number: l1_message.l1_block_number,
+                block_timestamp: 0,
+            });
+            indexer.next().await.unwrap().unwrap();
+            l1_messages.push(l1_message);
+        }
+
+        let mut blocks = Vec::with_capacity(UNITS_FOR_TESTING as usize);
+        for block_number in 0..UNITS_FOR_TESTING {
+            let l2_block = L2BlockInfoWithL1Messages {
+                block_info: BlockInfo {
+                    number: block_number,
+                    hash: Arbitrary::arbitrary(&mut u).unwrap(),
+                },
+                l1_messages: vec![l1_messages[block_number as usize].transaction.tx_hash()],
+            };
+            indexer.handle_block(l2_block.clone(), None);
+            indexer.next().await.unwrap().unwrap();
+            blocks.push(l2_block);
+        }
+
+        // Reorg at block 20
+        indexer.handle_l1_notification(L1Notification::Reorg(17));
+        let event = indexer.next().await.unwrap().unwrap();
+
+        assert_eq!(
+            event,
+            IndexerEvent::ReorgIndexed {
+                l1_block_number: 17,
+                queue_index: Some(18),
+                l2_block_info: Some(blocks[17].block_info)
+            }
+        );
     }
 }

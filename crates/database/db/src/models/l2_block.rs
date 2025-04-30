@@ -4,7 +4,7 @@ use sea_orm::{entity::prelude::*, ActiveValue};
 
 /// A database model that represents a derived block.
 #[derive(Clone, Debug, PartialEq, Eq, DeriveEntityModel)]
-#[sea_orm(table_name = "derived_block")]
+#[sea_orm(table_name = "l2_block")]
 pub struct Model {
     #[sea_orm(primary_key)]
     block_number: i64,
@@ -42,17 +42,17 @@ impl Related<super::batch_commit::Entity> for Entity {
 /// The active model behavior for the batch input model.
 impl ActiveModelBehavior for ActiveModel {}
 
-impl From<(BlockInfo, BatchInfo)> for ActiveModel {
-    fn from((block_info, batch_info): (BlockInfo, BatchInfo)) -> Self {
+impl From<(BlockInfo, Option<BatchInfo>)> for ActiveModel {
+    fn from((block_info, batch_info): (BlockInfo, Option<BatchInfo>)) -> Self {
         Self {
             block_number: ActiveValue::Set(
                 block_info.number.try_into().expect("block number should fit in i64"),
             ),
             block_hash: ActiveValue::Set(block_info.hash.to_vec()),
-            batch_index: ActiveValue::Set(Some(
-                batch_info.index.try_into().expect("index should fit in i64"),
-            )),
-            batch_hash: ActiveValue::Set(Some(batch_info.hash.to_vec())),
+            batch_index: ActiveValue::Set(
+                batch_info.map(|x| x.index.try_into().expect("index should fit in i64")),
+            ),
+            batch_hash: ActiveValue::Set(batch_info.map(|x| x.hash.to_vec())),
         }
     }
 }

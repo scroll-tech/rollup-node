@@ -230,8 +230,7 @@ pub trait DatabaseOperations: DatabaseConnectionProvider {
             block_hash = ?block_info.block_info.hash,
             "Inserting derived block into database."
         );
-        let l2_block: models::l2_block::ActiveModel =
-            (block_info.block_info, batch_info.unwrap_or_default()).into();
+        let l2_block: models::l2_block::ActiveModel = (block_info.block_info, batch_info).into();
         models::l2_block::Entity::insert(l2_block)
             .on_conflict(
                 OnConflict::column(models::l2_block::Column::BlockNumber)
