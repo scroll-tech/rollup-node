@@ -280,6 +280,8 @@ impl<ChainSpec: ScrollHardforks + 'static> Stream for Indexer<ChainSpec> {
 
 #[cfg(test)]
 mod test {
+    use std::vec;
+
     use super::*;
     use alloy_primitives::{address, bytes, U256};
 
@@ -483,14 +485,14 @@ mod test {
         let mut u = Unstructured::new(&bytes);
 
         const UNITS_FOR_TESTING: u64 = 20;
-        const L1_MESSAGE_EXECUTED_COUNT: u64 = 7;
+        const L1_MESSAGES_NOT_EXECUTED_COUNT: u64 = 7;
         let mut l1_messages = Vec::with_capacity(UNITS_FOR_TESTING as usize);
         for l1_message_que_index in 0..UNITS_FOR_TESTING {
             let l1_message = L1MessageEnvelope {
                 queue_hash: None,
                 l1_block_number: l1_message_que_index,
                 l2_block_number: (UNITS_FOR_TESTING - l1_message_que_index >
-                    L1_MESSAGE_EXECUTED_COUNT)
+                    L1_MESSAGES_NOT_EXECUTED_COUNT)
                     .then_some(l1_message_que_index),
                 transaction: TxL1Message {
                     queue_index: l1_message_que_index,
@@ -513,15 +515,18 @@ mod test {
                     number: block_number,
                     hash: Arbitrary::arbitrary(&mut u).unwrap(),
                 },
-                l1_messages: vec![l1_messages[block_number as usize].transaction.tx_hash()],
+                l1_messages: (UNITS_FOR_TESTING - block_number > L1_MESSAGES_NOT_EXECUTED_COUNT)
+                    .then_some(vec![l1_messages[block_number as usize].transaction.tx_hash()])
+                    .unwrap_or_default(),
             };
+            println!("L2 block: {:?}", l2_block);
             indexer.handle_block(l2_block.clone(), None);
             indexer.next().await.unwrap().unwrap();
             blocks.push(l2_block);
         }
 
         // First we assert that we dont reorg the L2 or message queue hash for a higher block
-        // reorg.
+        // than any of the L1 messages.
         indexer.handle_l1_notification(L1Notification::Reorg(30));
         let event = indexer.next().await.unwrap().unwrap();
         assert_eq!(
@@ -533,7 +538,7 @@ mod test {
             }
         );
 
-        // Reorg at block
+        // Reorg at block 17 which is one of he blocks that has not been executed yet. No reorg.
         indexer.handle_l1_notification(L1Notification::Reorg(17));
         let event = indexer.next().await.unwrap().unwrap();
 
@@ -541,8 +546,21 @@ mod test {
             event,
             IndexerEvent::ReorgIndexed {
                 l1_block_number: 17,
-                queue_index: Some(18),
-                l2_block_info: Some(blocks[17].block_info)
+                queue_index: None,
+                l2_block_info: None
+            }
+        );
+
+        // Now reorg at block 11 which contains L1 messages that have been executed .
+        indexer.handle_l1_notification(L1Notification::Reorg(11));
+        let event = indexer.next().await.unwrap().unwrap();
+
+        assert_eq!(
+            event,
+            IndexerEvent::ReorgIndexed {
+                l1_block_number: 11,
+                queue_index: Some(12),
+                l2_block_info: Some(blocks[11 as usize].block_info)
             }
         );
     }
