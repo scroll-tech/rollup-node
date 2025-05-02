@@ -238,9 +238,9 @@ where
             }
             EngineDriverEvent::NewPayload(payload) => {
                 if let Some(signer) = self.signer.as_mut() {
-                    let _ = signer.sign_block(payload).inspect_err(|err| tracing::error!(target: "scroll::node::manager", ?err, "Failed to send new payload to signer"));
+                    let _ = signer.sign_block(payload.clone()).inspect_err(|err| tracing::error!(target: "scroll::node::manager", ?err, "Failed to send new payload to signer"));
                 }
-                self.indexer.handle_block(payload.clone().into(), None);
+                self.indexer.handle_block(payload.into(), None);
             }
             EngineDriverEvent::L1BlockConsolidated((block_info, batch_info)) => {
                 self.indexer.handle_block(block_info.clone(), Some(batch_info));
