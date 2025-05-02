@@ -1,6 +1,6 @@
 use super::{future::EngineDriverFuture, ForkchoiceState};
 use crate::{future::EngineDriverFutureResult, EngineDriverEvent};
-use futures::{task::AtomicWaker, Stream};
+use futures::{ready, task::AtomicWaker, Stream};
 use rollup_node_primitives::{BlockInfo, ScrollPayloadAttributesWithBatchInfo};
 use rollup_node_providers::ExecutionPayloadProvider;
 use scroll_alloy_provider::ScrollEngineApi;
@@ -204,11 +204,10 @@ where
 
         // If we have a future, poll it.
         if let Some(future) = this.future.as_mut() {
-            if let Poll::Ready(result) = future.poll(cx) {
-                this.future = None;
-                if let Some(event) = this.handle_future_result(result) {
-                    return Poll::Ready(Some(event));
-                }
+            let result = ready!(future.poll(cx));
+            this.future = None;
+            if let Some(event) = this.handle_future_result(result) {
+                return Poll::Ready(Some(event));
             }
         };
 
