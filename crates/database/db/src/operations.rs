@@ -7,8 +7,8 @@ use rollup_node_primitives::{
     BatchCommitData, BatchInfo, BlockInfo, L1MessageEnvelope, L2BlockInfoWithL1Messages,
 };
 use scroll_alloy_rpc_types_engine::BlockDataHint;
-use scroll_migration::{Expr, OnConflict};
 use sea_orm::{
+    sea_query::{Expr, OnConflict},
     ActiveModelTrait, ColumnTrait, Condition, EntityTrait, QueryFilter, QueryOrder, QuerySelect,
     Set,
 };
