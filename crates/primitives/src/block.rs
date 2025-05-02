@@ -3,6 +3,7 @@ use alloy_primitives::B256;
 use alloy_rpc_types_engine::{ExecutionPayload, PayloadError};
 use reth_primitives_traits::transaction::signed::SignedTransaction;
 use reth_scroll_primitives::ScrollBlock;
+use std::vec::Vec;
 
 /// Information about a block.
 #[derive(Debug, Default, Copy, Clone, PartialEq, Eq)]
