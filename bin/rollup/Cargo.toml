@@ -28,8 +28,8 @@ reth-eth-wire-types.workspace = true
 reth-network.workspace = true
 reth-network-peers.workspace = true
 reth-node-api = { git = "https://github.com/scroll-tech/reth.git" }
-reth-node-builder = { git = "https://github.com/scroll-tech/reth.git", features = ["skip-state-root-validation"] }
-reth-node-core = { git = "https://github.com/scroll-tech/reth.git" }
+reth-node-builder = { workspace = true, features = ["skip-state-root-validation"] }
+reth-node-core.workspace = true
 reth-node-types = { git = "https://github.com/scroll-tech/reth.git" }
 reth-primitives.workspace = true
 reth-provider = { workspace = true, features = ["skip-state-root-validation"] }
@@ -43,14 +43,14 @@ reth-scroll-engine-primitives = { git = "https://github.com/scroll-tech/reth.git
 reth-scroll-node = { workspace = true, features = ["skip-state-root-validation"] }
 reth-scroll-primitives = { workspace = true }
 scroll-db = { workspace = true }
-scroll-engine = { workspace = true, features = ["test-utils"] }
+scroll-engine.workspace = true
 scroll-migration.workspace = true
 scroll-network.workspace = true
 scroll-wire.workspace = true
 
 # rollup-node
 rollup-node-manager.workspace = true
-rollup-node-providers.workspace = true
+rollup-node-providers = { workspace = true, features = ["test-utils"] }
 rollup-node-sequencer.workspace = true
 rollup-node-watcher.workspace = true
 
@@ -60,6 +60,7 @@ eyre.workspace = true
 reqwest = { version = "0.12", default-features = false }
 tokio = { workspace = true, features = ["full"] }
 tracing.workspace = true
+url = "2.5.4"
 
 [dev-dependencies]
 # alloy
@@ -69,7 +70,7 @@ alloy-rpc-types-engine.workspace = true
 # reth
 reth-e2e-test-utils.workspace = true
 reth-payload-builder = { git = "https://github.com/scroll-tech/reth.git" }
-reth-rpc-server-types = { git = "https://github.com/scroll-tech/reth.git" }
+reth-rpc-server-types.workspace = true
 reth-tasks.workspace = true
 reth-tracing = { git = "https://github.com/scroll-tech/reth.git" }
 
@@ -87,7 +88,6 @@ test-utils = [
     "reth-primitives/test-utils",
     "reth-provider/test-utils",
     "reth-transaction-pool/test-utils",
-    "scroll-engine/test-utils",
     "reth-payload-builder/test-utils",
     "reth-payload-builder/test-utils",
     "reth-scroll-node/test-utils",
@@ -97,6 +97,7 @@ test-utils = [
     "reth-scroll-node/test-utils",
     "reth-scroll-node/test-utils",
     "rollup-node-providers/test-utils",
+    "scroll-engine/test-utils",
 ]
 serde = [
     "alloy-primitives/serde",
@@ -112,6 +113,7 @@ serde = [
     "rollup-node-manager/serde",
     "alloy-chains/serde",
     "reth-transaction-pool/serde",
+    "url/serde",
 ]
 
 [[bin]]

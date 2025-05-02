@@ -16,11 +16,11 @@ use tokio::time::Duration;
 
 /// The main interface to the Engine API of the EN.
 /// Internally maintains the fork state of the chain.
-pub struct EngineDriver<EC, P> {
+pub struct EngineDriver<EC, P = ()> {
     /// The engine API client.
     client: Arc<EC>,
     /// The execution payload provider
-    execution_payload_provider: Arc<P>,
+    execution_payload_provider: Option<P>,
     /// The fork choice state of the engine.
     fcs: ForkchoiceState,
     /// Block building duration.
@@ -46,7 +46,7 @@ where
     /// [`ExecutionPayloadProvider`].
     pub const fn new(
         client: Arc<EC>,
-        execution_payload_provider: Arc<P>,
+        execution_payload_provider: Option<P>,
         fcs: ForkchoiceState,
         block_building_duration: Duration,
     ) -> Self {
@@ -192,7 +192,7 @@ where
 impl<EC, P> Stream for EngineDriver<EC, P>
 where
     EC: ScrollEngineApi + Unpin + Send + Sync + 'static,
-    P: ExecutionPayloadProvider + Unpin + Send + Sync + 'static,
+    P: ExecutionPayloadProvider + Clone + Unpin + Send + Sync + 'static,
 {
     type Item = EngineDriverEvent;
 
@@ -242,16 +242,20 @@ where
             let safe_block_info = *this.fcs.safe_block_info();
             let fcs = this.fcs.get_alloy_fcs();
             let client = this.client.clone();
-            let execution_payload_provider = this.execution_payload_provider.clone();
 
-            this.future = Some(EngineDriverFuture::l1_consolidation(
-                client,
-                execution_payload_provider,
-                safe_block_info,
-                fcs,
-                payload_attributes,
-            ));
-            this.waker.wake();
+            if let Some(provider) = this.execution_payload_provider.clone() {
+                this.future = Some(EngineDriverFuture::l1_consolidation(
+                    client,
+                    provider,
+                    safe_block_info,
+                    fcs,
+                    payload_attributes,
+                ));
+                this.waker.wake();
+            } else {
+                tracing::error!(target: "scroll::engine", "l1 consolidation requires an execution payload provider");
+            }
+
             return Poll::Pending;
         }
 
@@ -273,7 +277,7 @@ impl<EC, P> std::fmt::Debug for EngineDriver<EC, P> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use scroll_engine::test_utils::{NoopExecutionPayloadProvider, PanicEngineClient};
+    use scroll_engine::test_utils::PanicEngineClient;
 
     impl<EC, P> EngineDriver<EC, P> {
         fn with_future(&mut self, future: EngineDriverFuture) {
@@ -284,12 +288,11 @@ mod tests {
     #[tokio::test]
     async fn test_is_payload_building_in_progress() {
         let client = Arc::new(PanicEngineClient);
-        let payload_provider = Arc::new(NoopExecutionPayloadProvider);
         let fcs =
             ForkchoiceState::from_block_info(BlockInfo { number: 0, hash: Default::default() });
         let duration = Duration::from_secs(2);
 
-        let mut driver = EngineDriver::new(client, payload_provider, fcs, duration);
+        let mut driver = EngineDriver::new(client, None::<()>, fcs, duration);
 
         // Initially, it should be false
         assert!(!driver.is_payload_building_in_progress());
@@ -304,12 +307,11 @@ mod tests {
     #[tokio::test]
     async fn test_is_payload_building_in_progress_with_future() {
         let client = Arc::new(PanicEngineClient);
-        let payload_provider = Arc::new(NoopExecutionPayloadProvider);
         let fcs =
             ForkchoiceState::from_block_info(BlockInfo { number: 0, hash: Default::default() });
         let duration = Duration::from_secs(2);
 
-        let mut driver = EngineDriver::new(client.clone(), payload_provider, fcs, duration);
+        let mut driver = EngineDriver::new(client.clone(), None::<()>, fcs, duration);
 
         // Initially, it should be false
         assert!(!driver.is_payload_building_in_progress());

@@ -22,6 +22,7 @@ members = [
     "crates/scroll-wire",
     "crates/sequencer",
     "crates/watcher",
+    "crates/signer",
 ]
 
 resolver = "2"
@@ -127,6 +128,8 @@ alloy-rpc-client = { version = "0.14.0", default-features = false }
 alloy-rpc-types-engine = { version = "0.14.0", default-features = false }
 alloy-rpc-types-eth = { version = "0.14.0", default-features = false }
 alloy-sol-types = { version = "1.0.0", default-features = false }
+alloy-signer = { version = "0.14.0", default-features = false }
+alloy-signer-local = { version = "0.14.0", default-features = false }
 alloy-transport = { version = "0.14.0", default-features = false }
 
 # scroll-alloy
@@ -143,9 +146,13 @@ reth-eth-wire-types = { git = "https://github.com/scroll-tech/reth.git", default
 reth-network = { git = "https://github.com/scroll-tech/reth.git", default-features = false }
 reth-network-api = { git = "https://github.com/scroll-tech/reth.git", default-features = false }
 reth-network-peers = { git = "https://github.com/scroll-tech/reth.git", default-features = false }
+reth-node-builder = { git = "https://github.com/scroll-tech/reth.git", default-features = false }
+reth-node-core = { git = "https://github.com/scroll-tech/reth.git" }
+reth-payload-primitives = { git = "https://github.com/scroll-tech/reth.git" }
 reth-primitives = { git = "https://github.com/scroll-tech/reth.git", default-features = false }
 reth-primitives-traits = { git = "https://github.com/scroll-tech/reth.git", default-features = false }
 reth-provider = { git = "https://github.com/scroll-tech/reth.git", default-features = false }
+reth-rpc-server-types = { git = "https://github.com/scroll-tech/reth.git" }
 reth-tasks = { git = "https://github.com/scroll-tech/reth.git" }
 reth-tokio-util = { git = "https://github.com/scroll-tech/reth.git", default-features = false }
 reth-tracing = { git = "https://github.com/scroll-tech/reth.git", default-features = false }
@@ -163,6 +170,7 @@ rollup-node-manager = { path = "crates/node" }
 rollup-node-primitives = { path = "crates/primitives" }
 rollup-node-providers = { path = "crates/providers" }
 rollup-node-sequencer = { path = "crates/sequencer" }
+rollup-node-signer = { path = "crates/signer" }
 rollup-node-watcher = { path = "crates/watcher" }
 scroll-codec = { path = "crates/codec" }
 scroll-db = { path = "crates/database/db" }
@@ -189,4 +197,3 @@ thiserror = "2.0"
 tokio = { version = "1.39", default-features = false }
 tokio-stream = { version = "0.1", default-features = false }
 tracing = "0.1.0"
-jsonrpsee = "0.24.9"

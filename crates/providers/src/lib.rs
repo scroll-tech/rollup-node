@@ -7,7 +7,7 @@ mod beacon;
 pub use block::BlockDataProvider;
 mod block;
 
-pub use execution_payload::ExecutionPayloadProvider;
+pub use execution_payload::{AlloyExecutionPayloadProvider, ExecutionPayloadProvider};
 mod execution_payload;
 
 pub use l1::{
@@ -18,5 +18,5 @@ pub use l1::{
 mod l1;
 
 /// Test utils related to providers.
-#[cfg(feature = "test-utils")]
+#[cfg(any(test, feature = "test-utils"))]
 pub mod test_utils;

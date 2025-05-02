@@ -1,3 +1,9 @@
+use crate::{
+    constants::PROVIDER_BLOB_CACHE_SIZE, L1ProviderArgs, ScrollRollupNodeArgs,
+    WATCHER_START_BLOCK_NUMBER,
+};
+use std::{sync::Arc, time::Duration};
+
 use alloy_provider::ProviderBuilder;
 use alloy_rpc_client::RpcClient;
 use alloy_transport::layers::RetryBackoffLayer;
@@ -11,21 +17,18 @@ use reth_scroll_chainspec::ScrollChainSpec;
 use reth_scroll_primitives::ScrollPrimitives;
 use reth_transaction_pool::{PoolTransaction, TransactionPool};
 use rollup_node_manager::{Consensus, NoopConsensus, PoAConsensus, RollupNodeManager};
-use rollup_node_providers::{beacon_provider, DatabaseL1MessageProvider, OnlineL1Provider};
+use rollup_node_providers::{
+    beacon_provider, AlloyExecutionPayloadProvider, DatabaseL1MessageProvider, OnlineL1Provider,
+};
 use rollup_node_sequencer::Sequencer;
 use rollup_node_watcher::L1Watcher;
 use scroll_alloy_provider::ScrollAuthEngineApiProvider;
 use scroll_db::{Database, DatabaseConnectionProvider};
-use scroll_engine::{test_utils::NoopExecutionPayloadProvider, EngineDriver, ForkchoiceState};
+use scroll_engine::{EngineDriver, ForkchoiceState};
 use scroll_network::NetworkManager as ScrollNetworkManager;
 use scroll_wire::{ProtocolHandler, ScrollWireConfig};
-use std::{sync::Arc, time::Duration};
 use tracing::info;
-
-use crate::{
-    constants::PROVIDER_BLOB_CACHE_SIZE, L1ProviderArgs, ScrollRollupNodeArgs,
-    WATCHER_START_BLOCK_NUMBER,
-};
+use url::Url;
 
 /// The network builder for the scroll rollup.
 #[derive(Debug)]
@@ -98,7 +101,39 @@ where
             auth_secret,
             self.config.engine_api_url.unwrap_or(format!("http://localhost:{auth_port}").parse()?),
         );
-        let payload_provider = NoopExecutionPayloadProvider;
+
+        // Get a provider
+        let provider = if let Some(url) = self.config.l1_provider_args.url {
+            let L1ProviderArgs { max_retries, initial_backoff, compute_units_per_second, .. } =
+                self.config.l1_provider_args;
+            let client = RpcClient::builder()
+                .layer(RetryBackoffLayer::new(
+                    max_retries,
+                    initial_backoff,
+                    compute_units_per_second,
+                ))
+                .http(url);
+            Some(ProviderBuilder::new().on_client(client))
+        } else {
+            None
+        };
+
+        // Get a payload provider
+        let payload_provider = if self.config.test || !ctx.config().rpc.http {
+            None
+        } else {
+            let l2_provider_url =
+                format!("http://{}:{}", ctx.config().rpc.http_addr, ctx.config().rpc.http_port);
+            let client = RpcClient::builder()
+                .layer(RetryBackoffLayer::new(
+                    self.config.l2_provider_args.max_retries,
+                    self.config.l2_provider_args.initial_backoff,
+                    self.config.l2_provider_args.compute_units_per_second,
+                ))
+                .http(Url::parse(&l2_provider_url)?);
+            let provider = ProviderBuilder::new().on_client(client);
+            Some(AlloyExecutionPayloadProvider::new(provider))
+        };
 
         let fcs = if let Some(named) = ctx.config().chain.chain.named() {
             ForkchoiceState::head_from_named_chain(named)
@@ -107,7 +142,7 @@ where
         };
         let engine = EngineDriver::new(
             Arc::new(engine_api),
-            Arc::new(payload_provider),
+            payload_provider,
             fcs,
             Duration::from_millis(self.config.sequencer_args.payload_building_duration),
         );
@@ -131,22 +166,6 @@ where
 
         // Get the chain specification
         let chain_spec = ctx.chain_spec();
-
-        // Spawn the L1Watcher
-        let provider = if let Some(url) = self.config.l1_provider_args.l1_rpc_url {
-            let L1ProviderArgs { max_retries, initial_backoff, compute_units_per_second, .. } =
-                self.config.l1_provider_args;
-            let client = RpcClient::builder()
-                .layer(RetryBackoffLayer::new(
-                    max_retries,
-                    initial_backoff,
-                    compute_units_per_second,
-                ))
-                .http(url);
-            Some(ProviderBuilder::new().on_client(client))
-        } else {
-            None
-        };
 
         // Create the consensus.
         let consensus: Box<dyn Consensus> = if self.config.test {
@@ -173,7 +192,7 @@ where
 
         // Construct the l1 provider.
         let l1_messages_provider = DatabaseL1MessageProvider::new(db.clone(), 0);
-        let l1_provider = if let Some(url) = self.config.l1_provider_args.beacon_rpc_url {
+        let l1_provider = if let Some(url) = self.config.beacon_provider_args.url {
             let beacon_provider = beacon_provider(url.to_string());
             let l1_provider = OnlineL1Provider::new(
                 beacon_provider,
@@ -212,6 +231,7 @@ where
             chain_spec,
             block_rx,
             sequencer,
+            None,
             block_time,
         );
 

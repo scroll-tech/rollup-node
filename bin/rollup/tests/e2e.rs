@@ -14,7 +14,9 @@ use reth_scroll_chainspec::ScrollChainSpec;
 use reth_scroll_engine_primitives::ScrollPayloadBuilderAttributes;
 use reth_scroll_node::{ScrollNetworkPrimitives, ScrollNode};
 use reth_tasks::TaskManager;
-use rollup_node::{L1ProviderArgs, ScrollRollupNodeArgs, SequencerArgs};
+use rollup_node::{
+    BeaconProviderArgs, L1ProviderArgs, L2ProviderArgs, ScrollRollupNodeArgs, SequencerArgs,
+};
 use scroll_alloy_rpc_types_engine::ScrollPayloadAttributes;
 use scroll_network::{NewBlockWithPeer, SCROLL_MAINNET};
 use scroll_wire::ScrollWireConfig;
@@ -137,18 +139,14 @@ pub async fn build_bridge_node(
         enable_eth_scroll_wire_bridge: true,
         enable_scroll_wire: true,
         database_path: Some(PathBuf::from("sqlite::memory:")),
-        l1_provider_args: L1ProviderArgs {
-            l1_rpc_url: None,
-            beacon_rpc_url: None,
-            compute_units_per_second: 100,
-            max_retries: 10,
-            initial_backoff: 100,
-        },
+        l1_provider_args: L1ProviderArgs::default(),
         engine_api_url: None,
         sequencer_args: SequencerArgs {
             scroll_sequencer_enabled: false,
             ..SequencerArgs::default()
         },
+        beacon_provider_args: BeaconProviderArgs::default(),
+        l2_provider_args: L2ProviderArgs::default(),
     };
     let node = ScrollNode;
     let NodeHandle { node, node_exit_future: _ } = NodeBuilder::new(node_config.clone())

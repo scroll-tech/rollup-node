@@ -16,5 +16,8 @@ mod batch;
 pub use bounded_vec::BoundedVec;
 mod bounded_vec;
 
+mod signature;
+pub use signature::sig_encode_hash;
+
 pub use transaction::L1MessageEnvelope;
 mod transaction;
