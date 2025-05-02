@@ -105,11 +105,14 @@ impl EngineDriverFuture {
     }
 }
 
-impl EngineDriverFuture {
+impl Future for EngineDriverFuture {
+    type Output = EngineDriverFutureResult;
+
     /// Polls the [`EngineDriverFuture`] and upon completion, returns the result of the
     /// corresponding future by converting it into an [`EngineDriverFutureResult`].
-    pub(super) fn poll(&mut self, cx: &mut Context<'_>) -> Poll<EngineDriverFutureResult> {
-        match self {
+    fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<EngineDriverFutureResult> {
+        let this = self.get_mut();
+        match this {
             Self::BlockImport(fut) => fut.as_mut().poll(cx).map(Into::into),
             Self::L1Consolidation(fut) => fut.as_mut().poll(cx).map(Into::into),
             Self::PayloadBuildingJob(fut) => fut.as_mut().poll(cx).map(Into::into),

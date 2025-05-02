@@ -49,8 +49,8 @@ impl ForkchoiceState {
     }
 
     /// Updates the `head` block info.
-    pub fn update_head_block_info(&mut self, unsafe_: BlockInfo) {
-        self.head = unsafe_;
+    pub fn update_head_block_info(&mut self, head: BlockInfo) {
+        self.head = head;
     }
 
     /// Updates the `safe` block info.
