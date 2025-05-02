@@ -22,16 +22,16 @@ impl MigrationTrait for Migration {
                             .name("fk_batch_index")
                             .from(L2Block::Table, L2Block::BatchIndex)
                             .to(BatchCommit::Table, BatchCommit::Index)
-                            .on_delete(ForeignKeyAction::Cascade)
-                            .on_update(ForeignKeyAction::Cascade),
+                            .on_delete(ForeignKeyAction::SetNull)
+                            .on_update(ForeignKeyAction::SetNull),
                     )
                     .foreign_key(
                         ForeignKey::create()
                             .name("fk_batch_hash")
                             .from(L2Block::Table, L2Block::BatchHash)
                             .to(BatchCommit::Table, BatchCommit::Hash)
-                            .on_delete(ForeignKeyAction::Cascade)
-                            .on_update(ForeignKeyAction::Cascade),
+                            .on_delete(ForeignKeyAction::SetNull)
+                            .on_update(ForeignKeyAction::SetNull),
                     )
                     .to_owned(),
             )

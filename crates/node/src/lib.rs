@@ -2,6 +2,7 @@
 
 use alloy_primitives::Signature;
 use futures::StreamExt;
+use reth_chainspec::EthChainSpec;
 use reth_tokio_util::{EventSender, EventStream};
 use rollup_node_indexer::{Indexer, IndexerEvent};
 use rollup_node_sequencer::Sequencer;
@@ -99,7 +100,7 @@ where
     P: ExecutionPayloadProvider + Unpin + Send + Sync + 'static,
     L1P: L1Provider + Clone + Send + Sync + 'static,
     L1MP: L1MessageProvider + Unpin + Send + Sync + 'static,
-    CS: ScrollHardforks + Send + Sync + 'static,
+    CS: ScrollHardforks + EthChainSpec + Send + Sync + 'static,
 {
     /// Create a new [`RollupNodeManager`] instance.
     #[allow(clippy::too_many_arguments)]
@@ -196,13 +197,23 @@ where
                 // update the fcs on new finalized block.
                 self.engine.set_finalized_block_info(finalized_block);
             }
-            IndexerEvent::ReorgIndexed { l1_block_number, queue_index, l2_block_info } => {
+            IndexerEvent::ReorgIndexed {
+                l1_block_number,
+                queue_index,
+                l2_head_block_info,
+                l2_safe_block_info,
+            } => {
                 // Update the [`EngineDriver`] fork choice state with the new L2 head info.
-                if let Some(l2_block_info) = l2_block_info {
-                    self.engine.set_head_block_info(l2_block_info);
+                if let Some(l2_head_block_info) = l2_head_block_info {
+                    self.engine.set_head_block_info(l2_head_block_info);
                 }
 
-                // Update the [`Sequencer`] with the new L2 head info.
+                // Update the [`EngineDriver`] fork choice state with the new L2 safe info.
+                if let Some(safe_block_info) = l2_safe_block_info {
+                    self.engine.set_safe_block_info(safe_block_info);
+                }
+
+                // Update the [`Sequencer`] with the new L1 head info and queue index.
                 if let Some(sequencer) = self.sequencer.as_mut() {
                     sequencer.handle_reorg(queue_index, l1_block_number);
                 }
@@ -249,7 +260,7 @@ where
     P: ExecutionPayloadProvider + Unpin + Send + Sync + 'static,
     L1P: L1Provider + Clone + Unpin + Send + Sync + 'static,
     L1MP: L1MessageProvider + Unpin + Send + Sync + 'static,
-    CS: ScrollHardforks + Unpin + Send + Sync + 'static,
+    CS: ScrollHardforks + EthChainSpec + Unpin + Send + Sync + 'static,
 {
     type Output = ();
 

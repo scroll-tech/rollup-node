@@ -26,6 +26,7 @@ scroll-alloy-provider.workspace = true
 reth-tokio-util.workspace = true
 
 # reth-scroll
+reth-chainspec.workspace = true
 reth-primitives-traits.workspace = true
 reth-scroll-primitives.workspace = true
 

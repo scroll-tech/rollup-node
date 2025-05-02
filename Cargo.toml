@@ -137,6 +137,7 @@ scroll-alloy-provider = { git = "https://github.com/scroll-tech/reth.git", defau
 scroll-alloy-rpc-types-engine = { git = "https://github.com/scroll-tech/reth.git", default-features = false }
 
 # reth
+reth-chainspec = { git = "https://github.com/scroll-tech/reth.git", default-features = false }
 reth-e2e-test-utils = { git = "https://github.com/scroll-tech/reth.git" }
 reth-eth-wire-types = { git = "https://github.com/scroll-tech/reth.git", default-features = false }
 reth-network = { git = "https://github.com/scroll-tech/reth.git", default-features = false }

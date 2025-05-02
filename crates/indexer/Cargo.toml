@@ -22,6 +22,9 @@ rollup-node-watcher.workspace = true
 scroll-alloy-consensus.workspace = true
 scroll-alloy-hardforks.workspace = true
 
+# reth
+reth-chainspec.workspace = true
+
 # misc
 futures.workspace = true
 thiserror.workspace = true

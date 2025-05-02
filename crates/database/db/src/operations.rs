@@ -90,13 +90,13 @@ pub trait DatabaseOperations: DatabaseConnectionProvider {
     }
 
     /// Delete all [`BatchCommitData`]s with a block number greater than the provided block number.
-    async fn delete_batches_gt(&self, block_number: u64) -> Result<(), DatabaseError> {
+    async fn delete_batches_gt(&self, block_number: u64) -> Result<u64, DatabaseError> {
         tracing::trace!(target: "scroll::db", block_number, "Deleting batch inputs greater than block number.");
         Ok(models::batch_commit::Entity::delete_many()
             .filter(models::batch_commit::Column::BlockNumber.gt(block_number as i64))
             .exec(self.get_connection())
             .await
-            .map(|_| ())?)
+            .map(|x| x.rows_affected)?)
     }
 
     /// Get an iterator over all [`BatchCommitData`]s in the database.
@@ -216,7 +216,38 @@ pub trait DatabaseOperations: DatabaseConnectionProvider {
             })?)
     }
 
-    /// Insert a new derived block line in the database.
+    /// Get the latest safe L2 [`BlockInfo`] from the database.
+    async fn get_latest_safe_l2_block(&self) -> Result<Option<BlockInfo>, DatabaseError> {
+        tracing::trace!(target: "scroll::db", "Fetching latest safe L2 block from database.");
+        Ok(models::l2_block::Entity::find()
+            .filter(models::l2_block::Column::BatchIndex.is_not_null())
+            .order_by_desc(models::l2_block::Column::BlockNumber)
+            .one(self.get_connection())
+            .await
+            .map(|x| x.map(|x| x.block_info()))?)
+    }
+
+    /// Get the latest L2 [`BlockInfo`] from the database.
+    async fn get_latest_l2_block(&self) -> Result<Option<BlockInfo>, DatabaseError> {
+        tracing::trace!(target: "scroll::db", "Fetching latest L2 block from database.");
+        Ok(models::l2_block::Entity::find()
+            .order_by_desc(models::l2_block::Column::BlockNumber)
+            .one(self.get_connection())
+            .await
+            .map(|x| x.map(|x| x.block_info()))?)
+    }
+
+    /// Delete all L2 blocks with a block number greater than the provided block number.
+    async fn delete_l2_blocks_gt(&self, block_number: u64) -> Result<u64, DatabaseError> {
+        tracing::trace!(target: "scroll::db", block_number, "Deleting L2 blocks greater than provided block number.");
+        Ok(models::l2_block::Entity::delete_many()
+            .filter(models::l2_block::Column::BlockNumber.gt(block_number as i64))
+            .exec(self.get_connection())
+            .await
+            .map(|x| x.rows_affected)?)
+    }
+
+    /// Insert a new block in the database.
     async fn insert_block(
         &self,
         block_info: L2BlockInfoWithL1Messages,
@@ -228,7 +259,7 @@ pub trait DatabaseOperations: DatabaseConnectionProvider {
             batch_index = batch_info.as_ref().map(|b| b.index),
             block_number = block_info.block_info.number,
             block_hash = ?block_info.block_info.hash,
-            "Inserting derived block into database."
+            "Inserting block into database."
         );
         let l2_block: models::l2_block::ActiveModel = (block_info.block_info, batch_info).into();
         models::l2_block::Entity::insert(l2_block)
@@ -247,7 +278,7 @@ pub trait DatabaseOperations: DatabaseConnectionProvider {
             target: "scroll::db",
             block_number = block_info.block_info.number,
             l1_messages = ?block_info.l1_messages,
-            "Updating executed L1 messages from derived block with L2 block number in the database."
+            "Updating executed L1 messages from block with L2 block number in the database."
         );
         models::l1_message::Entity::update_many()
             .col_expr(

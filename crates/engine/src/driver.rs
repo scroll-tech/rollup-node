@@ -68,6 +68,11 @@ where
         self.fcs.update_finalized_block_info(block_info);
     }
 
+    /// Sets the safe block info.
+    pub fn set_safe_block_info(&mut self, block_info: BlockInfo) {
+        self.fcs.update_safe_block_info(block_info);
+    }
+
     /// Sets the head block info.
     pub fn set_head_block_info(&mut self, block_info: BlockInfo) {
         self.fcs.update_head_block_info(block_info);

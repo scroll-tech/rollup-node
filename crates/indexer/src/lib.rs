@@ -2,6 +2,7 @@
 
 use alloy_primitives::{b256, keccak256, B256};
 use futures::Stream;
+use reth_chainspec::EthChainSpec;
 use rollup_node_primitives::{
     BatchCommitData, BatchInfo, BlockInfo, L1MessageEnvelope, L2BlockInfoWithL1Messages,
 };
@@ -44,7 +45,7 @@ pub struct Indexer<ChainSpec> {
     chain_spec: Arc<ChainSpec>,
 }
 
-impl<ChainSpec: ScrollHardforks + Send + Sync + 'static> Indexer<ChainSpec> {
+impl<ChainSpec: ScrollHardforks + EthChainSpec + Send + Sync + 'static> Indexer<ChainSpec> {
     /// Creates a new indexer with the given [`Database`].
     pub fn new(database: Arc<Database>, chain_spec: Arc<ChainSpec>) -> Self {
         Self {
@@ -74,7 +75,7 @@ impl<ChainSpec: ScrollHardforks + Send + Sync + 'static> Indexer<ChainSpec> {
     pub fn handle_l1_notification(&mut self, event: L1Notification) {
         let fut = match event {
             L1Notification::Reorg(block_number) => IndexerFuture::HandleReorg(Box::pin(
-                Self::handle_reorg(self.database.clone(), block_number),
+                Self::handle_l1_reorg(self.database.clone(), self.chain_spec.clone(), block_number),
             )),
             L1Notification::NewBlock(_block_number) => return,
             L1Notification::Finalized(block_number) => {
@@ -113,40 +114,57 @@ impl<ChainSpec: ScrollHardforks + Send + Sync + 'static> Indexer<ChainSpec> {
 
     /// Handles a reorganization event by deleting all indexed data which is greater than the
     /// provided block number.
-    async fn handle_reorg(
+    async fn handle_l1_reorg(
         database: Arc<Database>,
+        chain_spec: Arc<ChainSpec>,
         l1_block_number: u64,
     ) -> Result<IndexerEvent, IndexerError> {
         // create a database transaction so this operation is atomic
         let txn = database.tx().await?;
 
         // delete batch inputs and l1 messages
-        txn.delete_batches_gt(l1_block_number).await?;
+        let batches_removed = txn.delete_batches_gt(l1_block_number).await?;
         let deleted_messages = txn.delete_l1_messages_gt(l1_block_number).await?;
 
-        // determine if we need to reorg the L2
-        let mut queue_indices: Vec<_> = deleted_messages
-            .into_iter()
-            .filter_map(|x| {
-                (x.l1_block_number > l1_block_number && x.l2_block_number.is_some()).then_some(x)
-            })
-            .collect();
-        queue_indices.sort_by(|a, b| a.transaction.queue_index.cmp(&b.transaction.queue_index));
+        // filter and sort the executed L1 messages
+        let mut removed_executed_l1_messages: Vec<_> =
+            deleted_messages.into_iter().filter(|x| x.l2_block_number.is_some()).collect();
+        removed_executed_l1_messages
+            .sort_by(|a, b| a.transaction.queue_index.cmp(&b.transaction.queue_index));
 
-        let (queue_index, l2_block_info) = if let Some(msg) = queue_indices.first() {
-            let l2_reorg_block_number = msg.l2_block_number.unwrap() - 1;
-            let l2_block_info = txn
-                .get_l2_block_info_by_number(l2_reorg_block_number)
-                .await?
-                .ok_or(IndexerError::L2BlockNotFound(l2_reorg_block_number))?;
-            (Some(msg.transaction.queue_index), Some(l2_block_info))
+        // check if we need to reorg the L2 head and delete some L2 blocks
+        let (queue_index, l2_head_block_info) =
+            if let Some(msg) = removed_executed_l1_messages.first() {
+                let l2_reorg_block_number = msg.l2_block_number.unwrap() - 1;
+                let l2_block_info = txn
+                    .get_l2_block_info_by_number(l2_reorg_block_number)
+                    .await?
+                    .ok_or(IndexerError::L2BlockNotFound(l2_reorg_block_number))?;
+                txn.delete_l2_blocks_gt(l2_reorg_block_number).await?;
+                (Some(msg.transaction.queue_index), Some(l2_block_info))
+            } else {
+                (None, None)
+            };
+
+        // check if we need to reorg the L2 safe block
+        let l2_safe_block_info = if batches_removed > 0 {
+            if let Some(x) = txn.get_latest_safe_l2_block().await? {
+                Some(x)
+            } else {
+                Some(BlockInfo::new(0, chain_spec.genesis_hash()))
+            }
         } else {
-            (None, None)
+            None
         };
 
         // commit the transaction
         txn.commit().await?;
-        Ok(IndexerEvent::ReorgIndexed { l1_block_number, queue_index, l2_block_info })
+        Ok(IndexerEvent::ReorgIndexed {
+            l1_block_number,
+            queue_index,
+            l2_head_block_info,
+            l2_safe_block_info,
+        })
     }
 
     /// Handles a finalized event by updating the indexer L1 finalized block and returning the new
@@ -477,12 +495,28 @@ mod test {
     #[tokio::test]
     async fn test_handle_reorg_executed_l1_messages() {
         // Instantiate indexer and db
-        let (mut indexer, _db) = setup_test_indexer().await;
+        let (mut indexer, _database) = setup_test_indexer().await;
 
         // Generate unstructured bytes.
-        let mut bytes = [0u8; 4096];
+        let mut bytes = [0u8; 8192];
         rand::rng().fill(bytes.as_mut_slice());
         let mut u = Unstructured::new(&bytes);
+
+        // Generate a 3 random batch inputs and set their block numbers
+        let batch_commit_block_1 =
+            BatchCommitData { block_number: 5, ..Arbitrary::arbitrary(&mut u).unwrap() };
+        let batch_commit_block_20 =
+            BatchCommitData { block_number: 10, ..Arbitrary::arbitrary(&mut u).unwrap() };
+
+        // Index batch inputs
+        indexer.handle_l1_notification(L1Notification::BatchCommit(batch_commit_block_1.clone()));
+        indexer.handle_l1_notification(L1Notification::BatchCommit(batch_commit_block_20.clone()));
+        for _ in 0..2 {
+            let _event = indexer.next().await.unwrap().unwrap();
+        }
+
+        let batch_1 = BatchInfo::new(batch_commit_block_1.index, batch_commit_block_1.hash);
+        let batch_20 = BatchInfo::new(batch_commit_block_20.index, batch_commit_block_20.hash);
 
         const UNITS_FOR_TESTING: u64 = 20;
         const L1_MESSAGES_NOT_EXECUTED_COUNT: u64 = 7;
@@ -519,48 +553,58 @@ mod test {
                     .then_some(vec![l1_messages[block_number as usize].transaction.tx_hash()])
                     .unwrap_or_default(),
             };
-            println!("L2 block: {:?}", l2_block);
-            indexer.handle_block(l2_block.clone(), None);
+            let batch_info = if block_number < 5 {
+                Some(batch_1)
+            } else if block_number < 10 {
+                Some(batch_20)
+            } else {
+                None
+            };
+            indexer.handle_block(l2_block.clone(), batch_info);
             indexer.next().await.unwrap().unwrap();
             blocks.push(l2_block);
         }
 
         // First we assert that we dont reorg the L2 or message queue hash for a higher block
         // than any of the L1 messages.
-        indexer.handle_l1_notification(L1Notification::Reorg(30));
-        let event = indexer.next().await.unwrap().unwrap();
-        assert_eq!(
-            event,
-            IndexerEvent::ReorgIndexed {
-                l1_block_number: 30,
-                queue_index: None,
-                l2_block_info: None
-            }
-        );
-
-        // Reorg at block 17 which is one of he blocks that has not been executed yet. No reorg.
         indexer.handle_l1_notification(L1Notification::Reorg(17));
         let event = indexer.next().await.unwrap().unwrap();
-
         assert_eq!(
             event,
             IndexerEvent::ReorgIndexed {
                 l1_block_number: 17,
                 queue_index: None,
-                l2_block_info: None
+                l2_head_block_info: None,
+                l2_safe_block_info: None
             }
         );
 
-        // Now reorg at block 11 which contains L1 messages that have been executed .
-        indexer.handle_l1_notification(L1Notification::Reorg(11));
+        // Reorg at block 17 which is one of the messages that has not been executed yet. No reorg
+        // but we should ensure the L1 messages have been deleted.
+        indexer.handle_l1_notification(L1Notification::Reorg(7));
         let event = indexer.next().await.unwrap().unwrap();
 
         assert_eq!(
             event,
             IndexerEvent::ReorgIndexed {
-                l1_block_number: 11,
-                queue_index: Some(12),
-                l2_block_info: Some(blocks[11 as usize].block_info)
+                l1_block_number: 7,
+                queue_index: Some(8),
+                l2_head_block_info: Some(blocks[7].block_info),
+                l2_safe_block_info: Some(blocks[4].block_info)
+            }
+        );
+
+        // Now reorg at block 5 which contains L1 messages that have been executed .
+        indexer.handle_l1_notification(L1Notification::Reorg(3));
+        let event = indexer.next().await.unwrap().unwrap();
+
+        assert_eq!(
+            event,
+            IndexerEvent::ReorgIndexed {
+                l1_block_number: 3,
+                queue_index: Some(4),
+                l2_head_block_info: Some(blocks[3].block_info),
+                l2_safe_block_info: Some(BlockInfo::new(0, indexer.chain_spec.genesis_hash())),
             }
         );
     }

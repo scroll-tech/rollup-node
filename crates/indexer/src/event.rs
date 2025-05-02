@@ -20,8 +20,10 @@ pub enum IndexerEvent {
         l1_block_number: u64,
         /// The L1 message queue index of the new L1 head.
         queue_index: Option<u64>,
-        /// The L2 block info of the new L2 head.
-        l2_block_info: Option<BlockInfo>,
+        /// The L2 head block info.
+        l2_head_block_info: Option<BlockInfo>,
+        /// The L2 safe block info.
+        l2_safe_block_info: Option<BlockInfo>,
     },
     /// A block has been indexed returning batch and block info.
     BlockIndexed(L2BlockInfoWithL1Messages, Option<BatchInfo>),
