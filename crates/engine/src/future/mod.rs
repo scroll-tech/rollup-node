@@ -39,16 +39,16 @@ type L1ConsolidationFuture = Pin<
     Box<dyn Future<Output = Result<(BlockInfo, IsReorg, BatchInfo), EngineDriverError>> + Send>,
 >;
 
-/// A future that represents a payload building job.
-type PayloadBuildingJobFuture =
+/// A future that represents a new payload job.
+type NewPayloadJobFuture =
     Pin<Box<dyn Future<Output = Result<ScrollBlock, EngineDriverError>> + Send>>;
 
 /// An enum that represents the different types of futures that can be executed by the engine
-/// driver. It can be a block import job, an L1 consolidation job, or a payload building job.
+/// driver. It can be a block import job, an L1 consolidation job, or a new payload job.
 pub(crate) enum EngineDriverFuture {
     BlockImport(BlockImportFuture),
     L1Consolidation(L1ConsolidationFuture),
-    PayloadBuildingJob(PayloadBuildingJobFuture),
+    NewPayloadJob(NewPayloadJobFuture),
 }
 
 impl EngineDriverFuture {
@@ -85,23 +85,16 @@ impl EngineDriverFuture {
         )))
     }
 
-    /// Creates a new [`EngineDriverFuture::PayloadBuildingJob`] future from the provided
-    /// parameters.
-    pub(crate) fn payload_building_job<EC>(
+    /// Creates a new [`EngineDriverFuture::NewPayloadJob`] future from the provided parameters.
+    pub(crate) fn handle_new_payload_job<EC>(
         client: Arc<EC>,
         fcs: AlloyForkchoiceState,
-        block_building_duration: Duration,
-        payload_attributes: ScrollPayloadAttributes,
+        block: ScrollBlock,
     ) -> Self
     where
         EC: ScrollEngineApi + Unpin + Send + Sync + 'static,
     {
-        Self::PayloadBuildingJob(Box::pin(build_new_payload(
-            client,
-            fcs,
-            block_building_duration,
-            payload_attributes,
-        )))
+        Self::NewPayloadJob(Box::pin(handle_new_payload(client, fcs, block)))
     }
 }
 
@@ -115,7 +108,7 @@ impl Future for EngineDriverFuture {
         match this {
             Self::BlockImport(fut) => fut.as_mut().poll(cx).map(Into::into),
             Self::L1Consolidation(fut) => fut.as_mut().poll(cx).map(Into::into),
-            Self::PayloadBuildingJob(fut) => fut.as_mut().poll(cx).map(Into::into),
+            Self::NewPayloadJob(fut) => fut.as_mut().poll(cx).map(Into::into),
         }
     }
 }
@@ -266,9 +259,9 @@ where
 }
 
 /// Builds a new payload from the provided fork choice state and payload attributes.
-async fn build_new_payload<EC>(
+pub(crate) async fn build_new_payload<EC>(
     client: Arc<EC>,
-    mut fcs: AlloyForkchoiceState,
+    fcs: AlloyForkchoiceState,
     block_building_duration: Duration,
     payload_attributes: ScrollPayloadAttributes,
 ) -> Result<ScrollBlock, EngineDriverError>
@@ -284,18 +277,25 @@ where
     tokio::time::sleep(block_building_duration).await;
 
     // retrieve the execution payload
-    let execution_payload = get_payload(
-        client.clone(),
-        fc_updated.payload_id.expect("payload attributes has been set"),
-    )
-    .await?;
+    Ok(get_payload(client.clone(), fc_updated.payload_id.expect("payload attributes has been set"))
+        .await?
+        .try_into_block()?)
+}
 
+/// Handles a new payload by updating the fork choice state and returning the new block.
+async fn handle_new_payload<EC>(
+    client: Arc<EC>,
+    mut fcs: AlloyForkchoiceState,
+    block: ScrollBlock,
+) -> Result<ScrollBlock, EngineDriverError>
+where
+    EC: ScrollEngineApi + Unpin + Send + Sync + 'static,
+{
     // update the head block hash to the new payload block hash.
-    fcs.head_block_hash = execution_payload.block_hash();
+    fcs.head_block_hash = block.hash_slow();
 
     // update the fork choice state with the new block hash.
     forkchoice_updated(client, fcs, None).await?;
 
-    // convert the payload into a block.
-    execution_payload.try_into().map_err(EngineDriverError::InvalidExecutionPayload)
+    Ok(block)
 }

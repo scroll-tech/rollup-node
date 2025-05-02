@@ -8,7 +8,7 @@ pub enum EngineDriverError {
     EngineUnavailable,
     /// The execution payload is invalid.
     #[error("Invalid execution payload: {0}")]
-    InvalidExecutionPayload(PayloadError),
+    InvalidExecutionPayload(#[from] PayloadError),
     /// The execution payload provider is unavailable.
     #[error("Execution payload provider is unavailable")]
     ExecutionPayloadProviderUnavailable,
