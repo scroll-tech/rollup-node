@@ -113,7 +113,7 @@ where
                     compute_units_per_second,
                 ))
                 .http(url);
-            Some(ProviderBuilder::new().on_client(client))
+            Some(ProviderBuilder::new().connect_client(client))
         } else {
             None
         };
@@ -131,7 +131,7 @@ where
                     self.config.l2_provider_args.compute_units_per_second,
                 ))
                 .http(Url::parse(&l2_provider_url)?);
-            let provider = ProviderBuilder::new().on_client(client);
+            let provider = ProviderBuilder::new().connect_client(client);
             Some(AlloyExecutionPayloadProvider::new(provider))
         };
 
