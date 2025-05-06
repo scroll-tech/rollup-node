@@ -1,5 +1,6 @@
 use super::{payload::matching_payloads, EngineDriverError};
 use crate::api::*;
+use alloy_primitives::B256;
 use alloy_rpc_types_engine::{
     ExecutionPayloadV1, ForkchoiceState as AlloyForkchoiceState, PayloadStatusEnum,
 };
@@ -56,11 +57,17 @@ impl EngineDriverFuture {
     pub(crate) fn block_import<EC>(
         client: Arc<EC>,
         block_with_peer: NewBlockWithPeer,
-        fcs: AlloyForkchoiceState,
+        mut fcs: AlloyForkchoiceState,
+        optimistic_sync: bool,
     ) -> Self
     where
         EC: ScrollEngineApi + Unpin + Send + Sync + 'static,
     {
+        // Mask the finalized block hash and safe block hash.
+        if optimistic_sync {
+            fcs.finalized_block_hash = B256::ZERO;
+            fcs.safe_block_hash = B256::ZERO;
+        }
         Self::BlockImport(Box::pin(handle_execution_payload(client, block_with_peer, fcs)))
     }
 

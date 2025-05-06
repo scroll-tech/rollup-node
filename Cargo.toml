@@ -133,34 +133,34 @@ alloy-signer-local = { version = "0.15.5", default-features = false }
 alloy-transport = { version = "0.15.5", default-features = false }
 
 # scroll-alloy
-scroll-alloy-consensus = { git = "https://github.com/scroll-tech/reth.git", default-features = false, branch = "feat/euclid" }
-scroll-alloy-hardforks = { git = "https://github.com/scroll-tech/reth.git", default-features = false, branch = "feat/euclid" }
-scroll-alloy-network = { git = "https://github.com/scroll-tech/reth.git", default-features = false, branch = "feat/euclid" }
-scroll-alloy-provider = { git = "https://github.com/scroll-tech/reth.git", default-features = false, branch = "feat/euclid" }
-scroll-alloy-rpc-types-engine = { git = "https://github.com/scroll-tech/reth.git", default-features = false, branch = "feat/euclid" }
+scroll-alloy-consensus = { git = "https://github.com/scroll-tech/reth.git", default-features = false, branch = "feat/euclid-test" }
+scroll-alloy-hardforks = { git = "https://github.com/scroll-tech/reth.git", default-features = false, branch = "feat/euclid-test" }
+scroll-alloy-network = { git = "https://github.com/scroll-tech/reth.git", default-features = false, branch = "feat/euclid-test" }
+scroll-alloy-provider = { git = "https://github.com/scroll-tech/reth.git", default-features = false, branch = "feat/euclid-test" }
+scroll-alloy-rpc-types-engine = { git = "https://github.com/scroll-tech/reth.git", default-features = false, branch = "feat/euclid-test" }
 
 # reth
-reth-e2e-test-utils = { git = "https://github.com/scroll-tech/reth.git", branch = "feat/euclid" }
-reth-eth-wire-types = { git = "https://github.com/scroll-tech/reth.git", default-features = false, branch = "feat/euclid" }
-reth-network = { git = "https://github.com/scroll-tech/reth.git", default-features = false, branch = "feat/euclid" }
-reth-network-api = { git = "https://github.com/scroll-tech/reth.git", default-features = false, branch = "feat/euclid" }
-reth-network-peers = { git = "https://github.com/scroll-tech/reth.git", default-features = false, branch = "feat/euclid" }
-reth-node-builder = { git = "https://github.com/scroll-tech/reth.git", default-features = false, branch = "feat/euclid" }
-reth-node-core = { git = "https://github.com/scroll-tech/reth.git", branch = "feat/euclid" }
-reth-payload-primitives = { git = "https://github.com/scroll-tech/reth.git", branch = "feat/euclid" }
-reth-primitives = { git = "https://github.com/scroll-tech/reth.git", default-features = false, branch = "feat/euclid" }
-reth-primitives-traits = { git = "https://github.com/scroll-tech/reth.git", default-features = false, branch = "feat/euclid" }
-reth-provider = { git = "https://github.com/scroll-tech/reth.git", default-features = false, branch = "feat/euclid" }
-reth-rpc-server-types = { git = "https://github.com/scroll-tech/reth.git", branch = "feat/euclid" }
-reth-tasks = { git = "https://github.com/scroll-tech/reth.git", branch = "feat/euclid" }
-reth-tokio-util = { git = "https://github.com/scroll-tech/reth.git", default-features = false, branch = "feat/euclid" }
+reth-e2e-test-utils = { git = "https://github.com/scroll-tech/reth.git", branch = "feat/euclid-test" }
+reth-eth-wire-types = { git = "https://github.com/scroll-tech/reth.git", default-features = false, branch = "feat/euclid-test" }
+reth-network = { git = "https://github.com/scroll-tech/reth.git", default-features = false, branch = "feat/euclid-test" }
+reth-network-api = { git = "https://github.com/scroll-tech/reth.git", default-features = false, branch = "feat/euclid-test" }
+reth-network-peers = { git = "https://github.com/scroll-tech/reth.git", default-features = false, branch = "feat/euclid-test" }
+reth-node-builder = { git = "https://github.com/scroll-tech/reth.git", default-features = false, branch = "feat/euclid-test" }
+reth-node-core = { git = "https://github.com/scroll-tech/reth.git", branch = "feat/euclid-test" }
+reth-payload-primitives = { git = "https://github.com/scroll-tech/reth.git", branch = "feat/euclid-test" }
+reth-primitives = { git = "https://github.com/scroll-tech/reth.git", default-features = false, branch = "feat/euclid-test" }
+reth-primitives-traits = { git = "https://github.com/scroll-tech/reth.git", default-features = false, branch = "feat/euclid-test" }
+reth-provider = { git = "https://github.com/scroll-tech/reth.git", default-features = false, branch = "feat/euclid-test" }
+reth-rpc-server-types = { git = "https://github.com/scroll-tech/reth.git", branch = "feat/euclid-test" }
+reth-tasks = { git = "https://github.com/scroll-tech/reth.git", branch = "feat/euclid-test" }
+reth-tokio-util = { git = "https://github.com/scroll-tech/reth.git", default-features = false, branch = "feat/euclid-test" }
 
 # reth-scroll
-reth-scroll-chainspec = { git = "https://github.com/scroll-tech/reth.git", default-features = false, branch = "feat/euclid" }
-reth-scroll-engine-primitives = { git = "https://github.com/scroll-tech/reth.git", default-features = false, branch = "feat/euclid" }
-reth-scroll-forks = { git = "https://github.com/scroll-tech/reth.git", default-features = false, branch = "feat/euclid" }
-reth-scroll-node = { git = "https://github.com/scroll-tech/reth.git", default-features = false, branch = "feat/euclid" }
-reth-scroll-primitives = { git = "https://github.com/scroll-tech/reth.git", default-features = false, branch = "feat/euclid" }
+reth-scroll-chainspec = { git = "https://github.com/scroll-tech/reth.git", default-features = false, branch = "feat/euclid-test" }
+reth-scroll-engine-primitives = { git = "https://github.com/scroll-tech/reth.git", default-features = false, branch = "feat/euclid-test" }
+reth-scroll-forks = { git = "https://github.com/scroll-tech/reth.git", default-features = false, branch = "feat/euclid-test" }
+reth-scroll-node = { git = "https://github.com/scroll-tech/reth.git", default-features = false, branch = "feat/euclid-test" }
+reth-scroll-primitives = { git = "https://github.com/scroll-tech/reth.git", default-features = false, branch = "feat/euclid-test" }
 
 # rollup node
 rollup-node-indexer = { path = "crates/indexer" }

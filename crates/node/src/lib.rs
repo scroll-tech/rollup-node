@@ -62,6 +62,8 @@ pub struct RollupNodeManager<EC, P, L1P, L1MP, CS> {
     l1_notification_rx: Option<ReceiverStream<Arc<L1Notification>>>,
     /// An indexer used to index data for the rollup node.
     indexer: Indexer<CS>,
+    /// The chain specification.
+    chain_spec: Arc<CS>,
     /// The consensus algorithm used by the rollup node.
     consensus: Box<dyn Consensus>,
     /// The receiver for new blocks received from the network (used to bridge from eth-wire).
@@ -118,7 +120,7 @@ where
         signer: Option<SignerHandle>,
         block_time: Option<u64>,
     ) -> Self {
-        let indexer = Indexer::new(database.clone(), chain_spec);
+        let indexer = Indexer::new(database.clone(), chain_spec.clone());
         let derivation_pipeline =
             l1_provider.map(|provider| DerivationPipeline::new(provider, database));
         Self {
@@ -127,6 +129,7 @@ where
             derivation_pipeline,
             l1_notification_rx: l1_notification_rx.map(Into::into),
             indexer,
+            chain_spec,
             consensus,
             new_block_rx: new_block_rx.map(Into::into),
             event_sender: None,
@@ -154,7 +157,7 @@ where
     ///
     /// We will first validate the consensus of the block, then we will send the block to the engine
     /// to validate the correctness of the block.
-    pub fn handle_new_block(&mut self, block_with_peer: NewBlockWithPeer) {
+    pub fn handle_new_block(&mut self, mut block_with_peer: NewBlockWithPeer) {
         trace!(target: "scroll::node::manager", "Received new block from peer {:?} - hash {:?}", block_with_peer.peer_id, block_with_peer.block.hash_slow());
         if let Some(event_sender) = self.event_sender.as_ref() {
             event_sender.notify(RollupEvent::NewBlockReceived(block_with_peer.clone()));
@@ -172,6 +175,10 @@ where
                 result: Err(err.into()),
             });
         } else {
+            // Wipe the extra data field after signature verification.
+            if self.chain_spec.is_euclid_active_at_timestamp(block_with_peer.block.timestamp) {
+                block_with_peer.block.header.extra_data = Default::default();
+            }
             self.engine.handle_block_import(block_with_peer);
         }
     }

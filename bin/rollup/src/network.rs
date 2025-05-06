@@ -144,6 +144,7 @@ where
             Arc::new(engine_api),
             payload_provider,
             fcs,
+            self.config.optimistic_sync,
             Duration::from_millis(self.config.sequencer_args.payload_building_duration),
         );
 
