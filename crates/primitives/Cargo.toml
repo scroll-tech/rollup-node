@@ -42,6 +42,7 @@ std = [
     "alloy-consensus/std",
 ]
 arbitrary = [
+    "std",
     "dep:arbitrary",
     "alloy-primitives/arbitrary",
     "scroll-alloy-consensus/arbitrary",
