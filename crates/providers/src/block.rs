@@ -22,6 +22,6 @@ where
     type Error = DatabaseError;
 
     async fn block_data(&self, block_id: BlockId) -> Result<Option<BlockDataHint>, Self::Error> {
-        self.get_block_data(block_id).await
+        self.get_l2_block_data_hint(block_id).await
     }
 }

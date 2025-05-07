@@ -1,6 +1,7 @@
 //! This library contains the main manager for the rollup node.
 
 use futures::StreamExt;
+use reth_chainspec::EthChainSpec;
 use reth_tokio_util::{EventSender, EventStream};
 use rollup_node_indexer::{Indexer, IndexerEvent};
 use rollup_node_sequencer::Sequencer;
@@ -101,7 +102,7 @@ where
     P: ExecutionPayloadProvider + Unpin + Send + Sync + 'static,
     L1P: L1Provider + Clone + Send + Sync + 'static,
     L1MP: L1MessageProvider + Unpin + Send + Sync + 'static,
-    CS: ScrollHardforks + Send + Sync + 'static,
+    CS: ScrollHardforks + EthChainSpec + Send + Sync + 'static,
 {
     /// Create a new [`RollupNodeManager`] instance.
     #[allow(clippy::too_many_arguments)]
@@ -200,6 +201,27 @@ where
                 // update the fcs on new finalized block.
                 self.engine.set_finalized_block_info(finalized_block);
             }
+            IndexerEvent::ReorgIndexed {
+                l1_block_number,
+                queue_index,
+                l2_head_block_info,
+                l2_safe_block_info,
+            } => {
+                // Update the [`EngineDriver`] fork choice state with the new L2 head info.
+                if let Some(l2_head_block_info) = l2_head_block_info {
+                    self.engine.set_head_block_info(l2_head_block_info);
+                }
+
+                // Update the [`EngineDriver`] fork choice state with the new L2 safe info.
+                if let Some(safe_block_info) = l2_safe_block_info {
+                    self.engine.set_safe_block_info(safe_block_info);
+                }
+
+                // Update the [`Sequencer`] with the new L1 head info and queue index.
+                if let Some(sequencer) = self.sequencer.as_mut() {
+                    sequencer.handle_reorg(queue_index, l1_block_number);
+                }
+            }
             _ => (),
         }
     }
@@ -209,15 +231,19 @@ where
         trace!(target: "scroll::node::manager", ?event, "Received engine driver event");
         match event {
             EngineDriverEvent::BlockImportOutcome(outcome) => {
+                if let Some(block) = outcome.block() {
+                    self.indexer.handle_block(block.into(), None);
+                }
                 self.network.handle().block_import_outcome(outcome);
             }
             EngineDriverEvent::NewPayload(payload) => {
                 if let Some(signer) = self.signer.as_mut() {
-                    let _ = signer.sign_block(payload).inspect_err(|err| tracing::error!(target: "scroll::node::manager", ?err, "Failed to send new payload to signer"));
+                    let _ = signer.sign_block(payload.clone()).inspect_err(|err| tracing::error!(target: "scroll::node::manager", ?err, "Failed to send new payload to signer"));
                 }
+                self.indexer.handle_block(payload.into(), None);
             }
             EngineDriverEvent::L1BlockConsolidated((block_info, batch_info)) => {
-                self.indexer.handle_derived_block(block_info, batch_info);
+                self.indexer.handle_block(block_info.clone(), Some(batch_info));
 
                 if let Some(event_sender) = self.event_sender.as_ref() {
                     event_sender.notify(RollupEvent::L1DerivedBlockConsolidated(block_info));
@@ -238,7 +264,7 @@ where
     P: ExecutionPayloadProvider + Clone + Unpin + Send + Sync + 'static,
     L1P: L1Provider + Clone + Unpin + Send + Sync + 'static,
     L1MP: L1MessageProvider + Unpin + Send + Sync + 'static,
-    CS: ScrollHardforks + Unpin + Send + Sync + 'static,
+    CS: ScrollHardforks + EthChainSpec + Unpin + Send + Sync + 'static,
 {
     type Output = ();
 

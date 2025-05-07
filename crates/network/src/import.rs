@@ -28,6 +28,14 @@ impl BlockImportOutcome {
             result: Ok(BlockValidation::ValidBlock { new_block: NewBlock { signature, block } }),
         }
     }
+
+    /// Returns an `Option<ScrollBlock>` depending on the `BlockImportOutcome` result.
+    pub fn block(&self) -> Option<ScrollBlock> {
+        match &self.result {
+            Ok(BlockValidation::ValidBlock { new_block }) => Some(new_block.block.clone()),
+            _ => None,
+        }
+    }
 }
 
 /// The result of a block validation operation.

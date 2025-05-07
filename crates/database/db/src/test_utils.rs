@@ -1,7 +1,7 @@
 //! Test utilities for the database crate.
 
 use super::Database;
-use migration::{Migrator, MigratorTrait};
+use scroll_migration::{Migrator, MigratorTrait};
 
 /// Instantiates a new in-memory database and runs the migrations
 /// to set up the schema.

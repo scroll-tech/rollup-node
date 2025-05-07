@@ -149,8 +149,8 @@ impl<L1P: L1MessageProvider + Send + Sync, BP: Sync + Send> L1MessageProvider
         self.l1_message_provider.get_l1_message_with_block_number().await
     }
 
-    fn set_index_cursor(&self, index: u64) {
-        self.l1_message_provider.set_index_cursor(index);
+    fn set_queue_index_cursor(&self, index: u64) {
+        self.l1_message_provider.set_queue_index_cursor(index);
     }
 
     async fn set_hash_cursor(&self, hash: B256) {

@@ -13,7 +13,9 @@ impl MigrationTrait for Migration {
                     .if_not_exists()
                     .col(pk_auto(L1Message::QueueIndex))
                     .col(binary_len_null(L1Message::QueueHash, 32))
-                    .col(unsigned(L1Message::BlockNumber))
+                    .col(binary_len(L1Message::Hash, 32))
+                    .col(unsigned(L1Message::L1BlockNumber))
+                    .col(unsigned_null(L1Message::L2BlockNumber))
                     .col(text(L1Message::GasLimit))
                     .col(binary_len(L1Message::To, 20))
                     .col(binary_len(L1Message::Value, 32))
@@ -34,7 +36,9 @@ enum L1Message {
     Table,
     QueueIndex,
     QueueHash,
-    BlockNumber,
+    Hash,
+    L1BlockNumber,
+    L2BlockNumber,
     GasLimit,
     To,
     Value,

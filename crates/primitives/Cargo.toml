@@ -21,6 +21,7 @@ scroll-alloy-consensus.workspace = true
 scroll-alloy-rpc-types-engine.workspace = true
 
 # reth
+reth-primitives-traits.workspace = true
 reth-scroll-primitives.workspace = true
 
 # misc
@@ -37,9 +38,11 @@ std = [
     "scroll-alloy-rpc-types-engine/std",
     "alloy-eips/std",
     "reth-scroll-primitives/std",
+    "reth-primitives-traits/std",
     "alloy-consensus/std",
 ]
 arbitrary = [
+    "std",
     "dep:arbitrary",
     "alloy-primitives/arbitrary",
     "scroll-alloy-consensus/arbitrary",
@@ -47,5 +50,6 @@ arbitrary = [
     "scroll-alloy-rpc-types-engine/arbitrary",
     "reth-scroll-primitives/arbitrary",
     "reth-scroll-primitives/std",
+    "reth-primitives-traits/arbitrary",
     "alloy-consensus/arbitrary",
 ]

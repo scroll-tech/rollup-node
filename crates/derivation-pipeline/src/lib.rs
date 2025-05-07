@@ -182,7 +182,7 @@ pub async fn derive<L1P: L1Provider + Sync + Send, L2P: BlockDataProvider + Sync
     // set the cursor for the l1 provider.
     let data = &decoded.data;
     if let Some(index) = data.queue_index_start() {
-        l1_provider.set_index_cursor(index);
+        l1_provider.set_queue_index_cursor(index);
     } else if let Some(hash) = data.prev_l1_message_queue_hash() {
         l1_provider.set_hash_cursor(*hash).await;
         // we skip the first l1 message, as we are interested in the one starting after
@@ -285,7 +285,7 @@ mod tests {
             Ok(self.messages.get(index as usize).cloned())
         }
 
-        fn set_index_cursor(&self, _index: u64) {}
+        fn set_queue_index_cursor(&self, _index: u64) {}
 
         async fn set_hash_cursor(&self, _hash: B256) {}
 
@@ -319,8 +319,8 @@ mod tests {
         ) -> Result<Option<L1MessageEnvelope>, Self::Error> {
             self.l1_messages_provider.get_l1_message_with_block_number().await
         }
-        fn set_index_cursor(&self, index: u64) {
-            self.l1_messages_provider.set_index_cursor(index);
+        fn set_queue_index_cursor(&self, index: u64) {
+            self.l1_messages_provider.set_queue_index_cursor(index);
         }
         async fn set_hash_cursor(&self, hash: B256) {
             self.l1_messages_provider.set_hash_cursor(hash).await
@@ -362,7 +362,8 @@ mod tests {
         // load messages in db.
         let l1_messages = vec![
             L1MessageEnvelope {
-                block_number: 717,
+                l1_block_number: 717,
+                l2_block_number: None,
                 queue_hash: None,
                 transaction: TxL1Message {
                     queue_index: 33,
@@ -374,7 +375,8 @@ mod tests {
                 },
             },
             L1MessageEnvelope {
-                block_number: 717,
+                l1_block_number: 717,
+                l2_block_number: None,
                 queue_hash: None,
                 transaction: TxL1Message {
                     queue_index: 34,
@@ -440,7 +442,8 @@ mod tests {
 
         let l1_messages = vec![
             L1MessageEnvelope {
-                block_number: 5,
+                l1_block_number: 5,
+                l2_block_number: None,
                 queue_hash: None,
                 transaction: TxL1Message {
                     queue_index: 33,
@@ -452,7 +455,8 @@ mod tests {
                 },
             },
             L1MessageEnvelope {
-                block_number: 10,
+                l1_block_number: 10,
+                l2_block_number: None,
                 queue_hash: None,
                 transaction: TxL1Message {
                     queue_index: 34,

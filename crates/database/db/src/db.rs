@@ -55,7 +55,9 @@ mod test {
     use arbitrary::{Arbitrary, Unstructured};
     use futures::StreamExt;
     use rand::Rng;
-    use rollup_node_primitives::{BatchCommitData, BatchInfo, BlockInfo, L1MessageEnvelope};
+    use rollup_node_primitives::{
+        BatchCommitData, BatchInfo, BlockInfo, L1MessageEnvelope, L2BlockInfoWithL1Messages,
+    };
     use sea_orm::{ColumnTrait, EntityTrait, QueryFilter};
 
     #[tokio::test]
@@ -137,7 +139,7 @@ mod test {
         let db = setup_test_db().await;
 
         // db should contain the seeded data after migration.
-        let data = db.get_block_data(0.into()).await.unwrap();
+        let data = db.get_l2_block_data_hint(0.into()).await.unwrap();
         assert!(data.is_some());
     }
 
@@ -154,13 +156,18 @@ mod test {
         // Generate randoms BatchInfo and BlockInfo with increasing block numbers.
         let mut block_number = 100;
         let data = BatchCommitData { index: 100, ..Arbitrary::arbitrary(&mut u).unwrap() };
-        let batch_info = data.clone().into();
+        let batch_info: BatchInfo = data.clone().into();
         db.insert_batch(data).await.unwrap();
 
         for _ in 0..10 {
-            let block_info =
-                BlockInfo { number: block_number, hash: B256::arbitrary(&mut u).unwrap() };
-            db.insert_derived_block(block_info, batch_info).await.unwrap();
+            let block_info = L2BlockInfoWithL1Messages {
+                block_info: BlockInfo {
+                    number: block_number,
+                    hash: B256::arbitrary(&mut u).unwrap(),
+                },
+                l1_messages: vec![],
+            };
+            db.insert_block(block_info, batch_info.into()).await.unwrap();
             block_number += 1;
         }
 
@@ -183,7 +190,7 @@ mod test {
         // Generate randoms BatchInfo and BlockInfo with increasing block numbers.
         let mut block_number = 100;
         let first_batch = BatchCommitData { index: 100, ..Arbitrary::arbitrary(&mut u).unwrap() };
-        let first_batch_info = first_batch.clone().into();
+        let first_batch_info: BatchInfo = first_batch.clone().into();
 
         let second_batch = BatchCommitData { index: 250, ..Arbitrary::arbitrary(&mut u).unwrap() };
         let second_batch_info: BatchInfo = second_batch.clone().into();
@@ -192,9 +199,14 @@ mod test {
         db.insert_batch(second_batch).await.unwrap();
 
         for _ in 0..10 {
-            let block_info =
-                BlockInfo { number: block_number, hash: B256::arbitrary(&mut u).unwrap() };
-            db.insert_derived_block(block_info, first_batch_info).await.unwrap();
+            let block_info = L2BlockInfoWithL1Messages {
+                block_info: BlockInfo {
+                    number: block_number,
+                    hash: B256::arbitrary(&mut u).unwrap(),
+                },
+                l1_messages: vec![],
+            };
+            db.insert_block(block_info, first_batch_info.into()).await.unwrap();
             block_number += 1;
         }
 

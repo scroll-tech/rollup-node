@@ -9514,6 +9514,7 @@ dependencies = [
  "arbitrary",
  "futures",
  "rand 0.9.1",
+ "reth-chainspec",
  "reth-scroll-chainspec",
  "reth-scroll-forks",
  "rollup-node-primitives",
@@ -9537,6 +9538,7 @@ dependencies = [
  "alloy-provider",
  "alloy-rpc-types-engine",
  "futures",
+ "reth-chainspec",
  "reth-primitives-traits",
  "reth-scroll-primitives",
  "reth-tokio-util",
@@ -9570,6 +9572,7 @@ dependencies = [
  "alloy-rpc-types-engine",
  "arbitrary",
  "derive_more",
+ "reth-primitives-traits",
  "reth-scroll-primitives",
  "scroll-alloy-consensus",
  "scroll-alloy-rpc-types-engine",
@@ -9665,13 +9668,13 @@ dependencies = [
  "eyre",
  "itertools 0.14.0",
  "rand 0.9.1",
+ "reth-tracing",
  "rollup-node-primitives",
  "scroll-alloy-consensus",
  "scroll-l1",
  "thiserror 2.0.12",
  "tokio",
  "tracing",
- "tracing-subscriber 0.3.19",
 ]
 
 [[package]]

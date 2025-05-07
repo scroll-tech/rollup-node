@@ -7,7 +7,7 @@ extern crate alloc as std;
 pub use attributes::ScrollPayloadAttributesWithBatchInfo;
 mod attributes;
 
-pub use block::BlockInfo;
+pub use block::{BlockInfo, L2BlockInfoWithL1Messages};
 mod block;
 
 pub use batch::{BatchCommitData, BatchInfo};

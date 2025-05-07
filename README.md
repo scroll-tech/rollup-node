@@ -31,6 +31,7 @@ This repository is a modular Rust workspace for the Scroll rollup node. It is de
 │   ├── primitives/
 │   ├── providers/
 │   ├── scroll-wire/
+│   ├── signer/
 │   ├── sequencer/
 │   └── watcher/
 ├── Cargo.toml            # Workspace manifest
@@ -51,6 +52,7 @@ This repository is a modular Rust workspace for the Scroll rollup node. It is de
 - **crates/node/**: Node manager and orchestration logic.
 - **crates/primitives/**: Shared primitive types (blocks, batches, attributes, etc.).
 - **crates/providers/**: Abstractions for data providers (L1, beacon, block, etc.).
+- **crates/signer/**: Implements signing logic for blocks.
 - **crates/scroll-wire/**: Wire protocol definitions for Scroll-specific networking.
 - **crates/sequencer/**: Sequencer logic for ordering and batching transactions.
 - **crates/watcher/**: Monitors L1 chain state and handles reorgs and notifications.

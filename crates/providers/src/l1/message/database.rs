@@ -60,7 +60,7 @@ impl<DB: DatabaseConnectionProvider + Send + Sync> L1MessageProvider
         }
     }
 
-    fn set_index_cursor(&self, index: u64) {
+    fn set_queue_index_cursor(&self, index: u64) {
         self.index.store(index, Ordering::Relaxed);
     }
 

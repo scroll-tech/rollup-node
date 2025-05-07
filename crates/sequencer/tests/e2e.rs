@@ -83,7 +83,8 @@ async fn can_build_blocks() {
     // now lets add an L1 message to the database
     let wallet_lock = wallet.lock().await;
     let l1_message = L1MessageEnvelope {
-        block_number: 1,
+        l1_block_number: 1,
+        l2_block_number: None,
         queue_hash: None,
         transaction: TxL1Message {
             queue_index: 0,
@@ -157,7 +158,8 @@ async fn can_build_blocks_with_delayed_l1_messages() {
     // l1 block number is 3)
     let wallet_lock = wallet.lock().await;
     let l1_message = L1MessageEnvelope {
-        block_number: 1,
+        l1_block_number: 1,
+        l2_block_number: None,
         transaction: TxL1Message {
             queue_index: 0,
             gas_limit: 21000,

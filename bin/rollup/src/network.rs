@@ -7,7 +7,6 @@ use std::{sync::Arc, time::Duration};
 use alloy_provider::ProviderBuilder;
 use alloy_rpc_client::RpcClient;
 use alloy_transport::layers::RetryBackoffLayer;
-use migration::MigratorTrait;
 use reth_network::{config::NetworkMode, NetworkManager, PeersInfo};
 use reth_node_api::TxTy;
 use reth_node_builder::{components::NetworkBuilder, BuilderContext, FullNodeTypes};
@@ -25,6 +24,7 @@ use rollup_node_watcher::L1Watcher;
 use scroll_alloy_provider::ScrollAuthEngineApiProvider;
 use scroll_db::{Database, DatabaseConnectionProvider};
 use scroll_engine::{EngineDriver, ForkchoiceState};
+use scroll_migration::MigratorTrait;
 use scroll_network::NetworkManager as ScrollNetworkManager;
 use scroll_wire::{ProtocolHandler, ScrollWireConfig};
 use tracing::info;
@@ -159,7 +159,7 @@ where
         let db = Database::new(&database_path).await?;
 
         // Run the database migrations
-        migration::Migrator::up(db.get_connection(), None).await?;
+        scroll_migration::Migrator::up(db.get_connection(), None).await?;
 
         // Wrap the database in an Arc
         let db = Arc::new(db);

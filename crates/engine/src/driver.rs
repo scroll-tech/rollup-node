@@ -68,6 +68,16 @@ where
         self.fcs.update_finalized_block_info(block_info);
     }
 
+    /// Sets the safe block info.
+    pub fn set_safe_block_info(&mut self, block_info: BlockInfo) {
+        self.fcs.update_safe_block_info(block_info);
+    }
+
+    /// Sets the head block info.
+    pub fn set_head_block_info(&mut self, block_info: BlockInfo) {
+        self.fcs.update_head_block_info(block_info);
+    }
+
     /// Sets the payload building duration.
     pub fn set_payload_building_duration(&mut self, block_building_duration: Duration) {
         self.block_building_duration = block_building_duration;
@@ -134,12 +144,12 @@ where
                     Ok((block_info, reorg, batch_info)) => {
                         // Update the safe block info and return the block info
                         tracing::trace!(target: "scroll::engine", ?block_info, "updating safe block info from block derived from L1");
-                        self.fcs.update_safe_block_info(block_info);
+                        self.fcs.update_safe_block_info(block_info.block_info);
 
                         // If we reorged, update the head block info
                         if reorg {
                             tracing::warn!(target: "scroll::engine", ?block_info, "reorging head to l1 derived block");
-                            self.fcs.update_head_block_info(block_info);
+                            self.fcs.update_head_block_info(block_info.block_info);
                         }
 
                         return Some(EngineDriverEvent::L1BlockConsolidated((

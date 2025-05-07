@@ -21,11 +21,11 @@ pub struct Model {
 #[derive(Copy, Clone, Debug, EnumIter, DeriveRelation)]
 pub enum Relation {
     /// A one-to-many relation with the derived block table.
-    #[sea_orm(has_many = "super::derived_block::Entity")]
+    #[sea_orm(has_many = "super::l2_block::Entity")]
     DerivedBlock,
 }
 
-impl Related<super::derived_block::Entity> for Entity {
+impl Related<super::l2_block::Entity> for Entity {
     fn to() -> RelationDef {
         Relation::DerivedBlock.def()
     }
