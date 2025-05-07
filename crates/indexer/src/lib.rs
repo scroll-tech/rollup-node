@@ -135,7 +135,10 @@ impl<ChainSpec: ScrollHardforks + EthChainSpec + Send + Sync + 'static> Indexer<
         // check if we need to reorg the L2 head and delete some L2 blocks
         let (queue_index, l2_head_block_info) =
             if let Some(msg) = removed_executed_l1_messages.first() {
-                let l2_reorg_block_number = msg.l2_block_number.unwrap() - 1;
+                let l2_reorg_block_number = msg
+                    .l2_block_number
+                    .expect("we guarantee that this is Some(u64) due to the filter on line 130") -
+                    1;
                 let l2_block_info = txn
                     .get_l2_block_info_by_number(l2_reorg_block_number)
                     .await?
@@ -521,15 +524,15 @@ mod test {
         const UNITS_FOR_TESTING: u64 = 20;
         const L1_MESSAGES_NOT_EXECUTED_COUNT: u64 = 7;
         let mut l1_messages = Vec::with_capacity(UNITS_FOR_TESTING as usize);
-        for l1_message_que_index in 0..UNITS_FOR_TESTING {
+        for l1_message_queue_index in 0..UNITS_FOR_TESTING {
             let l1_message = L1MessageEnvelope {
                 queue_hash: None,
-                l1_block_number: l1_message_que_index,
-                l2_block_number: (UNITS_FOR_TESTING - l1_message_que_index >
+                l1_block_number: l1_message_queue_index,
+                l2_block_number: (UNITS_FOR_TESTING - l1_message_queue_index >
                     L1_MESSAGES_NOT_EXECUTED_COUNT)
-                    .then_some(l1_message_que_index),
+                    .then_some(l1_message_queue_index),
                 transaction: TxL1Message {
-                    queue_index: l1_message_que_index,
+                    queue_index: l1_message_queue_index,
                     ..Arbitrary::arbitrary(&mut u).unwrap()
                 },
             };
