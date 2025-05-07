@@ -176,7 +176,7 @@ where
             });
         } else {
             // Wipe the extra data field after signature verification.
-            if self.chain_spec.is_euclid_active_at_timestamp(block_with_peer.block.timestamp) {
+            if self.chain_spec.is_euclid_v2_active_at_timestamp(block_with_peer.block.timestamp) {
                 block_with_peer.block.header.extra_data = Default::default();
             }
             self.engine.handle_block_import(block_with_peer);

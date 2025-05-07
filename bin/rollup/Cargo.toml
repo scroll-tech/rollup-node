@@ -22,25 +22,25 @@ scroll-alloy-provider.workspace = true
 scroll-alloy-rpc-types-engine.workspace = true
 
 # reth
-reth-cli-util = { git = "https://github.com/scroll-tech/reth.git", branch = "feat/euclid-test" }
+reth-cli-util = { git = "https://github.com/scroll-tech/reth.git" }
 # keep this import as it is needed for correct compilation.
-reth-engine-local = { git = "https://github.com/scroll-tech/reth.git", features = ["scroll-alloy-traits"], branch = "feat/euclid-test" }
+reth-engine-local = { git = "https://github.com/scroll-tech/reth.git", features = ["scroll-alloy-traits"] }
 reth-eth-wire-types.workspace = true
 reth-network.workspace = true
 reth-network-peers.workspace = true
-reth-node-api = { git = "https://github.com/scroll-tech/reth.git", branch = "feat/euclid-test" }
+reth-node-api = { git = "https://github.com/scroll-tech/reth.git" }
 reth-node-builder = { workspace = true, features = ["skip-state-root-validation"] }
 reth-node-core.workspace = true
-reth-node-types = { git = "https://github.com/scroll-tech/reth.git", branch = "feat/euclid-test" }
+reth-node-types = { git = "https://github.com/scroll-tech/reth.git" }
 reth-primitives.workspace = true
 reth-provider = { workspace = true, features = ["skip-state-root-validation"] }
-reth-rpc-builder = { git = "https://github.com/scroll-tech/reth.git", branch = "feat/euclid-test" }
-reth-transaction-pool = { git = "https://github.com/scroll-tech/reth.git", branch = "feat/euclid-test" }
+reth-rpc-builder = { git = "https://github.com/scroll-tech/reth.git" }
+reth-transaction-pool = { git = "https://github.com/scroll-tech/reth.git" }
 
 # scroll
 reth-scroll-chainspec.workspace = true
-reth-scroll-cli = { git = "https://github.com/scroll-tech/reth.git", branch = "feat/euclid-test" }
-reth-scroll-engine-primitives = { git = "https://github.com/scroll-tech/reth.git", branch = "feat/euclid-test" }
+reth-scroll-cli = { git = "https://github.com/scroll-tech/reth.git" }
+reth-scroll-engine-primitives = { git = "https://github.com/scroll-tech/reth.git" }
 reth-scroll-node = { workspace = true, features = ["skip-state-root-validation"] }
 reth-scroll-primitives = { workspace = true }
 scroll-db = { workspace = true }
@@ -70,10 +70,10 @@ alloy-rpc-types-engine.workspace = true
 
 # reth
 reth-e2e-test-utils.workspace = true
-reth-payload-builder = { git = "https://github.com/scroll-tech/reth.git", branch = "feat/euclid-test" }
+reth-payload-builder = { git = "https://github.com/scroll-tech/reth.git" }
 reth-rpc-server-types.workspace = true
 reth-tasks.workspace = true
-reth-tracing = { git = "https://github.com/scroll-tech/reth.git", branch = "feat/euclid-test" }
+reth-tracing = { git = "https://github.com/scroll-tech/reth.git" }
 
 # misc
 futures.workspace = true
@@ -115,6 +115,7 @@ serde = [
     "alloy-chains/serde",
     "reth-transaction-pool/serde",
     "url/serde",
+    "scroll-alloy-hardforks/serde",
 ]
 
 [[bin]]

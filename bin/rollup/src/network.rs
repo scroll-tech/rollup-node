@@ -14,6 +14,7 @@ use reth_node_builder::{components::NetworkBuilder, BuilderContext, FullNodeType
 use reth_node_types::NodeTypes;
 use reth_rpc_builder::config::RethRpcServerConfig;
 use reth_scroll_chainspec::ScrollChainSpec;
+use reth_scroll_node::ScrollHeaderTransform;
 use reth_scroll_primitives::ScrollPrimitives;
 use reth_transaction_pool::{PoolTransaction, TransactionPool};
 use rollup_node_manager::{Consensus, NoopConsensus, PoAConsensus, RollupNodeManager};
@@ -77,6 +78,7 @@ where
         // Create the network configuration.
         let mut config = ctx.network_config()?;
         config.network_mode = NetworkMode::Work;
+        config.header_transform = ScrollHeaderTransform::boxed(ctx.chain_spec());
         if let Some(tx) = block_tx {
             config.block_import = Box::new(super::BridgeBlockImport::new(tx.clone()))
         }
