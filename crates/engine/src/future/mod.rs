@@ -39,16 +39,20 @@ type L1ConsolidationFuture = Pin<
     Box<dyn Future<Output = Result<(BlockInfo, IsReorg, BatchInfo), EngineDriverError>> + Send>,
 >;
 
-/// A future that represents a new payload job.
-type NewPayloadJobFuture =
+/// A future that represents a new payload processing.
+type NewPayloadFuture =
+    Pin<Box<dyn Future<Output = Result<ScrollBlock, EngineDriverError>> + Send>>;
+
+/// A future that represents a new payload building job.
+pub(crate) type BuildNewPayloadFuture =
     Pin<Box<dyn Future<Output = Result<ScrollBlock, EngineDriverError>> + Send>>;
 
 /// An enum that represents the different types of futures that can be executed by the engine
-/// driver. It can be a block import job, an L1 consolidation job, or a new payload job.
+/// driver. It can be a block import job, an L1 consolidation job, or a new payload processing.
 pub(crate) enum EngineDriverFuture {
     BlockImport(BlockImportFuture),
     L1Consolidation(L1ConsolidationFuture),
-    NewPayloadJob(NewPayloadJobFuture),
+    NewPayload(NewPayloadFuture),
 }
 
 impl EngineDriverFuture {
@@ -85,7 +89,7 @@ impl EngineDriverFuture {
         )))
     }
 
-    /// Creates a new [`EngineDriverFuture::NewPayloadJob`] future from the provided parameters.
+    /// Creates a new [`EngineDriverFuture::NewPayload`] future from the provided parameters.
     pub(crate) fn handle_new_payload_job<EC>(
         client: Arc<EC>,
         fcs: AlloyForkchoiceState,
@@ -94,7 +98,7 @@ impl EngineDriverFuture {
     where
         EC: ScrollEngineApi + Unpin + Send + Sync + 'static,
     {
-        Self::NewPayloadJob(Box::pin(handle_new_payload(client, fcs, block)))
+        Self::NewPayload(Box::pin(handle_new_payload(client, fcs, block)))
     }
 }
 
@@ -108,7 +112,7 @@ impl Future for EngineDriverFuture {
         match this {
             Self::BlockImport(fut) => fut.as_mut().poll(cx).map(Into::into),
             Self::L1Consolidation(fut) => fut.as_mut().poll(cx).map(Into::into),
-            Self::NewPayloadJob(fut) => fut.as_mut().poll(cx).map(Into::into),
+            Self::NewPayload(fut) => fut.as_mut().poll(cx).map(Into::into),
         }
     }
 }
