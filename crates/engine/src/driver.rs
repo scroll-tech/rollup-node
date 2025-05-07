@@ -1,6 +1,9 @@
 use super::{future::EngineDriverFuture, ForkchoiceState};
-use crate::{future::EngineDriverFutureResult, EngineDriverEvent};
-use futures::{ready, task::AtomicWaker, Stream};
+use crate::{
+    future::{BuildNewPayloadFuture, EngineDriverFutureResult},
+    EngineDriverEvent,
+};
+use futures::{ready, task::AtomicWaker, FutureExt, Stream};
 use rollup_node_primitives::{BlockInfo, ScrollPayloadAttributesWithBatchInfo};
 use rollup_node_providers::ExecutionPayloadProvider;
 use scroll_alloy_provider::ScrollEngineApi;
@@ -33,6 +36,8 @@ pub struct EngineDriver<EC, P = ()> {
     sequencer_payload_attributes: Option<ScrollPayloadAttributes>,
     /// The future of the engine driver.
     future: Option<EngineDriverFuture>,
+    /// The future for the payload building job.
+    payload_building_future: Option<BuildNewPayloadFuture>,
     /// The waker to notify when the engine driver should be polled.
     waker: AtomicWaker,
 }
@@ -58,6 +63,7 @@ where
             l1_payload_attributes: VecDeque::new(),
             block_imports: VecDeque::new(),
             sequencer_payload_attributes: None,
+            payload_building_future: None,
             future: None,
             waker: AtomicWaker::new(),
         }
@@ -184,8 +190,7 @@ where
 
     /// A helper function to check if a payload building job is in progress.
     pub const fn is_payload_building_in_progress(&self) -> bool {
-        self.sequencer_payload_attributes.is_some() ||
-            matches!(self.future, Some(EngineDriverFuture::PayloadBuildingJob(_)))
+        self.sequencer_payload_attributes.is_some() || self.payload_building_future.is_some()
     }
 }
 
@@ -204,12 +209,37 @@ where
 
         // If we have a future, poll it.
         if let Some(future) = this.future.as_mut() {
-            let result = ready!(future.poll(cx));
+            let result = ready!(future.poll_unpin(cx));
             this.future = None;
             if let Some(event) = this.handle_future_result(result) {
                 return Poll::Ready(Some(event));
             }
         };
+
+        // Take the handle to the payload building job if it exists and poll it.
+        if let Some(mut handle) = this.payload_building_future.take() {
+            // If the payload build job is done, handle the result - otherwise continue to process
+            // another driver job.
+            match handle.poll_unpin(cx) {
+                Poll::Ready(result) => match result {
+                    Ok(block) => {
+                        this.future = Some(EngineDriverFuture::handle_new_payload_job(
+                            this.client.clone(),
+                            this.fcs.get_alloy_fcs(),
+                            block,
+                        ));
+                        this.waker.wake();
+                    }
+                    Err(err) => {
+                        tracing::error!(target: "scroll::engine", ?err, "failed to build new payload");
+                    }
+                },
+                // The job is still in progress, reassign the handle and continue.
+                _ => {
+                    this.payload_building_future = Some(handle);
+                }
+            }
+        }
 
         // If we have a payload building request from the sequencer, build a new payload.
         if let Some(payload_attributes) = this.sequencer_payload_attributes.take() {
@@ -217,12 +247,12 @@ where
             let client = this.client.clone();
             let duration = this.block_building_duration;
 
-            this.future = Some(EngineDriverFuture::payload_building_job(
+            this.payload_building_future = Some(Box::pin(super::future::build_new_payload(
                 client,
                 fcs,
                 duration,
                 payload_attributes,
-            ));
+            )));
             this.waker.wake();
             return Poll::Pending;
         }
@@ -275,12 +305,14 @@ impl<EC, P> std::fmt::Debug for EngineDriver<EC, P> {
 
 #[cfg(test)]
 mod tests {
+    use crate::future::build_new_payload;
+
     use super::*;
     use scroll_engine::test_utils::PanicEngineClient;
 
     impl<EC, P> EngineDriver<EC, P> {
-        fn with_future(&mut self, future: EngineDriverFuture) {
-            self.future = Some(future);
+        fn with_payload_future(&mut self, future: BuildNewPayloadFuture) {
+            self.payload_building_future = Some(Box::pin(future));
         }
     }
 
@@ -316,12 +348,12 @@ mod tests {
         assert!(!driver.is_payload_building_in_progress());
 
         // Set a future to simulate an ongoing job
-        driver.with_future(EngineDriverFuture::payload_building_job(
+        driver.with_payload_future(Box::pin(build_new_payload(
             client,
             Default::default(),
             Default::default(),
             Default::default(),
-        ));
+        )));
 
         // Now, it should return true
         assert!(driver.is_payload_building_in_progress());
