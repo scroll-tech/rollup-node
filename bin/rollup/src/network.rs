@@ -135,8 +135,7 @@ where
             Some(AlloyExecutionPayloadProvider::new(provider))
         };
 
-        let fcs =
-            ForkchoiceState::head_from_genesis(ctx.config().chain.genesis_header().hash_slow());
+        let fcs = ForkchoiceState::head_from_genesis(ctx.config().chain.genesis_hash());
         let engine = EngineDriver::new(
             Arc::new(engine_api),
             payload_provider,
