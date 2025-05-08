@@ -76,3 +76,7 @@ docs:
 
 .PHONY: pr
 pr: lint test docs
+
+.PHONY: docker
+docker:
+	docker build -t scrolltech/rollup-node:latest . -f Dockerfile
