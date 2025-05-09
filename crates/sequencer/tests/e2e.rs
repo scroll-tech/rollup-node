@@ -76,9 +76,12 @@ async fn can_build_blocks() {
 
     // make some assertions on the transaction inclusion of the block
     assert_eq!(block.body.transactions.first().unwrap().tx_hash(), &tx_hash);
-    assert!(block.body.transactions.len() == 1);
-    assert!(block.header.number() == 1);
+    assert_eq!(block.body.transactions.len(), 1);
+    assert_eq!(block.header.number(), 1);
     assert_eq!(block.header.parent_hash, genesis_hash);
+
+    // check the base fee has been set for the block.
+    assert_eq!(block.header.base_fee_per_gas.unwrap(), 15711571);
 
     // now lets add an L1 message to the database
     let wallet_lock = wallet.lock().await;
@@ -116,8 +119,8 @@ async fn can_build_blocks() {
 
     // make some assertions on the transaction inclusion of the block
     assert_eq!(block.body.transactions.first().unwrap().tx_hash(), &l1_message_hash);
-    assert!(block.body.transactions.len() == 1);
-    assert!(block.header.number() == 2);
+    assert_eq!(block.body.transactions.len(), 1);
+    assert_eq!(block.header.number(), 2);
     assert_eq!(block.header.parent_hash, block_1_hash);
 }
 
@@ -202,8 +205,8 @@ async fn can_build_blocks_with_delayed_l1_messages() {
 
     // make some assertions on the transaction inclusion of the block
     assert_eq!(block.body.transactions.first().unwrap().tx_hash(), &tx_hash);
-    assert!(block.body.transactions.len() == 1);
-    assert!(block.header.number() == 1);
+    assert_eq!(block.body.transactions.len(), 1);
+    assert_eq!(block.header.number(), 1);
     assert_eq!(block.header.parent_hash, genesis_hash);
 
     // sleep 2 seconds (ethereum header timestamp has granularity of seconds and proceeding header
@@ -226,7 +229,7 @@ async fn can_build_blocks_with_delayed_l1_messages() {
 
     // make some assertions on the transaction inclusion of the block
     assert_eq!(block.body.transactions.first().unwrap().tx_hash(), &l1_message_hash);
-    assert!(block.body.transactions.len() == 1);
-    assert!(block.header.number() == 2);
+    assert_eq!(block.body.transactions.len(), 1);
+    assert_eq!(block.header.number(), 2);
     assert_eq!(block.header.parent_hash, block_1_hash);
 }
