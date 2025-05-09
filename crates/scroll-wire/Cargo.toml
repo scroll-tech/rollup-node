@@ -15,7 +15,7 @@ alloy-primitives = { workspace = true, features = ["map-foldhash"] }
 alloy-rlp = { version = "0.3.10", default-features = false }
 
 # reth
-reth-eth-wire = { git = "https://github.com/scroll-tech/reth.git", default-features = false }
+reth-eth-wire = { git = "https://github.com/scroll-tech/reth.git", branch = "feat/calc-base-fee", default-features = false }
 reth-network.workspace = true
 reth-network-api.workspace = true
 
