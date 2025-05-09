@@ -1,16 +1,9 @@
-FROM ubuntu:24.04 AS chef
+FROM rust:1.86.0 AS chef
 
 RUN apt-get update -y && apt-get upgrade -y
 
 # Install basic packages
-RUN apt-get install build-essential curl wget git pkg-config -y
-# Install dev-packages
-RUN apt-get install libclang-dev libssl-dev llvm -y
-
-# Install Rust
-RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
-ENV PATH="/root/.cargo/bin:${PATH}"
-ENV CARGO_HOME=/root/.cargo
+RUN apt-get update && apt-get -y upgrade && apt-get install -y libclang-dev pkg-config
 RUN cargo install cargo-chef --locked --version  0.1.71
 
 FROM chef AS planner
@@ -27,13 +20,7 @@ RUN --mount=target=. \
 
 # Release
 
-FROM ubuntu:24.04
-
-RUN apt-get update -y && \
-    apt-get install -y --no-install-recommends \
-    libssl3 \
-    ca-certificates && \
-    rm -rf /var/lib/apt/lists/*
+FROM rust:1.86.0
 
 WORKDIR /app
 
