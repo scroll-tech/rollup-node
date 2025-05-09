@@ -20,7 +20,10 @@ RUN --mount=target=. \
 
 # Release
 
-FROM rust:1.86.0
+FROM debian:bullseye-slim
+
+RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates && \
+    rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
 
