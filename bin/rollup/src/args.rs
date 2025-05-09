@@ -16,6 +16,10 @@ pub struct ScrollRollupNodeArgs {
     /// A bool that represents if the scroll wire protocol should be enabled.
     #[arg(long, default_value_t = false)]
     pub enable_scroll_wire: bool,
+    /// A bool that represents whether optimistic sync of the EN should be performed.
+    /// This is a temp solution and should be removed when implementing issue #23.
+    #[arg(long, default_value_t = false)]
+    pub optimistic_sync: bool,
     /// Database path
     #[arg(long)]
     pub database_path: Option<PathBuf>,

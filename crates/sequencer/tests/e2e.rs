@@ -39,7 +39,7 @@ async fn can_build_blocks() {
     let auth_client = node.inner.engine_http_client();
     let engine_client = ScrollAuthApiEngineClient::new(auth_client);
     let mut engine_driver =
-        EngineDriver::new(Arc::new(engine_client), None::<()>, fcs, BLOCK_BUILDING_DURATION);
+        EngineDriver::new(Arc::new(engine_client), None::<()>, fcs, false, BLOCK_BUILDING_DURATION);
 
     // create a test database
     let database = Arc::new(setup_test_db().await);
@@ -145,7 +145,7 @@ async fn can_build_blocks_with_delayed_l1_messages() {
     let auth_client = node.inner.engine_http_client();
     let engine_client = ScrollAuthApiEngineClient::new(auth_client);
     let mut engine_driver =
-        EngineDriver::new(Arc::new(engine_client), None::<()>, fcs, BLOCK_BUILDING_DURATION);
+        EngineDriver::new(Arc::new(engine_client), None::<()>, fcs, false, BLOCK_BUILDING_DURATION);
 
     // create a test database
     let database = Arc::new(setup_test_db().await);

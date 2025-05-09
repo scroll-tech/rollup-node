@@ -52,4 +52,5 @@ arbitrary = [
     "reth-scroll-primitives/std",
     "reth-primitives-traits/arbitrary",
     "alloy-consensus/arbitrary",
+    "alloy-rpc-types-engine/arbitrary",
 ]

@@ -13,6 +13,7 @@ use reth_node_builder::{components::NetworkBuilder, BuilderContext, FullNodeType
 use reth_node_types::NodeTypes;
 use reth_rpc_builder::config::RethRpcServerConfig;
 use reth_scroll_chainspec::ScrollChainSpec;
+use reth_scroll_node::ScrollHeaderTransform;
 use reth_scroll_primitives::ScrollPrimitives;
 use reth_transaction_pool::{PoolTransaction, TransactionPool};
 use rollup_node_manager::{Consensus, NoopConsensus, PoAConsensus, RollupNodeManager};
@@ -77,6 +78,7 @@ where
         // Create the network configuration.
         let mut config = ctx.network_config()?;
         config.network_mode = NetworkMode::Work;
+        config.header_transform = ScrollHeaderTransform::boxed(ctx.chain_spec());
         if let Some(tx) = block_tx {
             config.block_import = Box::new(super::BridgeBlockImport::new(tx.clone()))
         }
@@ -113,7 +115,7 @@ where
                     compute_units_per_second,
                 ))
                 .http(url);
-            Some(ProviderBuilder::new().on_client(client))
+            Some(ProviderBuilder::new().connect_client(client))
         } else {
             None
         };
@@ -131,7 +133,7 @@ where
                     self.config.l2_provider_args.compute_units_per_second,
                 ))
                 .http(Url::parse(&l2_provider_url)?);
-            let provider = ProviderBuilder::new().on_client(client);
+            let provider = ProviderBuilder::new().connect_client(client);
             Some(AlloyExecutionPayloadProvider::new(provider))
         };
 
@@ -140,6 +142,7 @@ where
             Arc::new(engine_api),
             payload_provider,
             fcs,
+            self.config.optimistic_sync,
             Duration::from_millis(self.config.sequencer_args.payload_building_duration),
         );
 
