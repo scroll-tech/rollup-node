@@ -105,11 +105,7 @@ impl RollupManagerAddon {
                 .expect("failed to create payload provider")
         });
 
-        let fcs = if let Some(named) = ctx.config.chain.chain().named() {
-            ForkchoiceState::head_from_named_chain(named)
-        } else {
-            ForkchoiceState::head_from_genesis(ctx.config.chain.genesis_header().hash_slow())
-        };
+        let fcs = ForkchoiceState::head_from_genesis(ctx.config.chain.genesis_header().hash_slow());
         let engine = EngineDriver::new(
             Arc::new(engine_api),
             payload_provider,
