@@ -1,71 +1,55 @@
 use crate::{BlockImportError, BlockValidationError};
 
 use super::{
-    BlockImportOutcome, BlockValidation, NetworkHandle, NetworkHandleMessage, NetworkManagerEvent,
-    NewBlockWithPeer,
+    BlockImportOutcome, BlockValidation, NetworkHandleMessage, NetworkManagerEvent,
+    NewBlockWithPeer, ScrollNetworkHandle,
 };
 use alloy_primitives::FixedBytes;
 use core::task::Poll;
 use futures::{FutureExt, Stream, StreamExt};
 use reth_network::{
     cache::LruCache, NetworkConfig as RethNetworkConfig, NetworkHandle as RethNetworkHandle,
-    NetworkManager as RethNetworkManager, Peers,
+    NetworkManager as RethNetworkManager,
 };
+use reth_network_api::FullNetwork;
 use reth_scroll_node::ScrollNetworkPrimitives;
 use reth_storage_api::BlockNumReader as BlockNumReaderT;
 use scroll_wire::{
-    NewBlock, ProtocolHandler, ScrollWireConfig, ScrollWireEvent, ScrollWireManager, LRU_CACHE_SIZE,
+    NewBlock, ScrollWireConfig, ScrollWireEvent, ScrollWireManager, ScrollWireProtocolHandler,
+    LRU_CACHE_SIZE,
 };
 use tokio::sync::mpsc::{self, UnboundedReceiver};
 use tokio_stream::wrappers::UnboundedReceiverStream;
 use tracing::trace;
 
-/// [`NetworkManager`] manages the state of the scroll p2p network.
+/// [`ScrollNetworkManager`] manages the state of the scroll p2p network.
 ///
 /// This manager drives the state of the entire network forward and includes the following
 /// components:
-/// - `handle`: Used to interact with this [`NetworkManager`] by sending messages using the
-///   [`NetworkHandle`].
-/// - `from_handle_rx`: Receives commands from the [`NetworkHandle`].
+/// - `handle`: Used to interact with this [`ScrollNetworkManager`] by sending messages using the
+///   [`FullNetwork`].
+/// - `from_handle_rx`: Receives commands from the [`FullNetwork`].
 /// - `scroll_wire`: The type that manages connections and state of the scroll wire protocol.
 #[derive(Debug)]
-pub struct NetworkManager {
+pub struct ScrollNetworkManager<N> {
     /// A handle used to interact with the network manager.
-    handle: NetworkHandle,
-    /// Receiver half of the channel set up between this type and the [`NetworkHandle`], receives
+    handle: ScrollNetworkHandle<N>,
+    /// Receiver half of the channel set up between this type and the [`FullNetwork`], receives
     /// [`NetworkHandleMessage`]s.
     from_handle_rx: UnboundedReceiverStream<NetworkHandleMessage>,
     /// The scroll wire protocol manager.
     scroll_wire: ScrollWireManager,
 }
 
-impl NetworkManager {
-    /// Creates a new [`NetworkManager`] instance from the provided parts.
-    ///
-    /// This is used when the scroll-wire [`ProtocolHandler`] and the inner network manager
-    /// [`RethNetworkManager`] are instantiated externally.
-    pub fn from_parts(
-        inner_network_handle: RethNetworkHandle<ScrollNetworkPrimitives>,
-        events: UnboundedReceiver<ScrollWireEvent>,
-    ) -> Self {
-        // Create the channel for sending messages to the network manager from the network handle.
-        let (to_manager_tx, from_handle_rx) = mpsc::unbounded_channel();
-
-        // Create the scroll-wire protocol manager.
-        let scroll_wire = ScrollWireManager::new(events);
-
-        let handle = NetworkHandle::new(to_manager_tx, inner_network_handle);
-
-        Self { handle, from_handle_rx: from_handle_rx.into(), scroll_wire }
-    }
-
-    /// Creates a new [`NetworkManager`] instance from the provided configuration and block import.
+impl ScrollNetworkManager<RethNetworkHandle<ScrollNetworkPrimitives>> {
+    /// Creates a new [`ScrollNetworkManager`] instance from the provided configuration and block
+    /// import.
     pub async fn new<C: BlockNumReaderT + 'static>(
         mut network_config: RethNetworkConfig<C, ScrollNetworkPrimitives>,
         scroll_wire_config: ScrollWireConfig,
     ) -> Self {
         // Create the scroll-wire protocol handler.
-        let (scroll_wire_handler, events) = ProtocolHandler::new(scroll_wire_config);
+        let (scroll_wire_handler, events) = ScrollWireProtocolHandler::new(scroll_wire_config);
 
         // Add the scroll-wire protocol to the network configuration.
         network_config.extra_protocols.push(scroll_wire_handler);
@@ -78,7 +62,7 @@ impl NetworkManager {
         // Create the channel for sending messages to the network manager.
         let (to_manager_tx, from_handle_rx) = mpsc::unbounded_channel();
 
-        let handle = NetworkHandle::new(to_manager_tx, inner_network_handle);
+        let handle = ScrollNetworkHandle::new(to_manager_tx, inner_network_handle);
 
         // Create the scroll-wire protocol manager.
         let scroll_wire = ScrollWireManager::new(events);
@@ -88,14 +72,32 @@ impl NetworkManager {
 
         Self { handle, from_handle_rx: from_handle_rx.into(), scroll_wire }
     }
+}
 
-    /// Returns a new [`NetworkHandle`] instance.
-    pub fn handle(&self) -> &NetworkHandle {
+impl<N: FullNetwork> ScrollNetworkManager<N> {
+    /// Creates a new [`ScrollNetworkManager`] instance from the provided parts.
+    ///
+    /// This is used when the scroll-wire [`ScrollWireProtocolHandler`] and the inner network
+    /// manager [`RethNetworkManager`] are instantiated externally.
+    pub fn from_parts(inner_network_handle: N, events: UnboundedReceiver<ScrollWireEvent>) -> Self {
+        // Create the channel for sending messages to the network manager from the network handle.
+        let (to_manager_tx, from_handle_rx) = mpsc::unbounded_channel();
+
+        // Create the scroll-wire protocol manager.
+        let scroll_wire = ScrollWireManager::new(events);
+
+        let handle = ScrollNetworkHandle::new(to_manager_tx, inner_network_handle);
+
+        Self { handle, from_handle_rx: from_handle_rx.into(), scroll_wire }
+    }
+
+    /// Returns a new [`ScrollNetworkHandle`] instance.
+    pub fn handle(&self) -> &ScrollNetworkHandle<N> {
         &self.handle
     }
 
     /// Returns an inner network handle [`RethNetworkHandle`].
-    pub fn inner_network_handle(&self) -> &RethNetworkHandle<ScrollNetworkPrimitives> {
+    pub fn inner_network_handle(&self) -> &N {
         self.handle.inner()
     }
 
@@ -133,7 +135,7 @@ impl NetworkManager {
         }
     }
 
-    /// Handler for received messaged from the [`NetworkHandle`].
+    /// Handler for received messaged from the [`ScrollNetworkHandle`].
     fn on_handle_message(&mut self, message: NetworkHandleMessage) {
         match message {
             NetworkHandleMessage::AnnounceBlock { block, signature } => {
@@ -177,13 +179,9 @@ impl NetworkManager {
             }
         }
     }
-
-    pub async fn perform_network_shutdown(&mut self) {
-        self.inner_network_handle().shutdown().await.unwrap()
-    }
 }
 
-impl Stream for NetworkManager {
+impl<N: FullNetwork> Stream for ScrollNetworkManager<N> {
     type Item = NetworkManagerEvent;
 
     fn poll_next(

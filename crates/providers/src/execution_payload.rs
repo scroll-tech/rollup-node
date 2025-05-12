@@ -4,6 +4,7 @@ use alloy_eips::BlockId;
 use alloy_provider::Provider;
 use alloy_rpc_types_engine::ExecutionPayload;
 use alloy_transport::{RpcError, TransportErrorKind};
+use scroll_alloy_network::Scroll;
 
 #[derive(Debug, thiserror::Error)]
 pub enum ExecutionPayloadProviderError {
@@ -40,7 +41,7 @@ pub struct AlloyExecutionPayloadProvider<P> {
     provider: P,
 }
 
-impl<P: Provider> AlloyExecutionPayloadProvider<P> {
+impl<P: Provider<Scroll>> AlloyExecutionPayloadProvider<P> {
     /// Returns a new instance of a [`AlloyExecutionPayloadProvider`].
     pub const fn new(provider: P) -> Self {
         Self { provider }
@@ -48,7 +49,7 @@ impl<P: Provider> AlloyExecutionPayloadProvider<P> {
 }
 
 #[async_trait::async_trait]
-impl<P: Provider> ExecutionPayloadProvider for AlloyExecutionPayloadProvider<P> {
+impl<P: Provider<Scroll>> ExecutionPayloadProvider for AlloyExecutionPayloadProvider<P> {
     async fn execution_payload_for_block(
         &self,
         block_id: BlockId,
@@ -89,7 +90,7 @@ mod tests {
         // Get a provider to the node.
         let url = node.rpc_url();
         let client = RpcClient::new_http(url);
-        let provider = ProviderBuilder::new().on_client(client);
+        let provider = ProviderBuilder::default().connect_client(client);
 
         let execution_payload_provider = AlloyExecutionPayloadProvider::new(provider);
 

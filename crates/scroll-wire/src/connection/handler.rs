@@ -1,6 +1,6 @@
 use super::{ScrollWireConfig, ScrollWireConnection};
 use crate::{
-    protocol::{ProtocolState, ScrollMessage},
+    protocol::{ScrollMessage, ScrollWireProtocolState},
     ScrollWireEvent,
 };
 use reth_network::protocol::{ConnectionHandler as ConnectionHandlerTrait, OnNotSupported};
@@ -9,13 +9,13 @@ use tracing::trace;
 /// The connection handler for the `ScrollWire` protocol.
 #[derive(Debug)]
 pub struct ScrollConnectionHandler {
-    state: ProtocolState,
+    state: ScrollWireProtocolState,
     config: ScrollWireConfig,
 }
 
 impl ScrollConnectionHandler {
     /// Creates a new [`ScrollConnectionHandler`] with the provided state and config.
-    pub const fn from_parts(state: ProtocolState, config: ScrollWireConfig) -> Self {
+    pub const fn from_parts(state: ScrollWireProtocolState, config: ScrollWireConfig) -> Self {
         Self { state, config }
     }
 }

@@ -1,5 +1,5 @@
 use crate::{
-    protocol::{ProtocolState, ScrollMessage, ScrollMessagePayload, ScrollWireEvent},
+    protocol::{ScrollMessage, ScrollMessagePayload, ScrollWireEvent, ScrollWireProtocolState},
     ScrollWireConfig,
 };
 use alloy_primitives::Signature;
@@ -36,13 +36,13 @@ pub struct ScrollWireConnection {
 
 impl ScrollWireConnection {
     /// Creates a new [`ScrollWireConnection`] with the provided [`ProtocolConnection`] and
-    /// [`ProtocolState`].
+    /// [`ScrollWireProtocolState`].
     pub fn new(
         peer_id: PeerId,
         conn: ProtocolConnection,
         direction: Direction,
         outbound: UnboundedReceiver<ScrollMessage>,
-        state: ProtocolState,
+        state: ScrollWireProtocolState,
     ) -> Self {
         Self {
             conn,
