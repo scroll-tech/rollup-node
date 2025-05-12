@@ -39,13 +39,13 @@ impl ForkchoiceState {
     /// Creates a [`ForkchoiceState`] instance setting the `head` hash to the
     ///  `genesis` hash of the [`NamedChain`] and the `safe` and `finalized` block info to the
     /// default values.
-    pub fn head_from_named_chain(chain: NamedChain) -> Self {
+    pub const fn head_from_named_chain(chain: NamedChain) -> Option<Self> {
         let genesis_hash = match chain {
             NamedChain::Scroll => SCROLL_MAINNET_GENESIS_HASH,
             NamedChain::ScrollSepolia => SCROLL_SEPOLIA_GENESIS_HASH,
-            _ => panic!("unsupported chain"),
+            _ => return None,
         };
-        Self::head_from_genesis(genesis_hash)
+        Some(Self::head_from_genesis(genesis_hash))
     }
 
     /// Updates the `head` block info.
