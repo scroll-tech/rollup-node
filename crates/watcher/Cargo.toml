@@ -18,11 +18,13 @@ alloy-network.workspace = true
 alloy-primitives.workspace = true
 alloy-provider.workspace = true
 alloy-rpc-types-eth.workspace = true
+alloy-rpc-client = { workspace = true, optional = true }
 alloy-sol-types.workspace = true
 alloy-transport.workspace = true
 
 # rollup
 rollup-node-primitives.workspace = true
+rollup-node-providers.workspace = true
 scroll-l1.workspace = true
 
 # scroll
@@ -40,6 +42,7 @@ tracing.workspace = true
 [dev-dependencies]
 alloy-consensus = { workspace = true, features = ["arbitrary", "k256"] }
 alloy-eips.workspace = true
+alloy-rpc-client.workspace = true
 alloy-rpc-types-eth = { workspace = true, features = ["arbitrary"] }
 arbitrary.workspace = true
 eyre.workspace = true
@@ -48,7 +51,7 @@ scroll-l1 = { workspace = true, features = ["test-utils"] }
 reth-tracing.workspace = true
 
 [features]
-test-utils = ["arbitrary", "rand", "scroll-l1/test-utils"]
+test-utils = ["arbitrary", "rand", "scroll-l1/test-utils", "dep:alloy-rpc-client"]
 arbitrary = [
     "dep:arbitrary",
     "alloy-consensus/arbitrary",

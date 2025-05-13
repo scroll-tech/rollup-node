@@ -11,11 +11,9 @@ workspace = true
 
 [dependencies]
 # alloy
-alloy-chains.workspace = true
 alloy-consensus.workspace = true
 alloy-eips.workspace = true
 alloy-primitives.workspace = true
-alloy-provider.workspace = true
 alloy-rpc-types-engine.workspace = true
 
 # scroll-alloy
@@ -66,7 +64,6 @@ serde = [
     "scroll-wire/serde",
     "alloy-eips/serde",
     "scroll-alloy-hardforks/serde",
-    "alloy-chains/serde",
     "alloy-consensus/serde",
     "alloy-primitives/serde",
     "reth-primitives-traits/serde",
