@@ -90,7 +90,7 @@ mod tests {
         // Get a provider to the node.
         let url = node.rpc_url();
         let client = RpcClient::new_http(url);
-        let provider = ProviderBuilder::default().connect_client(client);
+        let provider = ProviderBuilder::<_, _, Scroll>::default().connect_client(client);
 
         let execution_payload_provider = AlloyExecutionPayloadProvider::new(provider);
 

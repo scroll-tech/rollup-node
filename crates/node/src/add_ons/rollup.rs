@@ -112,6 +112,7 @@ impl RollupManagerAddon {
             Arc::new(engine_api),
             payload_provider,
             fcs,
+            true,
             Duration::from_millis(self.config.sequencer_args.payload_building_duration),
         );
 
@@ -186,7 +187,11 @@ impl RollupManagerAddon {
         };
 
         // Instantiate the eth wire listener
-        let eth_wire_listener = ctx.node.network().eth_wire_block_listener().await?;
+        let eth_wire_listener = self
+            .config
+            .network_args
+            .enable_eth_scroll_wire_bridge
+            .then_some(ctx.node.network().eth_wire_block_listener().await?);
 
         // Spawn the rollup node manager
         let rollup_node_manager = RollupNodeManager::new(
@@ -197,7 +202,7 @@ impl RollupManagerAddon {
             l1_notification_rx,
             consensus,
             ctx.config.chain.clone(),
-            Some(eth_wire_listener),
+            eth_wire_listener,
             sequencer,
             None,
             block_time,

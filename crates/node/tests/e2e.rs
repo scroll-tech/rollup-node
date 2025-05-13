@@ -136,6 +136,7 @@ pub async fn build_bridge_node(
             enable_eth_scroll_wire_bridge: true,
             enable_scroll_wire: true,
         },
+        optimistic_sync: false,
         database_path: Some(PathBuf::from("sqlite::memory:")),
         l1_provider_args: L1ProviderArgs::default(),
         engine_api_url: None,
