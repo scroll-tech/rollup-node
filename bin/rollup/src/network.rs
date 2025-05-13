@@ -2,12 +2,12 @@ use crate::{
     constants::PROVIDER_BLOB_CACHE_SIZE, L1ProviderArgs, ScrollRollupNodeArgs,
     WATCHER_START_BLOCK_NUMBER,
 };
-use std::{sync::Arc, time::Duration};
+use std::{collections::HashSet, sync::Arc, time::Duration};
 
 use alloy_provider::ProviderBuilder;
 use alloy_rpc_client::RpcClient;
 use alloy_transport::layers::RetryBackoffLayer;
-use reth_network::{config::NetworkMode, NetworkManager, PeersInfo};
+use reth_network::{config::NetworkMode, NetworkHandle, NetworkManager, PeersInfo};
 use reth_node_api::TxTy;
 use reth_node_builder::{components::NetworkBuilder, BuilderContext, FullNodeTypes};
 use reth_node_types::NodeTypes;
@@ -17,8 +17,10 @@ use reth_scroll_node::ScrollHeaderTransform;
 use reth_scroll_primitives::ScrollPrimitives;
 use reth_transaction_pool::{PoolTransaction, TransactionPool};
 use rollup_node_manager::{Consensus, NoopConsensus, PoAConsensus, RollupNodeManager};
+use rollup_node_primitives::ConsensusUpdate;
 use rollup_node_providers::{
     beacon_provider, AlloyExecutionPayloadProvider, DatabaseL1MessageProvider, OnlineL1Provider,
+    SystemContractProvider,
 };
 use rollup_node_sequencer::Sequencer;
 use rollup_node_watcher::L1Watcher;
@@ -56,13 +58,13 @@ where
         > + Unpin
         + 'static,
 {
-    type Primitives = reth_scroll_node::ScrollNetworkPrimitives;
+    type Network = NetworkHandle<reth_scroll_node::ScrollNetworkPrimitives>;
 
     async fn build_network(
         self,
         ctx: &BuilderContext<Node>,
         pool: Pool,
-    ) -> eyre::Result<reth_network::NetworkHandle<Self::Primitives>> {
+    ) -> eyre::Result<Self::Network> {
         // Create a new block channel to bridge between eth-wire and scroll-wire protocols.
         let (block_tx, block_rx) =
             if self.config.enable_eth_scroll_wire_bridge & self.config.enable_scroll_wire {
@@ -89,7 +91,7 @@ where
         }
 
         // Create the network manager.
-        let network = NetworkManager::<Self::Primitives>::builder(config).await?;
+        let network = NetworkManager::builder(config).await?;
         let handle = ctx.start_network(network, pool);
 
         // Create the scroll network manager.
@@ -170,14 +172,10 @@ where
         let consensus: Box<dyn Consensus> = if self.config.test {
             Box::new(NoopConsensus::default())
         } else {
-            let mut poa = PoAConsensus::new(vec![]);
+            let mut poa = PoAConsensus::new(HashSet::new());
             if let Some(ref provider) = provider {
-                // Initialize the consensus
-                poa.initialize(
-                    provider,
-                    ctx.config().chain.chain.named().expect("expected named chain"),
-                )
-                .await;
+                let signer = provider.authorized_signer().await?;
+                poa.update_config(&ConsensusUpdate::AuthorizedSigner(signer));
             }
             Box::new(poa)
         };

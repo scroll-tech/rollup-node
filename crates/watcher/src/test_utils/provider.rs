@@ -7,7 +7,7 @@ use std::{
 use alloy_eips::BlockNumberOrTag;
 use alloy_json_rpc::RpcError;
 use alloy_network::Ethereum;
-use alloy_primitives::{BlockNumber, TxHash, B256};
+use alloy_primitives::{BlockNumber, TxHash, B256, U64};
 use alloy_provider::{EthGetBlock, Provider, ProviderCall, RootProvider};
 use alloy_rpc_types_eth::{BlockId, Filter, Log, Transaction};
 use alloy_transport::TransportResult;
@@ -47,6 +47,10 @@ impl MockProvider {
 impl Provider for MockProvider {
     fn root(&self) -> &RootProvider<Ethereum> {
         unreachable!("unused calls")
+    }
+
+    fn get_chain_id(&self) -> ProviderCall<alloy_rpc_client::NoParams, U64, u64> {
+        ProviderCall::Ready(Some(Ok(0)))
     }
 
     fn get_block(&self, block_id: BlockId) -> EthGetBlock<Block> {
