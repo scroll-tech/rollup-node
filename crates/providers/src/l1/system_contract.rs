@@ -30,9 +30,9 @@ impl<P: Provider> SystemContractProvider for P {
         let named_chain: NamedChain =
             chain_id.try_into().map_err(|_| L1ProviderError::Other("unexpected chain id"))?;
         let address = match named_chain {
-            NamedChain::Scroll => MAINNET_SYSTEM_CONTRAT_ADDRESS,
-            NamedChain::ScrollSepolia => SEPOLIA_SYSTEM_CONTRAT_ADDRESS,
-            _ => return Err(L1ProviderError::Other("expected Scroll Mainnet or Sepolia chain")),
+            NamedChain::Mainnet => MAINNET_SYSTEM_CONTRAT_ADDRESS,
+            NamedChain::Sepolia => SEPOLIA_SYSTEM_CONTRAT_ADDRESS,
+            _ => return Err(L1ProviderError::Other("expected Mainnet or Sepolia chain")),
         };
 
         let signer = self.get_storage_at(address, AUTHORIZED_SIGNER_STORAGE_SLOT).await?;

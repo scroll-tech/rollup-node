@@ -4,20 +4,23 @@
 #[cfg(not(feature = "std"))]
 extern crate alloc as std;
 
-pub use attributes::ScrollPayloadAttributesWithBatchInfo;
 mod attributes;
+pub use attributes::ScrollPayloadAttributesWithBatchInfo;
 
-pub use block::{BlockInfo, L2BlockInfoWithL1Messages};
 mod block;
+pub use block::{BlockInfo, L2BlockInfoWithL1Messages};
 
-pub use batch::{BatchCommitData, BatchInfo};
 mod batch;
+pub use batch::{BatchCommitData, BatchInfo};
 
-pub use bounded_vec::BoundedVec;
 mod bounded_vec;
+pub use bounded_vec::BoundedVec;
 
 mod signature;
 pub use signature::sig_encode_hash;
 
-pub use transaction::L1MessageEnvelope;
+mod consensus;
+pub use consensus::ConsensusUpdate;
+
 mod transaction;
+pub use transaction::L1MessageEnvelope;
