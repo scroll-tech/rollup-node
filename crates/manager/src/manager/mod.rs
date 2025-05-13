@@ -6,10 +6,9 @@ use super::Consensus;
 use alloy_primitives::Signature;
 use futures::StreamExt;
 use reth_chainspec::EthChainSpec;
-use reth_network::NetworkPrimitives;
-
 use reth_network_api::{block::NewBlockWithPeer as RethNewBlockWithPeer, FullNetwork};
 use reth_scroll_node::ScrollNetworkPrimitives;
+use reth_scroll_primitives::ScrollBlock;
 use reth_tokio_util::{EventSender, EventStream};
 use rollup_node_indexer::{Indexer, IndexerEvent};
 use rollup_node_sequencer::Sequencer;
@@ -25,7 +24,6 @@ use std::{
     fmt,
     fmt::{Debug, Formatter},
     future::Future,
-    mem,
     pin::Pin,
     sync::Arc,
     task::{Context, Poll},
@@ -44,6 +42,7 @@ pub use event::RollupManagerEvent;
 /// The size of the event channel.
 const EVENT_CHANNEL_SIZE: usize = 100;
 
+/// The size of the ECDSA signature in bytes.
 const ECDSA_SIGNATURE_LEN: usize = 65;
 
 /// The main manager for the rollup node.
@@ -67,6 +66,8 @@ pub struct RollupNodeManager<
     L1MP,
     CS,
 > {
+    /// The chain spec used by the rollup node.
+    chain_spec: Arc<CS>,
     /// The network manager that manages the scroll p2p network.
     network: ScrollNetworkManager<N>,
     /// The engine driver used to communicate with the engine.
@@ -80,8 +81,7 @@ pub struct RollupNodeManager<
     /// The consensus algorithm used by the rollup node.
     consensus: Box<dyn Consensus>,
     /// The receiver for new blocks received from the network (used to bridge from eth-wire).
-    eth_wire_block_rx:
-        Option<EventStream<RethNewBlockWithPeer<<N::Primitives as NetworkPrimitives>::Block>>>,
+    eth_wire_block_rx: Option<EventStream<RethNewBlockWithPeer<ScrollBlock>>>,
     /// An event sender for sending events to subscribers of the rollup node manager.
     event_sender: Option<EventSender<RollupManagerEvent>>,
     /// The sequencer which is responsible for sequencing transactions and producing new blocks.
@@ -136,17 +136,16 @@ where
         l1_notification_rx: Option<Receiver<Arc<L1Notification>>>,
         consensus: Box<dyn Consensus>,
         chain_spec: Arc<CS>,
-        eth_wire_block_rx: Option<
-            EventStream<RethNewBlockWithPeer<<N::Primitives as NetworkPrimitives>::Block>>,
-        >,
+        eth_wire_block_rx: Option<EventStream<RethNewBlockWithPeer<ScrollBlock>>>,
         sequencer: Option<Sequencer<L1MP>>,
         signer: Option<SignerHandle>,
         block_time: Option<u64>,
     ) -> Self {
-        let indexer = Indexer::new(database.clone(), chain_spec);
+        let indexer = Indexer::new(database.clone(), chain_spec.clone());
         let derivation_pipeline =
             l1_provider.map(|provider| DerivationPipeline::new(provider, database));
         Self {
+            chain_spec,
             network,
             engine,
             derivation_pipeline,
@@ -276,6 +275,41 @@ where
         }
     }
 
+    fn handle_eth_wire_block(
+        &mut self,
+        block: reth_network_api::block::NewBlockWithPeer<ScrollBlock>,
+    ) {
+        trace!(target: "scroll::node::manager", ?block, "Received new block from eth-wire protocol");
+        let reth_network_api::block::NewBlockWithPeer { peer_id, mut block } = block;
+
+        // We purge the extra data field post euclid v2 to align with protocol specification.
+        let extra_data = if self.chain_spec.is_euclid_v2_active_at_timestamp(block.timestamp) {
+            let extra_data = block.extra_data.clone();
+            block.header.extra_data = Default::default();
+            extra_data
+        } else {
+            block.extra_data.clone()
+        };
+
+        // If we can extract a signature from the extra data we validate consensus and then attempt
+        // import via the EngineAPI in the `handle_new_block` method. The signature is extracted
+        // from the last `ECDSA_SIGNATURE_LEN` bytes of the extra data field as specified by
+        // the protocol.
+        let block = if let Some(signature) = extra_data
+            .len()
+            .checked_sub(ECDSA_SIGNATURE_LEN)
+            .and_then(|i| Signature::from_raw(&extra_data[i..]).ok())
+        {
+            trace!(target: "scroll::bridge::import", peer_id = %peer_id, block = ?block.hash_slow(), "Received new block from eth-wire protocol");
+            NewBlockWithPeer { peer_id, block, signature }
+        } else {
+            warn!(target: "scroll::bridge::import", peer_id = %peer_id, "Failed to extract signature from block extra data");
+            return;
+        };
+
+        self.handle_new_block(block);
+    }
+
     /// Handles an [`L1Notification`] from the L1 watcher.
     fn handle_l1_notification(&mut self, notification: L1Notification) {
         self.indexer.handle_l1_notification(notification);
@@ -363,33 +397,10 @@ where
         }
 
         // Handle blocks received from the eth-wire protocol.
-        while let Some(Poll::Ready(Some(mut block))) =
+        while let Some(Poll::Ready(Some(block))) =
             this.eth_wire_block_rx.as_mut().map(|new_block_rx| new_block_rx.poll_next_unpin(cx))
         {
-            // We create a reference to the extra data of the incoming block.
-            // TODO: Only take post euclid.
-            let extra_data = mem::take(&mut block.block.header.extra_data);
-
-            // If we can extract a signature from the extra data we send the block to the
-            // scroll-wire protocol. The signature is extracted from the last
-            // `ECDSA_SIGNATURE_LEN` bytes of the extra data field.
-            let block = if let Some(signature) = extra_data
-                .len()
-                .checked_sub(ECDSA_SIGNATURE_LEN)
-                .and_then(|i| Signature::from_raw(&extra_data[i..]).ok())
-            {
-                let reth_network_api::block::NewBlockWithPeer { peer_id, block } = block.clone();
-                trace!(target: "scroll::bridge::import", peer_id = %peer_id, block = ?block.hash_slow(), "Received new block from eth-wire protocol");
-
-                // We trigger a new block event to be sent to the rollup node's network manager. If
-                // this results in an error it means the network manager has been
-                // dropped.
-                NewBlockWithPeer { peer_id, block, signature }
-            } else {
-                warn!(target: "scroll::bridge::import", peer_id = %block.peer_id, "Failed to extract signature from block extra data");
-                continue;
-            };
-            this.handle_new_block(block);
+            this.handle_eth_wire_block(block);
         }
 
         // Handle network manager events.
