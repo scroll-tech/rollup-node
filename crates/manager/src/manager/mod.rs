@@ -3,9 +3,13 @@
 //! responsible for handling events from these components and coordinating their actions.
 
 use super::Consensus;
+use alloy_primitives::Signature;
 use futures::StreamExt;
 use reth_chainspec::EthChainSpec;
-use reth_network_api::FullNetwork;
+use reth_network::NetworkPrimitives;
+
+use reth_network_api::{block::NewBlockWithPeer as RethNewBlockWithPeer, FullNetwork};
+use reth_scroll_node::ScrollNetworkPrimitives;
 use reth_tokio_util::{EventSender, EventStream};
 use rollup_node_indexer::{Indexer, IndexerEvent};
 use rollup_node_sequencer::Sequencer;
@@ -21,15 +25,13 @@ use std::{
     fmt,
     fmt::{Debug, Formatter},
     future::Future,
+    mem,
     pin::Pin,
     sync::Arc,
     task::{Context, Poll},
 };
-use tokio::{
-    sync::mpsc::{Receiver, UnboundedReceiver},
-    time::Interval,
-};
-use tokio_stream::wrappers::{ReceiverStream, UnboundedReceiverStream};
+use tokio::{sync::mpsc::Receiver, time::Interval};
+use tokio_stream::wrappers::ReceiverStream;
 use tracing::{error, trace, warn};
 
 use rollup_node_providers::{ExecutionPayloadProvider, L1MessageProvider, L1Provider};
@@ -41,6 +43,8 @@ pub use event::RollupManagerEvent;
 
 /// The size of the event channel.
 const EVENT_CHANNEL_SIZE: usize = 100;
+
+const ECDSA_SIGNATURE_LEN: usize = 65;
 
 /// The main manager for the rollup node.
 ///
@@ -55,7 +59,14 @@ const EVENT_CHANNEL_SIZE: usize = 100;
 /// - `forkchoice_state`: The forkchoice state of the rollup node.
 /// - `pending_block_imports`: A collection of pending block imports.
 /// - `event_sender`: An event sender for sending events to subscribers of the rollup node manager.
-pub struct RollupNodeManager<N, EC, P, L1P, L1MP, CS> {
+pub struct RollupNodeManager<
+    N: FullNetwork<Primitives = ScrollNetworkPrimitives>,
+    EC,
+    P,
+    L1P,
+    L1MP,
+    CS,
+> {
     /// The network manager that manages the scroll p2p network.
     network: ScrollNetworkManager<N>,
     /// The engine driver used to communicate with the engine.
@@ -69,7 +80,8 @@ pub struct RollupNodeManager<N, EC, P, L1P, L1MP, CS> {
     /// The consensus algorithm used by the rollup node.
     consensus: Box<dyn Consensus>,
     /// The receiver for new blocks received from the network (used to bridge from eth-wire).
-    new_block_rx: Option<UnboundedReceiverStream<NewBlockWithPeer>>,
+    eth_wire_block_rx:
+        Option<EventStream<RethNewBlockWithPeer<<N::Primitives as NetworkPrimitives>::Block>>>,
     /// An event sender for sending events to subscribers of the rollup node manager.
     event_sender: Option<EventSender<RollupManagerEvent>>,
     /// The sequencer which is responsible for sequencing transactions and producing new blocks.
@@ -80,8 +92,14 @@ pub struct RollupNodeManager<N, EC, P, L1P, L1MP, CS> {
     block_building_trigger: Option<Interval>,
 }
 
-impl<N: Debug, EC: Debug, P: Debug, L1P: Debug, L1MP: Debug, CS: Debug> Debug
-    for RollupNodeManager<N, EC, P, L1P, L1MP, CS>
+impl<
+        N: FullNetwork<Primitives = ScrollNetworkPrimitives>,
+        EC: Debug,
+        P: Debug,
+        L1P: Debug,
+        L1MP: Debug,
+        CS: Debug,
+    > Debug for RollupNodeManager<N, EC, P, L1P, L1MP, CS>
 {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         f.debug_struct("RollupNodeManager")
@@ -91,7 +109,7 @@ impl<N: Debug, EC: Debug, P: Debug, L1P: Debug, L1MP: Debug, CS: Debug> Debug
             .field("l1_notification_rx", &self.l1_notification_rx)
             .field("indexer", &self.indexer)
             .field("consensus", &self.consensus)
-            .field("new_block_rx", &self.new_block_rx)
+            .field("eth_wire_block_rx", &"eth_wire_block_rx")
             .field("event_sender", &self.event_sender)
             .field("sequencer", &self.sequencer)
             .field("block_building_trigger", &self.block_building_trigger)
@@ -101,7 +119,7 @@ impl<N: Debug, EC: Debug, P: Debug, L1P: Debug, L1MP: Debug, CS: Debug> Debug
 
 impl<N, EC, P, L1P, L1MP, CS> RollupNodeManager<N, EC, P, L1P, L1MP, CS>
 where
-    N: FullNetwork,
+    N: FullNetwork<Primitives = ScrollNetworkPrimitives>,
     EC: ScrollEngineApi + Unpin + Sync + Send + 'static,
     P: ExecutionPayloadProvider + Unpin + Send + Sync + 'static,
     L1P: L1Provider + Clone + Send + Sync + 'static,
@@ -118,7 +136,9 @@ where
         l1_notification_rx: Option<Receiver<Arc<L1Notification>>>,
         consensus: Box<dyn Consensus>,
         chain_spec: Arc<CS>,
-        new_block_rx: Option<UnboundedReceiver<NewBlockWithPeer>>,
+        eth_wire_block_rx: Option<
+            EventStream<RethNewBlockWithPeer<<N::Primitives as NetworkPrimitives>::Block>>,
+        >,
         sequencer: Option<Sequencer<L1MP>>,
         signer: Option<SignerHandle>,
         block_time: Option<u64>,
@@ -133,7 +153,7 @@ where
             l1_notification_rx: l1_notification_rx.map(Into::into),
             indexer,
             consensus,
-            new_block_rx: new_block_rx.map(Into::into),
+            eth_wire_block_rx,
             event_sender: None,
             sequencer,
             signer,
@@ -264,7 +284,7 @@ where
 
 impl<N, EC, P, L1P, L1MP, CS> Future for RollupNodeManager<N, EC, P, L1P, L1MP, CS>
 where
-    N: FullNetwork,
+    N: FullNetwork<Primitives = ScrollNetworkPrimitives>,
     EC: ScrollEngineApi + Unpin + Sync + Send + 'static,
     P: ExecutionPayloadProvider + Clone + Unpin + Send + Sync + 'static,
     L1P: L1Provider + Clone + Unpin + Send + Sync + 'static,
@@ -343,9 +363,32 @@ where
         }
 
         // Handle blocks received from the eth-wire protocol.
-        while let Some(Poll::Ready(Some(block))) =
-            this.new_block_rx.as_mut().map(|new_block_rx| new_block_rx.poll_next_unpin(cx))
+        while let Some(Poll::Ready(Some(mut block))) =
+            this.eth_wire_block_rx.as_mut().map(|new_block_rx| new_block_rx.poll_next_unpin(cx))
         {
+            // We create a reference to the extra data of the incoming block.
+            // TODO: Only take post euclid.
+            let extra_data = mem::take(&mut block.block.header.extra_data);
+
+            // If we can extract a signature from the extra data we send the block to the
+            // scroll-wire protocol. The signature is extracted from the last
+            // `ECDSA_SIGNATURE_LEN` bytes of the extra data field.
+            let block = if let Some(signature) = extra_data
+                .len()
+                .checked_sub(ECDSA_SIGNATURE_LEN)
+                .and_then(|i| Signature::from_raw(&extra_data[i..]).ok())
+            {
+                let reth_network_api::block::NewBlockWithPeer { peer_id, block } = block.clone();
+                trace!(target: "scroll::bridge::import", peer_id = %peer_id, block = ?block.hash_slow(), "Received new block from eth-wire protocol");
+
+                // We trigger a new block event to be sent to the rollup node's network manager. If
+                // this results in an error it means the network manager has been
+                // dropped.
+                NewBlockWithPeer { peer_id, block, signature }
+            } else {
+                warn!(target: "scroll::bridge::import", peer_id = %block.peer_id, "Failed to extract signature from block extra data");
+                continue;
+            };
             this.handle_new_block(block);
         }
 

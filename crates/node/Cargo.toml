@@ -40,6 +40,7 @@ reth-node-builder = { workspace = true, features = ["skip-state-root-validation"
 reth-node-api = { git = "https://github.com/scroll-tech/reth.git", branch = "feat/rnm-node-integration" }
 reth-node-types = { git = "https://github.com/scroll-tech/reth.git", branch = "feat/rnm-node-integration" }
 reth-network.workspace = true
+reth-network-api.workspace = true
 reth-network-peers.workspace = true
 reth-revm = { git = "https://github.com/scroll-tech/reth.git", branch = "feat/rnm-node-integration" }
 reth-rpc-builder = { git = "https://github.com/scroll-tech/reth.git", branch = "feat/rnm-node-integration" }

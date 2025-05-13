@@ -8,9 +8,11 @@ use alloy_rpc_client::RpcClient;
 use alloy_transport::layers::RetryBackoffLayer;
 use reth_chainspec::EthChainSpec;
 use reth_network::{protocol::IntoRlpxSubProtocol, NetworkProtocols};
+use reth_network_api::{block::EthWireBlockListenerProvider, FullNetwork};
 use reth_node_api::{FullNodeTypes, NodeTypes};
 use reth_node_builder::{rpc::RpcHandle, AddOnsContext, FullNodeComponents};
 use reth_rpc_eth_api::EthApiTypes;
+use reth_scroll_node::ScrollNetworkPrimitives;
 use rollup_node_manager::{Consensus, NoopConsensus, PoAConsensus, RollupNodeManager};
 use rollup_node_providers::{
     beacon_provider, AlloyExecutionPayloadProvider, DatabaseL1MessageProvider, OnlineL1Provider,
@@ -69,11 +71,11 @@ impl RollupManagerAddon {
     >
     where
         <<N as FullNodeTypes>::Types as NodeTypes>::ChainSpec: ScrollHardforks,
-        N::Network: NetworkProtocols,
+        N::Network: NetworkProtocols + FullNetwork<Primitives = ScrollNetworkPrimitives>,
     {
         // Instantiate the network manager
         let (scroll_wire_handler, events) =
-            ScrollWireProtocolHandler::new(ScrollWireConfig::new(false));
+            ScrollWireProtocolHandler::new(ScrollWireConfig::new(true));
         ctx.node.network().add_rlpx_sub_protocol(scroll_wire_handler.into_rlpx_sub_protocol());
         let scroll_network_manager =
             ScrollNetworkManager::from_parts(ctx.node.network().clone(), events);
@@ -183,6 +185,9 @@ impl RollupManagerAddon {
             (None, None)
         };
 
+        // Instantiate the eth wire listener
+        let eth_wire_listener = ctx.node.network().eth_wire_block_listener().await?;
+
         // Spawn the rollup node manager
         let rollup_node_manager = RollupNodeManager::new(
             scroll_network_manager,
@@ -192,7 +197,7 @@ impl RollupManagerAddon {
             l1_notification_rx,
             consensus,
             ctx.config.chain.clone(),
-            None,
+            Some(eth_wire_listener),
             sequencer,
             None,
             block_time,

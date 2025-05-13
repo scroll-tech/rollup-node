@@ -23,6 +23,7 @@ scroll-alloy-hardforks.workspace = true
 scroll-alloy-provider.workspace = true
 
 # reth
+reth-network.workspace = true
 reth-network-api.workspace = true
 reth-tokio-util.workspace = true
 
@@ -30,6 +31,7 @@ reth-tokio-util.workspace = true
 reth-chainspec.workspace = true
 reth-primitives-traits.workspace = true
 reth-scroll-primitives.workspace = true
+reth-scroll-node.workspace = true
 
 # scroll
 scroll-alloy-rpc-types-engine.workspace = true
@@ -73,4 +75,5 @@ serde = [
     "reth-primitives-traits/serde",
     "scroll-alloy-consensus/serde",
     "reth-network-api/serde",
+    "reth-network/serde",
 ]

@@ -52,7 +52,7 @@ async fn can_bridge_blocks() {
             .with_unused_listener_port()
             .with_pow()
             .build_with_noop_provider(chain_spec.clone());
-    let scroll_wire_config = ScrollWireConfig::new(false);
+    let scroll_wire_config = ScrollWireConfig::new(true);
     let mut scroll_network =
         scroll_network::ScrollNetworkManager::new(network_config, scroll_wire_config).await;
     let scroll_network_handle = scroll_network.handle();
