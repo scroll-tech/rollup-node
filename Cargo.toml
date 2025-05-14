@@ -118,19 +118,19 @@ large_enum_variant = "allow"
 [workspace.dependencies]
 # alloy
 alloy-chains = { version = "0.2.0", default-features = false }
-alloy-consensus = { version = "0.15.5", default-features = false }
-alloy-eips = { version = "0.15.5", default-features = false }
-alloy-json-rpc = { version = "0.15.5", default-features = false }
-alloy-network = { version = "0.15.5", default-features = false }
-alloy-primitives = { version = "1.0.0", default-features = false }
-alloy-provider = { version = "0.15.5", default-features = false }
-alloy-rpc-client = { version = "0.15.5", default-features = false }
-alloy-rpc-types-engine = { version = "0.15.5", default-features = false }
-alloy-rpc-types-eth = { version = "0.15.5", default-features = false }
-alloy-sol-types = { version = "1.0.0", default-features = false }
-alloy-signer = { version = "0.15.5", default-features = false }
-alloy-signer-local = { version = "0.15.5", default-features = false }
-alloy-transport = { version = "0.15.5", default-features = false }
+alloy-consensus = { version = "0.15.10", default-features = false }
+alloy-eips = { version = "0.15.10", default-features = false }
+alloy-json-rpc = { version = "0.15.10", default-features = false }
+alloy-network = { version = "0.15.10", default-features = false }
+alloy-primitives = { version = "1.1.0", default-features = false }
+alloy-provider = { version = "0.15.10", default-features = false }
+alloy-rpc-client = { version = "0.15.10", default-features = false }
+alloy-rpc-types-engine = { version = "0.15.10", default-features = false }
+alloy-rpc-types-eth = { version = "0.15.10", default-features = false }
+alloy-sol-types = { version = "1.1.0", default-features = false }
+alloy-signer = { version = "0.15.10", default-features = false }
+alloy-signer-local = { version = "0.15.10", default-features = false }
+alloy-transport = { version = "0.15.10", default-features = false }
 
 # scroll-alloy
 scroll-alloy-consensus = { git = "https://github.com/scroll-tech/reth.git", branch = "feat/rnm-node-integration", default-features = false }
