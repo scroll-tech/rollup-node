@@ -26,6 +26,8 @@ pub struct EngineDriver<EC, P = ()> {
     execution_payload_provider: Option<P>,
     /// The fork choice state of the engine.
     fcs: ForkchoiceState,
+    /// Whether the node should perform optimistic sync.
+    optimistic_sync: bool,
     /// Block building duration.
     block_building_duration: Duration,
     /// The pending payload attributes derived from batches on L1.
@@ -53,6 +55,7 @@ where
         client: Arc<EC>,
         execution_payload_provider: Option<P>,
         fcs: ForkchoiceState,
+        optimistic_sync: bool,
         block_building_duration: Duration,
     ) -> Self {
         Self {
@@ -60,6 +63,7 @@ where
             execution_payload_provider,
             fcs,
             block_building_duration,
+            optimistic_sync,
             l1_payload_attributes: VecDeque::new(),
             block_imports: VecDeque::new(),
             sequencer_payload_attributes: None,
@@ -262,7 +266,16 @@ where
             let fcs = this.fcs.get_alloy_fcs();
             let client = this.client.clone();
 
-            this.future = Some(EngineDriverFuture::block_import(client, block_with_peer, fcs));
+            this.future = Some(EngineDriverFuture::block_import(
+                client,
+                block_with_peer,
+                fcs,
+                this.optimistic_sync,
+            ));
+
+            // only perform optimistic sync once.
+            this.optimistic_sync = false;
+
             this.waker.wake();
             return Poll::Pending;
         }
@@ -323,7 +336,7 @@ mod tests {
             ForkchoiceState::from_block_info(BlockInfo { number: 0, hash: Default::default() });
         let duration = Duration::from_secs(2);
 
-        let mut driver = EngineDriver::new(client, None::<()>, fcs, duration);
+        let mut driver = EngineDriver::new(client, None::<()>, fcs, false, duration);
 
         // Initially, it should be false
         assert!(!driver.is_payload_building_in_progress());
@@ -342,7 +355,7 @@ mod tests {
             ForkchoiceState::from_block_info(BlockInfo { number: 0, hash: Default::default() });
         let duration = Duration::from_secs(2);
 
-        let mut driver = EngineDriver::new(client.clone(), None::<()>, fcs, duration);
+        let mut driver = EngineDriver::new(client.clone(), None::<()>, fcs, false, duration);
 
         // Initially, it should be false
         assert!(!driver.is_payload_building_in_progress());

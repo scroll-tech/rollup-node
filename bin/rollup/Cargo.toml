@@ -17,6 +17,7 @@ alloy-transport.workspace = true
 
 # scroll-alloy
 scroll-alloy-consensus.workspace = true
+scroll-alloy-hardforks.workspace = true
 scroll-alloy-provider.workspace = true
 scroll-alloy-rpc-types-engine.workspace = true
 
@@ -114,6 +115,7 @@ serde = [
     "alloy-chains/serde",
     "reth-transaction-pool/serde",
     "url/serde",
+    "scroll-alloy-hardforks/serde",
 ]
 
 [[bin]]

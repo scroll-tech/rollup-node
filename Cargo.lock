@@ -9649,6 +9649,7 @@ dependencies = [
  "rollup-node-sequencer",
  "rollup-node-watcher",
  "scroll-alloy-consensus",
+ "scroll-alloy-hardforks",
  "scroll-alloy-provider",
  "scroll-alloy-rpc-types-engine",
  "scroll-db",
