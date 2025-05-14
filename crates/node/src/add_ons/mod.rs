@@ -1,5 +1,5 @@
 use super::args::ScrollRollupNodeConfig;
-use reth_evm::{ConfigureEvm, EvmFactory, EvmFactoryFor, NextBlockEnvAttributes};
+use reth_evm::{ConfigureEvm, EvmFactory, EvmFactoryFor};
 use reth_network::NetworkProtocols;
 use reth_network_api::FullNetwork;
 use reth_node_api::{AddOnsContext, NodeAddOns};
@@ -15,6 +15,7 @@ use reth_revm::context::TxEnv;
 use reth_rpc_eth_types::error::FromEvmError;
 use reth_scroll_chainspec::ScrollChainSpec;
 use reth_scroll_engine_primitives::ScrollEngineTypes;
+use reth_scroll_evm::ScrollNextBlockEnvAttributes;
 use reth_scroll_node::{
     ScrollEngineValidator, ScrollEngineValidatorBuilder, ScrollNetworkPrimitives, ScrollStorage,
 };
@@ -65,7 +66,7 @@ where
             Storage = ScrollStorage,
             Payload = ScrollEngineTypes,
         >,
-        Evm: ConfigureEvm<NextBlockEnvCtx = NextBlockEnvAttributes>,
+        Evm: ConfigureEvm<NextBlockEnvCtx = ScrollNextBlockEnvAttributes>,
         Network: NetworkProtocols + FullNetwork<Primitives = ScrollNetworkPrimitives>,
     >,
     ScrollEthApiError: FromEvmError<N::Evm>,
@@ -97,7 +98,7 @@ where
             Storage = ScrollStorage,
             Payload = ScrollEngineTypes,
         >,
-        Evm: ConfigureEvm<NextBlockEnvCtx = NextBlockEnvAttributes>,
+        Evm: ConfigureEvm<NextBlockEnvCtx = ScrollNextBlockEnvAttributes>,
         Network: NetworkProtocols + FullNetwork<Primitives = ScrollNetworkPrimitives>,
     >,
     ScrollEthApiError: FromEvmError<N::Evm>,

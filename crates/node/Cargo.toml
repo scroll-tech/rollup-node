@@ -26,6 +26,7 @@ scroll-alloy-network.workspace = true
 scroll-alloy-provider.workspace = true
 
 reth-scroll-engine-primitives.workspace = true
+reth-scroll-evm = { git = "https://github.com/scroll-tech/reth.git", branch = "feat/rnm-node-integration" }
 reth-scroll-cli = { git = "https://github.com/scroll-tech/reth.git", branch = "feat/rnm-node-integration" }
 reth-scroll-primitives.workspace = true
 reth-scroll-chainspec.workspace = true

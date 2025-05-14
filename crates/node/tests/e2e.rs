@@ -33,7 +33,6 @@ use tracing::trace;
 ///
 /// The test will send messages from Node 3 to Node 1, which will bridge the messages to Node
 /// Node 2 will then receive the messages and verify that they are correct.
-#[ignore]
 #[tokio::test]
 async fn can_bridge_blocks() {
     reth_tracing::init_test_tracing();
