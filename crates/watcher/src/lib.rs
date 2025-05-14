@@ -20,7 +20,7 @@ use alloy_provider::{Network, Provider};
 use alloy_rpc_types_eth::{BlockNumberOrTag, Log, TransactionTrait};
 use error::L1WatcherResult;
 use itertools::Itertools;
-use rollup_node_primitives::{BatchCommitData, BoundedVec, ConsensusUpdate};
+use rollup_node_primitives::{BatchCommitData, BoundedVec, ConsensusUpdate, NodeConfig};
 use rollup_node_providers::SystemContractProvider;
 use scroll_alloy_consensus::TxL1Message;
 use scroll_l1::abi::logs::{try_decode_log, CommitBatch, FinalizeBatch, QueueTransaction};
@@ -75,6 +75,8 @@ pub struct L1Watcher<EP> {
     current_block_number: BlockNumber,
     /// The sender part of the channel for [`L1Notification`].
     sender: mpsc::Sender<Arc<L1Notification>>,
+    /// The rollup node configuration.
+    config: Arc<NodeConfig>,
 }
 
 /// The L1 notification type yielded by the [`L1Watcher`].
@@ -117,6 +119,7 @@ where
     pub async fn spawn(
         execution_provider: EP,
         start_block: BlockNumber,
+        config: Arc<NodeConfig>,
     ) -> mpsc::Receiver<Arc<L1Notification>> {
         let (tx, rx) = mpsc::channel(LOGS_QUERY_BLOCK_RANGE as usize);
 
@@ -146,6 +149,7 @@ where
             current_block_number: start_block - 1,
             l1_state,
             sender: tx,
+            config,
         };
 
         // notify at spawn.
@@ -443,7 +447,10 @@ where
     async fn handle_system_contract_update(&self, latest_block: &Block) -> L1WatcherResult<()> {
         // refresh the signer every new block.
         if latest_block.header.number != self.l1_state.head {
-            let signer = self.execution_provider.authorized_signer().await?;
+            let signer = self
+                .execution_provider
+                .authorized_signer(self.config.system_contract_address())
+                .await?;
             self.notify(L1Notification::Consensus(ConsensusUpdate::AuthorizedSigner(signer))).await;
         }
 
@@ -588,6 +595,7 @@ mod tests {
                 l1_state: L1State { head: 0, finalized: 0 },
                 current_block_number: 0,
                 sender: tx,
+                config: Arc::new(NodeConfig::mainnet()),
             },
             rx,
         )

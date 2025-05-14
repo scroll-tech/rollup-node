@@ -51,7 +51,13 @@ scroll-l1 = { workspace = true, features = ["test-utils"] }
 reth-tracing.workspace = true
 
 [features]
-test-utils = ["arbitrary", "rand", "scroll-l1/test-utils", "dep:alloy-rpc-client"]
+test-utils = [
+    "arbitrary",
+    "rand",
+    "scroll-l1/test-utils",
+    "dep:alloy-rpc-client",
+    "rollup-node-providers/test-utils",
+]
 arbitrary = [
     "dep:arbitrary",
     "alloy-consensus/arbitrary",

@@ -17,7 +17,7 @@ use reth_scroll_node::ScrollHeaderTransform;
 use reth_scroll_primitives::ScrollPrimitives;
 use reth_transaction_pool::{PoolTransaction, TransactionPool};
 use rollup_node_manager::{Consensus, NoopConsensus, PoAConsensus, RollupNodeManager};
-use rollup_node_primitives::ConsensusUpdate;
+use rollup_node_primitives::{ConsensusUpdate, NodeConfig};
 use rollup_node_providers::{
     beacon_provider, AlloyExecutionPayloadProvider, DatabaseL1MessageProvider, OnlineL1Provider,
     SystemContractProvider,
@@ -65,6 +65,11 @@ where
         ctx: &BuilderContext<Node>,
         pool: Pool,
     ) -> eyre::Result<Self::Network> {
+        // Get the rollup node config.
+        let node_config = Arc::new(NodeConfig::from_named_chain(
+            ctx.chain_spec().chain.named().expect("expected named chain"),
+        ));
+
         // Create a new block channel to bridge between eth-wire and scroll-wire protocols.
         let (block_tx, block_rx) =
             if self.config.enable_eth_scroll_wire_bridge & self.config.enable_scroll_wire {
@@ -174,7 +179,8 @@ where
         } else {
             let mut poa = PoAConsensus::new(HashSet::new());
             if let Some(ref provider) = provider {
-                let signer = provider.authorized_signer().await?;
+                let signer =
+                    provider.authorized_signer(node_config.system_contract_address()).await?;
                 poa.update_config(&ConsensusUpdate::AuthorizedSigner(signer));
             }
             Box::new(poa)
@@ -182,7 +188,7 @@ where
 
         let l1_notification_rx = if let Some(provider) = provider {
             // Spawn the L1Watcher
-            Some(L1Watcher::spawn(provider, WATCHER_START_BLOCK_NUMBER).await)
+            Some(L1Watcher::spawn(provider, WATCHER_START_BLOCK_NUMBER, node_config).await)
         } else {
             None
         };

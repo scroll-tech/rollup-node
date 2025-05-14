@@ -19,7 +19,8 @@ impl<T> BoundedVec<T> {
         Self { data: VecDeque::with_capacity(capacity) }
     }
 
-    /// Pushes a value at the back of the buffer. If the buffer is full,
+    /// Pushes a value at the back of the buffer. If the buffer is full, pops the data at the front
+    /// of the buffer first.
     pub fn push(&mut self, elem: T) {
         if self.is_full() {
             self.data.pop_front();

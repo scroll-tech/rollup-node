@@ -11,6 +11,7 @@ workspace = true
 
 [dependencies]
 # alloy
+alloy-chains.workspace = true
 alloy-consensus.workspace = true
 alloy-eips.workspace = true
 alloy-primitives.workspace = true
@@ -40,6 +41,7 @@ std = [
     "reth-scroll-primitives/std",
     "reth-primitives-traits/std",
     "alloy-consensus/std",
+    "alloy-chains/std",
 ]
 arbitrary = [
     "std",
@@ -53,4 +55,5 @@ arbitrary = [
     "reth-primitives-traits/arbitrary",
     "alloy-consensus/arbitrary",
     "alloy-rpc-types-engine/arbitrary",
+    "alloy-chains/arbitrary",
 ]

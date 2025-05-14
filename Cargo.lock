@@ -120,7 +120,9 @@ checksum = "7734aecfc58a597dde036e4c5cace2ae43e2f8bf3d406b022a1ef34da178dd49"
 dependencies = [
  "alloy-primitives",
  "alloy-rlp",
+ "arbitrary",
  "num_enum",
+ "proptest",
  "serde",
  "strum 0.27.1",
 ]
@@ -9719,6 +9721,7 @@ dependencies = [
 name = "rollup-node-primitives"
 version = "0.0.1"
 dependencies = [
+ "alloy-chains",
  "alloy-consensus 0.15.11",
  "alloy-eips 0.15.11",
  "alloy-primitives",

@@ -16,11 +16,15 @@ pub use batch::{BatchCommitData, BatchInfo};
 mod bounded_vec;
 pub use bounded_vec::BoundedVec;
 
+mod node;
+pub use node::{
+    config::{NodeConfig, MAINNET_SYSTEM_CONTRAT_ADDRESS, SEPOLIA_SYSTEM_CONTRAT_ADDRESS},
+    consensus::ConsensusUpdate,
+};
+
 mod signature;
 pub use signature::sig_encode_hash;
 
-mod consensus;
-pub use consensus::ConsensusUpdate;
-
 mod transaction;
+
 pub use transaction::L1MessageEnvelope;

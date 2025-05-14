@@ -13,10 +13,7 @@ mod execution_payload;
 pub use l1::{
     blob::L1BlobProvider,
     message::{DatabaseL1MessageProvider, L1MessageProvider},
-    system_contract::{
-        SystemContractProvider, AUTHORIZED_SIGNER_STORAGE_SLOT, MAINNET_SYSTEM_CONTRAT_ADDRESS,
-        SEPOLIA_SYSTEM_CONTRAT_ADDRESS,
-    },
+    system_contract::{SystemContractProvider, AUTHORIZED_SIGNER_STORAGE_SLOT},
     L1Provider, L1ProviderError, OnlineL1Provider,
 };
 mod l1;
