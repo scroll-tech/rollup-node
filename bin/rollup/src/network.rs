@@ -7,7 +7,7 @@ use std::{sync::Arc, time::Duration};
 use alloy_provider::ProviderBuilder;
 use alloy_rpc_client::RpcClient;
 use alloy_transport::layers::RetryBackoffLayer;
-use reth_network::{config::NetworkMode, NetworkManager, PeersInfo};
+use reth_network::{config::NetworkMode, NetworkHandle, NetworkManager, PeersInfo};
 use reth_node_api::TxTy;
 use reth_node_builder::{components::NetworkBuilder, BuilderContext, FullNodeTypes};
 use reth_node_types::NodeTypes;
@@ -55,13 +55,13 @@ where
         > + Unpin
         + 'static,
 {
-    type Primitives = reth_scroll_node::ScrollNetworkPrimitives;
+    type Network = NetworkHandle<reth_scroll_node::ScrollNetworkPrimitives>;
 
     async fn build_network(
         self,
         ctx: &BuilderContext<Node>,
         pool: Pool,
-    ) -> eyre::Result<reth_network::NetworkHandle<Self::Primitives>> {
+    ) -> eyre::Result<Self::Network> {
         // Create a new block channel to bridge between eth-wire and scroll-wire protocols.
         let (block_tx, block_rx) =
             if self.config.enable_eth_scroll_wire_bridge & self.config.enable_scroll_wire {
@@ -87,7 +87,7 @@ where
         }
 
         // Create the network manager.
-        let network = NetworkManager::<Self::Primitives>::builder(config).await?;
+        let network = NetworkManager::builder(config).await?;
         let handle = ctx.start_network(network, pool);
 
         // Create the scroll network manager.

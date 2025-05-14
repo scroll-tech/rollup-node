@@ -118,51 +118,51 @@ large_enum_variant = "allow"
 [workspace.dependencies]
 # alloy
 alloy-chains = { version = "0.2.0", default-features = false }
-alloy-consensus = { version = "0.15.5", default-features = false }
-alloy-eips = { version = "0.15.5", default-features = false }
-alloy-json-rpc = { version = "0.15.5", default-features = false }
-alloy-network = { version = "0.15.5", default-features = false }
-alloy-primitives = { version = "1.0.0", default-features = false }
-alloy-provider = { version = "0.15.5", default-features = false }
-alloy-rpc-client = { version = "0.15.5", default-features = false }
-alloy-rpc-types-engine = { version = "0.15.5", default-features = false }
-alloy-rpc-types-eth = { version = "0.15.5", default-features = false }
-alloy-sol-types = { version = "1.0.0", default-features = false }
-alloy-signer = { version = "0.15.5", default-features = false }
-alloy-signer-local = { version = "0.15.5", default-features = false }
-alloy-transport = { version = "0.15.5", default-features = false }
+alloy-consensus = { version = "0.15.10", default-features = false }
+alloy-eips = { version = "0.15.10", default-features = false }
+alloy-json-rpc = { version = "0.15.10", default-features = false }
+alloy-network = { version = "0.15.10", default-features = false }
+alloy-primitives = { version = "1.1.0", default-features = false }
+alloy-provider = { version = "0.15.10", default-features = false }
+alloy-rpc-client = { version = "0.15.10", default-features = false }
+alloy-rpc-types-engine = { version = "0.15.10", default-features = false }
+alloy-rpc-types-eth = { version = "0.15.10", default-features = false }
+alloy-sol-types = { version = "1.1.0", default-features = false }
+alloy-signer = { version = "0.15.10", default-features = false }
+alloy-signer-local = { version = "0.15.10", default-features = false }
+alloy-transport = { version = "0.15.10", default-features = false }
 
 # scroll-alloy
-scroll-alloy-consensus = { git = "https://github.com/scroll-tech/reth.git", branch = "feat/calc-base-fee", default-features = false }
-scroll-alloy-hardforks = { git = "https://github.com/scroll-tech/reth.git", branch = "feat/calc-base-fee", default-features = false }
-scroll-alloy-network = { git = "https://github.com/scroll-tech/reth.git", branch = "feat/calc-base-fee", default-features = false }
-scroll-alloy-provider = { git = "https://github.com/scroll-tech/reth.git", branch = "feat/calc-base-fee", default-features = false }
-scroll-alloy-rpc-types-engine = { git = "https://github.com/scroll-tech/reth.git", branch = "feat/calc-base-fee", default-features = false }
+scroll-alloy-consensus = { git = "https://github.com/scroll-tech/reth.git", default-features = false }
+scroll-alloy-hardforks = { git = "https://github.com/scroll-tech/reth.git", default-features = false }
+scroll-alloy-network = { git = "https://github.com/scroll-tech/reth.git", default-features = false }
+scroll-alloy-provider = { git = "https://github.com/scroll-tech/reth.git", default-features = false }
+scroll-alloy-rpc-types-engine = { git = "https://github.com/scroll-tech/reth.git", default-features = false }
 
 # reth
-reth-chainspec = { git = "https://github.com/scroll-tech/reth.git", branch = "feat/calc-base-fee", default-features = false }
-reth-e2e-test-utils = { git = "https://github.com/scroll-tech/reth.git", branch = "feat/calc-base-fee" }
-reth-eth-wire-types = { git = "https://github.com/scroll-tech/reth.git", branch = "feat/calc-base-fee", default-features = false }
-reth-network = { git = "https://github.com/scroll-tech/reth.git", branch = "feat/calc-base-fee", default-features = false }
-reth-network-api = { git = "https://github.com/scroll-tech/reth.git", branch = "feat/calc-base-fee", default-features = false }
-reth-network-peers = { git = "https://github.com/scroll-tech/reth.git", branch = "feat/calc-base-fee", default-features = false }
-reth-node-builder = { git = "https://github.com/scroll-tech/reth.git", branch = "feat/calc-base-fee", default-features = false }
-reth-node-core = { git = "https://github.com/scroll-tech/reth.git", branch = "feat/calc-base-fee" }
-reth-payload-primitives = { git = "https://github.com/scroll-tech/reth.git", branch = "feat/calc-base-fee" }
-reth-primitives = { git = "https://github.com/scroll-tech/reth.git", branch = "feat/calc-base-fee", default-features = false }
-reth-primitives-traits = { git = "https://github.com/scroll-tech/reth.git", branch = "feat/calc-base-fee", default-features = false }
-reth-provider = { git = "https://github.com/scroll-tech/reth.git", branch = "feat/calc-base-fee", default-features = false }
-reth-rpc-server-types = { git = "https://github.com/scroll-tech/reth.git", branch = "feat/calc-base-fee" }
-reth-tasks = { git = "https://github.com/scroll-tech/reth.git", branch = "feat/calc-base-fee" }
-reth-tokio-util = { git = "https://github.com/scroll-tech/reth.git", branch = "feat/calc-base-fee", default-features = false }
-reth-tracing = { git = "https://github.com/scroll-tech/reth.git", branch = "feat/calc-base-fee", default-features = false }
+reth-chainspec = { git = "https://github.com/scroll-tech/reth.git", default-features = false }
+reth-e2e-test-utils = { git = "https://github.com/scroll-tech/reth.git" }
+reth-eth-wire-types = { git = "https://github.com/scroll-tech/reth.git", default-features = false }
+reth-network = { git = "https://github.com/scroll-tech/reth.git", default-features = false }
+reth-network-api = { git = "https://github.com/scroll-tech/reth.git", default-features = false }
+reth-network-peers = { git = "https://github.com/scroll-tech/reth.git", default-features = false }
+reth-node-builder = { git = "https://github.com/scroll-tech/reth.git", default-features = false }
+reth-node-core = { git = "https://github.com/scroll-tech/reth.git" }
+reth-payload-primitives = { git = "https://github.com/scroll-tech/reth.git" }
+reth-primitives = { git = "https://github.com/scroll-tech/reth.git", default-features = false }
+reth-primitives-traits = { git = "https://github.com/scroll-tech/reth.git", default-features = false }
+reth-provider = { git = "https://github.com/scroll-tech/reth.git", default-features = false }
+reth-rpc-server-types = { git = "https://github.com/scroll-tech/reth.git" }
+reth-tasks = { git = "https://github.com/scroll-tech/reth.git" }
+reth-tokio-util = { git = "https://github.com/scroll-tech/reth.git", default-features = false }
+reth-tracing = { git = "https://github.com/scroll-tech/reth.git", default-features = false }
 
 # reth-scroll
-reth-scroll-chainspec = { git = "https://github.com/scroll-tech/reth.git", branch = "feat/calc-base-fee", default-features = false }
-reth-scroll-engine-primitives = { git = "https://github.com/scroll-tech/reth.git", branch = "feat/calc-base-fee", default-features = false }
-reth-scroll-forks = { git = "https://github.com/scroll-tech/reth.git", branch = "feat/calc-base-fee", default-features = false }
-reth-scroll-node = { git = "https://github.com/scroll-tech/reth.git", branch = "feat/calc-base-fee", default-features = false }
-reth-scroll-primitives = { git = "https://github.com/scroll-tech/reth.git", branch = "feat/calc-base-fee", default-features = false }
+reth-scroll-chainspec = { git = "https://github.com/scroll-tech/reth.git", default-features = false }
+reth-scroll-engine-primitives = { git = "https://github.com/scroll-tech/reth.git", default-features = false }
+reth-scroll-forks = { git = "https://github.com/scroll-tech/reth.git", default-features = false }
+reth-scroll-node = { git = "https://github.com/scroll-tech/reth.git", default-features = false }
+reth-scroll-primitives = { git = "https://github.com/scroll-tech/reth.git", default-features = false }
 
 # rollup node
 rollup-node-indexer = { path = "crates/indexer" }
@@ -197,3 +197,7 @@ thiserror = "2.0"
 tokio = { version = "1.39", default-features = false }
 tokio-stream = { version = "0.1", default-features = false }
 tracing = "0.1.0"
+
+[patch.crates-io]
+revm = { git = "https://github.com/scroll-tech/revm", branch = "feat/reth" }
+op-revm = { git = "https://github.com/scroll-tech/revm", branch = "feat/reth" }
