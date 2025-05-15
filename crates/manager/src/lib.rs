@@ -4,4 +4,6 @@ pub use consensus::{Consensus, NoopConsensus, PoAConsensus};
 mod consensus;
 
 mod manager;
-pub use manager::{RollupManagerEvent, RollupNodeManager};
+pub use manager::{
+    RollupManagerCommand, RollupManagerEvent, RollupManagerHandle, RollupNodeManager,
+};

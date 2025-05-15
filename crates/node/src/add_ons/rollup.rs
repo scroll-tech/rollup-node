@@ -13,7 +13,9 @@ use reth_node_api::{FullNodeTypes, NodeTypes};
 use reth_node_builder::{rpc::RpcHandle, AddOnsContext, FullNodeComponents};
 use reth_rpc_eth_api::EthApiTypes;
 use reth_scroll_node::ScrollNetworkPrimitives;
-use rollup_node_manager::{Consensus, NoopConsensus, PoAConsensus, RollupNodeManager};
+use rollup_node_manager::{
+    Consensus, NoopConsensus, PoAConsensus, RollupManagerHandle, RollupNodeManager,
+};
 use rollup_node_providers::{
     beacon_provider, AlloyExecutionPayloadProvider, DatabaseL1MessageProvider, OnlineL1Provider,
 };
@@ -48,27 +50,7 @@ impl RollupManagerAddon {
         self,
         ctx: AddOnsContext<'_, N>,
         rpc: RpcHandle<N, EthApi>,
-    ) -> eyre::Result<
-        RollupNodeManager<
-            N::Network,
-            ScrollAuthApiEngineClient<
-                jsonrpsee_http_client::HttpClient<
-                    reth_rpc_layer::AuthClientService<
-                        jsonrpsee_http_client::transport::HttpBackend,
-                    >,
-                >,
-            >,
-            AlloyExecutionPayloadProvider<impl Provider<Scroll> + Clone>,
-            OnlineL1Provider<
-                DatabaseL1MessageProvider<Arc<Database>>,
-                Arc<
-                    dyn rollup_node_providers::BeaconProvider<Error = reqwest::Error> + Send + Sync,
-                >,
-            >,
-            DatabaseL1MessageProvider<Arc<Database>>,
-            <<N as FullNodeTypes>::Types as NodeTypes>::ChainSpec,
-        >,
-    >
+    ) -> eyre::Result<RollupManagerHandle>
     where
         <<N as FullNodeTypes>::Types as NodeTypes>::ChainSpec: ScrollHardforks,
         N::Network: NetworkProtocols + FullNetwork<Primitives = ScrollNetworkPrimitives>,
@@ -181,7 +163,7 @@ impl RollupManagerAddon {
                 0,
                 0,
             );
-            (Some(sequencer), Some(args.block_time))
+            (Some(sequencer), (args.block_time != 0).then_some(args.block_time))
         } else {
             (None, None)
         };
@@ -194,7 +176,7 @@ impl RollupManagerAddon {
             .then_some(ctx.node.network().eth_wire_block_listener().await?);
 
         // Spawn the rollup node manager
-        let rollup_node_manager = RollupNodeManager::new(
+        let rnm = RollupNodeManager::new(
             scroll_network_manager,
             engine,
             l1_provider,
@@ -207,6 +189,6 @@ impl RollupManagerAddon {
             None,
             block_time,
         );
-        Ok(rollup_node_manager)
+        Ok(rnm)
     }
 }
