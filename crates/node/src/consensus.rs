@@ -41,8 +41,8 @@ pub struct PoAConsensus {
 
 impl PoAConsensus {
     /// Creates a new [`PoAConsensus`] consensus instance with the given authorized signers.
-    pub const fn new(authorized_signers: HashSet<Address>) -> Self {
-        Self { authorized_signers }
+    pub fn new<T: IntoIterator<Item = Address>>(authorized_signers: T) -> Self {
+        Self { authorized_signers: authorized_signers.into_iter().collect() }
     }
 }
 
@@ -81,9 +81,7 @@ mod tests {
 
     #[test]
     fn test_should_validate_block() {
-        let consensus = PoAConsensus::new(HashSet::from([address!(
-            "d83c4892bb5aa241b63d8c4c134920111e142a20"
-        )]));
+        let consensus = PoAConsensus::new([address!("d83c4892bb5aa241b63d8c4c134920111e142a20")]);
         let signature = Signature::from_raw(&bytes!("6d2b8ef87f0956ea4dd10fb0725fa7196ad80c6d567a161f6b4367f95b5de6ec279142b540d3b248f08ed337bb962fa3fd83d21de622f7d6c8207272558fd15a00")).unwrap();
 
         let tx_hash = OnceLock::new();

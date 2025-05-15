@@ -2,7 +2,7 @@ use crate::{
     constants::PROVIDER_BLOB_CACHE_SIZE, L1ProviderArgs, ScrollRollupNodeArgs,
     WATCHER_START_BLOCK_NUMBER,
 };
-use std::{collections::HashSet, sync::Arc, time::Duration};
+use std::{sync::Arc, time::Duration};
 
 use alloy_provider::ProviderBuilder;
 use alloy_rpc_client::RpcClient;
@@ -177,7 +177,7 @@ where
         let consensus: Box<dyn Consensus> = if self.config.test {
             Box::new(NoopConsensus::default())
         } else {
-            let mut poa = PoAConsensus::new(HashSet::new());
+            let mut poa = PoAConsensus::new([]);
             if let Some(ref provider) = provider {
                 let signer =
                     provider.authorized_signer(node_config.system_contract_address()).await?;
