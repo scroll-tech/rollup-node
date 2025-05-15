@@ -118,7 +118,6 @@ where
     /// returning [`L1Notification`] in the returned channel.
     pub async fn spawn(
         execution_provider: EP,
-        start_block: BlockNumber,
         config: Arc<NodeConfig>,
     ) -> mpsc::Receiver<Arc<L1Notification>> {
         let (tx, rx) = mpsc::channel(LOGS_QUERY_BLOCK_RANGE as usize);
@@ -146,7 +145,7 @@ where
         let watcher = Self {
             execution_provider,
             unfinalized_blocks: BoundedVec::new(HEADER_CAPACITY),
-            current_block_number: start_block - 1,
+            current_block_number: config.start_l1_block - 1,
             l1_state,
             sender: tx,
             config,
@@ -449,7 +448,7 @@ where
         if latest_block.header.number != self.l1_state.head {
             let signer = self
                 .execution_provider
-                .authorized_signer(self.config.system_contract_address())
+                .authorized_signer(self.config.system_contract_address)
                 .await?;
             self.notify(L1Notification::Consensus(ConsensusUpdate::AuthorizedSigner(signer))).await;
         }

@@ -6,7 +6,7 @@ pub use args::{
 };
 
 mod constants;
-pub use constants::{PROVIDER_INITIAL_BACKOFF, PROVIDER_MAX_RETRIES, WATCHER_START_BLOCK_NUMBER};
+pub use constants::{PROVIDER_INITIAL_BACKOFF, PROVIDER_MAX_RETRIES};
 
 mod import;
 pub use import::BridgeBlockImport;

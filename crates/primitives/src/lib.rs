@@ -18,7 +18,10 @@ pub use bounded_vec::BoundedVec;
 
 mod node;
 pub use node::{
-    config::{NodeConfig, MAINNET_SYSTEM_CONTRAT_ADDRESS, SEPOLIA_SYSTEM_CONTRAT_ADDRESS},
+    config::{
+        NodeConfig, MAINNET_L1_START_BLOCK_NUMBER, MAINNET_SYSTEM_CONTRAT_ADDRESS,
+        SEPOLIA_L1_START_BLOCK_NUMBER, SEPOLIA_SYSTEM_CONTRAT_ADDRESS,
+    },
     consensus::ConsensusUpdate,
 };
 

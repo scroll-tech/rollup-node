@@ -1,7 +1,4 @@
-use crate::{
-    constants::PROVIDER_BLOB_CACHE_SIZE, L1ProviderArgs, ScrollRollupNodeArgs,
-    WATCHER_START_BLOCK_NUMBER,
-};
+use crate::{constants::PROVIDER_BLOB_CACHE_SIZE, L1ProviderArgs, ScrollRollupNodeArgs};
 use std::{collections::HashSet, sync::Arc, time::Duration};
 
 use alloy_provider::ProviderBuilder;
@@ -180,7 +177,7 @@ where
             let mut poa = PoAConsensus::new(HashSet::new());
             if let Some(ref provider) = provider {
                 let signer =
-                    provider.authorized_signer(node_config.system_contract_address()).await?;
+                    provider.authorized_signer(node_config.system_contract_address).await?;
                 poa.update_config(&ConsensusUpdate::AuthorizedSigner(signer));
             }
             Box::new(poa)
@@ -188,7 +185,7 @@ where
 
         let l1_notification_rx = if let Some(provider) = provider {
             // Spawn the L1Watcher
-            Some(L1Watcher::spawn(provider, WATCHER_START_BLOCK_NUMBER, node_config).await)
+            Some(L1Watcher::spawn(provider, node_config).await)
         } else {
             None
         };
