@@ -1,3 +1,5 @@
+//! The [`ScrollRollupNodeAddOns`] implementation for the Scroll rollup node.
+
 use super::args::ScrollRollupNodeConfig;
 use reth_evm::{ConfigureEvm, EvmFactory, EvmFactoryFor};
 use reth_network::NetworkProtocols;

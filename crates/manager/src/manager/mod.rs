@@ -139,6 +139,7 @@ where
 {
     /// Create a new [`RollupNodeManager`] instance.
     #[allow(clippy::too_many_arguments)]
+    #[allow(clippy::new_ret_no_self)]
     pub fn new(
         network: ScrollNetworkManager<N>,
         engine: EngineDriver<EC, P>,

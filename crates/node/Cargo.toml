@@ -20,37 +20,37 @@ alloy-rpc-client.workspace = true
 alloy-transport.workspace = true
 
 scroll-alloy-consensus.workspace = true
-scroll-alloy-evm = { git = "https://github.com/scroll-tech/reth.git", branch = "feat/rnm-node-integration" }
+scroll-alloy-evm = { git = "https://github.com/scroll-tech/reth.git", branch = "feat/reth-rpc-addons-trait" }
 scroll-alloy-hardforks.workspace = true
 scroll-alloy-network.workspace = true
 scroll-alloy-provider.workspace = true
 
 reth-scroll-engine-primitives.workspace = true
-reth-scroll-evm = { git = "https://github.com/scroll-tech/reth.git", branch = "feat/rnm-node-integration" }
-reth-scroll-cli = { git = "https://github.com/scroll-tech/reth.git", branch = "feat/rnm-node-integration" }
+reth-scroll-evm = { git = "https://github.com/scroll-tech/reth.git", branch = "feat/reth-rpc-addons-trait" }
+reth-scroll-cli = { git = "https://github.com/scroll-tech/reth.git", branch = "feat/reth-rpc-addons-trait" }
 reth-scroll-primitives.workspace = true
 reth-scroll-chainspec.workspace = true
 reth-scroll-node.workspace = true
-reth-scroll-rpc = { git = "https://github.com/scroll-tech/reth.git", branch = "feat/rnm-node-integration" }
+reth-scroll-rpc = { git = "https://github.com/scroll-tech/reth.git", branch = "feat/reth-rpc-addons-trait" }
 
 reth-chainspec.workspace = true
-reth-cli-util = { git = "https://github.com/scroll-tech/reth.git", branch = "feat/rnm-node-integration" }
+reth-cli-util = { git = "https://github.com/scroll-tech/reth.git", branch = "feat/reth-rpc-addons-trait" }
 reth-eth-wire-types.workspace = true
-reth-evm = { git = "https://github.com/scroll-tech/reth.git", branch = "feat/rnm-node-integration" }
+reth-evm = { git = "https://github.com/scroll-tech/reth.git", branch = "feat/reth-rpc-addons-trait" }
 reth-node-builder = { workspace = true, features = ["skip-state-root-validation"] }
-reth-node-api = { git = "https://github.com/scroll-tech/reth.git", branch = "feat/rnm-node-integration" }
-reth-node-types = { git = "https://github.com/scroll-tech/reth.git", branch = "feat/rnm-node-integration" }
+reth-node-api = { git = "https://github.com/scroll-tech/reth.git", branch = "feat/reth-rpc-addons-trait" }
+reth-node-types = { git = "https://github.com/scroll-tech/reth.git", branch = "feat/reth-rpc-addons-trait" }
 reth-network.workspace = true
 reth-network-api.workspace = true
 reth-network-peers.workspace = true
-reth-revm = { git = "https://github.com/scroll-tech/reth.git", branch = "feat/rnm-node-integration" }
-reth-rpc-builder = { git = "https://github.com/scroll-tech/reth.git", branch = "feat/rnm-node-integration" }
-reth-rpc-eth-api = { git = "https://github.com/scroll-tech/reth.git", branch = "feat/rnm-node-integration" }
-reth-rpc-eth-types = { git = "https://github.com/scroll-tech/reth.git", branch = "feat/rnm-node-integration" }
-reth-rpc-layer = { git = "https://github.com/scroll-tech/reth.git", branch = "feat/rnm-node-integration" }
+reth-revm = { git = "https://github.com/scroll-tech/reth.git", branch = "feat/reth-rpc-addons-trait" }
+reth-rpc-builder = { git = "https://github.com/scroll-tech/reth.git", branch = "feat/reth-rpc-addons-trait" }
+reth-rpc-eth-api = { git = "https://github.com/scroll-tech/reth.git", branch = "feat/reth-rpc-addons-trait" }
+reth-rpc-eth-types = { git = "https://github.com/scroll-tech/reth.git", branch = "feat/reth-rpc-addons-trait" }
+reth-rpc-layer = { git = "https://github.com/scroll-tech/reth.git", branch = "feat/reth-rpc-addons-trait" }
 reth-tokio-util.workspace = true
-reth-transaction-pool = { git = "https://github.com/scroll-tech/reth.git", branch = "feat/rnm-node-integration" }
-reth-trie-db = { git = "https://github.com/scroll-tech/reth.git", branch = "feat/rnm-node-integration" }
+reth-transaction-pool = { git = "https://github.com/scroll-tech/reth.git", branch = "feat/reth-rpc-addons-trait" }
+reth-trie-db = { git = "https://github.com/scroll-tech/reth.git", branch = "feat/reth-rpc-addons-trait" }
 
 rollup-node-manager.workspace = true
 rollup-node-providers.workspace = true

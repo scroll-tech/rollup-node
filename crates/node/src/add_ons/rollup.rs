@@ -3,7 +3,7 @@ use crate::{
     constants::{PROVIDER_BLOB_CACHE_SIZE, WATCHER_START_BLOCK_NUMBER},
 };
 use alloy_primitives::Sealable;
-use alloy_provider::{Provider, ProviderBuilder};
+use alloy_provider::ProviderBuilder;
 use alloy_rpc_client::RpcClient;
 use alloy_transport::layers::RetryBackoffLayer;
 use reth_chainspec::EthChainSpec;
@@ -22,7 +22,6 @@ use rollup_node_providers::{
 use rollup_node_sequencer::Sequencer;
 use rollup_node_watcher::L1Watcher;
 use scroll_alloy_hardforks::ScrollHardforks;
-use scroll_alloy_network::Scroll;
 use scroll_alloy_provider::ScrollAuthApiEngineClient;
 use scroll_db::{Database, DatabaseConnectionProvider};
 use scroll_engine::{EngineDriver, ForkchoiceState};
