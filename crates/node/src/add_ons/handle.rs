@@ -2,6 +2,9 @@ use reth_node_api::FullNodeComponents;
 use reth_node_builder::rpc::{RpcHandle, RpcHandleProvider};
 use reth_rpc_eth_api::EthApiTypes;
 use rollup_node_manager::RollupManagerHandle;
+use rollup_node_watcher::L1Notification;
+use std::sync::Arc;
+use tokio::sync::mpsc::Sender;
 
 /// A handle for scroll addons, which includes handles for the rollup manager and RPC server.
 #[derive(Debug, Clone)]
@@ -10,6 +13,8 @@ pub struct ScrollAddOnsHandle<Node: FullNodeComponents, EthApi: EthApiTypes> {
     pub rollup_manager_handle: RollupManagerHandle,
     /// The handle used to send commands to the RPC server.
     pub rpc_handle: RpcHandle<Node, EthApi>,
+    /// An optional channel used to send `L1Watcher` notifications to the `RollupNodeManager`.
+    pub l1_watcher_tx: Option<Sender<Arc<L1Notification>>>,
 }
 
 impl<Node: FullNodeComponents, EthApi: EthApiTypes> RpcHandleProvider<Node, EthApi>
