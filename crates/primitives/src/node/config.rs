@@ -9,22 +9,36 @@ pub const SEPOLIA_SYSTEM_CONTRAT_ADDRESS: Address =
 pub const MAINNET_SYSTEM_CONTRAT_ADDRESS: Address =
     address!("8432728A257646449245558B8b7Dbe51A16c7a4D");
 
+/// The L1 start block for Mainnet.
+pub const MAINNET_L1_START_BLOCK_NUMBER: u64 = 18318215;
+
+/// The L1 start block for Sepolia.
+pub const SEPOLIA_L1_START_BLOCK_NUMBER: u64 = 4041343;
+
 /// A shared configuration for the node.
 #[derive(Debug, Clone)]
 pub struct NodeConfig {
     /// The address of the system contract used in consensus.
-    system_contract_address: Address,
+    pub system_contract_address: Address,
+    /// The start block for the L1 sync.
+    pub start_l1_block: u64,
 }
 
 impl NodeConfig {
     /// Returns the node configuration for mainnet.
     pub const fn mainnet() -> Self {
-        Self { system_contract_address: MAINNET_SYSTEM_CONTRAT_ADDRESS }
+        Self {
+            system_contract_address: MAINNET_SYSTEM_CONTRAT_ADDRESS,
+            start_l1_block: MAINNET_L1_START_BLOCK_NUMBER,
+        }
     }
 
     /// Returns the node configuration for sepolia.
     pub const fn sepolia() -> Self {
-        Self { system_contract_address: SEPOLIA_SYSTEM_CONTRAT_ADDRESS }
+        Self {
+            system_contract_address: SEPOLIA_SYSTEM_CONTRAT_ADDRESS,
+            start_l1_block: SEPOLIA_L1_START_BLOCK_NUMBER,
+        }
     }
 
     /// Returns the node configuration from a [`NamedChain`].
@@ -34,10 +48,5 @@ impl NodeConfig {
             NamedChain::ScrollSepolia => Self::sepolia(),
             _ => panic!("expected Scroll Mainnet or Sepolia"),
         }
-    }
-
-    /// Returns the current system contract address.
-    pub const fn system_contract_address(&self) -> Address {
-        self.system_contract_address
     }
 }

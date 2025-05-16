@@ -1,48 +1,42 @@
 use alloy_primitives::Signature;
-use reth_network::{config::SecretKey, NetworkHandle as RethNetworkHandle, PeersInfo};
-use reth_network_peers::PeerId;
-use reth_scroll_node::ScrollNetworkPrimitives;
+use reth_network_api::FullNetwork;
 use reth_scroll_primitives::ScrollBlock;
 use std::sync::Arc;
 use tokio::sync::{mpsc::UnboundedSender, oneshot};
 
-/// A handle used to communicate with the [`super::NetworkManager`].
+/// A handle used to communicate with the [`super::ScrollNetworkManager`].
 #[derive(Debug, Clone)]
-pub struct NetworkHandle {
+pub struct ScrollNetworkHandle<N> {
     /// A reference to the inner network handle.
-    pub(crate) inner: Arc<NetworkInner>,
+    pub(crate) inner: Arc<NetworkInner<N>>,
 }
 
-impl NetworkHandle {
-    /// Creates a new [`NetworkHandle`] instance from the given [`UnboundedSender`] and
-    /// [`RethNetworkHandle`].
+impl<N: FullNetwork> ScrollNetworkHandle<N> {
+    /// Creates a new [`ScrollNetworkHandle`] instance from the given [`UnboundedSender`] and
+    /// [`FullNetwork`].
     pub fn new(
         to_manager_tx: UnboundedSender<NetworkHandleMessage>,
-        inner_network_handle: RethNetworkHandle<ScrollNetworkPrimitives>,
+        inner_network_handle: N,
     ) -> Self {
         let inner = NetworkInner { to_manager_tx, inner_network_handle };
         Self { inner: Arc::new(inner) }
     }
 }
 
-/// The inner state of the [`NetworkHandle`].
+/// The inner state of the [`ScrollNetworkHandle`].
 #[derive(Debug)]
-pub struct NetworkInner {
-    /// The sender half of the channel set up between this type and the [`super::NetworkManager`].
+pub struct NetworkInner<N> {
+    /// The sender half of the channel set up between this type and the
+    /// [`super::ScrollNetworkManager`].
     pub(crate) to_manager_tx: UnboundedSender<NetworkHandleMessage>,
     /// Inner network handle which is used to communicate with the inner network.
-    pub inner_network_handle: RethNetworkHandle<ScrollNetworkPrimitives>,
+    pub inner_network_handle: N,
 }
 
-impl NetworkHandle {
+impl<N: FullNetwork> ScrollNetworkHandle<N> {
     /// Returns a reference to the inner network handle.
-    pub fn inner(&self) -> &RethNetworkHandle<ScrollNetworkPrimitives> {
+    pub fn inner(&self) -> &N {
         &self.inner.inner_network_handle
-    }
-
-    /// Returns the peer id of the network handle.
-    pub fn peer_id(&self) -> &PeerId {
-        self.inner.inner_network_handle.peer_id()
     }
 
     /// Sends a message to the network manager.
@@ -66,18 +60,13 @@ impl NetworkHandle {
         rx.await
     }
 
-    /// Returns the secret key of the network handle.
-    pub fn secret_key(&self) -> &SecretKey {
-        self.inner.inner_network_handle.secret_key()
-    }
-
     pub fn local_node_record(&self) -> reth_network_peers::NodeRecord {
         self.inner.inner_network_handle.local_node_record()
     }
 }
 
-/// A message type used for communication between the [`NetworkHandle`] and the
-/// [`super::NetworkManager`].
+/// A message type used for communication between the [`ScrollNetworkHandle`] and the
+/// [`super::ScrollNetworkManager`].
 #[derive(Debug)]
 pub enum NetworkHandleMessage {
     AnnounceBlock { block: ScrollBlock, signature: Signature },

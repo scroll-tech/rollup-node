@@ -1,3 +1,6 @@
+// TODO: remove this when re-integrating the bridge
+#![allow(dead_code)]
+
 use alloy_primitives::Signature;
 use reth_network::import::{BlockImport as RethBlockImport, NewBlockEvent};
 use reth_network_peers::PeerId;
@@ -15,7 +18,7 @@ const ECDSA_SIGNATURE_LEN: usize = 65;
 /// A block import implementation for the eth-wire protocol that sends block to the scroll-wire
 /// protocol.
 #[derive(Debug)]
-pub struct BridgeBlockImport {
+struct BridgeBlockImport {
     /// A sender for sending events to the scroll-wire protocol.
     new_block_tx: UnboundedSender<NewBlockWithPeer>,
 }
@@ -23,7 +26,7 @@ pub struct BridgeBlockImport {
 impl BridgeBlockImport {
     /// Creates a new [`BridgeBlockImport`] instance with the provided events sender and inner block
     /// import.
-    pub fn new(new_block_tx: UnboundedSender<NewBlockWithPeer>) -> Self {
+    const fn new(new_block_tx: UnboundedSender<NewBlockWithPeer>) -> Self {
         Self { new_block_tx }
     }
 
