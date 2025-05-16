@@ -7,7 +7,6 @@ exclude = [".github/"]
 
 [workspace]
 members = [
-    "bin/rollup",
     "crates/codec",
     "crates/database/db",
     "crates/database/migration",
@@ -15,14 +14,15 @@ members = [
     "crates/engine",
     "crates/indexer",
     "crates/l1",
-    "crates/node",
+    "crates/manager",
     "crates/network",
+    "crates/node",
     "crates/primitives",
     "crates/providers",
     "crates/scroll-wire",
     "crates/sequencer",
-    "crates/watcher",
     "crates/signer",
+    "crates/watcher",
 ]
 
 resolver = "2"
@@ -147,13 +147,13 @@ reth-network = { git = "https://github.com/scroll-tech/reth.git", default-featur
 reth-network-api = { git = "https://github.com/scroll-tech/reth.git", default-features = false }
 reth-network-peers = { git = "https://github.com/scroll-tech/reth.git", default-features = false }
 reth-node-builder = { git = "https://github.com/scroll-tech/reth.git", default-features = false }
-reth-node-core = { git = "https://github.com/scroll-tech/reth.git" }
-reth-payload-primitives = { git = "https://github.com/scroll-tech/reth.git" }
+reth-node-core = { git = "https://github.com/scroll-tech/reth.git", default-features = false }
+reth-payload-primitives = { git = "https://github.com/scroll-tech/reth.git", default-features = false }
 reth-primitives = { git = "https://github.com/scroll-tech/reth.git", default-features = false }
 reth-primitives-traits = { git = "https://github.com/scroll-tech/reth.git", default-features = false }
 reth-provider = { git = "https://github.com/scroll-tech/reth.git", default-features = false }
-reth-rpc-server-types = { git = "https://github.com/scroll-tech/reth.git" }
-reth-tasks = { git = "https://github.com/scroll-tech/reth.git" }
+reth-rpc-server-types = { git = "https://github.com/scroll-tech/reth.git", default-features = false }
+reth-tasks = { git = "https://github.com/scroll-tech/reth.git", default-features = false }
 reth-tokio-util = { git = "https://github.com/scroll-tech/reth.git", default-features = false }
 reth-tracing = { git = "https://github.com/scroll-tech/reth.git", default-features = false }
 
@@ -166,7 +166,7 @@ reth-scroll-primitives = { git = "https://github.com/scroll-tech/reth.git", defa
 
 # rollup node
 rollup-node-indexer = { path = "crates/indexer" }
-rollup-node-manager = { path = "crates/node" }
+rollup-node-manager = { path = "crates/manager" }
 rollup-node-primitives = { path = "crates/primitives" }
 rollup-node-providers = { path = "crates/providers" }
 rollup-node-sequencer = { path = "crates/sequencer" }

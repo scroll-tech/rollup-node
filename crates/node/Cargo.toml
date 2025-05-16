@@ -1,10 +1,14 @@
 [package]
-name = "rollup-node-manager"
+name = "rollup-node"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
 exclude.workspace = true
+
+[[bin]]
+name = "rollup-node"
+path = "src/main.rs"
 
 [lints]
 workspace = true
@@ -14,58 +18,71 @@ workspace = true
 alloy-consensus.workspace = true
 alloy-eips.workspace = true
 alloy-primitives.workspace = true
+alloy-provider.workspace = true
+alloy-rpc-client.workspace = true
 alloy-rpc-types-engine.workspace = true
+alloy-transport.workspace = true
 
-# scroll-alloy
+scroll-alloy-consensus.workspace = true
+scroll-alloy-evm = { git = "https://github.com/scroll-tech/reth.git" }
 scroll-alloy-hardforks.workspace = true
+scroll-alloy-network.workspace = true
 scroll-alloy-provider.workspace = true
 
-# reth
-reth-tokio-util.workspace = true
-
-# reth-scroll
-reth-chainspec.workspace = true
-reth-primitives-traits.workspace = true
+reth-scroll-engine-primitives.workspace = true
+reth-scroll-evm = { git = "https://github.com/scroll-tech/reth.git" }
+reth-scroll-cli = { git = "https://github.com/scroll-tech/reth.git" }
 reth-scroll-primitives.workspace = true
+reth-scroll-chainspec.workspace = true
+reth-scroll-node.workspace = true
+reth-scroll-rpc = { git = "https://github.com/scroll-tech/reth.git" }
 
-# scroll
-scroll-alloy-rpc-types-engine.workspace = true
-scroll-db.workspace = true
-scroll-derivation-pipeline.workspace = true
-scroll-engine.workspace = true
-scroll-network.workspace = true
-scroll-wire.workspace = true
+reth-chainspec.workspace = true
+reth-cli-util = { git = "https://github.com/scroll-tech/reth.git" }
+reth-eth-wire-types.workspace = true
+reth-evm = { git = "https://github.com/scroll-tech/reth.git" }
+reth-node-builder = { workspace = true, features = ["skip-state-root-validation"] }
+reth-node-api = { git = "https://github.com/scroll-tech/reth.git" }
+reth-node-types = { git = "https://github.com/scroll-tech/reth.git" }
+reth-network.workspace = true
+reth-network-api.workspace = true
+reth-network-peers.workspace = true
+reth-revm = { git = "https://github.com/scroll-tech/reth.git" }
+reth-rpc-builder = { git = "https://github.com/scroll-tech/reth.git" }
+reth-rpc-eth-api = { git = "https://github.com/scroll-tech/reth.git" }
+reth-rpc-eth-types = { git = "https://github.com/scroll-tech/reth.git" }
+reth-rpc-layer = { git = "https://github.com/scroll-tech/reth.git" }
+reth-tokio-util.workspace = true
+reth-transaction-pool = { git = "https://github.com/scroll-tech/reth.git" }
+reth-trie-db = { git = "https://github.com/scroll-tech/reth.git" }
 
-# rollup node
-rollup-node-indexer.workspace = true
+rollup-node-manager.workspace = true
 rollup-node-primitives.workspace = true
 rollup-node-providers.workspace = true
 rollup-node-sequencer.workspace = true
-rollup-node-signer.workspace = true
 rollup-node-watcher.workspace = true
 
-# misc
-futures.workspace = true
-tokio-stream.workspace = true
+scroll-db.workspace = true
+scroll-engine.workspace = true
+scroll-migration.workspace = true
+scroll-wire.workspace = true
+scroll-network.workspace = true
+
+clap = { version = "4", features = ["derive", "env"] }
+eyre.workspace = true
+jsonrpsee-http-client = "0.24.9"
+reqwest.workspace = true
 tokio.workspace = true
 tracing.workspace = true
+url = "2.5.4"
 
 [dev-dependencies]
-alloy-consensus.workspace = true
-scroll-alloy-consensus.workspace = true
-
-[features]
-serde = [
-    "alloy-rpc-types-engine/serde",
-    "reth-scroll-primitives/serde",
-    "scroll-alloy-rpc-types-engine/serde",
-    "scroll-engine/serde",
-    "scroll-network/serde",
-    "scroll-wire/serde",
-    "alloy-eips/serde",
-    "scroll-alloy-hardforks/serde",
-    "alloy-consensus/serde",
-    "alloy-primitives/serde",
-    "reth-primitives-traits/serde",
-    "scroll-alloy-consensus/serde",
-]
+futures.workspace = true
+reth-e2e-test-utils.workspace = true
+reth-node-core.workspace = true
+reth-provider.workspace = true
+reth-rpc-server-types.workspace = true
+reth-tasks.workspace = true
+reth-tracing.workspace = true
+scroll-alloy-rpc-types-engine.workspace = true
+serde_json = { version = "1.0.94", default-features = false, features = ["alloc"] }

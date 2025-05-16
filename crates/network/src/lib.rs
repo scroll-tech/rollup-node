@@ -2,7 +2,7 @@ mod event;
 pub use event::{NetworkManagerEvent, NewBlockWithPeer};
 
 mod handle;
-pub use handle::{NetworkHandle, NetworkHandleMessage};
+pub use handle::{NetworkHandleMessage, ScrollNetworkHandle};
 
 mod import;
 pub use import::{
@@ -11,7 +11,7 @@ pub use import::{
 };
 
 mod manager;
-pub use manager::NetworkManager;
+pub use manager::ScrollNetworkManager;
 
 pub use reth_network::{EthNetworkPrimitives, NetworkConfigBuilder};
 pub use reth_scroll_chainspec::SCROLL_MAINNET;

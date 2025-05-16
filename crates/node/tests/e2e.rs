@@ -1,4 +1,4 @@
-#![cfg(feature = "test-utils")]
+//! End-to-end tests for the rollup node.
 
 use alloy_primitives::B256;
 use futures::StreamExt;
@@ -6,16 +6,16 @@ use reth_e2e_test_utils::{node::NodeTestContext, NodeHelperType};
 use reth_network::{NetworkConfigBuilder, PeersInfo};
 use reth_network_peers::PeerId;
 use reth_node_api::PayloadBuilderAttributes;
-use reth_node_builder::{Node, NodeBuilder, NodeConfig, NodeHandle};
+use reth_node_builder::{NodeBuilder, NodeConfig, NodeHandle};
 use reth_node_core::args::{DiscoveryArgs, NetworkArgs, RpcServerArgs};
-use reth_provider::providers::BlockchainProvider;
 use reth_rpc_server_types::RpcModuleSelection;
 use reth_scroll_chainspec::ScrollChainSpec;
 use reth_scroll_engine_primitives::ScrollPayloadBuilderAttributes;
-use reth_scroll_node::{ScrollNetworkPrimitives, ScrollNode};
+use reth_scroll_node::ScrollNetworkPrimitives;
 use reth_tasks::TaskManager;
 use rollup_node::{
-    BeaconProviderArgs, L1ProviderArgs, L2ProviderArgs, ScrollRollupNodeArgs, SequencerArgs,
+    BeaconProviderArgs, L1ProviderArgs, L2ProviderArgs, NetworkArgs as ScrollNetworkArgs,
+    ScrollRollupNode, ScrollRollupNodeConfig, SequencerArgs,
 };
 use scroll_alloy_rpc_types_engine::ScrollPayloadAttributes;
 use scroll_network::{NewBlockWithPeer, SCROLL_MAINNET};
@@ -51,9 +51,9 @@ async fn can_bridge_blocks() {
             .with_unused_listener_port()
             .with_pow()
             .build_with_noop_provider(chain_spec.clone());
-    let scroll_wire_config = ScrollWireConfig::new(false);
+    let scroll_wire_config = ScrollWireConfig::new(true);
     let mut scroll_network =
-        scroll_network::NetworkManager::new(network_config, scroll_wire_config).await;
+        scroll_network::ScrollNetworkManager::new(network_config, scroll_wire_config).await;
     let scroll_network_handle = scroll_network.handle();
 
     // Connect the scroll-wire node to the scroll NetworkManager.
@@ -107,9 +107,10 @@ async fn can_bridge_blocks() {
 
 // HELPERS
 // ---------------------------------------------------------------------------------------------
+/// Helper function to create a new bridge node that will bridge messages from the eth-wire
 pub async fn build_bridge_node(
     chain_spec: Arc<ScrollChainSpec>,
-) -> eyre::Result<(NodeHelperType<ScrollNode>, TaskManager, PeerId)> {
+) -> eyre::Result<(NodeHelperType<ScrollRollupNode>, TaskManager, PeerId)> {
     // Create a [`TaskManager`] to manage the tasks.
     let tasks = TaskManager::current();
     let exec = tasks.executor();
@@ -123,43 +124,28 @@ pub async fn build_bridge_node(
     // Create the node config
     let node_config = NodeConfig::new(chain_spec.clone())
         .with_network(network_config.clone())
-        .with_rpc({
-            let mut args =
-                RpcServerArgs::default().with_http().with_http_api(RpcModuleSelection::All);
-            args.auth_jwtsecret =
-                Some(PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("assets/jwt.hex"));
-            args
-        })
+        .with_rpc(RpcServerArgs::default().with_http().with_http_api(RpcModuleSelection::All))
         .set_dev(false);
 
     // Create the node for a bridge node that will bridge messages from the eth-wire protocol
     // to the scroll-wire protocol.
-    let node_args = ScrollRollupNodeArgs {
+    let node_args = ScrollRollupNodeConfig {
         test: true,
-        enable_eth_scroll_wire_bridge: true,
-        enable_scroll_wire: true,
+        network_args: ScrollNetworkArgs {
+            enable_eth_scroll_wire_bridge: true,
+            enable_scroll_wire: true,
+        },
         optimistic_sync: false,
         database_path: Some(PathBuf::from("sqlite::memory:")),
         l1_provider_args: L1ProviderArgs::default(),
         engine_api_url: None,
-        sequencer_args: SequencerArgs {
-            scroll_sequencer_enabled: false,
-            ..SequencerArgs::default()
-        },
+        sequencer_args: SequencerArgs { sequencer_enabled: false, ..SequencerArgs::default() },
         beacon_provider_args: BeaconProviderArgs::default(),
         l2_provider_args: L2ProviderArgs::default(),
     };
-    let node = ScrollNode;
-    let NodeHandle { node, node_exit_future: _ } = NodeBuilder::new(node_config.clone())
-        .testing_node(exec.clone())
-        .with_types_and_provider::<ScrollNode, BlockchainProvider<_>>()
-        .with_components(
-            node.components_builder()
-                .network(rollup_node::ScrollRollupNetworkBuilder::new(node_args)),
-        )
-        .with_add_ons(node.add_ons())
-        .launch()
-        .await?;
+    let node = ScrollRollupNode::new(node_args);
+    let NodeHandle { node, node_exit_future: _ } =
+        NodeBuilder::new(node_config.clone()).testing_node(exec.clone()).launch_node(node).await?;
     let peer_id = *node.network.peer_id();
     let node = NodeTestContext::new(node, scroll_payload_attributes).await?;
 
