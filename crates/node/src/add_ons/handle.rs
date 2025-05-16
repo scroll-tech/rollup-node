@@ -14,6 +14,7 @@ pub struct ScrollAddOnsHandle<Node: FullNodeComponents, EthApi: EthApiTypes> {
     /// The handle used to send commands to the RPC server.
     pub rpc_handle: RpcHandle<Node, EthApi>,
     /// An optional channel used to send `L1Watcher` notifications to the `RollupNodeManager`.
+    #[cfg(feature = "test-utils")]
     pub l1_watcher_tx: Option<Sender<Arc<L1Notification>>>,
 }
 

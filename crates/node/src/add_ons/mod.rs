@@ -88,7 +88,12 @@ where
             rpc_add_ons.launch_add_ons_with(ctx.clone(), |_, _, _| Ok(())).await?;
         let (rollup_manager_handle, l1_watcher_tx) =
             rollup_node_manager_addon.launch(ctx.clone(), rpc_handle.clone()).await?;
-        Ok(ScrollAddOnsHandle { rollup_manager_handle, rpc_handle, l1_watcher_tx })
+        Ok(ScrollAddOnsHandle {
+            rollup_manager_handle,
+            rpc_handle,
+            #[cfg(feature = "test-utils")]
+            l1_watcher_tx,
+        })
     }
 }
 
