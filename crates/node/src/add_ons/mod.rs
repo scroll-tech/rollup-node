@@ -24,7 +24,7 @@ use reth_scroll_rpc::{eth::ScrollEthApiBuilder, ScrollEthApi, ScrollEthApiError}
 use scroll_alloy_evm::ScrollTransactionIntoTxEnv;
 
 mod rollup;
-use rollup::RollupManagerAddon;
+use rollup::RollupManagerAddOn;
 
 /// Add-ons for the Scroll follower node.
 #[derive(Debug)]
@@ -43,7 +43,7 @@ where
     >,
 
     /// Rollup manager addon responsible for managing the components of the rollup node.
-    pub rollup_manager_addon: RollupManagerAddon,
+    pub rollup_manager_addon: RollupManagerAddOn,
 }
 impl<N> ScrollRollupNodeAddOns<N>
 where
@@ -53,7 +53,7 @@ where
     /// Create a new instance of [`ScrollRollupNodeAddOns`].
     pub fn new(config: ScrollRollupNodeConfig) -> Self {
         let rpc_add_ons = RpcAddOns::default();
-        let rollup_manager_addon = RollupManagerAddon::new(config);
+        let rollup_manager_addon = RollupManagerAddOn::new(config);
         Self { rpc_add_ons, rollup_manager_addon }
     }
 }
