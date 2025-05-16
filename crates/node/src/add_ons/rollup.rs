@@ -1,6 +1,6 @@
 use crate::{
     args::{L1ProviderArgs, ScrollRollupNodeConfig},
-    constants::{PROVIDER_BLOB_CACHE_SIZE, WATCHER_START_BLOCK_NUMBER},
+    constants::PROVIDER_BLOB_CACHE_SIZE,
 };
 
 use alloy_primitives::Sealable;
@@ -147,7 +147,7 @@ impl RollupManagerAddOn {
             let mut poa = PoAConsensus::new([]);
             if let Some(ref provider) = provider {
                 let signer =
-                    provider.authorized_signer(node_config.system_contract_address()).await?;
+                    provider.authorized_signer(node_config.system_contract_address).await?;
                 poa.update_config(&ConsensusUpdate::AuthorizedSigner(signer));
             }
             Box::new(poa)
@@ -155,7 +155,7 @@ impl RollupManagerAddOn {
 
         let l1_notification_rx = if let Some(provider) = provider {
             // Spawn the L1Watcher
-            Some(L1Watcher::spawn(provider, WATCHER_START_BLOCK_NUMBER, node_config).await)
+            Some(L1Watcher::spawn(provider, node_config).await)
         } else {
             None
         };
