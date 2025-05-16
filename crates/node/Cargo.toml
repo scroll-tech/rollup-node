@@ -14,8 +14,9 @@ path = "src/main.rs"
 workspace = true
 
 [dependencies]
-alloy-provider.workspace = true
+# alloy
 alloy-primitives.workspace = true
+alloy-provider.workspace = true
 alloy-rpc-client.workspace = true
 alloy-transport.workspace = true
 
@@ -54,6 +55,7 @@ reth-trie-db = { git = "https://github.com/scroll-tech/reth.git", branch = "feat
 
 rollup-node-manager.workspace = true
 rollup-node-providers.workspace = true
+rollup-node-primitives.workspace = true
 rollup-node-sequencer.workspace = true
 rollup-node-watcher.workspace = true
 

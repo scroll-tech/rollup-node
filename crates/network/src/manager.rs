@@ -135,7 +135,7 @@ impl<N: FullNetwork> ScrollNetworkManager<N> {
         }
     }
 
-    /// Handler for received messaged from the [`ScrollNetworkHandle`].
+    /// Handler for received messages from the [`ScrollNetworkHandle`].
     fn on_handle_message(&mut self, message: NetworkHandleMessage) {
         match message {
             NetworkHandleMessage::AnnounceBlock { block, signature } => {

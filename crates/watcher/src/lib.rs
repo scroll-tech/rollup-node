@@ -20,7 +20,8 @@ use alloy_provider::{Network, Provider};
 use alloy_rpc_types_eth::{BlockNumberOrTag, Log, TransactionTrait};
 use error::L1WatcherResult;
 use itertools::Itertools;
-use rollup_node_primitives::{BatchCommitData, BoundedVec};
+use rollup_node_primitives::{BatchCommitData, BoundedVec, ConsensusUpdate, NodeConfig};
+use rollup_node_providers::SystemContractProvider;
 use scroll_alloy_consensus::TxL1Message;
 use scroll_l1::abi::logs::{try_decode_log, CommitBatch, FinalizeBatch, QueueTransaction};
 use tokio::sync::mpsc;
@@ -74,6 +75,8 @@ pub struct L1Watcher<EP> {
     current_block_number: BlockNumber,
     /// The sender part of the channel for [`L1Notification`].
     sender: mpsc::Sender<Arc<L1Notification>>,
+    /// The rollup node configuration.
+    config: Arc<NodeConfig>,
 }
 
 /// The L1 notification type yielded by the [`L1Watcher`].
@@ -99,6 +102,8 @@ pub enum L1Notification {
         /// The timestamp at which the L1 message was emitted.
         block_timestamp: u64,
     },
+    /// The consensus config has been updated.
+    Consensus(ConsensusUpdate),
     /// A new block has been added to the L1.
     NewBlock(u64),
     /// A block has been finalized on the L1.
@@ -107,13 +112,13 @@ pub enum L1Notification {
 
 impl<EP> L1Watcher<EP>
 where
-    EP: Provider + 'static,
+    EP: Provider + SystemContractProvider + 'static,
 {
     /// Spawn a new [`L1Watcher`], starting at `start_block`. The watcher will iterate the L1,
     /// returning [`L1Notification`] in the returned channel.
     pub async fn spawn(
         execution_provider: EP,
-        start_block: BlockNumber,
+        config: Arc<NodeConfig>,
     ) -> mpsc::Receiver<Arc<L1Notification>> {
         let (tx, rx) = mpsc::channel(LOGS_QUERY_BLOCK_RANGE as usize);
 
@@ -140,9 +145,10 @@ where
         let watcher = Self {
             execution_provider,
             unfinalized_blocks: BoundedVec::new(HEADER_CAPACITY),
-            current_block_number: start_block - 1,
+            current_block_number: config.start_l1_block - 1,
             l1_state,
             sender: tx,
+            config,
         };
 
         // notify at spawn.
@@ -187,6 +193,8 @@ where
         self.handle_l1_messages(&logs).await?;
         self.handle_batch_commits(&logs).await?;
         self.handle_batch_finalization(&logs).await?;
+        // TODO(greg): update with logs once system contract emits logs.
+        self.handle_system_contract_update(&latest).await?;
 
         // update the latest block the l1 watcher has indexed.
         self.update_current_block(&latest);
@@ -434,6 +442,20 @@ where
         Ok(())
     }
 
+    /// Handles the system contract update events.
+    async fn handle_system_contract_update(&self, latest_block: &Block) -> L1WatcherResult<()> {
+        // refresh the signer every new block.
+        if latest_block.header.number != self.l1_state.head {
+            let signer = self
+                .execution_provider
+                .authorized_signer(self.config.system_contract_address)
+                .await?;
+            self.notify(L1Notification::Consensus(ConsensusUpdate::AuthorizedSigner(signer))).await;
+        }
+
+        Ok(())
+    }
+
     /// Fetches the chain of unfinalized blocks up to and including the latest block, ensuring no
     /// gaps are present in the chain.
     #[tracing::instrument(target = "scroll::watcher", skip_all)]
@@ -572,6 +594,7 @@ mod tests {
                 l1_state: L1State { head: 0, finalized: 0 },
                 current_block_number: 0,
                 sender: tx,
+                config: Arc::new(NodeConfig::mainnet()),
             },
             rx,
         )

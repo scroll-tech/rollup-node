@@ -1,24 +1,13 @@
-use alloy_chains::NamedChain;
-use alloy_primitives::{address, Address, Signature, U256};
-use alloy_provider::Provider;
+use alloy_primitives::{Address, Signature};
 use reth_scroll_primitives::ScrollBlock;
-use rollup_node_primitives::sig_encode_hash;
+use rollup_node_primitives::{sig_encode_hash, ConsensusUpdate};
 use scroll_network::ConsensusError;
-use std::fmt::Debug;
-
-/// The address of the system contract on Sepolia.
-const SEPOLIA_SYSTEM_CONTRAT_ADDRESS: Address =
-    address!("C706Ba9fa4fedF4507CB7A898b4766c1bbf9be57");
-
-/// The address of the system contract on Mainnet.
-const MAINNET_SYSTEM_CONTRAT_ADDRESS: Address =
-    address!("8432728A257646449245558B8b7Dbe51A16c7a4D");
-
-/// The storage slot of the authorized signer.
-const AUTHORIZED_SIGNER_STORAGE_SLOT: U256 = U256::from_limbs([0x67, 0x0, 0x0, 0x0]);
+use std::{collections::HashSet, fmt::Debug};
 
 /// A trait for consensus implementations.
 pub trait Consensus: Send + Debug {
+    /// Updates the current config for the consensus.
+    fn update_config(&mut self, update: &ConsensusUpdate);
     /// Validates a new block with the given signature.
     fn validate_new_block(
         &self,
@@ -33,6 +22,8 @@ pub trait Consensus: Send + Debug {
 pub struct NoopConsensus;
 
 impl Consensus for NoopConsensus {
+    fn update_config(&mut self, _: &ConsensusUpdate) {}
+
     fn validate_new_block(
         &self,
         _block: &ScrollBlock,
@@ -45,33 +36,23 @@ impl Consensus for NoopConsensus {
 /// A Proof of Authority consensus instance.
 #[derive(Debug)]
 pub struct PoAConsensus {
-    authorized_signers: Vec<Address>,
+    authorized_signers: HashSet<Address>,
 }
 
 impl PoAConsensus {
     /// Creates a new [`PoAConsensus`] consensus instance with the given authorized signers.
-    pub const fn new(authorized_signers: Vec<Address>) -> Self {
-        Self { authorized_signers }
-    }
-
-    /// Initialize the [`PoAConsensus`] by fetching the authorized signers from L1 system contract.
-    pub async fn initialize<P: Provider>(&mut self, provider: &P, chain: NamedChain) {
-        let system_contract_address = match chain {
-            NamedChain::Scroll => MAINNET_SYSTEM_CONTRAT_ADDRESS,
-            NamedChain::ScrollSepolia => SEPOLIA_SYSTEM_CONTRAT_ADDRESS,
-            _ => panic!("unsupported chain"),
-        };
-        let authorized_signer = provider
-            .get_storage_at(system_contract_address, AUTHORIZED_SIGNER_STORAGE_SLOT)
-            .await
-            .expect("failed to fetch PoAConsensus authorized signer");
-
-        let authorized_signer = Address::from_slice(&authorized_signer.to_be_bytes::<32>()[12..]);
-        self.authorized_signers.push(authorized_signer);
+    pub fn new<T: IntoIterator<Item = Address>>(authorized_signers: T) -> Self {
+        Self { authorized_signers: authorized_signers.into_iter().collect() }
     }
 }
 
 impl Consensus for PoAConsensus {
+    fn update_config(&mut self, update: &ConsensusUpdate) {
+        match update {
+            ConsensusUpdate::AuthorizedSigner(signer) => self.authorized_signers.insert(*signer),
+        };
+    }
+
     fn validate_new_block(
         &self,
         block: &ScrollBlock,
@@ -100,8 +81,7 @@ mod tests {
 
     #[test]
     fn test_should_validate_block() {
-        let consensus =
-            PoAConsensus::new(vec![address!("d83c4892bb5aa241b63d8c4c134920111e142a20")]);
+        let consensus = PoAConsensus::new([address!("d83c4892bb5aa241b63d8c4c134920111e142a20")]);
         let signature = Signature::from_raw(&bytes!("6d2b8ef87f0956ea4dd10fb0725fa7196ad80c6d567a161f6b4367f95b5de6ec279142b540d3b248f08ed337bb962fa3fd83d21de622f7d6c8207272558fd15a00")).unwrap();
 
         let tx_hash = OnceLock::new();

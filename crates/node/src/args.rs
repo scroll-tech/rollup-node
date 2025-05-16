@@ -41,10 +41,10 @@ pub struct ScrollRollupNodeConfig {
 pub struct NetworkArgs {
     /// A bool to represent if new blocks should be bridged from the eth wire protocol to the
     /// scroll wire protocol.
-    #[arg(long = "eth-scroll-bridge.enabled", default_value_t = false)]
+    #[arg(long = "eth-scroll-bridge.enabled", default_value_t = true)]
     pub enable_eth_scroll_wire_bridge: bool,
     /// A bool that represents if the scroll wire protocol should be enabled.
-    #[arg(long = "scroll-wire.enabled", default_value_t = false)]
+    #[arg(long = "scroll-wire.enabled", default_value_t = true)]
     pub enable_scroll_wire: bool,
 }
 

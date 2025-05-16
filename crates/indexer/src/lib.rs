@@ -77,7 +77,7 @@ impl<ChainSpec: ScrollHardforks + EthChainSpec + Send + Sync + 'static> Indexer<
             L1Notification::Reorg(block_number) => IndexerFuture::HandleReorg(Box::pin(
                 Self::handle_l1_reorg(self.database.clone(), self.chain_spec.clone(), block_number),
             )),
-            L1Notification::NewBlock(_block_number) => return,
+            L1Notification::NewBlock(_) | L1Notification::Consensus(_) => return,
             L1Notification::Finalized(block_number) => {
                 IndexerFuture::HandleFinalized(Box::pin(Self::handle_finalized(
                     self.database.clone(),
