@@ -84,3 +84,33 @@ reth-tasks.workspace = true
 reth-tracing.workspace = true
 scroll-alloy-rpc-types-engine.workspace = true
 serde_json = { version = "1.0.94", default-features = false, features = ["alloc"] }
+
+[features]
+test-utils = [
+    "reth-chainspec/test-utils",
+    "reth-evm/test-utils",
+    "reth-network/test-utils",
+    "reth-node-builder/test-utils",
+    "reth-provider/test-utils",
+    "reth-revm/test-utils",
+    "reth-scroll-node/test-utils",
+    "reth-transaction-pool/test-utils",
+    "reth-trie-db/test-utils",
+    "rollup-node-providers/test-utils",
+    "rollup-node-watcher/test-utils",
+    "scroll-db/test-utils",
+    "scroll-engine/test-utils",
+    "reth-chainspec/test-utils",
+    "reth-evm/test-utils",
+    "reth-network/test-utils",
+    "reth-node-builder/test-utils",
+    "reth-provider/test-utils",
+    "reth-revm/test-utils",
+    "reth-scroll-node/test-utils",
+    "reth-transaction-pool/test-utils",
+    "reth-trie-db/test-utils",
+    "rollup-node-providers/test-utils",
+    "rollup-node-watcher/test-utils",
+    "scroll-db/test-utils",
+    "scroll-engine/test-utils",
+]

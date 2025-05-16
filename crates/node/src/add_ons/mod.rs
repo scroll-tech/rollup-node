@@ -86,10 +86,14 @@ where
         let Self { rpc_add_ons, rollup_manager_addon: rollup_node_manager_addon } = self;
         let rpc_handle: RpcHandle<N, ScrollEthApi<N>> =
             rpc_add_ons.launch_add_ons_with(ctx.clone(), |_, _, _| Ok(())).await?;
-        // TODO: modify handle type to have a handle for both rpc and rollup node manager.
-        let rollup_node_handle =
+        let (rollup_manager_handle, l1_watcher_tx) =
             rollup_node_manager_addon.launch(ctx.clone(), rpc_handle.clone()).await?;
-        Ok(ScrollAddOnsHandle { rollup_manager_handle: rollup_node_handle, rpc_handle })
+        Ok(ScrollAddOnsHandle {
+            rollup_manager_handle,
+            rpc_handle,
+            #[cfg(feature = "test-utils")]
+            l1_watcher_tx,
+        })
     }
 }
 
