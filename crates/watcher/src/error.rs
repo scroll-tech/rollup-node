@@ -1,6 +1,7 @@
 use alloy_json_rpc::RpcError;
 use alloy_primitives::B256;
 use alloy_transport::TransportErrorKind;
+use rollup_node_providers::L1ProviderError;
 
 /// A [`Result`] that uses [`L1WatcherError`] as the error type.
 pub(crate) type L1WatcherResult<T> = Result<T, L1WatcherError>;
@@ -11,6 +12,9 @@ pub enum L1WatcherError {
     /// A Provider error at the RPC level.
     #[error("execution provider rpc error: {0:?}")]
     ProviderRpc(#[from] RpcError<TransportErrorKind>),
+    /// An error with the L1 provider.
+    #[error("l1 provider error: {0:?}")]
+    L1Provider(#[from] L1ProviderError),
     /// An Ethereum request error.
     #[error("failed Ethereum JSON RPC request: {0:?}")]
     EthRequest(#[from] EthRequestError),

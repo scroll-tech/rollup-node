@@ -1,9 +1,12 @@
 //! Integration test of the reorg detection of the L1 watcher.
 #![cfg(feature = "test-utils")]
 
+use std::sync::Arc;
+
 use alloy_rpc_types_eth::Header;
 use arbitrary::Arbitrary;
 use rand::Rng;
+use rollup_node_primitives::NodeConfig;
 use rollup_node_watcher::{
     random, test_utils::provider::MockProvider, Block, L1Notification, L1Watcher,
 };
@@ -55,7 +58,10 @@ async fn test_reorg_detection() -> eyre::Result<()> {
         .collect::<Vec<_>>();
     finalized_blocks.sort_unstable_by(|a, b| a.header.number.cmp(&b.header.number));
 
-    let start = latest_blocks.first().unwrap().header.number;
+    let config = NodeConfig {
+        start_l1_block: latest_blocks.first().unwrap().header.number,
+        system_contract_address: Default::default(),
+    };
     let mock_provider = MockProvider::new(
         blocks.clone().into_iter(),
         std::iter::empty(),
@@ -64,7 +70,7 @@ async fn test_reorg_detection() -> eyre::Result<()> {
     );
 
     // spawn the watcher and verify received notifications are consistent.
-    let mut l1_watcher = L1Watcher::spawn(mock_provider, start).await;
+    let mut l1_watcher = L1Watcher::spawn(mock_provider, Arc::new(config)).await;
 
     // skip the first two events
     l1_watcher.recv().await.unwrap();
@@ -138,7 +144,10 @@ async fn test_gap() -> eyre::Result<()> {
         .collect::<Vec<_>>();
     finalized_blocks.sort_unstable_by(|a, b| a.header.number.cmp(&b.header.number));
 
-    let start = latest_blocks.first().unwrap().header.number;
+    let config = NodeConfig {
+        start_l1_block: latest_blocks.first().unwrap().header.number,
+        system_contract_address: Default::default(),
+    };
     let mock_provider = MockProvider::new(
         blocks.clone().into_iter(),
         std::iter::empty(),
@@ -147,7 +156,7 @@ async fn test_gap() -> eyre::Result<()> {
     );
 
     // spawn the watcher and verify received notifications are consistent.
-    let mut l1_watcher = L1Watcher::spawn(mock_provider, start).await;
+    let mut l1_watcher = L1Watcher::spawn(mock_provider, Arc::new(config)).await;
 
     // skip the first two events
     l1_watcher.recv().await.unwrap();

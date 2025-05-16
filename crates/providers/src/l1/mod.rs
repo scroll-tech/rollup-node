@@ -1,11 +1,13 @@
 pub(crate) mod blob;
 pub(crate) mod message;
+pub(crate) mod system_contract;
 
 use crate::{beacon::BeaconProvider, l1::message::L1MessageProvider, L1BlobProvider};
 use std::{num::NonZeroUsize, sync::Arc};
 
 use alloy_eips::eip4844::{Blob, BlobTransactionSidecarItem};
 use alloy_primitives::B256;
+use alloy_transport::{RpcError, TransportErrorKind};
 use lru::LruCache;
 use rollup_node_primitives::L1MessageEnvelope;
 use scroll_db::DatabaseError;
@@ -27,6 +29,9 @@ pub enum L1ProviderError {
     /// Database error.
     #[error(transparent)]
     Database(#[from] DatabaseError),
+    /// L1 RPC error.
+    #[error(transparent)]
+    Rpc(#[from] RpcError<TransportErrorKind>),
     /// Other error.
     #[error("{0}")]
     Other(&'static str),

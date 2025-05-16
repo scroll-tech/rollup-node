@@ -11,6 +11,7 @@ workspace = true
 
 [dependencies]
 # alloy
+alloy-chains.workspace = true
 alloy-eips = { workspace = true, features = ["kzg"] }
 alloy-primitives.workspace = true
 alloy-provider.workspace = true
@@ -20,6 +21,7 @@ alloy-serde = { version = "0.15.5", default-features = false }
 alloy-transport.workspace = true
 
 # scroll
+reth-scroll-chainspec.workspace = true
 scroll-alloy-consensus.workspace = true
 scroll-alloy-network.workspace = true
 scroll-alloy-rpc-types-engine.workspace = true

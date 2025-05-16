@@ -1,7 +1,8 @@
 use crate::{
     args::{L1ProviderArgs, ScrollRollupNodeConfig},
-    constants::{PROVIDER_BLOB_CACHE_SIZE, WATCHER_START_BLOCK_NUMBER},
+    constants::PROVIDER_BLOB_CACHE_SIZE,
 };
+
 use alloy_primitives::Sealable;
 use alloy_provider::{Provider, ProviderBuilder};
 use alloy_rpc_client::RpcClient;
@@ -14,8 +15,10 @@ use reth_node_builder::{rpc::RpcHandle, AddOnsContext, FullNodeComponents};
 use reth_rpc_eth_api::EthApiTypes;
 use reth_scroll_node::ScrollNetworkPrimitives;
 use rollup_node_manager::{Consensus, NoopConsensus, PoAConsensus, RollupNodeManager};
+use rollup_node_primitives::{ConsensusUpdate, NodeConfig};
 use rollup_node_providers::{
     beacon_provider, AlloyExecutionPayloadProvider, DatabaseL1MessageProvider, OnlineL1Provider,
+    SystemContractProvider,
 };
 use rollup_node_sequencer::Sequencer;
 use rollup_node_watcher::L1Watcher;
@@ -80,6 +83,11 @@ impl RollupManagerAddOn {
         let scroll_network_manager =
             ScrollNetworkManager::from_parts(ctx.node.network().clone(), events);
 
+        // Get the rollup node config.
+        let node_config = Arc::new(NodeConfig::from_named_chain(
+            ctx.config.chain.chain().named().expect("expected named chain"),
+        ));
+
         // Create the engine api client.
         let engine_api = ScrollAuthApiEngineClient::new(rpc.rpc_server_handles.auth.http_client());
 
@@ -137,21 +145,18 @@ impl RollupManagerAddOn {
         let consensus: Box<dyn Consensus> = if self.config.test {
             Box::new(NoopConsensus::default())
         } else {
-            let mut poa = PoAConsensus::new(vec![]);
+            let mut poa = PoAConsensus::new([]);
             if let Some(ref provider) = provider {
-                // Initialize the consensus
-                poa.initialize(
-                    provider,
-                    ctx.config.chain.chain().named().expect("expected named chain"),
-                )
-                .await;
+                let signer =
+                    provider.authorized_signer(node_config.system_contract_address).await?;
+                poa.update_config(&ConsensusUpdate::AuthorizedSigner(signer));
             }
             Box::new(poa)
         };
 
         let l1_notification_rx = if let Some(provider) = provider {
             // Spawn the L1Watcher
-            Some(L1Watcher::spawn(provider, WATCHER_START_BLOCK_NUMBER).await)
+            Some(L1Watcher::spawn(provider, node_config).await)
         } else {
             None
         };

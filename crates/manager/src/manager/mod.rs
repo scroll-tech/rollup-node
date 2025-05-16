@@ -312,7 +312,13 @@ where
 
     /// Handles an [`L1Notification`] from the L1 watcher.
     fn handle_l1_notification(&mut self, notification: L1Notification) {
-        self.indexer.handle_l1_notification(notification);
+        match notification {
+            L1Notification::Consensus(ref update) => {
+                self.consensus.update_config(update);
+                self.indexer.handle_l1_notification(notification)
+            }
+            _ => self.indexer.handle_l1_notification(notification),
+        }
     }
 }
 
