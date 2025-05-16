@@ -9585,6 +9585,7 @@ dependencies = [
  "reth-transaction-pool",
  "reth-trie-db",
  "rollup-node-manager",
+ "rollup-node-primitives",
  "rollup-node-providers",
  "rollup-node-sequencer",
  "rollup-node-watcher",
