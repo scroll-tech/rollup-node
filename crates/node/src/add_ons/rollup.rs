@@ -2,9 +2,8 @@ use crate::{
     args::{L1ProviderArgs, ScrollRollupNodeConfig},
     constants::PROVIDER_BLOB_CACHE_SIZE,
 };
-
 use alloy_primitives::Sealable;
-use alloy_provider::{Provider, ProviderBuilder};
+use alloy_provider::ProviderBuilder;
 use alloy_rpc_client::RpcClient;
 use alloy_transport::layers::RetryBackoffLayer;
 use reth_chainspec::EthChainSpec;
@@ -14,7 +13,9 @@ use reth_node_api::{FullNodeTypes, NodeTypes};
 use reth_node_builder::{rpc::RpcHandle, AddOnsContext, FullNodeComponents};
 use reth_rpc_eth_api::EthApiTypes;
 use reth_scroll_node::ScrollNetworkPrimitives;
-use rollup_node_manager::{Consensus, NoopConsensus, PoAConsensus, RollupNodeManager};
+use rollup_node_manager::{
+    Consensus, NoopConsensus, PoAConsensus, RollupManagerHandle, RollupNodeManager,
+};
 use rollup_node_primitives::{ConsensusUpdate, NodeConfig};
 use rollup_node_providers::{
     beacon_provider, AlloyExecutionPayloadProvider, DatabaseL1MessageProvider, OnlineL1Provider,
@@ -23,7 +24,6 @@ use rollup_node_providers::{
 use rollup_node_sequencer::Sequencer;
 use rollup_node_watcher::L1Watcher;
 use scroll_alloy_hardforks::ScrollHardforks;
-use scroll_alloy_network::Scroll;
 use scroll_alloy_provider::ScrollAuthApiEngineClient;
 use scroll_db::{Database, DatabaseConnectionProvider};
 use scroll_engine::{EngineDriver, ForkchoiceState};
@@ -51,27 +51,7 @@ impl RollupManagerAddOn {
         self,
         ctx: AddOnsContext<'_, N>,
         rpc: RpcHandle<N, EthApi>,
-    ) -> eyre::Result<
-        RollupNodeManager<
-            N::Network,
-            ScrollAuthApiEngineClient<
-                jsonrpsee_http_client::HttpClient<
-                    reth_rpc_layer::AuthClientService<
-                        jsonrpsee_http_client::transport::HttpBackend,
-                    >,
-                >,
-            >,
-            AlloyExecutionPayloadProvider<impl Provider<Scroll> + Clone>,
-            OnlineL1Provider<
-                DatabaseL1MessageProvider<Arc<Database>>,
-                Arc<
-                    dyn rollup_node_providers::BeaconProvider<Error = reqwest::Error> + Send + Sync,
-                >,
-            >,
-            DatabaseL1MessageProvider<Arc<Database>>,
-            <<N as FullNodeTypes>::Types as NodeTypes>::ChainSpec,
-        >,
-    >
+    ) -> eyre::Result<RollupManagerHandle>
     where
         <<N as FullNodeTypes>::Types as NodeTypes>::ChainSpec: ScrollHardforks,
         N::Network: NetworkProtocols + FullNetwork<Primitives = ScrollNetworkPrimitives>,
@@ -186,7 +166,7 @@ impl RollupManagerAddOn {
                 0,
                 0,
             );
-            (Some(sequencer), Some(args.block_time))
+            (Some(sequencer), (args.block_time != 0).then_some(args.block_time))
         } else {
             (None, None)
         };
@@ -199,7 +179,7 @@ impl RollupManagerAddOn {
             .then_some(ctx.node.network().eth_wire_block_listener().await?);
 
         // Spawn the rollup node manager
-        let rollup_node_manager = RollupNodeManager::new(
+        let rnm = RollupNodeManager::new(
             scroll_network_manager,
             engine,
             l1_provider,
@@ -212,6 +192,6 @@ impl RollupManagerAddOn {
             None,
             block_time,
         );
-        Ok(rollup_node_manager)
+        Ok(rnm)
     }
 }

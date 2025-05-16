@@ -20,33 +20,38 @@ alloy-provider.workspace = true
 alloy-rpc-client.workspace = true
 alloy-transport.workspace = true
 
-scroll-alloy-evm = { git = "https://github.com/scroll-tech/reth.git" }
+scroll-alloy-consensus.workspace = true
+scroll-alloy-evm = { git = "https://github.com/scroll-tech/reth.git", branch = "feat/reth-rpc-addons-trait" }
 scroll-alloy-hardforks.workspace = true
 scroll-alloy-network.workspace = true
 scroll-alloy-provider.workspace = true
 
 reth-scroll-engine-primitives.workspace = true
-reth-scroll-evm = { git = "https://github.com/scroll-tech/reth.git" }
-reth-scroll-cli = { git = "https://github.com/scroll-tech/reth.git" }
+reth-scroll-evm = { git = "https://github.com/scroll-tech/reth.git", branch = "feat/reth-rpc-addons-trait" }
+reth-scroll-cli = { git = "https://github.com/scroll-tech/reth.git", branch = "feat/reth-rpc-addons-trait" }
 reth-scroll-primitives.workspace = true
 reth-scroll-chainspec.workspace = true
 reth-scroll-node.workspace = true
-reth-scroll-rpc = { git = "https://github.com/scroll-tech/reth.git" }
+reth-scroll-rpc = { git = "https://github.com/scroll-tech/reth.git", branch = "feat/reth-rpc-addons-trait" }
 
 reth-chainspec.workspace = true
-reth-cli-util = { git = "https://github.com/scroll-tech/reth.git" }
+reth-cli-util = { git = "https://github.com/scroll-tech/reth.git", branch = "feat/reth-rpc-addons-trait" }
 reth-eth-wire-types.workspace = true
-reth-evm = { git = "https://github.com/scroll-tech/reth.git" }
+reth-evm = { git = "https://github.com/scroll-tech/reth.git", branch = "feat/reth-rpc-addons-trait" }
 reth-node-builder = { workspace = true, features = ["skip-state-root-validation"] }
-reth-node-api = { git = "https://github.com/scroll-tech/reth.git" }
-reth-node-types = { git = "https://github.com/scroll-tech/reth.git" }
+reth-node-api = { git = "https://github.com/scroll-tech/reth.git", branch = "feat/reth-rpc-addons-trait" }
+reth-node-types = { git = "https://github.com/scroll-tech/reth.git", branch = "feat/reth-rpc-addons-trait" }
 reth-network.workspace = true
 reth-network-api.workspace = true
 reth-network-peers.workspace = true
-reth-revm = { git = "https://github.com/scroll-tech/reth.git" }
-reth-rpc-eth-api = { git = "https://github.com/scroll-tech/reth.git" }
-reth-rpc-eth-types = { git = "https://github.com/scroll-tech/reth.git" }
-reth-rpc-layer = { git = "https://github.com/scroll-tech/reth.git" }
+reth-revm = { git = "https://github.com/scroll-tech/reth.git", branch = "feat/reth-rpc-addons-trait" }
+reth-rpc-builder = { git = "https://github.com/scroll-tech/reth.git", branch = "feat/reth-rpc-addons-trait" }
+reth-rpc-eth-api = { git = "https://github.com/scroll-tech/reth.git", branch = "feat/reth-rpc-addons-trait" }
+reth-rpc-eth-types = { git = "https://github.com/scroll-tech/reth.git", branch = "feat/reth-rpc-addons-trait" }
+reth-rpc-layer = { git = "https://github.com/scroll-tech/reth.git", branch = "feat/reth-rpc-addons-trait" }
+reth-tokio-util.workspace = true
+reth-transaction-pool = { git = "https://github.com/scroll-tech/reth.git", branch = "feat/reth-rpc-addons-trait" }
+reth-trie-db = { git = "https://github.com/scroll-tech/reth.git", branch = "feat/reth-rpc-addons-trait" }
 
 # rollup node
 rollup-node-manager.workspace = true
@@ -67,11 +72,13 @@ jsonrpsee-http-client = "0.24.9"
 reqwest.workspace = true
 tokio.workspace = true
 tracing.workspace = true
+url = "2.5.4"
 
 [dev-dependencies]
 futures.workspace = true
 reth-e2e-test-utils.workspace = true
 reth-node-core.workspace = true
+reth-provider.workspace = true
 reth-rpc-server-types.workspace = true
 reth-tasks.workspace = true
 reth-tracing.workspace = true
