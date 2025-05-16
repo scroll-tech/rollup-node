@@ -53,9 +53,10 @@ reth-tokio-util.workspace = true
 reth-transaction-pool = { git = "https://github.com/scroll-tech/reth.git", branch = "feat/reth-rpc-addons-trait" }
 reth-trie-db = { git = "https://github.com/scroll-tech/reth.git", branch = "feat/reth-rpc-addons-trait" }
 
+# rollup node
 rollup-node-manager.workspace = true
-rollup-node-providers.workspace = true
 rollup-node-primitives.workspace = true
+rollup-node-providers.workspace = true
 rollup-node-sequencer.workspace = true
 rollup-node-watcher.workspace = true
 

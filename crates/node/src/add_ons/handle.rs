@@ -5,7 +5,7 @@ use rollup_node_manager::RollupManagerHandle;
 
 /// A handle for scroll addons, which includes handles for the rollup manager and RPC server.
 #[derive(Debug, Clone)]
-pub struct ScrollAddonsHandle<Node: FullNodeComponents, EthApi: EthApiTypes> {
+pub struct ScrollAddOnsHandle<Node: FullNodeComponents, EthApi: EthApiTypes> {
     /// The handle used to send commands to the rollup manager.
     pub rollup_manager_handle: RollupManagerHandle,
     /// The handle used to send commands to the RPC server.
@@ -13,7 +13,7 @@ pub struct ScrollAddonsHandle<Node: FullNodeComponents, EthApi: EthApiTypes> {
 }
 
 impl<Node: FullNodeComponents, EthApi: EthApiTypes> RpcHandleProvider<Node, EthApi>
-    for ScrollAddonsHandle<Node, EthApi>
+    for ScrollAddOnsHandle<Node, EthApi>
 {
     fn rpc_handle(&self) -> &RpcHandle<Node, EthApi> {
         &self.rpc_handle

@@ -26,10 +26,10 @@ use reth_scroll_rpc::{eth::ScrollEthApiBuilder, ScrollEthApi, ScrollEthApiError}
 use scroll_alloy_evm::ScrollTransactionIntoTxEnv;
 
 mod handle;
-pub use handle::ScrollAddonsHandle;
+pub use handle::ScrollAddOnsHandle;
 
 mod rollup;
-use rollup::RollupManagerAddon;
+use rollup::RollupManagerAddOn;
 
 /// Add-ons for the Scroll follower node.
 #[derive(Debug)]
@@ -48,7 +48,7 @@ where
     >,
 
     /// Rollup manager addon responsible for managing the components of the rollup node.
-    pub rollup_manager_addon: RollupManagerAddon,
+    pub rollup_manager_addon: RollupManagerAddOn,
 }
 impl<N> ScrollRollupNodeAddOns<N>
 where
@@ -58,7 +58,7 @@ where
     /// Create a new instance of [`ScrollRollupNodeAddOns`].
     pub fn new(config: ScrollRollupNodeConfig) -> Self {
         let rpc_add_ons = RpcAddOns::default();
-        let rollup_manager_addon = RollupManagerAddon::new(config);
+        let rollup_manager_addon = RollupManagerAddOn::new(config);
         Self { rpc_add_ons, rollup_manager_addon }
     }
 }
@@ -77,7 +77,7 @@ where
     ScrollEthApiError: FromEvmError<N::Evm>,
     EvmFactoryFor<N::Evm>: EvmFactory<Tx = ScrollTransactionIntoTxEnv<TxEnv>>,
 {
-    type Handle = ScrollAddonsHandle<N, ScrollEthApi<N>>;
+    type Handle = ScrollAddOnsHandle<N, ScrollEthApi<N>>;
 
     async fn launch_add_ons(
         self,
@@ -89,7 +89,7 @@ where
         // TODO: modify handle type to have a handle for both rpc and rollup node manager.
         let rollup_node_handle =
             rollup_node_manager_addon.launch(ctx.clone(), rpc_handle.clone()).await?;
-        Ok(ScrollAddonsHandle { rollup_manager_handle: rollup_node_handle, rpc_handle })
+        Ok(ScrollAddOnsHandle { rollup_manager_handle: rollup_node_handle, rpc_handle })
     }
 }
 

@@ -36,11 +36,11 @@ use std::{sync::Arc, time::Duration};
 
 /// The rollup node manager addon.
 #[derive(Debug)]
-pub struct RollupManagerAddon {
+pub struct RollupManagerAddOn {
     config: ScrollRollupNodeConfig,
 }
 
-impl RollupManagerAddon {
+impl RollupManagerAddOn {
     /// Create a new rollup node manager addon.
     pub const fn new(config: ScrollRollupNodeConfig) -> Self {
         Self { config }
