@@ -4,18 +4,11 @@ use reth_scroll_chainspec::SCROLL_FEE_VAULT_ADDRESS;
 use std::path::PathBuf;
 
 /// A struct that represents the arguments for the rollup node.
-#[derive(Debug, clap::Args)]
-pub struct ScrollRollupNodeArgs {
+#[derive(Debug, Clone, clap::Args)]
+pub struct ScrollRollupNodeConfig {
     /// Whether the rollup node should be run in test mode.
     #[arg(long)]
     pub test: bool,
-    /// A bool to represent if new blocks should be bridged from the eth wire protocol to the
-    /// scroll wire protocol.
-    #[arg(long, default_value_t = false)]
-    pub enable_eth_scroll_wire_bridge: bool,
-    /// A bool that represents if the scroll wire protocol should be enabled.
-    #[arg(long, default_value_t = false)]
-    pub enable_scroll_wire: bool,
     /// A bool that represents whether optimistic sync of the EN should be performed.
     /// This is a temp solution and should be removed when implementing issue #23.
     #[arg(long, default_value_t = false)]
@@ -23,7 +16,7 @@ pub struct ScrollRollupNodeArgs {
     /// Database path
     #[arg(long)]
     pub database_path: Option<PathBuf>,
-    /// The EngineAPI URL.
+    /// The `EngineAPI` URL.
     #[arg(long)]
     pub engine_api_url: Option<reqwest::Url>,
     /// The beacon provider arguments.
@@ -38,9 +31,25 @@ pub struct ScrollRollupNodeArgs {
     /// The sequencer arguments
     #[command(flatten)]
     pub sequencer_args: SequencerArgs,
+    /// The network arguments
+    #[command(flatten)]
+    pub network_args: NetworkArgs,
 }
 
-#[derive(Debug, Default, clap::Args)]
+/// The network arguments.
+#[derive(Debug, Default, Clone, clap::Args)]
+pub struct NetworkArgs {
+    /// A bool to represent if new blocks should be bridged from the eth wire protocol to the
+    /// scroll wire protocol.
+    #[arg(long = "eth-scroll-bridge.enabled", default_value_t = true)]
+    pub enable_eth_scroll_wire_bridge: bool,
+    /// A bool that represents if the scroll wire protocol should be enabled.
+    #[arg(long = "scroll-wire.enabled", default_value_t = true)]
+    pub enable_scroll_wire: bool,
+}
+
+/// The arguments for the L1 provider.
+#[derive(Debug, Default, Clone, clap::Args)]
 pub struct L1ProviderArgs {
     /// The URL for the L1 RPC.
     #[arg(long = "l1.url", id = "l1_url", value_name = "L1_URL")]
@@ -56,7 +65,8 @@ pub struct L1ProviderArgs {
     pub initial_backoff: u64,
 }
 
-#[derive(Debug, Default, clap::Args)]
+/// The arguments for the Beacon provider.
+#[derive(Debug, Default, Clone, clap::Args)]
 pub struct BeaconProviderArgs {
     /// The URL for the Beacon chain.
     #[arg(long = "beacon.url", id = "beacon_url", value_name = "BEACON_URL")]
@@ -72,7 +82,8 @@ pub struct BeaconProviderArgs {
     pub initial_backoff: u64,
 }
 
-#[derive(Debug, Default, clap::Args)]
+/// The arguments for the L2 provider.
+#[derive(Debug, Default, Clone, clap::Args)]
 pub struct L2ProviderArgs {
     /// The compute units per second for the provider.
     #[arg(long = "l2.cups",  id = "l2_compute_units_per_second", value_name = "L2_COMPUTE_UNITS_PER_SECOND", default_value_t = constants::PROVIDER_COMPUTE_UNITS_PER_SECOND)]
@@ -85,21 +96,22 @@ pub struct L2ProviderArgs {
     pub initial_backoff: u64,
 }
 
-#[derive(Debug, Default, clap::Args)]
+/// The arguments for the sequencer.
+#[derive(Debug, Default, Clone, clap::Args)]
 pub struct SequencerArgs {
     /// Enable the scroll block sequencer.
-    #[arg(long, default_value_t = false)]
-    pub scroll_sequencer_enabled: bool,
+    #[arg(long = "sequencer.enabled", default_value_t = false)]
+    pub sequencer_enabled: bool,
     /// The block time for the sequencer.
-    #[arg(long, default_value_t = constants::DEFAULT_BLOCK_TIME)]
-    pub scroll_block_time: u64,
+    #[arg(long = "sequencer.block-time", id = "sequencer_block_time", value_name = "SEQUENCER_BLOCK_TIME", default_value_t = constants::DEFAULT_BLOCK_TIME)]
+    pub block_time: u64,
     /// The payload building duration for the sequencer (milliseconds)
-    #[arg(long, default_value_t = constants::DEFAULT_PAYLOAD_BUILDING_DURATION)]
+    #[arg(long = "sequencer.payload-building-duration", id = "sequencer_payload_building_duration", value_name = "SEQUENCER_PAYLOAD_BUILDING_DURATION", default_value_t = constants::DEFAULT_PAYLOAD_BUILDING_DURATION)]
     pub payload_building_duration: u64,
     /// The max L1 messages per block for the sequencer.
-    #[arg(long, default_value_t = constants::DEFAULT_MAX_L1_MESSAGES_PER_BLOCK)]
+    #[arg(long = "sequencer.max-l1-messages-per-block", id = "sequencer_max_l1_messages_per_block", value_name = "SEQUENCER_MAX_L1_MESSAGES_PER_BLOCK", default_value_t = constants::DEFAULT_MAX_L1_MESSAGES_PER_BLOCK)]
     pub max_l1_messages_per_block: u64,
     /// The fee recipient for the sequencer.
-    #[arg(long, default_value_t = SCROLL_FEE_VAULT_ADDRESS)]
+    #[arg(long = "sequencer.fee-recipient", id = "sequencer_fee_recipient", value_name = "SEQUENCER_FEE_RECIPIENT", default_value_t = SCROLL_FEE_VAULT_ADDRESS)]
     pub fee_recipient: Address,
 }
