@@ -9541,12 +9541,9 @@ dependencies = [
 name = "rollup-node"
 version = "0.0.1"
 dependencies = [
- "alloy-consensus 0.15.11",
- "alloy-eips 0.15.11",
  "alloy-primitives",
  "alloy-provider",
  "alloy-rpc-client",
- "alloy-rpc-types-engine 0.15.11",
  "alloy-transport",
  "clap",
  "eyre",
@@ -9565,9 +9562,7 @@ dependencies = [
  "reth-node-builder",
  "reth-node-core",
  "reth-node-types",
- "reth-provider",
  "reth-revm",
- "reth-rpc-builder",
  "reth-rpc-eth-api",
  "reth-rpc-eth-types",
  "reth-rpc-layer",
@@ -9580,16 +9575,12 @@ dependencies = [
  "reth-scroll-primitives",
  "reth-scroll-rpc",
  "reth-tasks",
- "reth-tokio-util",
  "reth-tracing",
- "reth-transaction-pool",
- "reth-trie-db",
  "rollup-node-manager",
  "rollup-node-primitives",
  "rollup-node-providers",
  "rollup-node-sequencer",
  "rollup-node-watcher",
- "scroll-alloy-consensus",
  "scroll-alloy-evm",
  "scroll-alloy-hardforks",
  "scroll-alloy-network",
@@ -9603,7 +9594,6 @@ dependencies = [
  "serde_json",
  "tokio",
  "tracing",
- "url",
 ]
 
 [[package]]

@@ -31,6 +31,7 @@ use scroll_migration::MigratorTrait;
 use scroll_network::ScrollNetworkManager;
 use scroll_wire::{ScrollWireConfig, ScrollWireProtocolHandler};
 use std::{sync::Arc, time::Duration};
+
 // Replace `Scroll` with the actual network type you use if it's generic
 
 /// The rollup node manager addon.
