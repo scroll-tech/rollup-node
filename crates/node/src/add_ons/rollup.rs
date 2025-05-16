@@ -86,7 +86,7 @@ impl RollupManagerAddOn {
         });
 
         // Get a payload provider
-        let payload_provider = (self.config.test || !ctx.config.rpc.http).then_some({
+        let payload_provider = (!self.config.test & ctx.config.rpc.http).then_some({
             rpc.rpc_server_handles
                 .rpc
                 .new_http_provider_for()

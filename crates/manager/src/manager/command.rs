@@ -5,7 +5,7 @@ use tokio::sync::oneshot;
 /// The commands that can be sent to the rollup manager.
 #[derive(Debug)]
 pub enum RollupManagerCommand {
-    /// The first demo command.
+    /// Command to build a new block.
     BuildBlock,
     /// Returns an event stream for rollup manager events.
     EventListener(oneshot::Sender<EventStream<RollupManagerEvent>>),
