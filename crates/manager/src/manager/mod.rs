@@ -28,7 +28,10 @@ use std::{
     sync::Arc,
     task::{Context, Poll},
 };
-use tokio::{sync::mpsc::Receiver, time::Interval};
+use tokio::{
+    sync::mpsc::{self, Receiver},
+    time::Interval,
+};
 use tokio_stream::wrappers::ReceiverStream;
 use tracing::{error, trace, warn};
 
@@ -36,8 +39,14 @@ use rollup_node_providers::{ExecutionPayloadProvider, L1MessageProvider, L1Provi
 use scroll_db::Database;
 use scroll_derivation_pipeline::DerivationPipeline;
 
+mod command;
+pub use command::RollupManagerCommand;
+
 mod event;
 pub use event::RollupManagerEvent;
+
+mod handle;
+pub use handle::RollupManagerHandle;
 
 /// The size of the event channel.
 const EVENT_CHANNEL_SIZE: usize = 100;
@@ -66,6 +75,8 @@ pub struct RollupNodeManager<
     L1MP,
     CS,
 > {
+    /// The handle receiver used to receive commands.
+    handle_rx: Receiver<RollupManagerCommand>,
     /// The chain spec used by the rollup node.
     chain_spec: Arc<CS>,
     /// The network manager that manages the scroll p2p network.
@@ -121,13 +132,14 @@ impl<N, EC, P, L1P, L1MP, CS> RollupNodeManager<N, EC, P, L1P, L1MP, CS>
 where
     N: FullNetwork<Primitives = ScrollNetworkPrimitives>,
     EC: ScrollEngineApi + Unpin + Sync + Send + 'static,
-    P: ExecutionPayloadProvider + Unpin + Send + Sync + 'static,
-    L1P: L1Provider + Clone + Send + Sync + 'static,
+    P: ExecutionPayloadProvider + Clone + Unpin + Send + Sync + 'static,
+    L1P: L1Provider + Clone + Send + Sync + Unpin + 'static,
     L1MP: L1MessageProvider + Unpin + Send + Sync + 'static,
     CS: ScrollHardforks + EthChainSpec + Send + Sync + 'static,
 {
     /// Create a new [`RollupNodeManager`] instance.
     #[allow(clippy::too_many_arguments)]
+    #[allow(clippy::new_ret_no_self)]
     pub fn new(
         network: ScrollNetworkManager<N>,
         engine: EngineDriver<EC, P>,
@@ -140,11 +152,13 @@ where
         sequencer: Option<Sequencer<L1MP>>,
         signer: Option<SignerHandle>,
         block_time: Option<u64>,
-    ) -> Self {
+    ) -> RollupManagerHandle {
+        let (handle_tx, handle_rx) = mpsc::channel(EVENT_CHANNEL_SIZE);
         let indexer = Indexer::new(database.clone(), chain_spec.clone());
         let derivation_pipeline =
             l1_provider.map(|provider| DerivationPipeline::new(provider, database));
-        Self {
+        tokio::spawn(Self {
+            handle_rx,
             chain_spec,
             network,
             engine,
@@ -158,7 +172,8 @@ where
             signer,
             block_building_trigger: block_time
                 .map(|time| tokio::time::interval(tokio::time::Duration::from_millis(time))),
-        }
+        });
+        RollupManagerHandle::new(handle_tx)
     }
 
     /// Returns a new event listener for the rollup node manager.
@@ -335,6 +350,21 @@ where
 
     fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
         let this = self.get_mut();
+
+        // Poll the handle receiver for commands.
+        while let Poll::Ready(Some(command)) = this.handle_rx.poll_recv(cx) {
+            match command {
+                RollupManagerCommand::BuildBlock => {
+                    if let Some(sequencer) = this.sequencer.as_mut() {
+                        sequencer.build_payload_attributes();
+                    }
+                }
+                RollupManagerCommand::EventListener(tx) => {
+                    let events = this.event_listener();
+                    tx.send(events).expect("Failed to send event listener to handle");
+                }
+            }
+        }
 
         // Handle new block production.
         if let Some(Poll::Ready(Some(attributes))) =
