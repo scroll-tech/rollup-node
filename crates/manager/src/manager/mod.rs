@@ -4,6 +4,7 @@
 
 use super::Consensus;
 use alloy_primitives::Signature;
+use alloy_provider::Provider;
 use futures::StreamExt;
 use reth_chainspec::EthChainSpec;
 use reth_network_api::{block::NewBlockWithPeer as RethNewBlockWithPeer, FullNetwork};
@@ -15,6 +16,7 @@ use rollup_node_sequencer::Sequencer;
 use rollup_node_signer::{SignerEvent, SignerHandle};
 use rollup_node_watcher::L1Notification;
 use scroll_alloy_hardforks::ScrollHardforks;
+use scroll_alloy_network::Scroll;
 use scroll_alloy_provider::ScrollEngineApi;
 use scroll_engine::{EngineDriver, EngineDriverEvent};
 use scroll_network::{
@@ -28,11 +30,10 @@ use std::{
     sync::Arc,
     task::{Context, Poll},
 };
-use tokio::{sync::mpsc::Receiver, time::Interval};
-use tokio_stream::wrappers::ReceiverStream;
+use tokio::time::Interval;
 use tracing::{error, trace, warn};
 
-use rollup_node_providers::{ExecutionPayloadProvider, L1MessageProvider, L1Provider};
+use rollup_node_providers::{L1MessageProvider, L1Provider};
 use scroll_db::Database;
 use scroll_derivation_pipeline::DerivationPipeline;
 
@@ -121,7 +122,7 @@ impl<N, EC, P, L1P, L1MP, CS> RollupNodeManager<N, EC, P, L1P, L1MP, CS>
 where
     N: FullNetwork<Primitives = ScrollNetworkPrimitives>,
     EC: ScrollEngineApi + Unpin + Sync + Send + 'static,
-    P: ExecutionPayloadProvider + Unpin + Send + Sync + 'static,
+    P: Provider<Scroll> + Unpin + Send + Sync + 'static,
     L1P: L1Provider + Clone + Send + Sync + 'static,
     L1MP: L1MessageProvider + Unpin + Send + Sync + 'static,
     CS: ScrollHardforks + EthChainSpec + Send + Sync + 'static,
@@ -173,6 +174,10 @@ where
 
         event_listener
     }
+
+    /// Shuts down the L1 watcher using the handle. Drains all channels that contain information
+    /// from the L1 watcher and saves a checkpoint.
+    pub fn handle_l1_watcher_shutdown(&mut self) {}
 
     /// Handles a new block received from the network.
     ///
@@ -244,6 +249,8 @@ where
                 if let Some(sequencer) = self.sequencer.as_mut() {
                     sequencer.handle_reorg(queue_index, l1_block_number);
                 }
+
+                // TODO: should clear the derivation pipeline.
             }
             _ => (),
         }
@@ -261,7 +268,7 @@ where
             }
             EngineDriverEvent::NewPayload(payload) => {
                 if let Some(signer) = self.signer.as_mut() {
-                    let _ = signer.sign_block(payload.clone()).inspect_err(|err| tracing::error!(target: "scroll::node::manager", ?err, "Failed to send new payload to signer"));
+                    let _ = signer.sign_block(payload.clone()).inspect_err(|err| error!(target: "scroll::node::manager", ?err, "Failed to send new payload to signer"));
                 }
                 self.indexer.handle_block(payload.into(), None);
             }
@@ -312,13 +319,10 @@ where
 
     /// Handles an [`L1Notification`] from the L1 watcher.
     fn handle_l1_notification(&mut self, notification: L1Notification) {
-        match notification {
-            L1Notification::Consensus(ref update) => {
-                self.consensus.update_config(update);
-                self.indexer.handle_l1_notification(notification)
-            }
-            _ => self.indexer.handle_l1_notification(notification),
+        if let L1Notification::Consensus(ref update) = notification {
+            self.consensus.update_config(update);
         }
+        self.indexer.handle_l1_notification(notification)
     }
 }
 
@@ -326,7 +330,7 @@ impl<N, EC, P, L1P, L1MP, CS> Future for RollupNodeManager<N, EC, P, L1P, L1MP, 
 where
     N: FullNetwork<Primitives = ScrollNetworkPrimitives>,
     EC: ScrollEngineApi + Unpin + Sync + Send + 'static,
-    P: ExecutionPayloadProvider + Clone + Unpin + Send + Sync + 'static,
+    P: Provider<Scroll> + Clone + Unpin + Send + Sync + 'static,
     L1P: L1Provider + Clone + Unpin + Send + Sync + 'static,
     L1MP: L1MessageProvider + Unpin + Send + Sync + 'static,
     CS: ScrollHardforks + EthChainSpec + Unpin + Send + Sync + 'static,
@@ -350,7 +354,7 @@ where
 
         // Drain all L1 notifications.
         while let Some(Poll::Ready(Some(event))) =
-            this.l1_notification_rx.as_mut().map(|rx| rx.poll_next_unpin(cx))
+            this.l1_watcher_handle.as_mut().map(|rx| rx.poll_next_unpin(cx))
         {
             this.handle_l1_notification((*event).clone());
         }

@@ -3,9 +3,10 @@ use crate::{
     future::{BuildNewPayloadFuture, EngineDriverFutureResult},
     EngineDriverEvent,
 };
+use alloy_provider::Provider;
 use futures::{ready, task::AtomicWaker, FutureExt, Stream};
 use rollup_node_primitives::{BlockInfo, ScrollPayloadAttributesWithBatchInfo};
-use rollup_node_providers::ExecutionPayloadProvider;
+use scroll_alloy_network::Scroll;
 use scroll_alloy_provider::ScrollEngineApi;
 use scroll_alloy_rpc_types_engine::ScrollPayloadAttributes;
 use scroll_network::NewBlockWithPeer;
@@ -19,7 +20,7 @@ use tokio::time::Duration;
 
 /// The main interface to the Engine API of the EN.
 /// Internally maintains the fork state of the chain.
-pub struct EngineDriver<EC, P = ()> {
+pub struct EngineDriver<EC, P> {
     /// The engine API client.
     client: Arc<EC>,
     /// The execution payload provider
@@ -47,7 +48,7 @@ pub struct EngineDriver<EC, P = ()> {
 impl<EC, P> EngineDriver<EC, P>
 where
     EC: ScrollEngineApi + Unpin + Send + Sync + 'static,
-    P: ExecutionPayloadProvider + Unpin + Send + Sync + 'static,
+    P: Provider<Scroll> + Unpin + Send + Sync + 'static,
 {
     /// Create a new [`EngineDriver`] from the provided [`ScrollEngineApi`] and
     /// [`ExecutionPayloadProvider`].
@@ -201,7 +202,7 @@ where
 impl<EC, P> Stream for EngineDriver<EC, P>
 where
     EC: ScrollEngineApi + Unpin + Send + Sync + 'static,
-    P: ExecutionPayloadProvider + Clone + Unpin + Send + Sync + 'static,
+    P: Provider<Scroll> + Clone + Unpin + Send + Sync + 'static,
 {
     type Item = EngineDriverEvent;
 
@@ -319,6 +320,7 @@ impl<EC, P> std::fmt::Debug for EngineDriver<EC, P> {
 #[cfg(test)]
 mod tests {
     use crate::future::build_new_payload;
+    use rollup_node_providers::ScrollRootProvider;
 
     use super::*;
     use scroll_engine::test_utils::PanicEngineClient;
@@ -336,7 +338,8 @@ mod tests {
             ForkchoiceState::from_block_info(BlockInfo { number: 0, hash: Default::default() });
         let duration = Duration::from_secs(2);
 
-        let mut driver = EngineDriver::new(client, None::<()>, fcs, false, duration);
+        let mut driver =
+            EngineDriver::new(client, None::<ScrollRootProvider>, fcs, false, duration);
 
         // Initially, it should be false
         assert!(!driver.is_payload_building_in_progress());
@@ -355,7 +358,8 @@ mod tests {
             ForkchoiceState::from_block_info(BlockInfo { number: 0, hash: Default::default() });
         let duration = Duration::from_secs(2);
 
-        let mut driver = EngineDriver::new(client.clone(), None::<()>, fcs, false, duration);
+        let mut driver =
+            EngineDriver::new(client.clone(), None::<ScrollRootProvider>, fcs, false, duration);
 
         // Initially, it should be false
         assert!(!driver.is_payload_building_in_progress());

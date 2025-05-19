@@ -17,8 +17,7 @@ use reth_scroll_node::ScrollNetworkPrimitives;
 use rollup_node_manager::{Consensus, NoopConsensus, PoAConsensus, RollupNodeManager};
 use rollup_node_primitives::{ConsensusUpdate, NodeConfig};
 use rollup_node_providers::{
-    beacon_provider, AlloyExecutionPayloadProvider, DatabaseL1MessageProvider, OnlineL1Provider,
-    SystemContractProvider,
+    beacon_provider, DatabaseL1MessageProvider, OnlineL1Provider, SystemContractProvider,
 };
 use rollup_node_sequencer::Sequencer;
 use rollup_node_watcher::L1Watcher;
@@ -61,7 +60,7 @@ impl RollupManagerAddOn {
                     >,
                 >,
             >,
-            AlloyExecutionPayloadProvider<impl Provider<Scroll> + Clone>,
+            impl Provider<Scroll> + Clone,
             OnlineL1Provider<
                 DatabaseL1MessageProvider<Arc<Database>>,
                 Arc<
@@ -111,7 +110,6 @@ impl RollupManagerAddOn {
                 .rpc
                 .new_http_provider_for()
                 .map(Arc::new)
-                .map(AlloyExecutionPayloadProvider::new)
                 .expect("failed to create payload provider")
         });
 
