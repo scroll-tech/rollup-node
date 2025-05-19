@@ -142,8 +142,16 @@ impl RollupManagerAddOn {
             } else {
                 // Create a channel for L1 notifications that we can use to inject L1 messages for
                 // testing
-                let (tx, rx) = tokio::sync::mpsc::channel(1000);
-                (Some(tx), Some(rx))
+                #[cfg(feature = "test-utils")]
+                {
+                    let (tx, rx) = tokio::sync::mpsc::channel(1000);
+                    (Some(tx), Some(rx))
+                }
+
+                #[cfg(not(feature = "test-utils"))]
+                {
+                    (None, None)
+                }
             };
 
         // Construct the l1 provider.
