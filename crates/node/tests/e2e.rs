@@ -1,6 +1,6 @@
 //! End-to-end tests for the rollup node.
 
-use alloy_primitives::B256;
+use alloy_primitives::{Address, B256, U256};
 use futures::StreamExt;
 use reth_e2e_test_utils::{node::NodeTestContext, NodeHelperType};
 use reth_network::{NetworkConfigBuilder, PeersInfo};
@@ -17,11 +17,84 @@ use rollup_node::{
     BeaconProviderArgs, L1ProviderArgs, L2ProviderArgs, NetworkArgs as ScrollNetworkArgs,
     ScrollRollupNode, ScrollRollupNodeConfig, SequencerArgs,
 };
+use rollup_node_manager::RollupManagerHandle;
+use rollup_node_watcher::L1Notification;
+use scroll_alloy_consensus::TxL1Message;
 use scroll_alloy_rpc_types_engine::ScrollPayloadAttributes;
 use scroll_network::{NewBlockWithPeer, SCROLL_MAINNET};
 use scroll_wire::ScrollWireConfig;
 use std::{path::PathBuf, sync::Arc};
 use tracing::trace;
+
+#[tokio::test]
+async fn can_bridge_l1_messages() -> eyre::Result<()> {
+    reth_tracing::init_test_tracing();
+    let tasks = TaskManager::current();
+    let exec = tasks.executor();
+
+    // Create the chain spec for scroll mainnet with Darwin v2 activated and a test genesis.
+    let chain_spec = (*SCROLL_MAINNET).clone();
+    let network_config = NetworkArgs {
+        discovery: DiscoveryArgs { disable_discovery: true, ..DiscoveryArgs::default() },
+        ..NetworkArgs::default()
+    };
+    let node_config = NodeConfig::new(chain_spec.clone())
+        .with_network(network_config.clone())
+        .with_unused_ports()
+        .with_rpc(RpcServerArgs::default().with_unused_ports().with_http());
+    let node_args = ScrollRollupNodeConfig {
+        test: true,
+        network_args: ScrollNetworkArgs {
+            enable_eth_scroll_wire_bridge: true,
+            enable_scroll_wire: true,
+        },
+        optimistic_sync: false,
+        database_path: Some(PathBuf::from("sqlite::memory:")),
+        l1_provider_args: L1ProviderArgs::default(),
+        engine_api_url: None,
+        sequencer_args: SequencerArgs {
+            sequencer_enabled: true,
+            block_time: 0,
+            ..SequencerArgs::default()
+        },
+        beacon_provider_args: BeaconProviderArgs::default(),
+        l2_provider_args: L2ProviderArgs::default(),
+    };
+    let NodeHandle { node, node_exit_future: _ } = NodeBuilder::new(node_config.clone())
+        .testing_node(exec.clone())
+        .node(ScrollRollupNode::new(node_args))
+        .launch()
+        .await?;
+    let node = NodeTestContext::new(node, |_| {
+        panic!("should not invoke the payload attributes builder for the rollup node")
+    })
+    .await?;
+
+    let rnm_handle: RollupManagerHandle = node.inner.add_ons_handle.rollup_manager_handle.clone();
+    let mut rnm_events = rnm_handle.get_event_listener().await?;
+    let l1_watcher_tx = node.inner.add_ons_handle.l1_watcher_tx.clone().unwrap();
+
+    l1_watcher_tx
+        .send(Arc::new(L1Notification::L1Message {
+            message: TxL1Message {
+                queue_index: 0,
+                gas_limit: 21000,
+                sender: Address::random(),
+                to: Address::random(),
+                value: U256::from(1),
+                input: Default::default(),
+            },
+            block_number: 10,
+            block_timestamp: 1000,
+        }))
+        .await?;
+    rnm_handle.build_block().await;
+
+    let block_event = rnm_events.next().await.unwrap();
+    println!("Block event: {:?}", block_event);
+
+    Ok(())
+}
 
 /// We test the bridge from the eth-wire protocol to the scroll-wire protocol.
 ///
