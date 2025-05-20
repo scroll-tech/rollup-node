@@ -22,7 +22,7 @@ use rollup_node_providers::{
     SystemContractProvider,
 };
 use rollup_node_sequencer::Sequencer;
-use rollup_node_watcher::L1Watcher;
+use rollup_node_watcher::{L1Notification, L1Watcher};
 use scroll_alloy_hardforks::ScrollHardforks;
 use scroll_alloy_provider::ScrollAuthApiEngineClient;
 use scroll_db::{Database, DatabaseConnectionProvider};
@@ -31,6 +31,7 @@ use scroll_migration::MigratorTrait;
 use scroll_network::ScrollNetworkManager;
 use scroll_wire::{ScrollWireConfig, ScrollWireProtocolHandler};
 use std::{sync::Arc, time::Duration};
+use tokio::sync::mpsc::Sender;
 
 // Replace `Scroll` with the actual network type you use if it's generic
 
@@ -51,7 +52,7 @@ impl RollupManagerAddOn {
         self,
         ctx: AddOnsContext<'_, N>,
         rpc: RpcHandle<N, EthApi>,
-    ) -> eyre::Result<RollupManagerHandle>
+    ) -> eyre::Result<(RollupManagerHandle, Option<Sender<Arc<L1Notification>>>)>
     where
         <<N as FullNodeTypes>::Types as NodeTypes>::ChainSpec: ScrollHardforks,
         N::Network: NetworkProtocols + FullNetwork<Primitives = ScrollNetworkPrimitives>,
@@ -134,12 +135,24 @@ impl RollupManagerAddOn {
             Box::new(poa)
         };
 
-        let l1_notification_rx = if let Some(provider) = provider {
-            // Spawn the L1Watcher
-            Some(L1Watcher::spawn(provider, node_config).await)
-        } else {
-            None
-        };
+        let (l1_notification_tx, l1_notification_rx) =
+            if let Some(provider) = provider.filter(|_| !self.config.test) {
+                // Spawn the L1Watcher
+                (None, Some(L1Watcher::spawn(provider, node_config).await))
+            } else {
+                // Create a channel for L1 notifications that we can use to inject L1 messages for
+                // testing
+                #[cfg(feature = "test-utils")]
+                {
+                    let (tx, rx) = tokio::sync::mpsc::channel(1000);
+                    (Some(tx), Some(rx))
+                }
+
+                #[cfg(not(feature = "test-utils"))]
+                {
+                    (None, None)
+                }
+            };
 
         // Construct the l1 provider.
         let l1_messages_provider = DatabaseL1MessageProvider::new(db.clone(), 0);
@@ -192,6 +205,6 @@ impl RollupManagerAddOn {
             None,
             block_time,
         );
-        Ok(rnm)
+        Ok((rnm, l1_notification_tx))
     }
 }
