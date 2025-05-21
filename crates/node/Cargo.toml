@@ -42,23 +42,23 @@ reth-evm = { git = "https://github.com/scroll-tech/reth.git" }
 reth-e2e-test-utils = { workspace = true, optional = true }
 reth-engine-local = { git = "https://github.com/scroll-tech/reth.git", default-features = false, optional = true }
 reth-node-builder = { workspace = true, features = ["skip-state-root-validation"] }
-reth-node-api = { git = "https://github.com/scroll-tech/reth.git" }
+reth-node-api = { git = "https://github.com/scroll-tech/reth.git", default-features = false }
 reth-node-core = { workspace = true, optional = true }
-reth-node-types = { git = "https://github.com/scroll-tech/reth.git" }
+reth-node-types = { git = "https://github.com/scroll-tech/reth.git", default-features = false }
 reth-network.workspace = true
 reth-network-api.workspace = true
 reth-network-peers.workspace = true
-reth-provider = { workspace = true, optional = true}
-reth-revm = { git = "https://github.com/scroll-tech/reth.git" }
-reth-rpc-builder = { git = "https://github.com/scroll-tech/reth.git" }
-reth-rpc-eth-api = { git = "https://github.com/scroll-tech/reth.git" }
-reth-rpc-eth-types = { git = "https://github.com/scroll-tech/reth.git" }
-reth-rpc-layer = { git = "https://github.com/scroll-tech/reth.git" }
+reth-provider = { workspace = true, optional = true }
+reth-revm = { git = "https://github.com/scroll-tech/reth.git", default-features = false }
+reth-rpc-builder = { git = "https://github.com/scroll-tech/reth.git", default-features = false }
+reth-rpc-eth-api = { git = "https://github.com/scroll-tech/reth.git", default-features = false }
+reth-rpc-eth-types = { git = "https://github.com/scroll-tech/reth.git", default-features = false }
+reth-rpc-layer = { git = "https://github.com/scroll-tech/reth.git", default-features = false }
 reth-rpc-server-types = { workspace = true }
 reth-tasks = { workspace = true, optional = true }
 reth-tokio-util.workspace = true
-reth-transaction-pool = { git = "https://github.com/scroll-tech/reth.git" }
-reth-trie-db = { git = "https://github.com/scroll-tech/reth.git" }
+reth-transaction-pool = { git = "https://github.com/scroll-tech/reth.git", default-features = false }
+reth-trie-db = { git = "https://github.com/scroll-tech/reth.git", default-features = false }
 
 # rollup node
 rollup-node-manager.workspace = true
@@ -126,4 +126,6 @@ test-utils = [
     "rollup-node-watcher/test-utils",
     "scroll-db/test-utils",
     "scroll-engine/test-utils",
+    "rollup-node/test-utils",
+    "rollup-node/test-utils",
 ]

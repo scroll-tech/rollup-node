@@ -15,17 +15,10 @@ use reth_node_builder::{
 use reth_node_core::args::{DiscoveryArgs, NetworkArgs, RpcServerArgs};
 use reth_provider::providers::BlockchainProvider;
 use reth_rpc_server_types::RpcModuleSelection;
-use reth_scroll_node::ScrollBuiltPayload;
 use reth_tasks::TaskManager;
 use std::sync::Arc;
 use tokio::sync::Mutex;
 use tracing::{span, Level};
-
-/// Scroll Node Helper type
-pub(crate) type ScrollRollupNodeTest = NodeHelperType<
-    ScrollRollupNode,
-    BlockchainProvider<NodeTypesWithDBAdapter<ScrollRollupNode, TmpDB>>,
->;
 
 /// Creates the initial setup with `num_nodes` started and interconnected.
 pub async fn setup_engine(

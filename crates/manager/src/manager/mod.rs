@@ -283,7 +283,6 @@ where
                 self.network.handle().block_import_outcome(outcome);
             }
             EngineDriverEvent::NewPayload(payload) => {
-                println!("New payload: {:?}", payload);
                 if let Some(signer) = self.signer.as_mut() {
                     let _ = signer.sign_block(payload.clone()).inspect_err(|err| tracing::error!(target: "scroll::node::manager", ?err, "Failed to send new payload to signer"));
                 }

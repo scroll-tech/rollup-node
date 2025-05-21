@@ -9,10 +9,10 @@ use std::{
 };
 
 use alloy_eips::eip2718::Encodable2718;
-use alloy_primitives::{Address, Uint};
+use alloy_primitives::Address;
 use alloy_rpc_types_engine::PayloadAttributes;
 use futures::{task::AtomicWaker, Stream};
-use rollup_node_primitives::L1MessageEnvelope;
+use rollup_node_primitives::{L1MessageEnvelope, DEFAULT_BLOCK_DIFFICULTY};
 use rollup_node_providers::L1MessageProvider;
 use scroll_alloy_rpc_types_engine::{BlockDataHint, ScrollPayloadAttributes};
 use std::task::{Context, Poll};
@@ -177,7 +177,7 @@ async fn build_payload_attributes<P: L1MessageProvider + Unpin + Send + Sync + '
         no_tx_pool: false,
         block_data_hint: Some(BlockDataHint {
             extra_data: Default::default(),
-            difficulty: Uint::from(1),
+            difficulty: DEFAULT_BLOCK_DIFFICULTY,
         }),
     })
 }

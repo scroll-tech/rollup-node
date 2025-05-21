@@ -135,7 +135,7 @@ async fn can_sequence_and_gossip_blocks() {
         l2_provider_args: L2ProviderArgs::default(),
     };
 
-    let (nodes, tasks, wallet) =
+    let (nodes, _tasks, wallet) =
         setup_engine(rollup_manager_args, 2, chain_spec, false).await.unwrap();
     let wallet = Arc::new(Mutex::new(wallet));
 

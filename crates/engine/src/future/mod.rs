@@ -8,6 +8,7 @@ use eyre::Result;
 use reth_scroll_primitives::ScrollBlock;
 use rollup_node_primitives::{
     BatchInfo, BlockInfo, L2BlockInfoWithL1Messages, ScrollPayloadAttributesWithBatchInfo,
+    DEFAULT_BLOCK_DIFFICULTY,
 };
 use rollup_node_providers::ExecutionPayloadProvider;
 use scroll_alloy_provider::ScrollEngineApi;
@@ -284,7 +285,6 @@ where
     EC: ScrollEngineApi + Unpin + Send + Sync + 'static,
 {
     tracing::trace!(target: "scroll::engine::future", ?payload_attributes, "building new payload");
-    println!("payload attributes: {payload_attributes:?}");
 
     // start a payload building job on top of the current unsafe head.
     let fc_updated = forkchoice_updated(client.clone(), fcs, Some(payload_attributes)).await?;
@@ -293,9 +293,17 @@ where
     tokio::time::sleep(block_building_duration).await;
 
     // retrieve the execution payload
-    Ok(get_payload(client.clone(), fc_updated.payload_id.expect("payload attributes has been set"))
-        .await?
-        .try_into_block()?)
+    let mut block = get_payload(
+        client.clone(),
+        fc_updated.payload_id.expect("payload attributes has been set"),
+    )
+    .await?
+    .try_into_block()?;
+
+    // set the block difficulty to the default value.
+    block.header.difficulty = DEFAULT_BLOCK_DIFFICULTY;
+
+    Ok(block)
 }
 
 /// Handles a new payload by updating the fork choice state and returning the new block.
