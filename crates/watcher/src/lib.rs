@@ -1,10 +1,5 @@
 //! L1 watcher for the Scroll Rollup Node.
 
-pub use constants::{
-    L1_MESSAGE_QUEUE_CONTRACT_ADDRESS, L1_WATCHER_LOG_FILTER, ROLLUP_CONTRACT_ADDRESS,
-};
-mod constants;
-
 pub use error::{EthRequestError, FilterLogError, L1WatcherError};
 mod error;
 
@@ -17,7 +12,8 @@ use std::{sync::Arc, time::Duration};
 use alloy_network::Ethereum;
 use alloy_primitives::{ruint::UintTryTo, BlockNumber, B256};
 use alloy_provider::{Network, Provider};
-use alloy_rpc_types_eth::{BlockNumberOrTag, Log, TransactionTrait};
+use alloy_rpc_types_eth::{BlockNumberOrTag, Filter, Log, TransactionTrait};
+use alloy_sol_types::SolEvent;
 use error::L1WatcherResult;
 use itertools::Itertools;
 use rollup_node_primitives::{BatchCommitData, BoundedVec, ConsensusUpdate, NodeConfig};
@@ -448,7 +444,7 @@ where
         if latest_block.header.number != self.l1_state.head {
             let signer = self
                 .execution_provider
-                .authorized_signer(self.config.system_contract_address)
+                .authorized_signer(self.config.address_book.system_contract_address)
                 .await?;
             self.notify(L1Notification::Consensus(ConsensusUpdate::AuthorizedSigner(signer))).await;
         }
@@ -550,6 +546,18 @@ where
         filter = filter
             .from_block(self.current_block_number)
             .to_block(self.current_block_number + LOGS_QUERY_BLOCK_RANGE);
+        let address_book = &self.config.address_book;
+        let mut filter = Filter::new()
+            .address(vec![
+                address_book.rollup_node_contract_address,
+                address_book.v1_message_queue_address,
+                address_book.v2_message_queue_address,
+            ])
+            .event_signature(vec![
+                QueueTransaction::SIGNATURE_HASH,
+                CommitBatch::SIGNATURE_HASH,
+                FinalizeBatch::SIGNATURE_HASH,
+            ]);
 
         Ok(self.execution_provider.get_logs(&filter).await?)
     }

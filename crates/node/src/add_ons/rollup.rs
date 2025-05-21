@@ -128,8 +128,9 @@ impl RollupManagerAddOn {
         } else {
             let mut poa = PoAConsensus::new([]);
             if let Some(ref provider) = provider {
-                let signer =
-                    provider.authorized_signer(node_config.system_contract_address).await?;
+                let signer = provider
+                    .authorized_signer(node_config.address_book.system_contract_address)
+                    .await?;
                 poa.update_config(&ConsensusUpdate::AuthorizedSigner(signer));
             }
             Box::new(poa)
