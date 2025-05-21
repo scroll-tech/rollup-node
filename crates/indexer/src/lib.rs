@@ -377,7 +377,7 @@ mod test {
         indexer.handle_l1_notification(L1Notification::L1Message {
             message: TxL1Message { queue_index: 1062109, ..Default::default() },
             block_number: 1475588,
-            block_timestamp: 172526400,
+            block_timestamp: 1745305199,
         });
         let _ = indexer.next().await.unwrap().unwrap();
 
@@ -393,7 +393,7 @@ mod test {
         indexer.handle_l1_notification(L1Notification::L1Message {
             message: message.clone(),
             block_number: 14755883,
-            block_timestamp: 1725264000,
+            block_timestamp: 1745305200,
         });
 
         let _ = indexer.next().await.unwrap().unwrap();
