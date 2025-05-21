@@ -5,6 +5,7 @@ use crate::{
 use alloy_primitives::Sealable;
 use alloy_provider::ProviderBuilder;
 use alloy_rpc_client::RpcClient;
+use alloy_signer_local::PrivateKeySigner;
 use alloy_transport::layers::RetryBackoffLayer;
 use reth_chainspec::EthChainSpec;
 use reth_network::{protocol::IntoRlpxSubProtocol, NetworkProtocols};
@@ -22,6 +23,7 @@ use rollup_node_providers::{
     SystemContractProvider,
 };
 use rollup_node_sequencer::Sequencer;
+use rollup_node_signer::Signer;
 use rollup_node_watcher::{L1Notification, L1Watcher};
 use scroll_alloy_hardforks::ScrollHardforks;
 use scroll_alloy_provider::ScrollAuthApiEngineClient;
@@ -191,6 +193,9 @@ impl RollupManagerAddOn {
             .enable_eth_scroll_wire_bridge
             .then_some(ctx.node.network().eth_wire_block_listener().await?);
 
+        // Instantiate the signer
+        let signer = self.config.test.then_some(Signer::spawn(PrivateKeySigner::random()).await);
+
         // Spawn the rollup node manager
         let rnm = RollupNodeManager::new(
             scroll_network_manager,
@@ -202,7 +207,7 @@ impl RollupManagerAddOn {
             ctx.config.chain.clone(),
             eth_wire_listener,
             sequencer,
-            None,
+            signer,
             block_time,
         );
         Ok((rnm, l1_notification_tx))

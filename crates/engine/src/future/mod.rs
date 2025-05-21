@@ -284,6 +284,7 @@ where
     EC: ScrollEngineApi + Unpin + Send + Sync + 'static,
 {
     tracing::trace!(target: "scroll::engine::future", ?payload_attributes, "building new payload");
+    println!("payload attributes: {payload_attributes:?}");
 
     // start a payload building job on top of the current unsafe head.
     let fc_updated = forkchoice_updated(client.clone(), fcs, Some(payload_attributes)).await?;

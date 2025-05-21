@@ -204,10 +204,10 @@ impl<ChainSpec: ScrollHardforks + EthChainSpec + Send + Sync + 'static> Indexer<
     ) -> Result<IndexerEvent, IndexerError> {
         let event = IndexerEvent::L1MessageIndexed(l1_message.queue_index);
 
-        // TODO(greg): update to Euclid.
         let queue_hash = if chain_spec
-            .scroll_fork_activation(ScrollHardfork::DarwinV2)
-            .active_at_timestamp_or_number(block_timestamp, l1_block_number)
+            .scroll_fork_activation(ScrollHardfork::EuclidV2)
+            .active_at_timestamp_or_number(block_timestamp, l1_block_number) &&
+            l1_message.queue_index > 0
         {
             let index = l1_message.queue_index - 1;
             let prev_queue_hash = database

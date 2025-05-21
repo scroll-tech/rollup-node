@@ -260,6 +260,11 @@ where
                     sequencer.handle_reorg(queue_index, l1_block_number);
                 }
             }
+            IndexerEvent::L1MessageIndexed(index) => {
+                if let Some(event_sender) = self.event_sender.as_ref() {
+                    event_sender.notify(RollupManagerEvent::L1MessageIndexed(index));
+                }
+            }
             _ => (),
         }
     }
@@ -270,14 +275,23 @@ where
         match event {
             EngineDriverEvent::BlockImportOutcome(outcome) => {
                 if let Some(block) = outcome.block() {
+                    if let Some(event_sender) = self.event_sender.as_ref() {
+                        event_sender.notify(RollupManagerEvent::BlockImported(block.clone()));
+                    }
                     self.indexer.handle_block(block.into(), None);
                 }
                 self.network.handle().block_import_outcome(outcome);
             }
             EngineDriverEvent::NewPayload(payload) => {
+                println!("New payload: {:?}", payload);
                 if let Some(signer) = self.signer.as_mut() {
                     let _ = signer.sign_block(payload.clone()).inspect_err(|err| tracing::error!(target: "scroll::node::manager", ?err, "Failed to send new payload to signer"));
                 }
+
+                if let Some(event_sender) = self.event_sender.as_ref() {
+                    event_sender.notify(RollupManagerEvent::BlockSequenced(payload.clone()));
+                }
+
                 self.indexer.handle_block(payload.into(), None);
             }
             EngineDriverEvent::L1BlockConsolidated((block_info, batch_info)) => {
