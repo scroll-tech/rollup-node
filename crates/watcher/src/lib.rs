@@ -534,9 +534,9 @@ where
             .expect("finalized block should always exist"))
     }
 
-    /// Returns the next range of logs, filtering using [`L1_WATCHER_LOG_FILTER`],
-    /// for the block range in \[[`current_block`](field@L1Watcher::current_block_number);
-    /// [`current_block`](field@L1Watcher::current_block_number) + [`LOGS_QUERY_BLOCK_RANGE`]\]
+    /// Returns the next range of logs, for the block range in
+    /// \[[`current_block`](field@L1Watcher::current_block_number);
+    /// [`current_block`](field@L1Watcher::current_block_number) + [`LOGS_QUERY_BLOCK_RANGE`]\].
     async fn next_filtered_logs(&self, latest_block_number: u64) -> L1WatcherResult<Vec<Log>> {
         // set the block range for the query
         let address_book = &self.config.address_book;
