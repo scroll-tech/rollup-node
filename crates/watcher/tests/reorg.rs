@@ -87,7 +87,7 @@ async fn test_reorg_detection() -> eyre::Result<()> {
         }
 
         if latest_number == latest.header.number {
-            continue;
+            continue
         }
 
         // check latest for reorg or new block.
@@ -173,7 +173,7 @@ async fn test_gap() -> eyre::Result<()> {
         }
 
         if latest_number == latest.header.number {
-            continue;
+            continue
         }
 
         let notification = l1_watcher.recv().await.unwrap();

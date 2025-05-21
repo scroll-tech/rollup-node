@@ -183,7 +183,7 @@ where
         self.handle_latest_block(&finalized.header, &latest.header).await?;
 
         // index the next range of blocks.
-        let logs = self.next_filtered_logs().await?;
+        let logs = self.next_filtered_logs(latest.header.number).await?;
 
         // handle all events.
         self.handle_l1_messages(&logs).await?;
@@ -510,13 +510,10 @@ where
 
     /// Updates the current block number, saturating at the head of the chain.
     fn update_current_block(&mut self, latest: &Block) {
-        let latest_block_number = latest.header.number;
-        let current_block_number = self.current_block_number + LOGS_QUERY_BLOCK_RANGE;
-        self.current_block_number = if current_block_number > latest_block_number {
-            latest_block_number
-        } else {
-            current_block_number
-        };
+        self.current_block_number = self
+            .current_block_number
+            .saturating_add(LOGS_QUERY_BLOCK_RANGE)
+            .min(latest.header.number);
     }
 
     /// Returns the latest L1 block.
@@ -540,12 +537,8 @@ where
     /// Returns the next range of logs, filtering using [`L1_WATCHER_LOG_FILTER`],
     /// for the block range in \[[`current_block`](field@L1Watcher::current_block_number);
     /// [`current_block`](field@L1Watcher::current_block_number) + [`LOGS_QUERY_BLOCK_RANGE`]\]
-    async fn next_filtered_logs(&self) -> L1WatcherResult<Vec<Log>> {
+    async fn next_filtered_logs(&self, latest_block_number: u64) -> L1WatcherResult<Vec<Log>> {
         // set the block range for the query
-        let mut filter = L1_WATCHER_LOG_FILTER.clone();
-        filter = filter
-            .from_block(self.current_block_number)
-            .to_block(self.current_block_number + LOGS_QUERY_BLOCK_RANGE);
         let address_book = &self.config.address_book;
         let mut filter = Filter::new()
             .address(vec![
@@ -558,6 +551,11 @@ where
                 CommitBatch::SIGNATURE_HASH,
                 FinalizeBatch::SIGNATURE_HASH,
             ]);
+        let to_block = self
+            .current_block_number
+            .saturating_add(LOGS_QUERY_BLOCK_RANGE)
+            .min(latest_block_number);
+        filter = filter.from_block(self.current_block_number).to_block(to_block);
 
         Ok(self.execution_provider.get_logs(&filter).await?)
     }
