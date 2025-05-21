@@ -1,3 +1,5 @@
+//! The [`ScrollRollupNodeAddOns`] implementation for the Scroll rollup node.
+
 use super::args::ScrollRollupNodeConfig;
 use reth_evm::{ConfigureEvm, EvmFactory, EvmFactoryFor};
 use reth_network::NetworkProtocols;
@@ -22,6 +24,9 @@ use reth_scroll_node::{
 use reth_scroll_primitives::ScrollPrimitives;
 use reth_scroll_rpc::{eth::ScrollEthApiBuilder, ScrollEthApi, ScrollEthApiError};
 use scroll_alloy_evm::ScrollTransactionIntoTxEnv;
+
+mod handle;
+pub use handle::ScrollAddOnsHandle;
 
 mod rollup;
 use rollup::RollupManagerAddOn;
@@ -72,7 +77,7 @@ where
     ScrollEthApiError: FromEvmError<N::Evm>,
     EvmFactoryFor<N::Evm>: EvmFactory<Tx = ScrollTransactionIntoTxEnv<TxEnv>>,
 {
-    type Handle = RpcHandle<N, ScrollEthApi<N>>;
+    type Handle = ScrollAddOnsHandle<N, ScrollEthApi<N>>;
 
     async fn launch_add_ons(
         self,
@@ -81,11 +86,14 @@ where
         let Self { rpc_add_ons, rollup_manager_addon: rollup_node_manager_addon } = self;
         let rpc_handle: RpcHandle<N, ScrollEthApi<N>> =
             rpc_add_ons.launch_add_ons_with(ctx.clone(), |_, _, _| Ok(())).await?;
-        // TODO: modify handle type to have a handle for both rpc and rollup node manager.
-        let rollup_node_manager =
+        let (rollup_manager_handle, l1_watcher_tx) =
             rollup_node_manager_addon.launch(ctx.clone(), rpc_handle.clone()).await?;
-        ctx.node.task_executor().spawn_critical("rollup_node_manager", rollup_node_manager);
-        Ok(rpc_handle)
+        Ok(ScrollAddOnsHandle {
+            rollup_manager_handle,
+            rpc_handle,
+            #[cfg(feature = "test-utils")]
+            l1_watcher_tx,
+        })
     }
 }
 

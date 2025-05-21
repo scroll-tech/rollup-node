@@ -20,6 +20,7 @@ alloy-provider.workspace = true
 alloy-rpc-client.workspace = true
 alloy-transport.workspace = true
 
+scroll-alloy-consensus.workspace = true
 scroll-alloy-evm = { git = "https://github.com/scroll-tech/reth.git" }
 scroll-alloy-hardforks.workspace = true
 scroll-alloy-network.workspace = true
@@ -44,9 +45,13 @@ reth-network.workspace = true
 reth-network-api.workspace = true
 reth-network-peers.workspace = true
 reth-revm = { git = "https://github.com/scroll-tech/reth.git" }
+reth-rpc-builder = { git = "https://github.com/scroll-tech/reth.git" }
 reth-rpc-eth-api = { git = "https://github.com/scroll-tech/reth.git" }
 reth-rpc-eth-types = { git = "https://github.com/scroll-tech/reth.git" }
 reth-rpc-layer = { git = "https://github.com/scroll-tech/reth.git" }
+reth-tokio-util.workspace = true
+reth-transaction-pool = { git = "https://github.com/scroll-tech/reth.git" }
+reth-trie-db = { git = "https://github.com/scroll-tech/reth.git" }
 
 # rollup node
 rollup-node-manager.workspace = true
@@ -67,13 +72,45 @@ jsonrpsee-http-client = "0.24.9"
 reqwest.workspace = true
 tokio.workspace = true
 tracing.workspace = true
+url = "2.5.4"
 
 [dev-dependencies]
 futures.workspace = true
 reth-e2e-test-utils.workspace = true
 reth-node-core.workspace = true
+reth-provider.workspace = true
 reth-rpc-server-types.workspace = true
 reth-tasks.workspace = true
 reth-tracing.workspace = true
 scroll-alloy-rpc-types-engine.workspace = true
 serde_json = { version = "1.0.94", default-features = false, features = ["alloc"] }
+
+[features]
+test-utils = [
+    "reth-chainspec/test-utils",
+    "reth-evm/test-utils",
+    "reth-network/test-utils",
+    "reth-node-builder/test-utils",
+    "reth-provider/test-utils",
+    "reth-revm/test-utils",
+    "reth-scroll-node/test-utils",
+    "reth-transaction-pool/test-utils",
+    "reth-trie-db/test-utils",
+    "rollup-node-providers/test-utils",
+    "rollup-node-watcher/test-utils",
+    "scroll-db/test-utils",
+    "scroll-engine/test-utils",
+    "reth-chainspec/test-utils",
+    "reth-evm/test-utils",
+    "reth-network/test-utils",
+    "reth-node-builder/test-utils",
+    "reth-provider/test-utils",
+    "reth-revm/test-utils",
+    "reth-scroll-node/test-utils",
+    "reth-transaction-pool/test-utils",
+    "reth-trie-db/test-utils",
+    "rollup-node-providers/test-utils",
+    "rollup-node-watcher/test-utils",
+    "scroll-db/test-utils",
+    "scroll-engine/test-utils",
+]
