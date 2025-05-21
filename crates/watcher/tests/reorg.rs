@@ -60,7 +60,7 @@ async fn test_reorg_detection() -> eyre::Result<()> {
 
     let config = NodeConfig {
         start_l1_block: latest_blocks.first().unwrap().header.number,
-        system_contract_address: Default::default(),
+        address_book: Default::default(),
     };
     let mock_provider = MockProvider::new(
         blocks.clone().into_iter(),
@@ -146,7 +146,7 @@ async fn test_gap() -> eyre::Result<()> {
 
     let config = NodeConfig {
         start_l1_block: latest_blocks.first().unwrap().header.number,
-        system_contract_address: Default::default(),
+        address_book: Default::default(),
     };
     let mock_provider = MockProvider::new(
         blocks.clone().into_iter(),
