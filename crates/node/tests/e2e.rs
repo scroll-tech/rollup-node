@@ -31,19 +31,9 @@ use tracing::trace;
 #[tokio::test]
 async fn can_bridge_l1_messages() -> eyre::Result<()> {
     reth_tracing::init_test_tracing();
-    let tasks = TaskManager::current();
-    let exec = tasks.executor();
 
     // Create the chain spec for scroll mainnet with Darwin v2 activated and a test genesis.
     let chain_spec = (*SCROLL_DEV).clone();
-    let network_config = NetworkArgs {
-        discovery: DiscoveryArgs { disable_discovery: true, ..DiscoveryArgs::default() },
-        ..NetworkArgs::default()
-    };
-    let node_config = NodeConfig::new(chain_spec.clone())
-        .with_network(network_config.clone())
-        .with_unused_ports()
-        .with_rpc(RpcServerArgs::default().with_unused_ports().with_http());
     let node_args = ScrollRollupNodeConfig {
         test: true,
         network_args: ScrollNetworkArgs {
@@ -63,15 +53,8 @@ async fn can_bridge_l1_messages() -> eyre::Result<()> {
         beacon_provider_args: BeaconProviderArgs::default(),
         l2_provider_args: L2ProviderArgs::default(),
     };
-    let NodeHandle { node, node_exit_future: _ } = NodeBuilder::new(node_config.clone())
-        .testing_node(exec.clone())
-        .node(ScrollRollupNode::new(node_args))
-        .launch()
-        .await?;
-    let node = NodeTestContext::new(node, |_| {
-        panic!("should not invoke the payload attributes builder for the rollup node")
-    })
-    .await?;
+    let (mut nodes, _tasks, _wallet) = setup_engine(node_args, 1, chain_spec, false).await.unwrap();
+    let node = nodes.pop().unwrap();
 
     let rnm_handle: RollupManagerHandle = node.inner.add_ons_handle.rollup_manager_handle.clone();
     let mut rnm_events = rnm_handle.get_event_listener().await?;
