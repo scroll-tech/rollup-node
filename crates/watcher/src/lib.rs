@@ -1,12 +1,12 @@
 //! L1 watcher for the Scroll Rollup Node.
 
+mod constants;
 pub use constants::{
     L1_MESSAGE_QUEUE_CONTRACT_ADDRESS, L1_WATCHER_LOG_FILTER, ROLLUP_CONTRACT_ADDRESS,
 };
-mod constants;
 
-pub use error::{EthRequestError, FilterLogError, L1WatcherError};
 mod error;
+pub use error::{EthRequestError, FilterLogError, L1WatcherError};
 
 #[cfg(any(test, feature = "test-utils"))]
 /// Common test helpers
@@ -118,6 +118,7 @@ where
     /// returning [`L1Notification`] in the returned channel.
     pub async fn spawn(
         execution_provider: EP,
+        start_block: Option<u64>,
         config: Arc<NodeConfig>,
     ) -> mpsc::Receiver<Arc<L1Notification>> {
         let (tx, rx) = mpsc::channel(LOGS_QUERY_BLOCK_RANGE as usize);
@@ -145,7 +146,7 @@ where
         let watcher = Self {
             execution_provider,
             unfinalized_blocks: BoundedVec::new(HEADER_CAPACITY),
-            current_block_number: config.start_l1_block - 1,
+            current_block_number: start_block.unwrap_or(config.start_l1_block) - 1,
             l1_state,
             sender: tx,
             config,
