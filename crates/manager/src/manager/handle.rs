@@ -1,5 +1,6 @@
-use super::RollupManagerCommand;
-use tokio::sync::mpsc;
+use super::{RollupManagerCommand, RollupManagerEvent};
+use reth_tokio_util::EventStream;
+use tokio::sync::{mpsc, oneshot};
 
 /// The handle used to send commands to the rollup manager.
 #[derive(Debug, Clone)]
@@ -22,5 +23,15 @@ impl RollupManagerHandle {
     /// Sends a command to the rollup manager to build a block.
     pub async fn build_block(&self) {
         self.send_command(RollupManagerCommand::BuildBlock).await;
+    }
+
+    /// Sends a command to the rollup manager to fetch an event listener for the rollup node
+    /// manager.
+    pub async fn get_event_listener(
+        &self,
+    ) -> Result<EventStream<RollupManagerEvent>, oneshot::error::RecvError> {
+        let (tx, rx) = oneshot::channel();
+        self.send_command(RollupManagerCommand::EventListener(tx)).await;
+        rx.await
     }
 }

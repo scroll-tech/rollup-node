@@ -6,6 +6,7 @@ use crate::{
 use futures::{ready, task::AtomicWaker, FutureExt, Stream};
 use rollup_node_primitives::{BlockInfo, ScrollPayloadAttributesWithBatchInfo};
 use rollup_node_providers::ExecutionPayloadProvider;
+use scroll_alloy_hardforks::ScrollHardforks;
 use scroll_alloy_provider::ScrollEngineApi;
 use scroll_alloy_rpc_types_engine::ScrollPayloadAttributes;
 use scroll_network::NewBlockWithPeer;
@@ -19,9 +20,11 @@ use tokio::time::Duration;
 
 /// The main interface to the Engine API of the EN.
 /// Internally maintains the fork state of the chain.
-pub struct EngineDriver<EC, P = ()> {
+pub struct EngineDriver<EC, CS, P = ()> {
     /// The engine API client.
     client: Arc<EC>,
+    /// The chain spec.
+    chain_spec: Arc<CS>,
     /// The execution payload provider
     execution_payload_provider: Option<P>,
     /// The fork choice state of the engine.
@@ -44,15 +47,17 @@ pub struct EngineDriver<EC, P = ()> {
     waker: AtomicWaker,
 }
 
-impl<EC, P> EngineDriver<EC, P>
+impl<EC, CS, P> EngineDriver<EC, CS, P>
 where
     EC: ScrollEngineApi + Unpin + Send + Sync + 'static,
+    CS: ScrollHardforks + Unpin + Send + Sync + 'static,
     P: ExecutionPayloadProvider + Unpin + Send + Sync + 'static,
 {
     /// Create a new [`EngineDriver`] from the provided [`ScrollEngineApi`] and
     /// [`ExecutionPayloadProvider`].
     pub const fn new(
         client: Arc<EC>,
+        chain_spec: Arc<CS>,
         execution_payload_provider: Option<P>,
         fcs: ForkchoiceState,
         optimistic_sync: bool,
@@ -60,6 +65,7 @@ where
     ) -> Self {
         Self {
             client,
+            chain_spec,
             execution_payload_provider,
             fcs,
             block_building_duration,
@@ -198,9 +204,10 @@ where
     }
 }
 
-impl<EC, P> Stream for EngineDriver<EC, P>
+impl<EC, CS, P> Stream for EngineDriver<EC, CS, P>
 where
     EC: ScrollEngineApi + Unpin + Send + Sync + 'static,
+    CS: ScrollHardforks + Unpin + Send + Sync + 'static,
     P: ExecutionPayloadProvider + Clone + Unpin + Send + Sync + 'static,
 {
     type Item = EngineDriverEvent;
@@ -249,10 +256,12 @@ where
         if let Some(payload_attributes) = this.sequencer_payload_attributes.take() {
             let fcs = this.fcs.get_alloy_fcs();
             let client = this.client.clone();
+            let chain_spec = this.chain_spec.clone();
             let duration = this.block_building_duration;
 
             this.payload_building_future = Some(Box::pin(super::future::build_new_payload(
                 client,
+                chain_spec,
                 fcs,
                 duration,
                 payload_attributes,
@@ -305,7 +314,7 @@ where
     }
 }
 
-impl<EC, P> std::fmt::Debug for EngineDriver<EC, P> {
+impl<EC, CS, P> std::fmt::Debug for EngineDriver<EC, CS, P> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("EngineDriver")
             .field("client", &"ScrollEngineApi")
@@ -321,6 +330,7 @@ mod tests {
     use crate::future::build_new_payload;
 
     use super::*;
+    use reth_scroll_chainspec::SCROLL_DEV;
     use scroll_engine::test_utils::PanicEngineClient;
 
     impl<EC, P> EngineDriver<EC, P> {
@@ -332,11 +342,12 @@ mod tests {
     #[tokio::test]
     async fn test_is_payload_building_in_progress() {
         let client = Arc::new(PanicEngineClient);
+        let chain_spec = (*SCROLL_DEV).clone();
         let fcs =
             ForkchoiceState::from_block_info(BlockInfo { number: 0, hash: Default::default() });
         let duration = Duration::from_secs(2);
 
-        let mut driver = EngineDriver::new(client, None::<()>, fcs, false, duration);
+        let mut driver = EngineDriver::new(client, chain_spec, None::<()>, fcs, false, duration);
 
         // Initially, it should be false
         assert!(!driver.is_payload_building_in_progress());
@@ -351,11 +362,13 @@ mod tests {
     #[tokio::test]
     async fn test_is_payload_building_in_progress_with_future() {
         let client = Arc::new(PanicEngineClient);
+        let chain_spec = (*SCROLL_DEV).clone();
         let fcs =
             ForkchoiceState::from_block_info(BlockInfo { number: 0, hash: Default::default() });
         let duration = Duration::from_secs(2);
 
-        let mut driver = EngineDriver::new(client.clone(), None::<()>, fcs, false, duration);
+        let mut driver =
+            EngineDriver::new(client.clone(), chain_spec.clone(), None::<()>, fcs, false, duration);
 
         // Initially, it should be false
         assert!(!driver.is_payload_building_in_progress());
@@ -363,6 +376,7 @@ mod tests {
         // Set a future to simulate an ongoing job
         driver.with_payload_future(Box::pin(build_new_payload(
             client,
+            chain_spec,
             Default::default(),
             Default::default(),
             Default::default(),
