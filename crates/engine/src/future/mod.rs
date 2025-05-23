@@ -70,7 +70,7 @@ pub(crate) enum EngineFuture {
 }
 
 impl EngineFuture {
-    /// Creates a new [`EngineDriverFuture::BlockImport`] future from the provided parameters.
+    /// Creates a new [`EngineFuture::BlockImport`] future from the provided parameters.
     pub(crate) fn block_import<EC>(
         client: Arc<EC>,
         block_with_peer: NewBlockWithPeer,
@@ -82,7 +82,7 @@ impl EngineFuture {
         Self::BlockImport(Box::pin(handle_execution_payload(client, block_with_peer, fcs)))
     }
 
-    /// Creates a new [`EngineDriverFuture::L1Consolidation`] future from the provided parameters.
+    /// Creates a new [`EngineFuture::L1Consolidation`] future from the provided parameters.
     pub(crate) fn l1_consolidation<EC, P>(
         client: Arc<EC>,
         execution_payload_provider: P,
@@ -103,7 +103,7 @@ impl EngineFuture {
         )))
     }
 
-    /// Creates a new [`EngineDriverFuture::NewPayload`] future from the provided parameters.
+    /// Creates a new [`EngineFuture::NewPayload`] future from the provided parameters.
     pub(crate) fn handle_new_payload_job<EC>(
         client: Arc<EC>,
         fcs: AlloyForkchoiceState,

@@ -66,8 +66,7 @@ where
     P: Provider<Scroll> + Clone + Unpin + Send + Sync + 'static,
     CS: ScrollHardforks + Send + Sync + 'static,
 {
-    /// Create a new [`EngineDriver`] from the provided [`ScrollEngineApi`] and
-    /// [`ExecutionPayloadProvider`].
+    /// Create a new [`EngineDriver`].
     pub const fn new(
         client: Arc<EC>,
         provider: Option<P>,
