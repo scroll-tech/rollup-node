@@ -199,10 +199,6 @@ where
         event_listener
     }
 
-    /// Shuts down the L1 watcher using the handle. Drains all channels that contain information
-    /// from the L1 watcher and saves a checkpoint.
-    pub fn handle_l1_watcher_shutdown(&mut self) {}
-
     /// Handles a new block received from the network.
     ///
     /// We will first validate the consensus of the block, then we will send the block to the engine
