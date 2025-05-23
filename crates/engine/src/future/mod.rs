@@ -2,15 +2,16 @@ use super::{payload::matching_payloads, EngineDriverError};
 use crate::api::*;
 use alloy_primitives::B256;
 use alloy_rpc_types_engine::{
-    ExecutionPayloadV1, ForkchoiceState as AlloyForkchoiceState, PayloadStatusEnum,
+    ExecutionData, ExecutionPayloadV1, ForkchoiceState as AlloyForkchoiceState, PayloadStatusEnum,
 };
 use eyre::Result;
+use reth_scroll_engine_primitives::try_into_block;
 use reth_scroll_primitives::ScrollBlock;
 use rollup_node_primitives::{
     BatchInfo, BlockInfo, L2BlockInfoWithL1Messages, ScrollPayloadAttributesWithBatchInfo,
-    DEFAULT_BLOCK_DIFFICULTY,
 };
 use rollup_node_providers::ExecutionPayloadProvider;
+use scroll_alloy_hardforks::ScrollHardforks;
 use scroll_alloy_provider::ScrollEngineApi;
 use scroll_alloy_rpc_types_engine::ScrollPayloadAttributes;
 use scroll_network::{BlockImportOutcome, NewBlockWithPeer};
@@ -275,14 +276,16 @@ where
 }
 
 /// Builds a new payload from the provided fork choice state and payload attributes.
-pub(crate) async fn build_new_payload<EC>(
+pub(crate) async fn build_new_payload<EC, CS>(
     client: Arc<EC>,
+    chain_spec: Arc<CS>,
     fcs: AlloyForkchoiceState,
     block_building_duration: Duration,
     payload_attributes: ScrollPayloadAttributes,
 ) -> Result<ScrollBlock, EngineDriverError>
 where
     EC: ScrollEngineApi + Unpin + Send + Sync + 'static,
+    CS: ScrollHardforks + Send + Sync + 'static,
 {
     tracing::trace!(target: "scroll::engine::future", ?payload_attributes, "building new payload");
 
@@ -293,15 +296,12 @@ where
     tokio::time::sleep(block_building_duration).await;
 
     // retrieve the execution payload
-    let mut block = get_payload(
+    let payload = get_payload(
         client.clone(),
         fc_updated.payload_id.expect("payload attributes has been set"),
     )
-    .await?
-    .try_into_block()?;
-
-    // set the block difficulty to the default value.
-    block.header.difficulty = DEFAULT_BLOCK_DIFFICULTY;
+    .await?;
+    let block = try_into_block(ExecutionData { payload, sidecar: Default::default() }, chain_spec)?;
 
     Ok(block)
 }

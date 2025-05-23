@@ -82,7 +82,7 @@ pub struct RollupNodeManager<
     /// The network manager that manages the scroll p2p network.
     network: ScrollNetworkManager<N>,
     /// The engine driver used to communicate with the engine.
-    engine: EngineDriver<EC, P>,
+    engine: EngineDriver<EC, CS, P>,
     /// The derivation pipeline, used to derive payload attributes from batches.
     derivation_pipeline: Option<DerivationPipeline<L1P>>,
     /// A receiver for [`L1Notification`]s from the [`rollup_node_watcher::L1Watcher`].
@@ -142,7 +142,7 @@ where
     #[allow(clippy::new_ret_no_self)]
     pub fn new(
         network: ScrollNetworkManager<N>,
-        engine: EngineDriver<EC, P>,
+        engine: EngineDriver<EC, CS, P>,
         l1_provider: Option<L1P>,
         database: Arc<Database>,
         l1_notification_rx: Option<Receiver<Arc<L1Notification>>>,

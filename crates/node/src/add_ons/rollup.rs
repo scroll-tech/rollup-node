@@ -101,6 +101,7 @@ impl RollupManagerAddOn {
         let fcs = ForkchoiceState::head_from_genesis(ctx.config.chain.genesis_header().hash_slow());
         let engine = EngineDriver::new(
             Arc::new(engine_api),
+            ctx.config.chain.clone(),
             payload_provider,
             fcs,
             true,
