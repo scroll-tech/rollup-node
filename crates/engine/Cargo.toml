@@ -73,4 +73,5 @@ serde = [
     "reth-network-api/serde",
     "scroll-network/serde",
     "scroll-engine/serde",
+    "scroll-alloy-hardforks/serde",
 ]
