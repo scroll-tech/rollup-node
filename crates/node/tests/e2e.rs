@@ -32,7 +32,7 @@ use tracing::trace;
 async fn can_bridge_l1_messages() -> eyre::Result<()> {
     reth_tracing::init_test_tracing();
 
-    // Create the chain spec for scroll mainnet with Darwin v2 activated and a test genesis.
+    // Create the chain spec for scroll mainnet with Euclid v2 activated and a test genesis.
     let chain_spec = (*SCROLL_DEV).clone();
     let node_args = ScrollRollupNodeConfig {
         test: true,
