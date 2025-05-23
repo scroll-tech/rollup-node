@@ -1,10 +1,5 @@
 //! L1 watcher for the Scroll Rollup Node.
 
-mod constants;
-pub use constants::{
-    L1_MESSAGE_QUEUE_CONTRACT_ADDRESS, L1_WATCHER_LOG_FILTER, ROLLUP_CONTRACT_ADDRESS,
-};
-
 mod error;
 pub use error::{EthRequestError, FilterLogError, L1WatcherError};
 
@@ -17,7 +12,8 @@ use std::{sync::Arc, time::Duration};
 use alloy_network::Ethereum;
 use alloy_primitives::{ruint::UintTryTo, BlockNumber, B256};
 use alloy_provider::{Network, Provider};
-use alloy_rpc_types_eth::{BlockNumberOrTag, Log, TransactionTrait};
+use alloy_rpc_types_eth::{BlockNumberOrTag, Filter, Log, TransactionTrait};
+use alloy_sol_types::SolEvent;
 use error::L1WatcherResult;
 use itertools::Itertools;
 use rollup_node_primitives::{BatchCommitData, BoundedVec, ConsensusUpdate, NodeConfig};
@@ -188,7 +184,7 @@ where
         self.handle_latest_block(&finalized.header, &latest.header).await?;
 
         // index the next range of blocks.
-        let logs = self.next_filtered_logs().await?;
+        let logs = self.next_filtered_logs(latest.header.number).await?;
 
         // handle all events.
         self.handle_l1_messages(&logs).await?;
@@ -449,7 +445,7 @@ where
         if latest_block.header.number != self.l1_state.head {
             let signer = self
                 .execution_provider
-                .authorized_signer(self.config.system_contract_address)
+                .authorized_signer(self.config.address_book.system_contract_address)
                 .await?;
             self.notify(L1Notification::Consensus(ConsensusUpdate::AuthorizedSigner(signer))).await;
         }
@@ -515,13 +511,10 @@ where
 
     /// Updates the current block number, saturating at the head of the chain.
     fn update_current_block(&mut self, latest: &Block) {
-        let latest_block_number = latest.header.number;
-        let current_block_number = self.current_block_number + LOGS_QUERY_BLOCK_RANGE;
-        self.current_block_number = if current_block_number > latest_block_number {
-            latest_block_number
-        } else {
-            current_block_number
-        };
+        self.current_block_number = self
+            .current_block_number
+            .saturating_add(LOGS_QUERY_BLOCK_RANGE)
+            .min(latest.header.number);
     }
 
     /// Returns the latest L1 block.
@@ -542,15 +535,28 @@ where
             .expect("finalized block should always exist"))
     }
 
-    /// Returns the next range of logs, filtering using [`L1_WATCHER_LOG_FILTER`],
-    /// for the block range in \[[`current_block`](field@L1Watcher::current_block_number);
-    /// [`current_block`](field@L1Watcher::current_block_number) + [`LOGS_QUERY_BLOCK_RANGE`]\]
-    async fn next_filtered_logs(&self) -> L1WatcherResult<Vec<Log>> {
+    /// Returns the next range of logs, for the block range in
+    /// \[[`current_block`](field@L1Watcher::current_block_number);
+    /// [`current_block`](field@L1Watcher::current_block_number) + [`LOGS_QUERY_BLOCK_RANGE`]\].
+    async fn next_filtered_logs(&self, latest_block_number: u64) -> L1WatcherResult<Vec<Log>> {
         // set the block range for the query
-        let mut filter = L1_WATCHER_LOG_FILTER.clone();
-        filter = filter
-            .from_block(self.current_block_number)
-            .to_block(self.current_block_number + LOGS_QUERY_BLOCK_RANGE);
+        let address_book = &self.config.address_book;
+        let mut filter = Filter::new()
+            .address(vec![
+                address_book.rollup_node_contract_address,
+                address_book.v1_message_queue_address,
+                address_book.v2_message_queue_address,
+            ])
+            .event_signature(vec![
+                QueueTransaction::SIGNATURE_HASH,
+                CommitBatch::SIGNATURE_HASH,
+                FinalizeBatch::SIGNATURE_HASH,
+            ]);
+        let to_block = self
+            .current_block_number
+            .saturating_add(LOGS_QUERY_BLOCK_RANGE)
+            .min(latest_block_number);
+        filter = filter.from_block(self.current_block_number).to_block(to_block);
 
         Ok(self.execution_provider.get_logs(&filter).await?)
     }
