@@ -346,7 +346,7 @@ where
     }
 
     /// Returns the current status of the [`RollupNodeManager`].
-    fn status(&self) -> RollupManagerStatus {
+    const fn status(&self) -> RollupManagerStatus {
         RollupManagerStatus { syncing: self.engine.is_syncing() }
     }
 }

@@ -25,6 +25,7 @@ static WALLET: LazyLock<Arc<Mutex<Wallet>>> = LazyLock::new(|| {
 });
 
 /// We test if the syncing of the RN is correctly triggered and released when the EN reaches sync.
+#[allow(clippy::large_stack_frames)]
 #[tokio::test]
 async fn can_sync_en() {
     reth_tracing::init_test_tracing();
@@ -128,8 +129,9 @@ async fn announce_latest_block(node: &NodeHelperType<ScrollRollupNode>) {
         .into_transactions()
         .map(|tx| {
             let signed = tx.inner.inner.into_inner();
-            let signature =
-                signed.signature().unwrap_or(Signature::try_from([0u8; 65].as_slice()).unwrap());
+            let signature = signed
+                .signature()
+                .unwrap_or_else(|| Signature::try_from([0u8; 65].as_slice()).unwrap());
             ScrollTransactionSigned::new(signed.into(), signature)
         })
         .collect();
