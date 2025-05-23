@@ -11,3 +11,4 @@ services:
       - "6060:6060"  # Metrics
     volumes:
       - ./l2reth:/l2reth
+
