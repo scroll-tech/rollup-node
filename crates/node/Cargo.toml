@@ -45,11 +45,8 @@ reth-network.workspace = true
 reth-network-api.workspace = true
 reth-network-peers.workspace = true
 reth-revm = { git = "https://github.com/scroll-tech/reth.git" }
-reth-rpc-builder = { git = "https://github.com/scroll-tech/reth.git" }
 reth-rpc-eth-api = { git = "https://github.com/scroll-tech/reth.git" }
 reth-rpc-eth-types = { git = "https://github.com/scroll-tech/reth.git" }
-reth-rpc-layer = { git = "https://github.com/scroll-tech/reth.git" }
-reth-tokio-util.workspace = true
 reth-transaction-pool = { git = "https://github.com/scroll-tech/reth.git" }
 reth-trie-db = { git = "https://github.com/scroll-tech/reth.git" }
 
@@ -60,6 +57,14 @@ rollup-node-providers.workspace = true
 rollup-node-sequencer.workspace = true
 rollup-node-watcher.workspace = true
 
+# test-utils
+alloy-rpc-types-engine = { workspace = true, optional = true }
+reth-e2e-test-utils = { workspace = true, optional = true }
+reth-node-core = { workspace = true, optional = true }
+reth-tasks = { workspace = true, optional = true }
+reth-rpc-server-types = { workspace = true, optional = true }
+scroll-alloy-rpc-types-engine = { workspace = true, optional = true }
+
 scroll-db.workspace = true
 scroll-engine.workspace = true
 scroll-migration.workspace = true
@@ -68,20 +73,22 @@ scroll-network.workspace = true
 
 clap = { version = "4", features = ["derive", "env"] }
 eyre.workspace = true
-jsonrpsee-http-client = "0.24.9"
 reqwest.workspace = true
 tokio.workspace = true
 tracing.workspace = true
-url = "2.5.4"
 
 [dev-dependencies]
+alloy-eips.workspace = true
+alloy-consensus.workspace = true
 futures.workspace = true
 reth-e2e-test-utils.workspace = true
 reth-node-core.workspace = true
 reth-provider.workspace = true
 reth-rpc-server-types.workspace = true
+reth-scroll-node = { workspace = true, features = ["test-utils"] }
 reth-tasks.workspace = true
 reth-tracing.workspace = true
+rollup-node = { workspace = true, features = ["test-utils"] }
 scroll-alloy-rpc-types-engine.workspace = true
 serde_json = { version = "1.0.94", default-features = false, features = ["alloc"] }
 
@@ -113,4 +120,11 @@ test-utils = [
     "rollup-node-watcher/test-utils",
     "scroll-db/test-utils",
     "scroll-engine/test-utils",
+    "rollup-node/test-utils",
+    "reth-e2e-test-utils",
+    "reth-node-core",
+    "reth-tasks",
+    "reth-rpc-server-types",
+    "scroll-alloy-rpc-types-engine",
+    "alloy-rpc-types-engine",
 ]

@@ -9,10 +9,6 @@ pub struct ScrollRollupNodeConfig {
     /// Whether the rollup node should be run in test mode.
     #[arg(long)]
     pub test: bool,
-    /// A bool that represents whether optimistic sync of the EN should be performed.
-    /// This is a temp solution and should be removed when implementing issue #23.
-    #[arg(long, default_value_t = false)]
-    pub optimistic_sync: bool,
     /// Database path
     #[arg(long)]
     pub database_path: Option<PathBuf>,

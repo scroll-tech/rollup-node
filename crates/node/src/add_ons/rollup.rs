@@ -86,7 +86,7 @@ impl RollupManagerAddOn {
         });
 
         // Get a payload provider
-        let payload_provider = (!self.config.test & ctx.config.rpc.http).then_some({
+        let l2_provider = ctx.config.rpc.http.then_some({
             rpc.rpc_server_handles
                 .rpc
                 .new_http_provider_for()
@@ -97,9 +97,9 @@ impl RollupManagerAddOn {
         let fcs = ForkchoiceState::head_from_genesis(ctx.config.chain.genesis_header().hash_slow());
         let engine = EngineDriver::new(
             Arc::new(engine_api),
-            payload_provider,
+            l2_provider.clone(),
+            ctx.config.chain.clone(),
             fcs,
-            true,
             Duration::from_millis(self.config.sequencer_args.payload_building_duration),
         );
 
@@ -136,7 +136,7 @@ impl RollupManagerAddOn {
         let (l1_notification_tx, l1_notification_rx) =
             if let Some(provider) = provider.filter(|_| !self.config.test) {
                 // Spawn the L1Watcher
-                (None, Some(L1Watcher::spawn(provider, node_config).await))
+                (None, Some(L1Watcher::spawn(provider, None, node_config).await))
             } else {
                 // Create a channel for L1 notifications that we can use to inject L1 messages for
                 // testing

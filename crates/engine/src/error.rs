@@ -1,4 +1,6 @@
+use alloy_json_rpc::RpcError;
 use alloy_rpc_types_engine::PayloadError;
+use alloy_transport::TransportErrorKind;
 
 /// The error type for the engine API.
 #[derive(Debug, thiserror::Error)]
@@ -18,4 +20,7 @@ pub enum EngineDriverError {
     /// The engine driver is syncing.
     #[error("Engine driver is syncing")]
     Syncing,
+    /// Provider error.
+    #[error(transparent)]
+    ProviderRpc(#[from] RpcError<TransportErrorKind>),
 }

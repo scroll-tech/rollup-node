@@ -84,7 +84,7 @@ pub struct RollupNodeManager<
     /// The network manager that manages the scroll p2p network.
     network: ScrollNetworkManager<N>,
     /// The engine driver used to communicate with the engine.
-    engine: EngineDriver<EC, P>,
+    engine: EngineDriver<EC, P, CS>,
     /// The derivation pipeline, used to derive payload attributes from batches.
     derivation_pipeline: Option<DerivationPipeline<L1P>>,
     /// A receiver for [`L1Notification`]s from the [`rollup_node_watcher::L1Watcher`].
@@ -105,6 +105,13 @@ pub struct RollupNodeManager<
     block_building_trigger: Option<Interval>,
 }
 
+/// The current status of the rollup manager.
+#[derive(Debug)]
+pub struct RollupManagerStatus {
+    /// Whether the rollup manager is syncing.
+    pub syncing: bool,
+}
+
 impl<
         N: FullNetwork<Primitives = ScrollNetworkPrimitives>,
         EC: Debug,
@@ -116,6 +123,7 @@ impl<
 {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         f.debug_struct("RollupNodeManager")
+            .field("chain_spec", &self.chain_spec)
             .field("network", &self.network)
             .field("engine", &self.engine)
             .field("derivation_pipeline", &self.derivation_pipeline)
@@ -144,7 +152,7 @@ where
     #[allow(clippy::new_ret_no_self)]
     pub fn new(
         network: ScrollNetworkManager<N>,
-        engine: EngineDriver<EC, P>,
+        engine: EngineDriver<EC, P, CS>,
         l1_provider: Option<L1P>,
         database: Arc<Database>,
         l1_notification_rx: Option<Receiver<Arc<L1Notification>>>,
@@ -340,6 +348,11 @@ where
         }
         self.indexer.handle_l1_notification(notification)
     }
+
+    /// Returns the current status of the [`RollupNodeManager`].
+    fn status(&self) -> RollupManagerStatus {
+        RollupManagerStatus { syncing: self.engine.is_syncing() }
+    }
 }
 
 impl<N, EC, P, L1P, L1MP, CS> Future for RollupNodeManager<N, EC, P, L1P, L1MP, CS>
@@ -355,40 +368,61 @@ where
 
     fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
         let this = self.get_mut();
+        // Helper macro, proceeds with the $task if $proceed is true.
+        macro_rules! proceed_if {
+            ($proceed: expr, $task: expr) => {
+                if $proceed {
+                    $task
+                }
+            };
+        }
+        let en_synced = !this.engine.is_syncing();
 
         // Poll the handle receiver for commands.
         while let Poll::Ready(Some(command)) = this.handle_rx.poll_recv(cx) {
             match command {
                 RollupManagerCommand::BuildBlock => {
-                    if let Some(sequencer) = this.sequencer.as_mut() {
-                        sequencer.build_payload_attributes();
-                    }
+                    proceed_if!(
+                        en_synced,
+                        if let Some(sequencer) = this.sequencer.as_mut() {
+                            sequencer.build_payload_attributes();
+                        }
+                    );
                 }
                 RollupManagerCommand::EventListener(tx) => {
                     let events = this.event_listener();
                     tx.send(events).expect("Failed to send event listener to handle");
                 }
+                RollupManagerCommand::Status(tx) => {
+                    tx.send(this.status()).expect("Failed to send status to handle");
+                }
             }
         }
 
-        // Handle new block production.
-        if let Some(Poll::Ready(Some(attributes))) =
-            this.sequencer.as_mut().map(|x| x.poll_next_unpin(cx))
-        {
-            this.engine.handle_build_new_payload(attributes);
-        }
+        proceed_if!(
+            en_synced,
+            // Handle new block production.
+            if let Some(Poll::Ready(Some(attributes))) =
+                this.sequencer.as_mut().map(|x| x.poll_next_unpin(cx))
+            {
+                this.engine.handle_build_new_payload(attributes);
+            }
+        );
 
         // Drain all EngineDriver events.
         while let Poll::Ready(Some(event)) = this.engine.poll_next_unpin(cx) {
             this.handle_engine_driver_event(event);
         }
 
-        // Drain all L1 notifications.
-        while let Some(Poll::Ready(Some(event))) =
-            this.l1_watcher_handle.as_mut().map(|rx| rx.poll_next_unpin(cx))
-        {
-            this.handle_l1_notification((*event).clone());
-        }
+        proceed_if!(
+            en_synced,
+            // Drain all L1 notifications.
+            while let Some(Poll::Ready(Some(event))) =
+                this.l1_notification_rx.as_mut().map(|rx| rx.poll_next_unpin(cx))
+            {
+                this.handle_l1_notification((*event).clone());
+            }
+        );
 
         // Drain all Indexer events.
         while let Poll::Ready(Some(result)) = this.indexer.poll_next_unpin(cx) {
@@ -412,23 +446,26 @@ where
             }
         }
 
-        // Check if we need to trigger the build of a new payload.
-        match (
-            this.block_building_trigger.as_mut().map(|x| x.poll_tick(cx)),
-            this.engine.is_payload_building_in_progress(),
-        ) {
-            (Some(Poll::Ready(_)), false) => {
-                if let Some(sequencer) = this.sequencer.as_mut() {
-                    sequencer.build_payload_attributes();
+        proceed_if!(
+            en_synced,
+            // Check if we need to trigger the build of a new payload.
+            match (
+                this.block_building_trigger.as_mut().map(|x| x.poll_tick(cx)),
+                this.engine.is_payload_building_in_progress(),
+            ) {
+                (Some(Poll::Ready(_)), false) => {
+                    if let Some(sequencer) = this.sequencer.as_mut() {
+                        sequencer.build_payload_attributes();
+                    }
                 }
+                (Some(Poll::Ready(_)), true) => {
+                    // If the sequencer is already building a payload, we don't need to trigger it
+                    // again.
+                    warn!(target: "scroll::node::manager", "Payload building is already in progress skipping slot");
+                }
+                _ => {}
             }
-            (Some(Poll::Ready(_)), true) => {
-                // If the sequencer is already building a payload, we don't need to trigger it
-                // again.
-                warn!(target: "scroll::node::manager", "Payload building is already in progress skipping slot");
-            }
-            _ => {}
-        }
+        );
 
         // Poll Derivation Pipeline and push attribute in queue if any.
         while let Some(Poll::Ready(Some(attributes))) =
@@ -448,8 +485,6 @@ where
         while let Poll::Ready(Some(event)) = this.network.poll_next_unpin(cx) {
             this.handle_network_manager_event(event);
         }
-
-        // Handle commands from the handle.
 
         Poll::Pending
     }
