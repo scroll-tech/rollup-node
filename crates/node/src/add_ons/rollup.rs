@@ -5,6 +5,7 @@ use crate::{
 use alloy_primitives::Sealable;
 use alloy_provider::ProviderBuilder;
 use alloy_rpc_client::RpcClient;
+use alloy_signer_local::PrivateKeySigner;
 use alloy_transport::layers::RetryBackoffLayer;
 use reth_chainspec::EthChainSpec;
 use reth_network::{protocol::IntoRlpxSubProtocol, NetworkProtocols};
@@ -21,6 +22,7 @@ use rollup_node_providers::{
     beacon_provider, DatabaseL1MessageProvider, OnlineL1Provider, SystemContractProvider,
 };
 use rollup_node_sequencer::Sequencer;
+use rollup_node_signer::Signer;
 use rollup_node_watcher::{L1Notification, L1Watcher};
 use scroll_alloy_hardforks::ScrollHardforks;
 use scroll_alloy_provider::ScrollAuthApiEngineClient;
@@ -86,7 +88,7 @@ impl RollupManagerAddOn {
         });
 
         // Get a payload provider
-        let l2_provider = ctx.config.rpc.http.then_some({
+        let payload_provider = ctx.config.rpc.http.then_some({
             rpc.rpc_server_handles
                 .rpc
                 .new_http_provider_for()
@@ -97,8 +99,8 @@ impl RollupManagerAddOn {
         let fcs = ForkchoiceState::head_from_genesis(ctx.config.chain.genesis_header().hash_slow());
         let engine = EngineDriver::new(
             Arc::new(engine_api),
-            l2_provider.clone(),
             ctx.config.chain.clone(),
+            payload_provider,
             fcs,
             Duration::from_millis(self.config.sequencer_args.payload_building_duration),
         );
@@ -190,6 +192,9 @@ impl RollupManagerAddOn {
             .enable_eth_scroll_wire_bridge
             .then_some(ctx.node.network().eth_wire_block_listener().await?);
 
+        // Instantiate the signer
+        let signer = self.config.test.then_some(Signer::spawn(PrivateKeySigner::random()).await);
+
         // Spawn the rollup node manager
         let rnm = RollupNodeManager::new(
             scroll_network_manager,
@@ -201,7 +206,7 @@ impl RollupManagerAddOn {
             ctx.config.chain.clone(),
             eth_wire_listener,
             sequencer,
-            None,
+            signer,
             block_time,
         );
         Ok((rnm, l1_notification_tx))

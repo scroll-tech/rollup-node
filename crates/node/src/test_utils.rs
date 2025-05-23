@@ -1,77 +1,124 @@
-//! Test utils to spawn test nodes.
+//! This crate contains utilities for running end-to-end tests for the scroll reth node.
 
-use crate::{
-    BeaconProviderArgs, L1ProviderArgs, L2ProviderArgs, ScrollRollupNode, ScrollRollupNodeConfig,
-    SequencerArgs,
+use super::{ScrollRollupNode, ScrollRollupNodeConfig};
+use alloy_primitives::Bytes;
+use reth_chainspec::EthChainSpec;
+use reth_e2e_test_utils::{
+    node::NodeTestContext, transaction::TransactionTestContext, wallet::Wallet, Adapter,
+    NodeHelperType, TmpDB, TmpNodeAddOnsHandle, TmpNodeEthApi,
 };
-
-use alloy_primitives::B256;
-use alloy_rpc_types_engine::PayloadAttributes;
-use reth_e2e_test_utils::{node::NodeTestContext, NodeHelperType};
-use reth_network_peers::PeerId;
-use reth_node_api::PayloadBuilderAttributes;
-use reth_node_builder::{NodeBuilder, NodeHandle};
-use reth_node_core::{
-    args::{DiscoveryArgs, NetworkArgs, RpcServerArgs},
-    node_config::NodeConfig,
+use reth_engine_local::LocalPayloadAttributesBuilder;
+use reth_node_builder::{
+    rpc::RpcHandleProvider, EngineNodeLauncher, Node, NodeBuilder, NodeConfig, NodeHandle,
+    NodeTypes, NodeTypesWithDBAdapter, PayloadAttributesBuilder, PayloadTypes,
 };
+use reth_node_core::args::{DiscoveryArgs, NetworkArgs, RpcServerArgs};
+use reth_provider::providers::BlockchainProvider;
 use reth_rpc_server_types::RpcModuleSelection;
-use reth_scroll_chainspec::ScrollChainSpec;
-use reth_scroll_engine_primitives::ScrollPayloadBuilderAttributes;
 use reth_tasks::TaskManager;
-use scroll_alloy_rpc_types_engine::ScrollPayloadAttributes;
-use std::{path::PathBuf, sync::Arc};
+use std::sync::Arc;
+use tokio::sync::Mutex;
+use tracing::{span, Level};
 
-/// Helper function to create a new bridge node that will bridge messages from the eth-wire
-pub async fn build_bridge_node(
-    chain_spec: Arc<ScrollChainSpec>,
-) -> eyre::Result<(NodeHelperType<ScrollRollupNode>, TaskManager, PeerId)> {
-    // Create a [`TaskManager`] to manage the tasks.
+/// Creates the initial setup with `num_nodes` started and interconnected.
+pub async fn setup_engine(
+    scroll_node_config: ScrollRollupNodeConfig,
+    num_nodes: usize,
+    chain_spec: Arc<<ScrollRollupNode as NodeTypes>::ChainSpec>,
+    is_dev: bool,
+) -> eyre::Result<(
+    Vec<
+        NodeHelperType<
+            ScrollRollupNode,
+            BlockchainProvider<NodeTypesWithDBAdapter<ScrollRollupNode, TmpDB>>,
+        >,
+    >,
+    TaskManager,
+    Wallet,
+)>
+where
+    // N: NodeBuilderHelper,
+    LocalPayloadAttributesBuilder<<ScrollRollupNode as NodeTypes>::ChainSpec>:
+        PayloadAttributesBuilder<
+            <<ScrollRollupNode as NodeTypes>::Payload as PayloadTypes>::PayloadAttributes,
+        >,
+    TmpNodeAddOnsHandle<ScrollRollupNode>:
+        RpcHandleProvider<Adapter<ScrollRollupNode>, TmpNodeEthApi<ScrollRollupNode>>,
+{
     let tasks = TaskManager::current();
     let exec = tasks.executor();
 
-    // Define the network configuration with discovery disabled.
     let network_config = NetworkArgs {
         discovery: DiscoveryArgs { disable_discovery: true, ..DiscoveryArgs::default() },
         ..NetworkArgs::default()
     };
 
-    // Create the node config
-    let node_config = NodeConfig::new(chain_spec.clone())
-        .with_network(network_config.clone())
-        .with_rpc(RpcServerArgs::default().with_http().with_http_api(RpcModuleSelection::All))
-        .with_unused_ports()
-        .set_dev(false);
+    // Create nodes and peer them
+    let mut nodes: Vec<NodeTestContext<_, _>> = Vec::with_capacity(num_nodes);
 
-    // Create the node for a bridge node that will bridge messages from the eth-wire protocol
-    // to the scroll-wire protocol.
-    let node_args = ScrollRollupNodeConfig {
-        test: true,
-        network_args: crate::args::NetworkArgs {
-            enable_eth_scroll_wire_bridge: true,
-            enable_scroll_wire: true,
-        },
-        database_path: Some(PathBuf::from("sqlite::memory:")),
-        l1_provider_args: L1ProviderArgs::default(),
-        engine_api_url: None,
-        sequencer_args: SequencerArgs { sequencer_enabled: false, ..SequencerArgs::default() },
-        beacon_provider_args: BeaconProviderArgs::default(),
-        l2_provider_args: L2ProviderArgs::default(),
-    };
-    let node = ScrollRollupNode::new(node_args);
-    let NodeHandle { node, node_exit_future: _ } =
-        NodeBuilder::new(node_config.clone()).testing_node(exec.clone()).launch_node(node).await?;
-    let peer_id = *node.network.peer_id();
-    let node = NodeTestContext::new(node, scroll_payload_attributes).await?;
+    for idx in 0..num_nodes {
+        let node_config = NodeConfig::new(chain_spec.clone())
+            .with_network(network_config.clone())
+            .with_unused_ports()
+            .with_rpc(
+                RpcServerArgs::default()
+                    .with_unused_ports()
+                    .with_http()
+                    .with_http_api(RpcModuleSelection::All),
+            )
+            .set_dev(is_dev);
 
-    Ok((node, tasks, peer_id))
+        let span = span!(Level::INFO, "node", idx);
+        let _enter = span.enter();
+        let node = ScrollRollupNode::new(scroll_node_config.clone());
+        let NodeHandle { node, node_exit_future: _ } = NodeBuilder::new(node_config.clone())
+            .testing_node(exec.clone())
+            .with_types_and_provider::<ScrollRollupNode, BlockchainProvider<_>>()
+            .with_components(node.components_builder())
+            .with_add_ons(node.add_ons())
+            .launch_with_fn(|builder| {
+                let launcher = EngineNodeLauncher::new(
+                    builder.task_executor().clone(),
+                    builder.config().datadir(),
+                    Default::default(),
+                );
+                builder.launch_with(launcher)
+            })
+            .await?;
+
+        let mut node =
+            NodeTestContext::new(node, |_| panic!("should not build payloads using this method"))
+                .await?;
+
+        let genesis = node.block_hash(0);
+        node.update_forkchoice(genesis, genesis).await?;
+
+        // Connect each node in a chain.
+        if let Some(previous_node) = nodes.last_mut() {
+            previous_node.connect(&mut node).await;
+        }
+
+        // Connect last node with the first if there are more than two
+        if idx + 1 == num_nodes && num_nodes > 2 {
+            if let Some(first_node) = nodes.first_mut() {
+                node.connect(first_node).await;
+            }
+        }
+
+        nodes.push(node);
+    }
+
+    Ok((nodes, tasks, Wallet::default().with_chain_id(chain_spec.chain().into())))
 }
 
-/// Helper function to create a new eth payload attributes
-fn scroll_payload_attributes(timestamp: u64) -> ScrollPayloadBuilderAttributes {
-    let attributes = ScrollPayloadAttributes {
-        payload_attributes: PayloadAttributes { timestamp, ..Default::default() },
-        ..Default::default()
-    };
-    ScrollPayloadBuilderAttributes::try_new(B256::ZERO, attributes, 0).unwrap()
+/// Generate a transfer transaction with the given wallet.
+pub async fn generate_tx(wallet: Arc<Mutex<Wallet>>) -> Bytes {
+    let mut wallet = wallet.lock().await;
+    let tx_fut = TransactionTestContext::transfer_tx_nonce_bytes(
+        wallet.chain_id,
+        wallet.inner.clone(),
+        wallet.inner_nonce,
+    );
+    wallet.inner_nonce += 1;
+    tx_fut.await
 }

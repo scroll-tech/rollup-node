@@ -31,13 +31,13 @@ pub const BLOCK_GAP_TRIGGER: u64 = 100_000;
 
 /// The main interface to the Engine API of the EN.
 /// Internally maintains the fork state of the chain.
-pub struct EngineDriver<EC, P, CS> {
+pub struct EngineDriver<EC, CS, P > {
     /// The engine API client.
     client: Arc<EC>,
-    /// The provider.
-    provider: Option<P>,
     /// The chain spec.
     chain_spec: Arc<CS>,
+    /// The provider.
+    provider: Option<P>,
     /// The fork choice state of the engine.
     fcs: ForkchoiceState,
     /// Whether the EN is syncing.
@@ -60,24 +60,24 @@ pub struct EngineDriver<EC, P, CS> {
     waker: AtomicWaker,
 }
 
-impl<EC, P, CS> EngineDriver<EC, P, CS>
+impl<EC, CS, P> EngineDriver<EC, CS, P>
 where
     EC: ScrollEngineApi + Unpin + Send + Sync + 'static,
-    P: Provider<Scroll> + Clone + Unpin + Send + Sync + 'static,
     CS: ScrollHardforks + Send + Sync + 'static,
+    P: Provider<Scroll> + Clone + Unpin + Send + Sync + 'static,
 {
     /// Create a new [`EngineDriver`].
     pub const fn new(
         client: Arc<EC>,
-        provider: Option<P>,
         chain_spec: Arc<CS>,
+        provider: Option<P>,
         fcs: ForkchoiceState,
         block_building_duration: Duration,
     ) -> Self {
         Self {
             client,
-            provider,
             chain_spec,
+            provider,
             fcs,
             block_building_duration,
             syncing: false,
@@ -266,11 +266,11 @@ where
     }
 }
 
-impl<EC, P, CS> Stream for EngineDriver<EC, P, CS>
+impl<EC, CS, P> Stream for EngineDriver<EC, CS, P>
 where
     EC: ScrollEngineApi + Unpin + Send + Sync + 'static,
-    P: Provider<Scroll> + Clone + Unpin + Send + Sync + 'static,
     CS: ScrollHardforks + Send + Sync + 'static,
+    P: Provider<Scroll> + Clone + Unpin + Send + Sync + 'static,
 {
     type Item = EngineDriverEvent;
 
@@ -318,11 +318,12 @@ where
         if let Some(payload_attributes) = this.sequencer_payload_attributes.take() {
             let fcs = this.alloy_forkchoice_state();
             let client = this.client.clone();
+            let chain_spec = this.chain_spec.clone();
             let duration = this.block_building_duration;
 
             this.payload_building_future = Some(Box::pin(super::future::build_new_payload(
                 client,
-                this.chain_spec.clone(),
+                chain_spec,
                 fcs,
                 duration,
                 payload_attributes,
@@ -376,7 +377,7 @@ where
     }
 }
 
-impl<EC, P, CS> std::fmt::Debug for EngineDriver<EC, P, CS> {
+impl<EC, CS, P> std::fmt::Debug for EngineDriver<EC, CS, P> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("EngineDriver")
             .field("client", &"ScrollEngineApi")
@@ -395,6 +396,7 @@ mod tests {
     use rollup_node_providers::ScrollRootProvider;
 
     use super::*;
+    use reth_scroll_chainspec::SCROLL_DEV;
     use scroll_engine::test_utils::PanicEngineClient;
 
     impl<EC, P, CS> EngineDriver<EC, P, CS> {
@@ -411,8 +413,7 @@ mod tests {
             ForkchoiceState::from_block_info(BlockInfo { number: 0, hash: Default::default() });
         let duration = Duration::from_secs(2);
 
-        let mut driver =
-            EngineDriver::new(client, None::<ScrollRootProvider>, chain_spec, fcs, duration);
+        let mut driver = EngineDriver::new(client, chain_spec, None::<()>, fcs,  duration);
 
         // Initially, it should be false
         assert!(!driver.is_payload_building_in_progress());
@@ -434,8 +435,8 @@ mod tests {
 
         let mut driver = EngineDriver::new(
             client.clone(),
-            None::<ScrollRootProvider>,
             chain_spec.clone(),
+            None::<ScrollRootProvider>,
             fcs,
             duration,
         );

@@ -44,6 +44,7 @@ reth-node-core.workspace = true
 reth-tracing = { git = "https://github.com/scroll-tech/reth.git" }
 
 # reth-scroll
+reth-scroll-chainspec.workspace = true
 reth-scroll-node = { workspace = true, features = ["test-utils"] }
 reth-scroll-chainspec.workspace = true
 

@@ -43,9 +43,10 @@ async fn can_build_blocks() {
     let engine_client = ScrollAuthApiEngineClient::new(auth_client);
     let mut engine_driver = EngineDriver::new(
         Arc::new(engine_client),
-        None::<ScrollRootProvider>,
-        chain_spec,
+        (*SCROLL_DEV).clone(),
+        None::<()>,
         fcs,
+        false,
         BLOCK_BUILDING_DURATION,
     );
 
@@ -158,9 +159,10 @@ async fn can_build_blocks_with_delayed_l1_messages() {
     let engine_client = ScrollAuthApiEngineClient::new(auth_client);
     let mut engine_driver = EngineDriver::new(
         Arc::new(engine_client),
-        None::<ScrollRootProvider>,
-        chain_spec,
+        (*SCROLL_DEV).clone(),
+        None::<()>,
         fcs,
+        false,
         BLOCK_BUILDING_DURATION,
     );
 

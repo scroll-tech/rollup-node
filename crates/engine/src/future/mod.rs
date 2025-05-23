@@ -301,8 +301,9 @@ where
         fc_updated.payload_id.expect("payload attributes has been set"),
     )
     .await?;
-    let data = ExecutionData::new(payload, Default::default());
-    Ok(try_into_block(data, chain_spec)?)
+    let block = try_into_block(ExecutionData { payload, sidecar: Default::default() }, chain_spec)?;
+
+    Ok(block)
 }
 
 /// Handles a new payload by updating the fork choice state and returning the new block.
