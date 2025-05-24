@@ -19,8 +19,7 @@ use rollup_node_manager::{
 };
 use rollup_node_primitives::{ConsensusUpdate, NodeConfig};
 use rollup_node_providers::{
-    beacon_provider, AlloyExecutionPayloadProvider, DatabaseL1MessageProvider, OnlineL1Provider,
-    SystemContractProvider,
+    beacon_provider, DatabaseL1MessageProvider, OnlineL1Provider, SystemContractProvider,
 };
 use rollup_node_sequencer::Sequencer;
 use rollup_node_signer::Signer;
@@ -94,7 +93,6 @@ impl RollupManagerAddOn {
                 .rpc
                 .new_http_provider_for()
                 .map(Arc::new)
-                .map(AlloyExecutionPayloadProvider::new)
                 .expect("failed to create payload provider")
         });
 
@@ -104,7 +102,6 @@ impl RollupManagerAddOn {
             ctx.config.chain.clone(),
             payload_provider,
             fcs,
-            true,
             Duration::from_millis(self.config.sequencer_args.payload_building_duration),
         );
 
@@ -142,7 +139,7 @@ impl RollupManagerAddOn {
         let (l1_notification_tx, l1_notification_rx) =
             if let Some(provider) = provider.filter(|_| !self.config.test) {
                 // Spawn the L1Watcher
-                (None, Some(L1Watcher::spawn(provider, node_config).await))
+                (None, Some(L1Watcher::spawn(provider, None, node_config).await))
             } else {
                 // Create a channel for L1 notifications that we can use to inject L1 messages for
                 // testing

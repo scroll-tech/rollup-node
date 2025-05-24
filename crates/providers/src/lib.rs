@@ -1,23 +1,30 @@
 //! The crate exposes various Providers along with their implementations for usage across the rollup
 //! node.
 
-pub use beacon::{beacon_provider, BeaconProvider, OnlineBeaconClient};
+use alloy_provider::RootProvider;
+use scroll_alloy_network::Scroll;
+
 mod beacon;
 
-pub use block::BlockDataProvider;
+pub use beacon::{beacon_provider, BeaconProvider, OnlineBeaconClient};
+
 mod block;
+pub use block::BlockDataProvider;
 
-pub use execution_payload::{AlloyExecutionPayloadProvider, ExecutionPayloadProvider};
 mod execution_payload;
+pub use execution_payload::ExecutionPayloadProvider;
 
+mod l1;
 pub use l1::{
     blob::L1BlobProvider,
     message::{DatabaseL1MessageProvider, L1MessageProvider},
     system_contract::{SystemContractProvider, AUTHORIZED_SIGNER_STORAGE_SLOT},
     L1Provider, L1ProviderError, OnlineL1Provider,
 };
-mod l1;
 
 /// Test utils related to providers.
 #[cfg(any(test, feature = "test-utils"))]
 pub mod test_utils;
+
+/// An alias for a [`RootProvider`] using the [`Scroll`] network.
+pub type ScrollRootProvider = RootProvider<Scroll>;

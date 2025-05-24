@@ -20,7 +20,9 @@ alloy-rpc-types-engine.workspace = true
 
 # scroll-alloy
 scroll-alloy-hardforks.workspace = true
+scroll-alloy-network.workspace = true
 scroll-alloy-provider.workspace = true
+scroll-alloy-rpc-types-engine.workspace = true
 
 # reth
 reth-network.workspace = true
@@ -34,7 +36,6 @@ reth-scroll-primitives.workspace = true
 reth-scroll-node.workspace = true
 
 # scroll
-scroll-alloy-rpc-types-engine.workspace = true
 scroll-db.workspace = true
 scroll-derivation-pipeline.workspace = true
 scroll-engine.workspace = true
