@@ -3,11 +3,11 @@
 use alloy_consensus::BlockHeader;
 use alloy_primitives::{Address, U256};
 use futures::stream::StreamExt;
-use reth_e2e_test_utils::{transaction::TransactionTestContext, wallet::Wallet};
+use reth_e2e_test_utils::transaction::TransactionTestContext;
 use reth_node_core::primitives::SignedTransaction;
 use reth_scroll_chainspec::SCROLL_DEV;
 use reth_scroll_node::test_utils::setup;
-use rollup_node::test_utils::build_bridge_node;
+use rollup_node::test_utils::{default_test_scroll_rollup_node_config, setup_engine};
 use rollup_node_primitives::{BlockInfo, L1MessageEnvelope};
 use rollup_node_providers::{DatabaseL1MessageProvider, ScrollRootProvider};
 use rollup_node_sequencer::Sequencer;
@@ -23,7 +23,6 @@ async fn can_build_blocks() {
     reth_tracing::init_test_tracing();
 
     const BLOCK_BUILDING_DURATION: Duration = Duration::from_millis(0);
-    let chain_spec = SCROLL_DEV.clone();
 
     // setup a test node
     let (mut nodes, _tasks, wallet) = setup(1, false).await.unwrap();
@@ -44,9 +43,8 @@ async fn can_build_blocks() {
     let mut engine_driver = EngineDriver::new(
         Arc::new(engine_client),
         (*SCROLL_DEV).clone(),
-        None::<()>,
+        None::<ScrollRootProvider>,
         fcs,
-        false,
         BLOCK_BUILDING_DURATION,
     );
 
@@ -142,9 +140,10 @@ async fn can_build_blocks_with_delayed_l1_messages() {
     const L1_MESSAGE_DELAY: u64 = 2;
 
     // setup a test node
-    let (node, _tasks, _bridge_peer_id) =
-        build_bridge_node(chain_spec.clone()).await.expect("Failed to setup node");
-    let wallet = Arc::new(Mutex::new(Wallet::default().with_chain_id(chain_spec.chain().into())));
+    let (mut nodes, _tasks, wallet) =
+        setup_engine(default_test_scroll_rollup_node_config(), 1, chain_spec, false).await.unwrap();
+    let node = nodes.pop().unwrap();
+    let wallet = Arc::new(Mutex::new(wallet));
 
     // create a forkchoice state
     let genesis_hash = node.inner.chain_spec().genesis_hash();
@@ -160,9 +159,8 @@ async fn can_build_blocks_with_delayed_l1_messages() {
     let mut engine_driver = EngineDriver::new(
         Arc::new(engine_client),
         (*SCROLL_DEV).clone(),
-        None::<()>,
+        None::<ScrollRootProvider>,
         fcs,
-        false,
         BLOCK_BUILDING_DURATION,
     );
 

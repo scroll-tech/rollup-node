@@ -1,13 +1,22 @@
 //! End-to-end tests for the rollup node.
 
-use alloy_primitives::Signature;
+use alloy_primitives::{Address, Signature, U256};
 use futures::StreamExt;
 use reth_network::{NetworkConfigBuilder, PeersInfo};
 use reth_scroll_chainspec::SCROLL_DEV;
 use reth_scroll_node::ScrollNetworkPrimitives;
-use rollup_node::test_utils::build_bridge_node;
+use rollup_node::{
+    test_utils::{default_test_scroll_rollup_node_config, generate_tx, setup_engine},
+    BeaconProviderArgs, L1ProviderArgs, L2ProviderArgs, NetworkArgs as ScrollNetworkArgs,
+    ScrollRollupNodeConfig, SequencerArgs,
+};
+use rollup_node_manager::{RollupManagerEvent, RollupManagerHandle};
+use rollup_node_watcher::L1Notification;
+use scroll_alloy_consensus::TxL1Message;
 use scroll_network::NewBlockWithPeer;
 use scroll_wire::ScrollWireConfig;
+use std::{path::PathBuf, sync::Arc};
+use tokio::sync::Mutex;
 use tracing::trace;
 
 #[tokio::test]
@@ -22,7 +31,6 @@ async fn can_bridge_l1_messages() -> eyre::Result<()> {
             enable_eth_scroll_wire_bridge: true,
             enable_scroll_wire: true,
         },
-        optimistic_sync: false,
         database_path: Some(PathBuf::from("sqlite::memory:")),
         l1_provider_args: L1ProviderArgs::default(),
         engine_api_url: None,
@@ -86,7 +94,6 @@ async fn can_sequence_and_gossip_blocks() {
             enable_eth_scroll_wire_bridge: true,
             enable_scroll_wire: true,
         },
-        optimistic_sync: false,
         database_path: Some(PathBuf::from("sqlite::memory:")),
         l1_provider_args: L1ProviderArgs::default(),
         engine_api_url: None,
@@ -157,8 +164,12 @@ async fn can_bridge_blocks() {
     let chain_spec = (*SCROLL_DEV).clone();
 
     // Setup the bridge node and a standard node.
-    let (mut bridge_node, tasks, bridge_peer_id) =
-        build_bridge_node(chain_spec.clone()).await.expect("Failed to setup nodes");
+    let (mut nodes, tasks, _) =
+        setup_engine(default_test_scroll_rollup_node_config(), 1, chain_spec.clone(), false)
+            .await
+            .unwrap();
+    let mut bridge_node = nodes.pop().unwrap();
+    let bridge_peer_id = bridge_node.network.record().id;
 
     // Instantiate the scroll NetworkManager.
     let network_config = NetworkConfigBuilder::<ScrollNetworkPrimitives>::with_rng_secret_key()

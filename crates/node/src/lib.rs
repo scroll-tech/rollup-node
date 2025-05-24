@@ -8,8 +8,5 @@ mod node;
 #[cfg(feature = "test-utils")]
 pub mod test_utils;
 
-#[cfg(feature = "test-utils")]
-pub mod test_utils;
-
 pub use args::*;
 pub use node::ScrollRollupNode;

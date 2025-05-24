@@ -8,7 +8,10 @@ use reth_e2e_test_utils::{transaction::TransactionTestContext, wallet::Wallet, N
 use reth_eth_wire_types::NewBlock;
 use reth_scroll_chainspec::SCROLL_DEV;
 use reth_scroll_primitives::{ScrollBlock, ScrollTransactionSigned};
-use rollup_node::{test_utils::build_bridge_node, ScrollRollupNode};
+use rollup_node::{
+    test_utils::{default_test_scroll_rollup_node_config, setup_engine},
+    ScrollRollupNode,
+};
 use rollup_node_manager::RollupManagerCommand;
 use scroll_alloy_network::Scroll;
 use scroll_engine::BLOCK_GAP_TRIGGER;
@@ -32,14 +35,18 @@ async fn can_sync_en() {
 
     // Create the chain spec for scroll mainnet with Euclid v2 activated and a test genesis.
     let chain_spec = (*SCROLL_DEV).clone();
-    let (mut synced, _tasks, _bridge_peer_id) =
-        build_bridge_node(chain_spec.clone()).await.expect("Failed to setup node");
+    let (mut nodes, _tasks, _) =
+        setup_engine(default_test_scroll_rollup_node_config(), 1, chain_spec.clone(), false)
+            .await
+            .unwrap();
+    let mut synced = nodes.pop().unwrap();
+
+    let (mut nodes, _tasks, _) =
+        setup_engine(default_test_scroll_rollup_node_config(), 1, chain_spec, false).await.unwrap();
+    let mut unsynced = nodes.pop().unwrap();
 
     // Advance the chain.
     synced.advance(BLOCK_GAP_TRIGGER + 1, tx_gen).await.unwrap();
-
-    let (mut unsynced, _tasks, _bridge_peer_id) =
-        build_bridge_node(chain_spec).await.expect("Failed to setup node");
 
     // Connect the nodes together.
     synced.network.add_peer(unsynced.network.record()).await;
