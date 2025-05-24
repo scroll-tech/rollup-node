@@ -31,7 +31,7 @@ pub const BLOCK_GAP_TRIGGER: u64 = 100_000;
 
 /// The main interface to the Engine API of the EN.
 /// Internally maintains the fork state of the chain.
-pub struct EngineDriver<EC, CS, P > {
+pub struct EngineDriver<EC, CS, P> {
     /// The engine API client.
     client: Arc<EC>,
     /// The chain spec.
@@ -391,12 +391,11 @@ impl<EC, CS, P> std::fmt::Debug for EngineDriver<EC, CS, P> {
 
 #[cfg(test)]
 mod tests {
+    use super::*;
     use crate::future::build_new_payload;
+
     use reth_scroll_chainspec::SCROLL_DEV;
     use rollup_node_providers::ScrollRootProvider;
-
-    use super::*;
-    use reth_scroll_chainspec::SCROLL_DEV;
     use scroll_engine::test_utils::PanicEngineClient;
 
     impl<EC, P, CS> EngineDriver<EC, P, CS> {
@@ -413,7 +412,8 @@ mod tests {
             ForkchoiceState::from_block_info(BlockInfo { number: 0, hash: Default::default() });
         let duration = Duration::from_secs(2);
 
-        let mut driver = EngineDriver::new(client, chain_spec, None::<()>, fcs,  duration);
+        let mut driver =
+            EngineDriver::new(client, chain_spec, None::<ScrollRootProvider>, fcs, duration);
 
         // Initially, it should be false
         assert!(!driver.is_payload_building_in_progress());
