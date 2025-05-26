@@ -62,9 +62,9 @@ pub struct EngineDriver<EC, CS, P> {
 
 impl<EC, CS, P> EngineDriver<EC, CS, P>
 where
-    EC: ScrollEngineApi + Unpin + Send + Sync + 'static,
-    CS: ScrollHardforks + Send + Sync + 'static,
-    P: Provider<Scroll> + Clone + Unpin + Send + Sync + 'static,
+    EC: ScrollEngineApi + Sync + 'static,
+    CS: ScrollHardforks + Sync + 'static,
+    P: Provider<Scroll> + Clone + Sync + 'static,
 {
     /// Create a new [`EngineDriver`].
     pub const fn new(
