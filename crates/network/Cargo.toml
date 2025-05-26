@@ -43,4 +43,5 @@ serde = [
     "reth-network-types/serde",
     "reth-scroll-primitives/serde",
     "scroll-wire/serde",
+    "reth-primitives-traits/serde",
 ]
