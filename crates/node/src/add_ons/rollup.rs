@@ -15,9 +15,9 @@ use reth_node_builder::{rpc::RpcHandle, AddOnsContext, FullNodeComponents};
 use reth_rpc_eth_api::EthApiTypes;
 use reth_scroll_node::ScrollNetworkPrimitives;
 use rollup_node_manager::{
-    Consensus, NoopConsensus, PoAConsensus, RollupManagerHandle, RollupNodeManager,
+    Consensus, NoopConsensus, RollupManagerHandle, RollupNodeManager, SystemContractConsensus,
 };
-use rollup_node_primitives::{ConsensusUpdate, NodeConfig};
+use rollup_node_primitives::NodeConfig;
 use rollup_node_providers::{
     beacon_provider, AlloyExecutionPayloadProvider, DatabaseL1MessageProvider, OnlineL1Provider,
     SystemContractProvider,
@@ -126,17 +126,13 @@ impl RollupManagerAddOn {
         let db = Arc::new(db);
 
         // Create the consensus.
-        let consensus: Box<dyn Consensus> = if self.config.test {
-            Box::new(NoopConsensus::default())
+        let consensus: Box<dyn Consensus> = if let Some(ref provider) = provider {
+            let signer = provider
+                .authorized_signer(node_config.address_book.system_contract_address)
+                .await?;
+            Box::new(SystemContractConsensus::new(signer))
         } else {
-            let mut poa = PoAConsensus::new([]);
-            if let Some(ref provider) = provider {
-                let signer = provider
-                    .authorized_signer(node_config.address_book.system_contract_address)
-                    .await?;
-                poa.update_config(&ConsensusUpdate::AuthorizedSigner(signer));
-            }
-            Box::new(poa)
+            Box::new(NoopConsensus::default())
         };
 
         let (l1_notification_tx, l1_notification_rx) =
