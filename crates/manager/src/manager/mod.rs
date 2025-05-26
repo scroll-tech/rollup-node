@@ -289,7 +289,7 @@ where
                     if let Some(event_sender) = self.event_sender.as_ref() {
                         event_sender.notify(RollupManagerEvent::BlockImported(block.clone()));
                     }
-                    self.indexer.handle_block(block.into(), None);
+                    self.indexer.handle_block((&block).into(), None);
                 }
                 self.network.handle().block_import_outcome(outcome);
             }
@@ -302,7 +302,7 @@ where
                     event_sender.notify(RollupManagerEvent::BlockSequenced(payload.clone()));
                 }
 
-                self.indexer.handle_block(payload.into(), None);
+                self.indexer.handle_block((&payload).into(), None);
             }
             EngineDriverEvent::L1BlockConsolidated((block_info, batch_info)) => {
                 self.indexer.handle_block(block_info.clone(), Some(batch_info));

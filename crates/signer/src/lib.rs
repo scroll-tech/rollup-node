@@ -71,7 +71,7 @@ impl Signer {
                     match result {
                         Ok(event) => self.sender.send(event).expect("The event channel is closed"),
                         Err(err) => {
-                            tracing::error!(target: "rollup_node::signer", ?err, "An error occurred while signing");
+                            tracing::error!(target: "node::signer", ?err, "An error occurred while signing");
                         }
                     }
 

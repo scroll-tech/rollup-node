@@ -2,6 +2,7 @@ use crate::{
     args::{L1ProviderArgs, ScrollRollupNodeConfig},
     constants::PROVIDER_BLOB_CACHE_SIZE,
 };
+
 use alloy_provider::ProviderBuilder;
 use alloy_rpc_client::RpcClient;
 use alloy_signer_local::PrivateKeySigner;

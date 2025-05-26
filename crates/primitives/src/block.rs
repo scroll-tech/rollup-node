@@ -1,8 +1,8 @@
-use alloy_eips::BlockNumHash;
+use alloy_eips::{BlockNumHash, Decodable2718};
 use alloy_primitives::{B256, U256};
-use alloy_rpc_types_engine::{ExecutionPayload, PayloadError};
+use alloy_rpc_types_engine::ExecutionPayload;
 use reth_primitives_traits::transaction::signed::SignedTransaction;
-use reth_scroll_primitives::ScrollBlock;
+use reth_scroll_primitives::{ScrollBlock, ScrollTransactionSigned};
 use std::vec::Vec;
 
 /// The default block difficulty for a scroll block.
@@ -68,26 +68,33 @@ pub struct L2BlockInfoWithL1Messages {
     pub l1_messages: Vec<B256>,
 }
 
-impl TryFrom<ExecutionPayload> for L2BlockInfoWithL1Messages {
-    type Error = PayloadError;
-
-    fn try_from(value: ExecutionPayload) -> Result<Self, Self::Error> {
-        value.try_into_block().map(Into::into)
-    }
-}
-
-impl From<ScrollBlock> for L2BlockInfoWithL1Messages {
-    // TODO: It would be more efficient to convert payload transactions from bytes to
-    // ScrollSignedTransaction directly, instead of converting the whole block (we would avoid
-    // calculating the transactions state root)
-    fn from(value: ScrollBlock) -> Self {
+impl From<&ScrollBlock> for L2BlockInfoWithL1Messages {
+    fn from(value: &ScrollBlock) -> Self {
         let block_number = value.number;
         let block_hash = value.hash_slow();
         let l1_messages = value
             .body
             .transactions
-            .into_iter()
-            .filter_map(|tx| tx.is_l1_message().then(|| *tx.tx_hash()))
+            .iter()
+            .filter(|tx| tx.is_l1_message())
+            .map(|tx| *tx.tx_hash())
+            .collect();
+        Self { block_info: BlockInfo { number: block_number, hash: block_hash }, l1_messages }
+    }
+}
+
+impl From<&ExecutionPayload> for L2BlockInfoWithL1Messages {
+    fn from(value: &ExecutionPayload) -> Self {
+        let block_number = value.block_number();
+        let block_hash = value.block_hash();
+        let l1_messages = value
+            .as_v1()
+            .transactions
+            .iter()
+            .filter_map(|raw| {
+                let tx = ScrollTransactionSigned::decode_2718(&mut raw.as_ref()).ok()?;
+                tx.is_l1_message().then(|| *tx.tx_hash())
+            })
             .collect();
         Self { block_info: BlockInfo { number: block_number, hash: block_hash }, l1_messages }
     }
