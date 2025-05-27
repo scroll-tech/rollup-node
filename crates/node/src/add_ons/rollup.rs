@@ -109,7 +109,7 @@ impl RollupManagerAddOn {
         );
 
         // Instantiate the database
-        let database_path = if let Some(db_path) = self.config.database_path {
+        let database_path = if let Some(db_path) = self.config.database_args.path {
             db_path.to_string_lossy().to_string()
         } else {
             // append the path using strings as using `join(...)` overwrites "sqlite://"
