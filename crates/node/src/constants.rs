@@ -8,13 +8,13 @@ pub(crate) const PROVIDER_MAX_RETRIES: u32 = 10;
 pub(crate) const PROVIDER_INITIAL_BACKOFF: u64 = 100;
 
 /// The default provider compute units per second.
-pub(crate) const PROVIDER_COMPUTE_UNITS_PER_SECOND: u64 = 50;
+pub(crate) const PROVIDER_COMPUTE_UNITS_PER_SECOND: u64 = 10000;
 
 /// The default block time in milliseconds for the sequencer.
-pub(crate) const DEFAULT_BLOCK_TIME: u64 = 2000;
+pub(crate) const DEFAULT_BLOCK_TIME: u64 = 1000;
 
 /// The default payload building duration in milliseconds for the sequencer.
-pub(crate) const DEFAULT_PAYLOAD_BUILDING_DURATION: u64 = 500;
+pub(crate) const DEFAULT_PAYLOAD_BUILDING_DURATION: u64 = 800;
 
 /// The default max L1 messages per block for the sequencer.
 pub(crate) const DEFAULT_MAX_L1_MESSAGES_PER_BLOCK: u64 = 4;

@@ -1,7 +1,7 @@
 //! This crate contains utilities for running end-to-end tests for the scroll reth node.
 
 use super::{
-    BeaconProviderArgs, EngineDriverArgs, L1ProviderArgs, L2ProviderArgs, ScrollRollupNode,
+    BeaconProviderArgs, DatabaseArgs, EngineDriverArgs, L1ProviderArgs, ScrollRollupNode,
     ScrollRollupNodeConfig, SequencerArgs,
 };
 use alloy_primitives::{Bytes, B256};
@@ -152,11 +152,10 @@ pub fn default_test_scroll_rollup_node_config() -> ScrollRollupNodeConfig {
             enable_eth_scroll_wire_bridge: true,
             enable_scroll_wire: true,
         },
-        database_path: Some(PathBuf::from("sqlite::memory:")),
+        database_args: DatabaseArgs { path: Some(PathBuf::from("sqlite::memory:")) },
         l1_provider_args: L1ProviderArgs::default(),
         engine_driver_args: EngineDriverArgs { en_sync_trigger: 100 },
         sequencer_args: SequencerArgs::default(),
         beacon_provider_args: BeaconProviderArgs::default(),
-        l2_provider_args: L2ProviderArgs::default(),
     }
 }

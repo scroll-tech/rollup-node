@@ -7,7 +7,7 @@ use reth_scroll_chainspec::SCROLL_DEV;
 use reth_scroll_node::ScrollNetworkPrimitives;
 use rollup_node::{
     test_utils::{default_test_scroll_rollup_node_config, generate_tx, setup_engine},
-    BeaconProviderArgs, EngineDriverArgs, L1ProviderArgs, L2ProviderArgs,
+    BeaconProviderArgs, DatabaseArgs, EngineDriverArgs, L1ProviderArgs,
     NetworkArgs as ScrollNetworkArgs, ScrollRollupNodeConfig, SequencerArgs,
 };
 use rollup_node_manager::{RollupManagerEvent, RollupManagerHandle};
@@ -31,7 +31,7 @@ async fn can_bridge_l1_messages() -> eyre::Result<()> {
             enable_eth_scroll_wire_bridge: true,
             enable_scroll_wire: true,
         },
-        database_path: Some(PathBuf::from("sqlite::memory:")),
+        database_args: DatabaseArgs { path: Some(PathBuf::from("sqlite::memory:")) },
         l1_provider_args: L1ProviderArgs::default(),
         engine_driver_args: EngineDriverArgs::default(),
         sequencer_args: SequencerArgs {
@@ -41,9 +41,8 @@ async fn can_bridge_l1_messages() -> eyre::Result<()> {
             ..SequencerArgs::default()
         },
         beacon_provider_args: BeaconProviderArgs::default(),
-        l2_provider_args: L2ProviderArgs::default(),
     };
-    let (mut nodes, _tasks, _wallet) = setup_engine(node_args, 1, chain_spec, false).await.unwrap();
+    let (mut nodes, _tasks, _wallet) = setup_engine(node_args, 1, chain_spec, false).await?;
     let node = nodes.pop().unwrap();
 
     let rnm_handle: RollupManagerHandle = node.inner.add_ons_handle.rollup_manager_handle.clone();
@@ -94,7 +93,7 @@ async fn can_sequence_and_gossip_blocks() {
             enable_eth_scroll_wire_bridge: true,
             enable_scroll_wire: true,
         },
-        database_path: Some(PathBuf::from("sqlite::memory:")),
+        database_args: DatabaseArgs { path: Some(PathBuf::from("sqlite::memory:")) },
         l1_provider_args: L1ProviderArgs::default(),
         engine_driver_args: EngineDriverArgs::default(),
         sequencer_args: SequencerArgs {
@@ -104,7 +103,6 @@ async fn can_sequence_and_gossip_blocks() {
             ..SequencerArgs::default()
         },
         beacon_provider_args: BeaconProviderArgs::default(),
-        l2_provider_args: L2ProviderArgs::default(),
     };
 
     let (nodes, _tasks, wallet) =
