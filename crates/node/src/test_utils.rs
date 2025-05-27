@@ -1,8 +1,8 @@
 //! This crate contains utilities for running end-to-end tests for the scroll reth node.
 
 use super::{
-    BeaconProviderArgs, L1ProviderArgs, L2ProviderArgs, ScrollRollupNode, ScrollRollupNodeConfig,
-    SequencerArgs,
+    BeaconProviderArgs, EngineDriverArgs, L1ProviderArgs, L2ProviderArgs, ScrollRollupNode,
+    ScrollRollupNodeConfig, SequencerArgs,
 };
 use alloy_primitives::{Bytes, B256};
 use alloy_rpc_types_engine::PayloadAttributes;
@@ -22,6 +22,7 @@ use reth_provider::providers::BlockchainProvider;
 use reth_rpc_server_types::RpcModuleSelection;
 use reth_scroll_engine_primitives::ScrollPayloadBuilderAttributes;
 use reth_tasks::TaskManager;
+use rollup_node_manager::RollupManagerCommand;
 use scroll_alloy_rpc_types_engine::ScrollPayloadAttributes;
 use std::{path::PathBuf, sync::Arc};
 use tokio::sync::Mutex;
@@ -44,7 +45,6 @@ pub async fn setup_engine(
     Wallet,
 )>
 where
-    // N: NodeBuilderHelper,
     LocalPayloadAttributesBuilder<<ScrollRollupNode as NodeTypes>::ChainSpec>:
         PayloadAttributesBuilder<
             <<ScrollRollupNode as NodeTypes>::Payload as PayloadTypes>::PayloadAttributes,
@@ -94,6 +94,13 @@ where
             .await?;
 
         let mut node = NodeTestContext::new(node, scroll_payload_attributes).await?;
+
+        // Disable sync mode for the engine driver by default in testing.
+        node.inner
+            .add_ons_handle
+            .rollup_manager_handle
+            .send_command(RollupManagerCommand::EndSync)
+            .await;
 
         let genesis = node.block_hash(0);
         node.update_forkchoice(genesis, genesis).await?;
@@ -147,7 +154,7 @@ pub fn default_test_scroll_rollup_node_config() -> ScrollRollupNodeConfig {
         },
         database_path: Some(PathBuf::from("sqlite::memory:")),
         l1_provider_args: L1ProviderArgs::default(),
-        engine_api_url: None,
+        engine_driver_args: EngineDriverArgs { en_sync_trigger: 100 },
         sequencer_args: SequencerArgs::default(),
         beacon_provider_args: BeaconProviderArgs::default(),
         l2_provider_args: L2ProviderArgs::default(),

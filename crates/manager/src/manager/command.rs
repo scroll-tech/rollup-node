@@ -8,6 +8,8 @@ use tokio::sync::oneshot;
 pub enum RollupManagerCommand {
     /// Command to build a new block.
     BuildBlock,
+    /// Command to end sync for the engine driver.
+    EndSync,
     /// Returns an event stream for rollup manager events.
     EventListener(oneshot::Sender<EventStream<RollupManagerEvent>>),
     /// Report the current status of the manager via the oneshot channel.
