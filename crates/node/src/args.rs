@@ -14,20 +14,14 @@ pub struct ScrollRollupNodeConfig {
     #[arg(long, default_value_t = false)]
     pub optimistic_sync: bool,
     /// Database path
-    #[arg(long)]
-    pub database_path: Option<PathBuf>,
-    /// The `EngineAPI` URL.
-    #[arg(long)]
-    pub engine_api_url: Option<reqwest::Url>,
+    #[command(flatten)]
+    pub database_args: DatabaseArgs,
     /// The beacon provider arguments.
     #[command(flatten)]
     pub beacon_provider_args: BeaconProviderArgs,
     /// The L1 provider arguments
     #[command(flatten)]
     pub l1_provider_args: L1ProviderArgs,
-    /// The L2 provider arguments
-    #[command(flatten)]
-    pub l2_provider_args: L2ProviderArgs,
     /// The sequencer arguments
     #[command(flatten)]
     pub sequencer_args: SequencerArgs,
@@ -36,15 +30,23 @@ pub struct ScrollRollupNodeConfig {
     pub network_args: NetworkArgs,
 }
 
+/// The database arguments.
+#[derive(Debug, Default, Clone, clap::Args)]
+pub struct DatabaseArgs {
+    /// Database path
+    #[arg(long)]
+    pub path: Option<PathBuf>,
+}
+
 /// The network arguments.
 #[derive(Debug, Default, Clone, clap::Args)]
 pub struct NetworkArgs {
     /// A bool to represent if new blocks should be bridged from the eth wire protocol to the
     /// scroll wire protocol.
-    #[arg(long = "eth-scroll-bridge.enabled", default_value_t = true)]
+    #[arg(long = "network.bridge", default_value_t = true)]
     pub enable_eth_scroll_wire_bridge: bool,
     /// A bool that represents if the scroll wire protocol should be enabled.
-    #[arg(long = "scroll-wire.enabled", default_value_t = true)]
+    #[arg(long = "network.scroll-wire", default_value_t = true)]
     pub enable_scroll_wire: bool,
 }
 
@@ -79,20 +81,6 @@ pub struct BeaconProviderArgs {
     pub max_retries: u32,
     /// The initial backoff for the provider.
     #[arg(long = "beacon.initial-backoff", id = "beacon_initial_backoff", value_name = "BEACON_INITIAL_BACKOFF", default_value_t = constants::PROVIDER_INITIAL_BACKOFF)]
-    pub initial_backoff: u64,
-}
-
-/// The arguments for the L2 provider.
-#[derive(Debug, Default, Clone, clap::Args)]
-pub struct L2ProviderArgs {
-    /// The compute units per second for the provider.
-    #[arg(long = "l2.cups",  id = "l2_compute_units_per_second", value_name = "L2_COMPUTE_UNITS_PER_SECOND", default_value_t = constants::PROVIDER_COMPUTE_UNITS_PER_SECOND)]
-    pub compute_units_per_second: u64,
-    /// The max amount of retries for the provider.
-    #[arg(long = "l2.max-retries", id = "l2_max_retries", value_name = "L2_MAX_RETRIES", default_value_t = constants::PROVIDER_MAX_RETRIES)]
-    pub max_retries: u32,
-    /// The initial backoff for the provider.
-    #[arg(long = "l2.initial-backoff", id = "l2_initial_back_off", value_name = "L2_INITIAL_BACKOFF", default_value_t = constants::PROVIDER_INITIAL_BACKOFF)]
     pub initial_backoff: u64,
 }
 

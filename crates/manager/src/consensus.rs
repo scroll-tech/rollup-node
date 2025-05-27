@@ -1,8 +1,9 @@
 use alloy_primitives::{Address, Signature};
+use reth_primitives_traits::GotExpected;
 use reth_scroll_primitives::ScrollBlock;
 use rollup_node_primitives::{sig_encode_hash, ConsensusUpdate};
 use scroll_network::ConsensusError;
-use std::{collections::HashSet, fmt::Debug};
+use std::fmt::Debug;
 
 /// A trait for consensus implementations.
 pub trait Consensus: Send + Debug {
@@ -33,23 +34,24 @@ impl Consensus for NoopConsensus {
     }
 }
 
-/// A Proof of Authority consensus instance.
+/// The system contract consensus.
 #[derive(Debug)]
-pub struct PoAConsensus {
-    authorized_signers: HashSet<Address>,
+pub struct SystemContractConsensus {
+    authorized_signer: Address,
 }
 
-impl PoAConsensus {
-    /// Creates a new [`PoAConsensus`] consensus instance with the given authorized signers.
-    pub fn new<T: IntoIterator<Item = Address>>(authorized_signers: T) -> Self {
-        Self { authorized_signers: authorized_signers.into_iter().collect() }
+impl SystemContractConsensus {
+    /// Creates a new [`SystemContractConsensus`] consensus instance with the given authorized
+    /// signers.
+    pub const fn new(authorized_signer: Address) -> Self {
+        Self { authorized_signer }
     }
 }
 
-impl Consensus for PoAConsensus {
+impl Consensus for SystemContractConsensus {
     fn update_config(&mut self, update: &ConsensusUpdate) {
         match update {
-            ConsensusUpdate::AuthorizedSigner(signer) => self.authorized_signers.insert(*signer),
+            ConsensusUpdate::AuthorizedSigner(signer) => self.authorized_signer = *signer,
         };
     }
 
@@ -59,11 +61,13 @@ impl Consensus for PoAConsensus {
         signature: &Signature,
     ) -> Result<(), ConsensusError> {
         let hash = sig_encode_hash(&block.header);
-        let signer = reth_primitives_traits::crypto::secp256k1::recover_signer(signature, hash)
-            .map_err(|_| ConsensusError::Signature)?;
+        let signer = reth_primitives_traits::crypto::secp256k1::recover_signer(signature, hash)?;
 
-        if !self.authorized_signers.contains(&signer) {
-            return Err(ConsensusError::Signature)
+        if self.authorized_signer != signer {
+            return Err(ConsensusError::IncorrectSigner(GotExpected {
+                got: signer,
+                expected: self.authorized_signer,
+            }))
         }
         Ok(())
     }
@@ -81,7 +85,8 @@ mod tests {
 
     #[test]
     fn test_should_validate_block() {
-        let consensus = PoAConsensus::new([address!("d83c4892bb5aa241b63d8c4c134920111e142a20")]);
+        let consensus =
+            SystemContractConsensus::new(address!("d83c4892bb5aa241b63d8c4c134920111e142a20"));
         let signature = Signature::from_raw(&bytes!("6d2b8ef87f0956ea4dd10fb0725fa7196ad80c6d567a161f6b4367f95b5de6ec279142b540d3b248f08ed337bb962fa3fd83d21de622f7d6c8207272558fd15a00")).unwrap();
 
         let tx_hash = OnceLock::new();

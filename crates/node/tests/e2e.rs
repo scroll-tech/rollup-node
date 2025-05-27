@@ -15,7 +15,7 @@ use reth_scroll_node::ScrollNetworkPrimitives;
 use reth_tasks::TaskManager;
 use rollup_node::{
     test_utils::{generate_tx, setup_engine},
-    BeaconProviderArgs, L1ProviderArgs, L2ProviderArgs, NetworkArgs as ScrollNetworkArgs,
+    BeaconProviderArgs, DatabaseArgs, L1ProviderArgs, NetworkArgs as ScrollNetworkArgs,
     ScrollRollupNode, ScrollRollupNodeConfig, SequencerArgs,
 };
 use rollup_node_manager::{RollupManagerEvent, RollupManagerHandle};
@@ -41,9 +41,8 @@ async fn can_bridge_l1_messages() -> eyre::Result<()> {
             enable_scroll_wire: true,
         },
         optimistic_sync: false,
-        database_path: Some(PathBuf::from("sqlite::memory:")),
+        database_args: DatabaseArgs { path: Some(PathBuf::from("sqlite::memory:")) },
         l1_provider_args: L1ProviderArgs::default(),
-        engine_api_url: None,
         sequencer_args: SequencerArgs {
             sequencer_enabled: true,
             block_time: 0,
@@ -51,7 +50,6 @@ async fn can_bridge_l1_messages() -> eyre::Result<()> {
             ..SequencerArgs::default()
         },
         beacon_provider_args: BeaconProviderArgs::default(),
-        l2_provider_args: L2ProviderArgs::default(),
     };
     let (mut nodes, _tasks, _wallet) = setup_engine(node_args, 1, chain_spec, false).await.unwrap();
     let node = nodes.pop().unwrap();
@@ -105,9 +103,8 @@ async fn can_sequence_and_gossip_blocks() {
             enable_scroll_wire: true,
         },
         optimistic_sync: false,
-        database_path: Some(PathBuf::from("sqlite::memory:")),
+        database_args: DatabaseArgs { path: Some(PathBuf::from("sqlite::memory:")) },
         l1_provider_args: L1ProviderArgs::default(),
-        engine_api_url: None,
         sequencer_args: SequencerArgs {
             sequencer_enabled: true,
             block_time: 0,
@@ -115,7 +112,6 @@ async fn can_sequence_and_gossip_blocks() {
             ..SequencerArgs::default()
         },
         beacon_provider_args: BeaconProviderArgs::default(),
-        l2_provider_args: L2ProviderArgs::default(),
     };
 
     let (nodes, _tasks, wallet) =
@@ -270,12 +266,10 @@ pub async fn build_bridge_node(
             enable_scroll_wire: true,
         },
         optimistic_sync: false,
-        database_path: Some(PathBuf::from("sqlite::memory:")),
+        database_args: DatabaseArgs { path: Some(PathBuf::from("sqlite::memory:")) },
         l1_provider_args: L1ProviderArgs::default(),
-        engine_api_url: None,
-        sequencer_args: SequencerArgs { sequencer_enabled: false, ..SequencerArgs::default() },
+        sequencer_args: SequencerArgs::default(),
         beacon_provider_args: BeaconProviderArgs::default(),
-        l2_provider_args: L2ProviderArgs::default(),
     };
     let node = ScrollRollupNode::new(node_args);
     let NodeHandle { node, node_exit_future: _ } =
