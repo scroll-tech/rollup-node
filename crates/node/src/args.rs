@@ -12,9 +12,9 @@ pub struct ScrollRollupNodeConfig {
     /// Database path
     #[arg(long)]
     pub database_path: Option<PathBuf>,
-    /// The `EngineAPI` URL.
-    #[arg(long)]
-    pub engine_api_url: Option<reqwest::Url>,
+    /// Engine driver args.
+    #[command(flatten)]
+    pub engine_driver_args: EngineDriverArgs,
     /// The beacon provider arguments.
     #[command(flatten)]
     pub beacon_provider_args: BeaconProviderArgs,
@@ -30,6 +30,15 @@ pub struct ScrollRollupNodeConfig {
     /// The network arguments
     #[command(flatten)]
     pub network_args: NetworkArgs,
+}
+
+/// The engine driver args.
+#[derive(Debug, Default, Clone, clap::Args)]
+pub struct EngineDriverArgs {
+    /// The amount of block difference between the EN and the latest block received from P2P
+    /// at which the engine driver triggers optimistic sync.
+    #[arg(long = "engine.en-sync-trigger", default_value_t = constants::BLOCK_GAP_TRIGGER)]
+    pub en_sync_trigger: u64,
 }
 
 /// The network arguments.

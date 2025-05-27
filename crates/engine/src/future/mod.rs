@@ -23,9 +23,6 @@ use std::{
 use tokio::time::Duration;
 use tracing::instrument;
 
-mod provider;
-pub(crate) use provider::{ProviderFuture, ProviderFutureResult};
-
 mod result;
 pub(crate) use result::EngineDriverFutureResult;
 

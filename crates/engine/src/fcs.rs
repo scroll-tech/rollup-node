@@ -87,6 +87,16 @@ impl ForkchoiceState {
         }
     }
 
+    /// Returns the [`AlloyForkchoiceState`] representation of the fork choice state, with the safe
+    /// and finalized hashes set to 0x0.
+    pub fn get_alloy_optimistic_fcs(&self) -> AlloyForkchoiceState {
+        AlloyForkchoiceState {
+            head_block_hash: self.head.hash,
+            safe_block_hash: B256::default(),
+            finalized_block_hash: B256::default(),
+        }
+    }
+
     /// Returns `true` if the fork choice state is the genesis state.
     pub const fn is_genesis(&self) -> bool {
         self.head.number == 0

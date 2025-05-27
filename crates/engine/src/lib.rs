@@ -3,7 +3,7 @@
 
 pub(crate) mod api;
 
-pub use driver::{EngineDriver, BLOCK_GAP_TRIGGER};
+pub use driver::EngineDriver;
 mod driver;
 
 pub use error::EngineDriverError;

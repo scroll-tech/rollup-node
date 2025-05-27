@@ -1,16 +1,13 @@
 use super::{future::EngineFuture, ForkchoiceState};
 use crate::{
-    future::{
-        BuildNewPayloadFuture, EngineDriverFutureResult, ProviderFuture, ProviderFutureResult,
-    },
+    future::{BuildNewPayloadFuture, EngineDriverFutureResult},
     EngineDriverEvent,
 };
-use alloy_primitives::B256;
-use alloy_provider::Provider;
+
 use futures::{ready, task::AtomicWaker, FutureExt, Stream};
 use rollup_node_primitives::{BlockInfo, ScrollPayloadAttributesWithBatchInfo};
+use rollup_node_providers::ExecutionPayloadProvider;
 use scroll_alloy_hardforks::ScrollHardforks;
-use scroll_alloy_network::Scroll;
 use scroll_alloy_provider::ScrollEngineApi;
 use scroll_alloy_rpc_types_engine::ScrollPayloadAttributes;
 use scroll_network::NewBlockWithPeer;
@@ -21,13 +18,6 @@ use std::{
     task::{Context, Poll},
 };
 use tokio::time::Duration;
-
-/// The gap in blocks between the P2P and EN which triggers sync.
-#[cfg(any(test, feature = "test-utils"))]
-pub const BLOCK_GAP_TRIGGER: u64 = 100;
-#[cfg(not(any(test, feature = "test-utils")))]
-/// The gap in blocks between the P2P and EN which triggers sync.
-pub const BLOCK_GAP_TRIGGER: u64 = 100_000;
 
 /// The main interface to the Engine API of the EN.
 /// Internally maintains the fork state of the chain.
@@ -42,6 +32,8 @@ pub struct EngineDriver<EC, CS, P> {
     fcs: ForkchoiceState,
     /// Whether the EN is syncing.
     syncing: bool,
+    /// The gap between EN and tip of chain which triggers optimistic sync.
+    block_gap_sync_trigger: u64,
     /// Block building duration.
     block_building_duration: Duration,
     /// The pending payload attributes derived from batches on L1.
@@ -52,8 +44,6 @@ pub struct EngineDriver<EC, CS, P> {
     sequencer_payload_attributes: Option<ScrollPayloadAttributes>,
     /// The future related to engine API.
     engine_future: Option<EngineFuture>,
-    /// The future related to the provider.
-    provider_future: Option<ProviderFuture>,
     /// The future for the payload building job.
     payload_building_future: Option<BuildNewPayloadFuture>,
     /// The waker to notify when the engine driver should be polled.
@@ -64,7 +54,7 @@ impl<EC, CS, P> EngineDriver<EC, CS, P>
 where
     EC: ScrollEngineApi + Sync + 'static,
     CS: ScrollHardforks + Sync + 'static,
-    P: Provider<Scroll> + Clone + Sync + 'static,
+    P: ExecutionPayloadProvider + Clone + Sync + 'static,
 {
     /// Create a new [`EngineDriver`].
     pub const fn new(
@@ -72,6 +62,7 @@ where
         chain_spec: Arc<CS>,
         provider: Option<P>,
         fcs: ForkchoiceState,
+        block_gap_sync_trigger: u64,
         block_building_duration: Duration,
     ) -> Self {
         Self {
@@ -80,13 +71,13 @@ where
             provider,
             fcs,
             block_building_duration,
-            syncing: false,
+            syncing: true,
+            block_gap_sync_trigger,
             l1_payload_attributes: VecDeque::new(),
             block_imports: VecDeque::new(),
             sequencer_payload_attributes: None,
             payload_building_future: None,
             engine_future: None,
-            provider_future: None,
             waker: AtomicWaker::new(),
         }
     }
@@ -111,16 +102,20 @@ where
         self.block_building_duration = block_building_duration;
     }
 
+    /// Sets the syncing mode of the driver.
+    pub fn set_syncing(&mut self, syncing: bool) {
+        self.syncing = syncing;
+    }
+
     /// Handles a block import request by adding it to the queue and waking up the driver.
     pub fn handle_block_import(&mut self, block_with_peer: NewBlockWithPeer) {
         tracing::trace!(target: "scroll::engine", ?block_with_peer, "new block import request received");
 
-        // Check diff between EN and P2P network tips.
-        if !self.syncing && self.provider_future.is_none() {
-            if let Some(provider) = self.provider.clone() {
-                self.provider_future =
-                    Some(ProviderFuture::block_number(provider, block_with_peer.block.number));
-            }
+        // Check diff between EN fcs and P2P network tips.
+        let en_block_number = self.fcs.head_block_info().number;
+        let p2p_block_number = block_with_peer.block.header.number;
+        if p2p_block_number.saturating_sub(en_block_number) > self.block_gap_sync_trigger {
+            self.syncing = true
         }
 
         self.block_imports.push_back(block_with_peer);
@@ -225,25 +220,6 @@ where
         None
     }
 
-    /// Handle the result of a call to the provider.
-    fn handle_provider_future_result(&mut self, res: ProviderFutureResult) {
-        tracing::trace!(target: "scroll::engine", ?res, "handling provider future result");
-        match res {
-            ProviderFutureResult::BlockNumber { provider_result, current_number } => {
-                match provider_result {
-                    Ok(block_number) => {
-                        if current_number.saturating_sub(block_number) > BLOCK_GAP_TRIGGER {
-                            self.syncing = true
-                        }
-                    }
-                    Err(err) => {
-                        tracing::error!(target: "scroll::engine", ?err, "failed to fetch block number");
-                    }
-                }
-            }
-        }
-    }
-
     /// A helper function to check if a payload building job is in progress.
     pub const fn is_payload_building_in_progress(&self) -> bool {
         self.sequencer_payload_attributes.is_some() || self.payload_building_future.is_some()
@@ -256,12 +232,10 @@ where
 
     /// Returns the alloy forkchoice state.
     pub fn alloy_forkchoice_state(&self) -> alloy_rpc_types_engine::ForkchoiceState {
-        let safe_head = self.fcs.safe_block_info().hash;
-        let finalized_head = self.fcs.finalized_block_info().hash;
-        alloy_rpc_types_engine::ForkchoiceState {
-            head_block_hash: self.fcs.head_block_info().hash,
-            safe_block_hash: if self.is_syncing() { B256::default() } else { safe_head },
-            finalized_block_hash: if self.is_syncing() { B256::default() } else { finalized_head },
+        if self.is_syncing() {
+            self.fcs.get_alloy_optimistic_fcs()
+        } else {
+            self.fcs.get_alloy_fcs()
         }
     }
 }
@@ -270,7 +244,7 @@ impl<EC, CS, P> Stream for EngineDriver<EC, CS, P>
 where
     EC: ScrollEngineApi + Unpin + Send + Sync + 'static,
     CS: ScrollHardforks + Send + Sync + 'static,
-    P: Provider<Scroll> + Clone + Unpin + Send + Sync + 'static,
+    P: ExecutionPayloadProvider + Clone + Unpin + Send + Sync + 'static,
 {
     type Item = EngineDriverEvent;
 
@@ -332,15 +306,6 @@ where
             return Poll::Pending;
         }
 
-        // Handle the provider future.
-        if let Some(mut provider_fut) = this.provider_future.take() {
-            tracing::trace!(target: "scroll::engine", "polling provider future");
-            match provider_fut.poll_unpin(cx) {
-                Poll::Pending => this.provider_future = Some(provider_fut),
-                Poll::Ready(res) => this.handle_provider_future_result(res),
-            }
-        }
-
         // Handle the block import requests.
         if let Some(block_with_peer) = this.block_imports.pop_front() {
             let fcs = this.alloy_forkchoice_state();
@@ -381,7 +346,7 @@ impl<EC, CS, P> std::fmt::Debug for EngineDriver<EC, CS, P> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("EngineDriver")
             .field("client", &"ScrollEngineApi")
-            .field("provider", &"Provider")
+            .field("provider", &"ExecutionPayloadProvider")
             .field("chain_spec", &"ScrollHardforks")
             .field("fcs", &self.fcs)
             .field("future", &"EngineDriverFuture")
@@ -413,7 +378,7 @@ mod tests {
         let duration = Duration::from_secs(2);
 
         let mut driver =
-            EngineDriver::new(client, chain_spec, None::<ScrollRootProvider>, fcs, duration);
+            EngineDriver::new(client, chain_spec, None::<ScrollRootProvider>, fcs, 0, duration);
 
         // Initially, it should be false
         assert!(!driver.is_payload_building_in_progress());
@@ -438,6 +403,7 @@ mod tests {
             chain_spec.clone(),
             None::<ScrollRootProvider>,
             fcs,
+            0,
             duration,
         );
 

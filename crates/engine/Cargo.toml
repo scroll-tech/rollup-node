@@ -15,13 +15,11 @@ alloy-chains.workspace = true
 alloy-eips.workspace = true
 alloy-json-rpc.workspace = true
 alloy-primitives.workspace = true
-alloy-provider.workspace = true
 alloy-rpc-types-engine.workspace = true
 alloy-transport.workspace = true
 
 # scroll-alloy
 scroll-alloy-hardforks.workspace = true
-scroll-alloy-network.workspace = true
 scroll-alloy-provider.workspace = true
 scroll-alloy-rpc-types-engine.workspace = true
 

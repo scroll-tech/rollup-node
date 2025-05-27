@@ -102,6 +102,7 @@ impl RollupManagerAddOn {
             ctx.config.chain.clone(),
             payload_provider,
             fcs,
+            self.config.engine_driver_args.en_sync_trigger,
             Duration::from_millis(self.config.sequencer_args.payload_building_duration),
         );
 

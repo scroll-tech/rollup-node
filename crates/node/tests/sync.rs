@@ -14,7 +14,6 @@ use rollup_node::{
 };
 use rollup_node_manager::RollupManagerCommand;
 use scroll_alloy_network::Scroll;
-use scroll_engine::BLOCK_GAP_TRIGGER;
 use std::{
     future::Future,
     pin::Pin,
@@ -32,21 +31,20 @@ static WALLET: LazyLock<Arc<Mutex<Wallet>>> = LazyLock::new(|| {
 #[tokio::test]
 async fn can_sync_en() {
     reth_tracing::init_test_tracing();
+    let node_config = default_test_scroll_rollup_node_config();
 
     // Create the chain spec for scroll mainnet with Euclid v2 activated and a test genesis.
     let chain_spec = (*SCROLL_DEV).clone();
     let (mut nodes, _tasks, _) =
-        setup_engine(default_test_scroll_rollup_node_config(), 1, chain_spec.clone(), false)
-            .await
-            .unwrap();
+        setup_engine(node_config.clone(), 1, chain_spec.clone(), false).await.unwrap();
     let mut synced = nodes.pop().unwrap();
 
     let (mut nodes, _tasks, _) =
-        setup_engine(default_test_scroll_rollup_node_config(), 1, chain_spec, false).await.unwrap();
+        setup_engine(node_config.clone(), 1, chain_spec, false).await.unwrap();
     let mut unsynced = nodes.pop().unwrap();
 
     // Advance the chain.
-    synced.advance(BLOCK_GAP_TRIGGER + 1, tx_gen).await.unwrap();
+    synced.advance(node_config.engine_driver_args.en_sync_trigger + 1, tx_gen).await.unwrap();
 
     // Connect the nodes together.
     synced.network.add_peer(unsynced.network.record()).await;
@@ -73,7 +71,7 @@ async fn can_sync_en() {
     let mut num = provider.get_block_number().await.unwrap();
 
     loop {
-        if retries > 20 || num > BLOCK_GAP_TRIGGER {
+        if retries > 20 || num > node_config.engine_driver_args.en_sync_trigger {
             break
         }
         num = provider.get_block_number().await.unwrap();

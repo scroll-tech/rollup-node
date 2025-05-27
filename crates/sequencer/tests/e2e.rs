@@ -23,6 +23,7 @@ async fn can_build_blocks() {
     reth_tracing::init_test_tracing();
 
     const BLOCK_BUILDING_DURATION: Duration = Duration::from_millis(0);
+    const BLOCK_GAP_TRIGGER: u64 = 100;
 
     // setup a test node
     let (mut nodes, _tasks, wallet) = setup(1, false).await.unwrap();
@@ -45,6 +46,7 @@ async fn can_build_blocks() {
         (*SCROLL_DEV).clone(),
         None::<ScrollRootProvider>,
         fcs,
+        BLOCK_GAP_TRIGGER,
         BLOCK_BUILDING_DURATION,
     );
 
@@ -137,6 +139,7 @@ async fn can_build_blocks_with_delayed_l1_messages() {
 
     let chain_spec = SCROLL_DEV.clone();
     const BLOCK_BUILDING_DURATION: Duration = tokio::time::Duration::from_millis(0);
+    const BLOCK_GAP_TRIGGER: u64 = 100;
     const L1_MESSAGE_DELAY: u64 = 2;
 
     // setup a test node
@@ -161,6 +164,7 @@ async fn can_build_blocks_with_delayed_l1_messages() {
         (*SCROLL_DEV).clone(),
         None::<ScrollRootProvider>,
         fcs,
+        BLOCK_GAP_TRIGGER,
         BLOCK_BUILDING_DURATION,
     );
 
