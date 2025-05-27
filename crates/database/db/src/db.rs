@@ -390,13 +390,10 @@ mod test {
         }
 
         // Test getting existing blocks
-        for expected_block in &block_infos {
+        for expected_block in block_infos {
             let retrieved_block =
                 db.get_l2_block_info_by_number(expected_block.number).await.unwrap();
-            assert!(retrieved_block.is_some());
-            let retrieved_block = retrieved_block.unwrap();
-            assert_eq!(retrieved_block.number, expected_block.number);
-            assert_eq!(retrieved_block.hash, expected_block.hash);
+            assert_eq!(retrieved_block, Some(expected_block))
         }
 
         // Test getting non-existent block
@@ -451,9 +448,8 @@ mod test {
         .unwrap();
 
         // Should return the highest safe block (block 201)
-        let latest_safe = db.get_latest_safe_l2_block().await.unwrap().unwrap();
-        assert_eq!(latest_safe.number, 201);
-        assert_eq!(latest_safe.hash, safe_block_2.hash);
+        let latest_safe = db.get_latest_safe_l2_block().await.unwrap();
+        assert_eq!(latest_safe, Some(safe_block_2));
     }
 
     #[tokio::test]
@@ -478,9 +474,8 @@ mod test {
         }
 
         // Should return the block with highest number
-        let retrieved_latest = db.get_latest_l2_block().await.unwrap().unwrap();
-        assert_eq!(retrieved_latest.number, latest_block.number);
-        assert_eq!(retrieved_latest.hash, latest_block.hash);
+        let retrieved_latest = db.get_latest_l2_block().await.unwrap();
+        assert_eq!(retrieved_latest, Some(latest_block));
     }
 
     #[tokio::test]
@@ -552,9 +547,8 @@ mod test {
         db.insert_block(l2_block, Some(batch_info)).await.unwrap();
 
         // Verify block was inserted
-        let retrieved_block = db.get_l2_block_info_by_number(500).await.unwrap().unwrap();
-        assert_eq!(retrieved_block.number, block_info.number);
-        assert_eq!(retrieved_block.hash, block_info.hash);
+        let retrieved_block = db.get_l2_block_info_by_number(500).await.unwrap();
+        assert_eq!(retrieved_block, Some(block_info));
 
         // Verify L1 messages were updated with L2 block number
         for i in 100..103 {
@@ -589,9 +583,8 @@ mod test {
         db.insert_block(l2_block, Some(batch_info_1)).await.unwrap();
 
         // Verify initial insertion
-        let retrieved_block = db.get_l2_block_info_by_number(600).await.unwrap().unwrap();
-        assert_eq!(retrieved_block.number, block_info.number);
-        assert_eq!(retrieved_block.hash, block_info.hash);
+        let retrieved_block = db.get_l2_block_info_by_number(600).await.unwrap();
+        assert_eq!(retrieved_block, Some(block_info));
 
         // Verify initial batch association using model conversion
         let initial_l2_block_model = models::l2_block::Entity::find()
@@ -612,8 +605,7 @@ mod test {
 
         // Verify the block still exists and was updated
         let retrieved_block = db.get_l2_block_info_by_number(600).await.unwrap().unwrap();
-        assert_eq!(retrieved_block.number, block_info.number);
-        assert_eq!(retrieved_block.hash, block_info.hash);
+        assert_eq!(retrieved_block, block_info);
 
         // Verify batch association was updated using model conversion
         let updated_l2_block_model = models::l2_block::Entity::find()
