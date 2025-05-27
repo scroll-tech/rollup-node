@@ -321,4 +321,310 @@ mod test {
         assert!(l1_messages.contains(&l1_message_1));
         assert!(l1_messages.contains(&l1_message_2));
     }
+
+    #[tokio::test]
+    async fn test_delete_l1_messages_gt() {
+        // Set up the test database.
+        let db = setup_test_db().await;
+
+        // Generate unstructured bytes.
+        let mut bytes = [0u8; 1024];
+        rand::rng().fill(bytes.as_mut_slice());
+        let mut u = Unstructured::new(&bytes);
+
+        // Generate L1 messages with different L1 block numbers and queue indices
+        for i in 0..10 {
+            let mut l1_message = L1MessageEnvelope::arbitrary(&mut u).unwrap();
+            l1_message.l1_block_number = 100 + i; // block number: 100-109
+            l1_message.transaction.queue_index = i; // queue index: 0-9
+            db.insert_l1_message(l1_message).await.unwrap();
+        }
+
+        // Delete messages with L1 block number > 105
+        let deleted_messages = db.delete_l1_messages_gt(105).await.unwrap();
+
+        // Verify that 4 messages were deleted (block numbers 106, 107, 108, 109)
+        assert_eq!(deleted_messages.len(), 4);
+
+        // Verify deleted messages have correct L1 block numbers
+        for msg in &deleted_messages {
+            assert!(msg.l1_block_number > 105);
+        }
+
+        // Verify remaining messages are still in database (queue indices 0-5)
+        for queue_idx in 0..=5 {
+            let msg = db.get_l1_message_by_index(queue_idx).await.unwrap();
+            assert!(msg.is_some());
+            assert!(msg.unwrap().l1_block_number <= 105);
+        }
+
+        // Verify deleted messages are no longer in database (queue indices 6-9)
+        for queue_idx in 6..10 {
+            let msg = db.get_l1_message_by_index(queue_idx).await.unwrap();
+            assert!(msg.is_none());
+        }
+    }
+
+    #[tokio::test]
+    async fn test_get_l2_block_info_by_number() {
+        // Set up the test database.
+        let db = setup_test_db().await;
+
+        // Generate unstructured bytes.
+        let mut bytes = [0u8; 1024];
+        rand::rng().fill(bytes.as_mut_slice());
+        let mut u = Unstructured::new(&bytes);
+
+        // Generate and insert a batch
+        let batch_data = BatchCommitData { index: 100, ..Arbitrary::arbitrary(&mut u).unwrap() };
+        let batch_info: BatchInfo = batch_data.clone().into();
+        db.insert_batch(batch_data).await.unwrap();
+
+        // Generate and insert multiple L2 blocks
+        let mut block_infos = Vec::new();
+        for i in 200..205 {
+            let block_info = BlockInfo { number: i, hash: B256::arbitrary(&mut u).unwrap() };
+            let l2_block = L2BlockInfoWithL1Messages { block_info, l1_messages: vec![] };
+            block_infos.push(block_info);
+            db.insert_block(l2_block, Some(batch_info)).await.unwrap();
+        }
+
+        // Test getting existing blocks
+        for expected_block in &block_infos {
+            let retrieved_block =
+                db.get_l2_block_info_by_number(expected_block.number).await.unwrap();
+            assert!(retrieved_block.is_some());
+            let retrieved_block = retrieved_block.unwrap();
+            assert_eq!(retrieved_block.number, expected_block.number);
+            assert_eq!(retrieved_block.hash, expected_block.hash);
+        }
+
+        // Test getting non-existent block
+        let non_existent_block = db.get_l2_block_info_by_number(999).await.unwrap();
+        assert!(non_existent_block.is_none());
+    }
+
+    #[tokio::test]
+    async fn test_get_latest_safe_l2_block() {
+        // Set up the test database.
+        let db = setup_test_db().await;
+
+        // Generate unstructured bytes.
+        let mut bytes = [0u8; 1024];
+        rand::rng().fill(bytes.as_mut_slice());
+        let mut u = Unstructured::new(&bytes);
+
+        // Initially should return None
+        let latest_safe = db.get_latest_safe_l2_block().await.unwrap();
+        assert!(latest_safe.is_none());
+
+        // Generate and insert a batch
+        let batch_data = BatchCommitData { index: 100, ..Arbitrary::arbitrary(&mut u).unwrap() };
+        let batch_info: BatchInfo = batch_data.clone().into();
+        db.insert_batch(batch_data).await.unwrap();
+
+        // Insert blocks with batch info (safe blocks)
+        let safe_block_1 = BlockInfo { number: 200, hash: B256::arbitrary(&mut u).unwrap() };
+        let safe_block_2 = BlockInfo { number: 201, hash: B256::arbitrary(&mut u).unwrap() };
+
+        db.insert_block(
+            L2BlockInfoWithL1Messages { block_info: safe_block_1, l1_messages: vec![] },
+            Some(batch_info),
+        )
+        .await
+        .unwrap();
+
+        db.insert_block(
+            L2BlockInfoWithL1Messages { block_info: safe_block_2, l1_messages: vec![] },
+            Some(batch_info),
+        )
+        .await
+        .unwrap();
+
+        // Insert block without batch info (unsafe block)
+        let unsafe_block = BlockInfo { number: 202, hash: B256::arbitrary(&mut u).unwrap() };
+        db.insert_block(
+            L2BlockInfoWithL1Messages { block_info: unsafe_block, l1_messages: vec![] },
+            None,
+        )
+        .await
+        .unwrap();
+
+        // Should return the highest safe block (block 201)
+        let latest_safe = db.get_latest_safe_l2_block().await.unwrap().unwrap();
+        assert_eq!(latest_safe.number, 201);
+        assert_eq!(latest_safe.hash, safe_block_2.hash);
+    }
+
+    #[tokio::test]
+    async fn test_get_latest_l2_block() {
+        // Set up the test database.
+        let db = setup_test_db().await;
+
+        // Generate unstructured bytes.
+        let mut bytes = [0u8; 1024];
+        rand::rng().fill(bytes.as_mut_slice());
+        let mut u = Unstructured::new(&bytes);
+
+        // Insert multiple blocks with increasing block numbers
+        let mut latest_block = BlockInfo { number: 0, hash: B256::ZERO };
+        for i in 300..305 {
+            let block_info = BlockInfo { number: i, hash: B256::arbitrary(&mut u).unwrap() };
+            latest_block = block_info;
+
+            db.insert_block(L2BlockInfoWithL1Messages { block_info, l1_messages: vec![] }, None)
+                .await
+                .unwrap();
+        }
+
+        // Should return the block with highest number
+        let retrieved_latest = db.get_latest_l2_block().await.unwrap().unwrap();
+        assert_eq!(retrieved_latest.number, latest_block.number);
+        assert_eq!(retrieved_latest.hash, latest_block.hash);
+    }
+
+    #[tokio::test]
+    async fn test_delete_l2_blocks_gt() {
+        // Set up the test database.
+        let db = setup_test_db().await;
+
+        // Generate unstructured bytes.
+        let mut bytes = [0u8; 1024];
+        rand::rng().fill(bytes.as_mut_slice());
+        let mut u = Unstructured::new(&bytes);
+
+        // Insert multiple L2 blocks
+        for i in 400..410 {
+            let block_info = BlockInfo { number: i, hash: B256::arbitrary(&mut u).unwrap() };
+
+            db.insert_block(L2BlockInfoWithL1Messages { block_info, l1_messages: vec![] }, None)
+                .await
+                .unwrap();
+        }
+
+        // Delete blocks with number > 405
+        let deleted_count = db.delete_l2_blocks_gt(405).await.unwrap();
+        assert_eq!(deleted_count, 4); // Blocks 406, 407, 408, 409
+
+        // Verify remaining blocks still exist
+        for i in 400..=405 {
+            let block = db.get_l2_block_info_by_number(i).await.unwrap();
+            assert!(block.is_some());
+        }
+
+        // Verify deleted blocks no longer exist
+        for i in 406..410 {
+            let block = db.get_l2_block_info_by_number(i).await.unwrap();
+            assert!(block.is_none());
+        }
+    }
+
+    #[tokio::test]
+    async fn test_insert_block_with_l1_messages() {
+        // Set up the test database.
+        let db = setup_test_db().await;
+
+        // Generate unstructured bytes.
+        let mut bytes = [0u8; 1024];
+        rand::rng().fill(bytes.as_mut_slice());
+        let mut u = Unstructured::new(&bytes);
+
+        // Generate and insert batch
+        let batch_data = BatchCommitData { index: 10, ..Arbitrary::arbitrary(&mut u).unwrap() };
+        let batch_info: BatchInfo = batch_data.clone().into();
+        db.insert_batch(batch_data).await.unwrap();
+
+        // Generate and insert L1 messages
+        let mut l1_message_hashes = Vec::new();
+        for i in 100..103 {
+            let mut l1_message = L1MessageEnvelope::arbitrary(&mut u).unwrap();
+            l1_message.transaction.queue_index = i;
+            l1_message_hashes.push(l1_message.transaction.tx_hash());
+            db.insert_l1_message(l1_message).await.unwrap();
+        }
+
+        // Create block with L1 messages
+        let block_info = BlockInfo { number: 500, hash: B256::arbitrary(&mut u).unwrap() };
+        let l2_block =
+            L2BlockInfoWithL1Messages { block_info, l1_messages: l1_message_hashes.clone() };
+
+        // Insert block
+        db.insert_block(l2_block, Some(batch_info)).await.unwrap();
+
+        // Verify block was inserted
+        let retrieved_block = db.get_l2_block_info_by_number(500).await.unwrap().unwrap();
+        assert_eq!(retrieved_block.number, block_info.number);
+        assert_eq!(retrieved_block.hash, block_info.hash);
+
+        // Verify L1 messages were updated with L2 block number
+        for i in 100..103 {
+            let l1_message = db.get_l1_message_by_index(i).await.unwrap().unwrap();
+            assert_eq!(l1_message.l2_block_number, Some(500));
+        }
+    }
+
+    #[tokio::test]
+    async fn test_insert_block_upsert_behavior() {
+        // Set up the test database.
+        let db = setup_test_db().await;
+
+        // Generate unstructured bytes.
+        let mut bytes = [0u8; 1024];
+        rand::rng().fill(bytes.as_mut_slice());
+        let mut u = Unstructured::new(&bytes);
+
+        // Generate batches
+        let batch_data_1 = BatchCommitData { index: 100, ..Arbitrary::arbitrary(&mut u).unwrap() };
+        let batch_info_1: BatchInfo = batch_data_1.clone().into();
+        let batch_data_2 = BatchCommitData { index: 200, ..Arbitrary::arbitrary(&mut u).unwrap() };
+        let batch_info_2: BatchInfo = batch_data_2.clone().into();
+
+        db.insert_batch(batch_data_1).await.unwrap();
+        db.insert_batch(batch_data_2).await.unwrap();
+
+        // Insert initial block
+        let block_info = BlockInfo { number: 600, hash: B256::arbitrary(&mut u).unwrap() };
+        let l2_block = L2BlockInfoWithL1Messages { block_info, l1_messages: vec![] };
+
+        db.insert_block(l2_block, Some(batch_info_1)).await.unwrap();
+
+        // Verify initial insertion
+        let retrieved_block = db.get_l2_block_info_by_number(600).await.unwrap().unwrap();
+        assert_eq!(retrieved_block.number, block_info.number);
+        assert_eq!(retrieved_block.hash, block_info.hash);
+
+        // Verify initial batch association using model conversion
+        let initial_l2_block_model = models::l2_block::Entity::find()
+            .filter(models::l2_block::Column::BlockNumber.eq(600))
+            .one(db.get_connection())
+            .await
+            .unwrap()
+            .unwrap();
+        let (initial_block_info, initial_batch_info): (BlockInfo, Option<BatchInfo>) =
+            initial_l2_block_model.into();
+        assert_eq!(initial_block_info, block_info);
+        assert_eq!(initial_batch_info, Some(batch_info_1));
+
+        // Update the same block with different batch info (upsert)
+        let updated_l2_block = L2BlockInfoWithL1Messages { block_info, l1_messages: vec![] };
+
+        db.insert_block(updated_l2_block, Some(batch_info_2)).await.unwrap();
+
+        // Verify the block still exists and was updated
+        let retrieved_block = db.get_l2_block_info_by_number(600).await.unwrap().unwrap();
+        assert_eq!(retrieved_block.number, block_info.number);
+        assert_eq!(retrieved_block.hash, block_info.hash);
+
+        // Verify batch association was updated using model conversion
+        let updated_l2_block_model = models::l2_block::Entity::find()
+            .filter(models::l2_block::Column::BlockNumber.eq(600))
+            .one(db.get_connection())
+            .await
+            .unwrap()
+            .unwrap();
+        let (updated_block_info, updated_batch_info): (BlockInfo, Option<BatchInfo>) =
+            updated_l2_block_model.into();
+        assert_eq!(updated_block_info, block_info);
+        assert_eq!(updated_batch_info, Some(batch_info_2));
+    }
 }
