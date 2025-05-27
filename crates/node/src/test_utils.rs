@@ -4,15 +4,13 @@ use super::{
     BeaconProviderArgs, DatabaseArgs, EngineDriverArgs, L1ProviderArgs, ScrollRollupNode,
     ScrollRollupNodeConfig, SequencerArgs,
 };
-use alloy_primitives::{Bytes, B256};
-use alloy_rpc_types_engine::PayloadAttributes;
+use alloy_primitives::Bytes;
 use reth_chainspec::EthChainSpec;
 use reth_e2e_test_utils::{
     node::NodeTestContext, transaction::TransactionTestContext, wallet::Wallet, Adapter,
     NodeHelperType, TmpDB, TmpNodeAddOnsHandle, TmpNodeEthApi,
 };
 use reth_engine_local::LocalPayloadAttributesBuilder;
-use reth_node_api::PayloadBuilderAttributes;
 use reth_node_builder::{
     rpc::RpcHandleProvider, EngineNodeLauncher, Node, NodeBuilder, NodeConfig, NodeHandle,
     NodeTypes, NodeTypesWithDBAdapter, PayloadAttributesBuilder, PayloadTypes,
@@ -20,10 +18,8 @@ use reth_node_builder::{
 use reth_node_core::args::{DiscoveryArgs, NetworkArgs, RpcServerArgs};
 use reth_provider::providers::BlockchainProvider;
 use reth_rpc_server_types::RpcModuleSelection;
-use reth_scroll_engine_primitives::ScrollPayloadBuilderAttributes;
 use reth_tasks::TaskManager;
 use rollup_node_manager::RollupManagerCommand;
-use scroll_alloy_rpc_types_engine::ScrollPayloadAttributes;
 use std::{path::PathBuf, sync::Arc};
 use tokio::sync::Mutex;
 use tracing::{span, Level};
@@ -93,7 +89,9 @@ where
             })
             .await?;
 
-        let mut node = NodeTestContext::new(node, scroll_payload_attributes).await?;
+        let mut node =
+            NodeTestContext::new(node, |_| panic!("should not build payloads using this method"))
+                .await?;
 
         // Disable sync mode for the engine driver by default in testing.
         node.inner
@@ -123,15 +121,6 @@ where
     Ok((nodes, tasks, Wallet::default().with_chain_id(chain_spec.chain().into())))
 }
 
-/// Helper function to create a new eth payload attributes
-fn scroll_payload_attributes(timestamp: u64) -> ScrollPayloadBuilderAttributes {
-    let attributes = ScrollPayloadAttributes {
-        payload_attributes: PayloadAttributes { timestamp, ..Default::default() },
-        ..Default::default()
-    };
-    ScrollPayloadBuilderAttributes::try_new(B256::ZERO, attributes, 0).unwrap()
-}
-
 /// Generate a transfer transaction with the given wallet.
 pub async fn generate_tx(wallet: Arc<Mutex<Wallet>>) -> Bytes {
     let mut wallet = wallet.lock().await;
@@ -156,6 +145,28 @@ pub fn default_test_scroll_rollup_node_config() -> ScrollRollupNodeConfig {
         l1_provider_args: L1ProviderArgs::default(),
         engine_driver_args: EngineDriverArgs { en_sync_trigger: 100 },
         sequencer_args: SequencerArgs::default(),
+        beacon_provider_args: BeaconProviderArgs::default(),
+    }
+}
+
+/// Returns a default [`ScrollRollupNodeConfig`] preconfigured for testing with sequencer.
+pub fn default_sequencer_test_scroll_rollup_node_config() -> ScrollRollupNodeConfig {
+    ScrollRollupNodeConfig {
+        test: true,
+        network_args: crate::args::NetworkArgs {
+            enable_eth_scroll_wire_bridge: true,
+            enable_scroll_wire: true,
+        },
+        database_args: DatabaseArgs { path: Some(PathBuf::from("sqlite::memory:")) },
+        l1_provider_args: L1ProviderArgs::default(),
+        engine_driver_args: EngineDriverArgs { en_sync_trigger: 100 },
+        sequencer_args: SequencerArgs {
+            sequencer_enabled: true,
+            block_time: 50,
+            payload_building_duration: 0,
+            max_l1_messages_per_block: 0,
+            fee_recipient: Default::default(),
+        },
         beacon_provider_args: BeaconProviderArgs::default(),
     }
 }

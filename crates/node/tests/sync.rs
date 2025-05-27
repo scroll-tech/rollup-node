@@ -9,7 +9,10 @@ use reth_eth_wire_types::NewBlock;
 use reth_scroll_chainspec::SCROLL_DEV;
 use reth_scroll_primitives::{ScrollBlock, ScrollTransactionSigned};
 use rollup_node::{
-    test_utils::{default_test_scroll_rollup_node_config, setup_engine},
+    test_utils::{
+        default_sequencer_test_scroll_rollup_node_config, default_test_scroll_rollup_node_config,
+        setup_engine,
+    },
     ScrollRollupNode,
 };
 use rollup_node_manager::RollupManagerCommand;
@@ -29,14 +32,15 @@ static WALLET: LazyLock<Arc<Mutex<Wallet>>> = LazyLock::new(|| {
 /// We test if the syncing of the RN is correctly triggered and released when the EN reaches sync.
 #[allow(clippy::large_stack_frames)]
 #[tokio::test]
-async fn can_sync_en() {
+async fn test_should_trigger_pipeline_sync_for_execution_node() {
     reth_tracing::init_test_tracing();
     let node_config = default_test_scroll_rollup_node_config();
+    let sequencer_node_config = default_sequencer_test_scroll_rollup_node_config();
 
     // Create the chain spec for scroll mainnet with Euclid v2 activated and a test genesis.
     let chain_spec = (*SCROLL_DEV).clone();
     let (mut nodes, _tasks, _) =
-        setup_engine(node_config.clone(), 1, chain_spec.clone(), false).await.unwrap();
+        setup_engine(sequencer_node_config.clone(), 1, chain_spec.clone(), false).await.unwrap();
     let mut synced = nodes.pop().unwrap();
 
     let (mut nodes, _tasks, _) =
@@ -44,7 +48,12 @@ async fn can_sync_en() {
     let mut unsynced = nodes.pop().unwrap();
 
     // Advance the chain.
-    synced.advance(node_config.engine_driver_args.en_sync_trigger + 1, tx_gen).await.unwrap();
+    build_blocks(
+        &mut synced,
+        node_config.engine_driver_args.en_sync_trigger as usize + 1,
+        sequencer_node_config.sequencer_args.block_time,
+    )
+    .await;
 
     // Connect the nodes together.
     synced.network.add_peer(unsynced.network.record()).await;
@@ -80,7 +89,7 @@ async fn can_sync_en() {
     }
 
     // Build and announce a new block to have engine driver exit syncing mode.
-    build_block_and_announce(&mut synced).await;
+    build_block_and_announce(&mut synced, sequencer_node_config.sequencer_args.block_time).await;
 
     // Check the unsynced node exits sync mode.
     let (tx, rx) = oneshot::channel();
@@ -108,9 +117,18 @@ fn tx_gen(_: u64) -> Pin<Box<dyn Future<Output = Bytes>>> {
     })
 }
 
+async fn build_blocks(node: &mut NodeHelperType<ScrollRollupNode>, len: usize, wait: u64) {
+    let rollup_node_handle = &node.inner.rollup_manager_handle;
+    // Advance the chain.
+    for _ in 0..len {
+        rollup_node_handle.build_block().await;
+        tokio::time::sleep(tokio::time::Duration::from_millis(wait)).await;
+    }
+}
+
 /// Builds a block and announces it on the network.
-async fn build_block_and_announce(node: &mut NodeHelperType<ScrollRollupNode>) {
-    node.advance(1, tx_gen).await.unwrap();
+async fn build_block_and_announce(node: &mut NodeHelperType<ScrollRollupNode>, wait: u64) {
+    build_blocks(node, 1, wait).await;
     announce_latest_block(node).await;
 }
 
