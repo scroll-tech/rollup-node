@@ -1,6 +1,6 @@
 //! End-to-end tests for the rollup node.
 
-use alloy_primitives::B256;
+use alloy_primitives::{Address, B256, U256};
 use futures::StreamExt;
 use reth_e2e_test_utils::{node::NodeTestContext, NodeHelperType};
 use reth_network::{NetworkConfigBuilder, PeersInfo};
@@ -9,19 +9,149 @@ use reth_node_api::PayloadBuilderAttributes;
 use reth_node_builder::{NodeBuilder, NodeConfig, NodeHandle};
 use reth_node_core::args::{DiscoveryArgs, NetworkArgs, RpcServerArgs};
 use reth_rpc_server_types::RpcModuleSelection;
-use reth_scroll_chainspec::ScrollChainSpec;
+use reth_scroll_chainspec::{ScrollChainSpec, SCROLL_DEV};
 use reth_scroll_engine_primitives::ScrollPayloadBuilderAttributes;
 use reth_scroll_node::ScrollNetworkPrimitives;
 use reth_tasks::TaskManager;
 use rollup_node::{
-    BeaconProviderArgs, L1ProviderArgs, L2ProviderArgs, NetworkArgs as ScrollNetworkArgs,
+    test_utils::{generate_tx, setup_engine},
+    BeaconProviderArgs, DatabaseArgs, L1ProviderArgs, NetworkArgs as ScrollNetworkArgs,
     ScrollRollupNode, ScrollRollupNodeConfig, SequencerArgs,
 };
+use rollup_node_manager::{RollupManagerEvent, RollupManagerHandle};
+use rollup_node_watcher::L1Notification;
+use scroll_alloy_consensus::TxL1Message;
 use scroll_alloy_rpc_types_engine::ScrollPayloadAttributes;
 use scroll_network::{NewBlockWithPeer, SCROLL_MAINNET};
 use scroll_wire::ScrollWireConfig;
 use std::{path::PathBuf, sync::Arc};
+use tokio::sync::Mutex;
 use tracing::trace;
+
+#[tokio::test]
+async fn can_bridge_l1_messages() -> eyre::Result<()> {
+    reth_tracing::init_test_tracing();
+
+    // Create the chain spec for scroll mainnet with Euclid v2 activated and a test genesis.
+    let chain_spec = (*SCROLL_DEV).clone();
+    let node_args = ScrollRollupNodeConfig {
+        test: true,
+        network_args: ScrollNetworkArgs {
+            enable_eth_scroll_wire_bridge: true,
+            enable_scroll_wire: true,
+        },
+        optimistic_sync: false,
+        database_args: DatabaseArgs { path: Some(PathBuf::from("sqlite::memory:")) },
+        l1_provider_args: L1ProviderArgs::default(),
+        sequencer_args: SequencerArgs {
+            sequencer_enabled: true,
+            block_time: 0,
+            max_l1_messages_per_block: 4,
+            ..SequencerArgs::default()
+        },
+        beacon_provider_args: BeaconProviderArgs::default(),
+    };
+    let (mut nodes, _tasks, _wallet) = setup_engine(node_args, 1, chain_spec, false).await.unwrap();
+    let node = nodes.pop().unwrap();
+
+    let rnm_handle: RollupManagerHandle = node.inner.add_ons_handle.rollup_manager_handle.clone();
+    let mut rnm_events = rnm_handle.get_event_listener().await?;
+    let l1_watcher_tx = node.inner.add_ons_handle.l1_watcher_tx.clone().unwrap();
+
+    let l1_message = TxL1Message {
+        queue_index: 0,
+        gas_limit: 21000,
+        sender: Address::random(),
+        to: Address::random(),
+        value: U256::from(1),
+        input: Default::default(),
+    };
+    l1_watcher_tx
+        .send(Arc::new(L1Notification::L1Message {
+            message: l1_message.clone(),
+            block_number: 0,
+            block_timestamp: 1000,
+        }))
+        .await?;
+    if let Some(RollupManagerEvent::L1MessageIndexed(index)) = rnm_events.next().await {
+        assert_eq!(index, 0);
+    } else {
+        panic!("Incorrect index for L1 message");
+    };
+
+    rnm_handle.build_block().await;
+    if let Some(RollupManagerEvent::BlockSequenced(block)) = rnm_events.next().await {
+        assert_eq!(block.body.transactions.len(), 1);
+        assert_eq!(block.body.transactions[0].transaction.l1_message().unwrap(), &l1_message,);
+    } else {
+        panic!("Failed to receive block from rollup node");
+    }
+
+    Ok(())
+}
+
+#[tokio::test]
+async fn can_sequence_and_gossip_blocks() {
+    reth_tracing::init_test_tracing();
+
+    // create 2 nodes
+    let chain_spec = (*SCROLL_DEV).clone();
+    let rollup_manager_args = ScrollRollupNodeConfig {
+        test: true,
+        network_args: ScrollNetworkArgs {
+            enable_eth_scroll_wire_bridge: true,
+            enable_scroll_wire: true,
+        },
+        optimistic_sync: false,
+        database_args: DatabaseArgs { path: Some(PathBuf::from("sqlite::memory:")) },
+        l1_provider_args: L1ProviderArgs::default(),
+        sequencer_args: SequencerArgs {
+            sequencer_enabled: true,
+            block_time: 0,
+            max_l1_messages_per_block: 4,
+            ..SequencerArgs::default()
+        },
+        beacon_provider_args: BeaconProviderArgs::default(),
+    };
+
+    let (nodes, _tasks, wallet) =
+        setup_engine(rollup_manager_args, 2, chain_spec, false).await.unwrap();
+    let wallet = Arc::new(Mutex::new(wallet));
+
+    // generate rollup node manager event streams for each node
+    let sequencer_rnm_handle = nodes[0].inner.add_ons_handle.rollup_manager_handle.clone();
+    let mut sequencer_events = sequencer_rnm_handle.get_event_listener().await.unwrap();
+    let mut follower_events =
+        nodes[1].inner.add_ons_handle.rollup_manager_handle.get_event_listener().await.unwrap();
+
+    // inject a transaction into the pool of the first node
+    let tx = generate_tx(wallet).await;
+    nodes[0].rpc.inject_tx(tx).await.unwrap();
+    sequencer_rnm_handle.build_block().await;
+
+    // wait for the sequencer to build a block
+    if let Some(RollupManagerEvent::BlockSequenced(block)) = sequencer_events.next().await {
+        assert_eq!(block.body.transactions.len(), 1);
+    } else {
+        panic!("Failed to receive block from rollup node");
+    }
+
+    // assert that the follower node has received the block from the peer
+    if let Some(RollupManagerEvent::NewBlockReceived(block_with_peer)) =
+        follower_events.next().await
+    {
+        assert_eq!(block_with_peer.block.body.transactions.len(), 1);
+    } else {
+        panic!("Failed to receive block from rollup node");
+    }
+
+    // assert that the block was successfully imported by the follower node
+    if let Some(RollupManagerEvent::BlockImported(block)) = follower_events.next().await {
+        assert_eq!(block.body.transactions.len(), 1);
+    } else {
+        panic!("Failed to receive block from rollup node");
+    }
+}
 
 /// We test the bridge from the eth-wire protocol to the scroll-wire protocol.
 ///
@@ -136,12 +266,10 @@ pub async fn build_bridge_node(
             enable_scroll_wire: true,
         },
         optimistic_sync: false,
-        database_path: Some(PathBuf::from("sqlite::memory:")),
+        database_args: DatabaseArgs { path: Some(PathBuf::from("sqlite::memory:")) },
         l1_provider_args: L1ProviderArgs::default(),
-        engine_api_url: None,
-        sequencer_args: SequencerArgs { sequencer_enabled: false, ..SequencerArgs::default() },
+        sequencer_args: SequencerArgs::default(),
         beacon_provider_args: BeaconProviderArgs::default(),
-        l2_provider_args: L2ProviderArgs::default(),
     };
     let node = ScrollRollupNode::new(node_args);
     let NodeHandle { node, node_exit_future: _ } =

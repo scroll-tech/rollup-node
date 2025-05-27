@@ -165,6 +165,7 @@ reth-scroll-node = { git = "https://github.com/scroll-tech/reth.git", default-fe
 reth-scroll-primitives = { git = "https://github.com/scroll-tech/reth.git", default-features = false }
 
 # rollup node
+rollup-node = { path = "crates/node" }
 rollup-node-indexer = { path = "crates/indexer" }
 rollup-node-manager = { path = "crates/manager" }
 rollup-node-primitives = { path = "crates/primitives" }

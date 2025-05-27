@@ -17,6 +17,7 @@ alloy-primitives.workspace = true
 alloy-rpc-types-engine.workspace = true
 
 # scroll-alloy
+scroll-alloy-hardforks.workspace = true
 scroll-alloy-provider.workspace = true
 scroll-alloy-rpc-types-engine.workspace = true
 
@@ -47,7 +48,7 @@ tracing.workspace = true
 [dev-dependencies]
 arbitrary.workspace = true
 async-trait.workspace = true
-reth-testing-utils = { git = "https://github.com/scroll-tech/reth.git" }
+reth-testing-utils = { git = "https://github.com/scroll-tech/reth.git", default-features = false }
 rollup-node-providers = { workspace = true, features = ["test-utils"] }
 scroll-engine = { path = "../engine", features = ["test-utils"] }
 
@@ -68,4 +69,5 @@ serde = [
     "reth-network-api/serde",
     "scroll-network/serde",
     "scroll-engine/serde",
+    "scroll-alloy-hardforks/serde",
 ]

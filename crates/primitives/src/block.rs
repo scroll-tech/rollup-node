@@ -1,9 +1,12 @@
 use alloy_eips::BlockNumHash;
-use alloy_primitives::B256;
+use alloy_primitives::{B256, U256};
 use alloy_rpc_types_engine::{ExecutionPayload, PayloadError};
 use reth_primitives_traits::transaction::signed::SignedTransaction;
 use reth_scroll_primitives::ScrollBlock;
 use std::vec::Vec;
+
+/// The default block difficulty for a scroll block.
+pub const DEFAULT_BLOCK_DIFFICULTY: U256 = U256::from_limbs([1, 0, 0, 0]);
 
 /// Information about a block.
 #[derive(Debug, Default, Copy, Clone, PartialEq, Eq)]

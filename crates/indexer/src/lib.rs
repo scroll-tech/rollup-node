@@ -204,10 +204,10 @@ impl<ChainSpec: ScrollHardforks + EthChainSpec + Send + Sync + 'static> Indexer<
     ) -> Result<IndexerEvent, IndexerError> {
         let event = IndexerEvent::L1MessageIndexed(l1_message.queue_index);
 
-        // TODO(greg): update to Euclid.
         let queue_hash = if chain_spec
-            .scroll_fork_activation(ScrollHardfork::DarwinV2)
-            .active_at_timestamp_or_number(block_timestamp, l1_block_number)
+            .scroll_fork_activation(ScrollHardfork::EuclidV2)
+            .active_at_timestamp_or_number(block_timestamp, l1_block_number) &&
+            l1_message.queue_index > 0
         {
             let index = l1_message.queue_index - 1;
             let prev_queue_hash = database
@@ -377,7 +377,7 @@ mod test {
         indexer.handle_l1_notification(L1Notification::L1Message {
             message: TxL1Message { queue_index: 1062109, ..Default::default() },
             block_number: 1475588,
-            block_timestamp: 172526400,
+            block_timestamp: 1745305199,
         });
         let _ = indexer.next().await.unwrap().unwrap();
 
@@ -393,7 +393,7 @@ mod test {
         indexer.handle_l1_notification(L1Notification::L1Message {
             message: message.clone(),
             block_number: 14755883,
-            block_timestamp: 1725264000,
+            block_timestamp: 1745305200,
         });
 
         let _ = indexer.next().await.unwrap().unwrap();
