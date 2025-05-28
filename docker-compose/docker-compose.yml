@@ -2,8 +2,7 @@ version: '3'
 
 services:
   rollup-node:
-    image: scrolltech/rollup-node:v0.0.1-rc8
-    platform: linux/amd64
+    image: scrolltech/rollup-node:v0.0.1-rc9
     container_name: rollup-node
     entrypoint: ["sh", "-c"]
     command: >
