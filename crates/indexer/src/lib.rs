@@ -13,10 +13,12 @@ use scroll_db::{Database, DatabaseError, DatabaseOperations};
 use std::{
     collections::VecDeque,
     pin::Pin,
-    sync::Arc,
+    sync::{
+        atomic::{AtomicU64, Ordering},
+        Arc,
+    },
     task::{Context, Poll},
 };
-use tokio::sync::Mutex;
 
 mod action;
 use action::IndexerFuture;
@@ -38,9 +40,9 @@ pub struct Indexer<ChainSpec> {
     /// A queue of pending futures.
     pending_futures: VecDeque<IndexerFuture>,
     /// The block number of the L1 finalized block.
-    l1_finalized_block_number: Arc<Mutex<u64>>,
+    l1_finalized_block_number: Arc<AtomicU64>,
     /// The block number of the L2 finalized block.
-    l2_finalized_block_number: Arc<Mutex<u64>>,
+    l2_finalized_block_number: Arc<AtomicU64>,
     /// The chain specification for the indexer.
     chain_spec: Arc<ChainSpec>,
 }
@@ -51,8 +53,8 @@ impl<ChainSpec: ScrollHardforks + EthChainSpec + Send + Sync + 'static> Indexer<
         Self {
             database,
             pending_futures: Default::default(),
-            l1_finalized_block_number: Arc::new(Mutex::new(0)),
-            l2_finalized_block_number: Arc::new(Mutex::new(0)),
+            l1_finalized_block_number: Arc::new(AtomicU64::new(0)),
+            l2_finalized_block_number: Arc::new(AtomicU64::new(0)),
             chain_spec,
         }
     }
@@ -175,8 +177,8 @@ impl<ChainSpec: ScrollHardforks + EthChainSpec + Send + Sync + 'static> Indexer<
     async fn handle_finalized(
         database: Arc<Database>,
         block_number: u64,
-        l1_block_number: Arc<Mutex<u64>>,
-        l2_block_number: Arc<Mutex<u64>>,
+        l1_block_number: Arc<AtomicU64>,
+        l2_block_number: Arc<AtomicU64>,
     ) -> Result<IndexerEvent, IndexerError> {
         // get the newest finalized batch.
         let batch_hash = database.get_finalized_batch_hash_at_height(block_number).await?;
@@ -189,7 +191,7 @@ impl<ChainSpec: ScrollHardforks + EthChainSpec + Send + Sync + 'static> Indexer<
         };
 
         // update the indexer l1 block number.
-        *l1_block_number.lock().await = block_number;
+        l1_block_number.store(block_number, Ordering::Relaxed);
 
         Ok(IndexerEvent::FinalizedIndexed(block_number, finalized_block))
     }
@@ -243,16 +245,16 @@ impl<ChainSpec: ScrollHardforks + EthChainSpec + Send + Sync + 'static> Indexer<
         database: Arc<Database>,
         batch_hash: B256,
         block_number: u64,
-        l1_block_number: Arc<Mutex<u64>>,
-        l2_block_number: Arc<Mutex<u64>>,
+        l1_block_number: Arc<AtomicU64>,
+        l2_block_number: Arc<AtomicU64>,
     ) -> Result<IndexerEvent, IndexerError> {
         // finalized the batch.
         database.finalize_batch(batch_hash, block_number).await?;
 
         // check if the block where the batch was finalized is finalized on L1.
         let mut finalized_block = None;
-        let l1_block_number = *l1_block_number.lock().await;
-        if l1_block_number > block_number {
+        let l1_block_number_value = l1_block_number.load(Ordering::Relaxed);
+        if l1_block_number_value > block_number {
             // fetch the finalized block.
             finalized_block =
                 Self::fetch_highest_finalized_block(database, batch_hash, l2_block_number).await?;
@@ -267,15 +269,20 @@ impl<ChainSpec: ScrollHardforks + EthChainSpec + Send + Sync + 'static> Indexer<
     async fn fetch_highest_finalized_block(
         database: Arc<Database>,
         batch_hash: B256,
-        l2_block_number: Arc<Mutex<u64>>,
+        l2_block_number: Arc<AtomicU64>,
     ) -> Result<Option<BlockInfo>, IndexerError> {
         let finalized_block = database.get_highest_block_for_batch(batch_hash).await?;
-        let mut l2_block_number = l2_block_number.lock().await;
 
         // only return the block if the indexer hasn't seen it.
         // in which case also update the `l2_finalized_block_number` value.
-        Ok(finalized_block.filter(|info| info.number > *l2_block_number).inspect(|info| {
-            *l2_block_number = info.number;
+        Ok(finalized_block.filter(|info| {
+            let current_l2_block_number = l2_block_number.load(Ordering::Relaxed);
+            if info.number > current_l2_block_number {
+                l2_block_number.store(info.number, Ordering::Relaxed);
+                true
+            } else {
+                false
+            }
         }))
     }
 }
