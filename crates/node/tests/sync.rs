@@ -4,7 +4,7 @@ use alloy_consensus::BlockBody;
 use alloy_eips::{BlockId, BlockNumberOrTag};
 use alloy_primitives::{Bytes, Signature};
 use alloy_provider::{Provider, ProviderBuilder};
-use reth_e2e_test_utils::{transaction::TransactionTestContext, wallet::Wallet, NodeHelperType};
+use reth_e2e_test_utils::NodeHelperType;
 use reth_eth_wire_types::NewBlock;
 use reth_scroll_chainspec::SCROLL_DEV;
 use reth_scroll_primitives::{ScrollBlock, ScrollTransactionSigned};
@@ -17,17 +17,7 @@ use rollup_node::{
 };
 use rollup_node_manager::RollupManagerCommand;
 use scroll_alloy_network::Scroll;
-use std::{
-    future::Future,
-    pin::Pin,
-    sync::{Arc, LazyLock},
-};
-use tokio::sync::{oneshot, Mutex};
-
-static WALLET: LazyLock<Arc<Mutex<Wallet>>> = LazyLock::new(|| {
-    let chain_spec = (*SCROLL_DEV).clone();
-    Arc::new(Mutex::new(Wallet::default().with_chain_id(chain_spec.chain().into())))
-});
+use tokio::sync::oneshot;
 
 /// We test if the syncing of the RN is correctly triggered and released when the EN reaches sync.
 #[allow(clippy::large_stack_frames)]
@@ -49,7 +39,7 @@ async fn test_should_trigger_pipeline_sync_for_execution_node() {
 
     // Advance the chain.
     build_blocks(
-        &mut synced,
+        &synced,
         node_config.engine_driver_args.en_sync_trigger as usize + 1,
         sequencer_node_config.sequencer_args.block_time,
     )
@@ -89,7 +79,7 @@ async fn test_should_trigger_pipeline_sync_for_execution_node() {
     }
 
     // Build and announce a new block to have engine driver exit syncing mode.
-    build_block_and_announce(&mut synced, sequencer_node_config.sequencer_args.block_time).await;
+    build_block_and_announce(&synced, sequencer_node_config.sequencer_args.block_time).await;
 
     // Check the unsynced node exits sync mode.
     let (tx, rx) = oneshot::channel();
@@ -103,21 +93,7 @@ async fn test_should_trigger_pipeline_sync_for_execution_node() {
     assert!(!status.syncing);
 }
 
-fn tx_gen(_: u64) -> Pin<Box<dyn Future<Output = Bytes>>> {
-    let wallet = WALLET.clone();
-    Box::pin(async move {
-        let mut wallet = wallet.lock().await;
-        let tx_fut = TransactionTestContext::transfer_tx_nonce_bytes(
-            wallet.chain_id,
-            wallet.inner.clone(),
-            wallet.inner_nonce,
-        );
-        wallet.inner_nonce += 1;
-        tx_fut.await
-    })
-}
-
-async fn build_blocks(node: &mut NodeHelperType<ScrollRollupNode>, len: usize, wait: u64) {
+async fn build_blocks(node: &NodeHelperType<ScrollRollupNode>, len: usize, wait: u64) {
     let rollup_node_handle = &node.inner.rollup_manager_handle;
     // Advance the chain.
     for _ in 0..len {
@@ -127,7 +103,7 @@ async fn build_blocks(node: &mut NodeHelperType<ScrollRollupNode>, len: usize, w
 }
 
 /// Builds a block and announces it on the network.
-async fn build_block_and_announce(node: &mut NodeHelperType<ScrollRollupNode>, wait: u64) {
+async fn build_block_and_announce(node: &NodeHelperType<ScrollRollupNode>, wait: u64) {
     build_blocks(node, 1, wait).await;
     announce_latest_block(node).await;
 }

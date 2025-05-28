@@ -2,7 +2,6 @@ use crate::{
     args::{L1ProviderArgs, ScrollRollupNodeConfig},
     constants::PROVIDER_BLOB_CACHE_SIZE,
 };
-use alloy_primitives::Sealable;
 use alloy_provider::ProviderBuilder;
 use alloy_rpc_client::RpcClient;
 use alloy_signer_local::PrivateKeySigner;
@@ -74,7 +73,7 @@ impl RollupManagerAddOn {
         let engine_api = ScrollAuthApiEngineClient::new(rpc.rpc_server_handles.auth.http_client());
 
         // Get a provider
-        let provider = self.config.l1_provider_args.url.clone().map(|url| {
+        let l1_provider = self.config.l1_provider_args.url.clone().map(|url| {
             let L1ProviderArgs { max_retries, initial_backoff, compute_units_per_second, .. } =
                 self.config.l1_provider_args;
             let client = RpcClient::builder()
@@ -87,8 +86,8 @@ impl RollupManagerAddOn {
             ProviderBuilder::new().connect_client(client)
         });
 
-        // Get a payload provider
-        let payload_provider = ctx.config.rpc.http.then_some({
+        // Get a provider to the execution layer.
+        let l2_provider = ctx.config.rpc.http.then_some({
             rpc.rpc_server_handles
                 .rpc
                 .new_http_provider_for()
@@ -96,11 +95,20 @@ impl RollupManagerAddOn {
                 .expect("failed to create payload provider")
         });
 
-        let fcs = ForkchoiceState::head_from_genesis(ctx.config.chain.genesis_header().hash_slow());
+        let chain_spec_fcs = || {
+            ForkchoiceState::head_from_chain_spec(ctx.config.chain.clone())
+                .expect("failed to derive forkchoice state from chain spec")
+        };
+        let fcs = if let Some(provider) = l2_provider.clone() {
+            ForkchoiceState::head_from_provider(provider).await.unwrap_or_else(chain_spec_fcs)
+        } else {
+            chain_spec_fcs()
+        };
+
         let engine = EngineDriver::new(
             Arc::new(engine_api),
             ctx.config.chain.clone(),
-            payload_provider,
+            l2_provider,
             fcs,
             self.config.engine_driver_args.en_sync_trigger,
             Duration::from_millis(self.config.sequencer_args.payload_building_duration),
@@ -124,7 +132,7 @@ impl RollupManagerAddOn {
         let db = Arc::new(db);
 
         // Create the consensus.
-        let consensus: Box<dyn Consensus> = if let Some(ref provider) = provider {
+        let consensus: Box<dyn Consensus> = if let Some(ref provider) = l1_provider {
             let signer = provider
                 .authorized_signer(node_config.address_book.system_contract_address)
                 .await?;
@@ -134,7 +142,7 @@ impl RollupManagerAddOn {
         };
 
         let (l1_notification_tx, l1_notification_rx) =
-            if let Some(provider) = provider.filter(|_| !self.config.test) {
+            if let Some(provider) = l1_provider.filter(|_| !self.config.test) {
                 // Spawn the L1Watcher
                 (None, Some(L1Watcher::spawn(provider, None, node_config).await))
             } else {
