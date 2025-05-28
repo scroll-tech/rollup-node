@@ -34,6 +34,7 @@ scroll-alloy-consensus.workspace = true
 arbitrary = { workspace = true, optional = true }
 async-trait.workspace = true
 itertools = "0.14"
+futures.workspace = true
 rand = { workspace = true, optional = true }
 thiserror.workspace = true
 tokio = { workspace = true, features = ["full"] }

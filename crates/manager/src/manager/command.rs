@@ -1,4 +1,5 @@
-use super::RollupManagerEvent;
+use super::{RollupManagerEvent, RollupManagerStatus};
+
 use reth_tokio_util::EventStream;
 use tokio::sync::oneshot;
 
@@ -9,4 +10,6 @@ pub enum RollupManagerCommand {
     BuildBlock,
     /// Returns an event stream for rollup manager events.
     EventListener(oneshot::Sender<EventStream<RollupManagerEvent>>),
+    /// Report the current status of the manager via the oneshot channel.
+    Status(oneshot::Sender<RollupManagerStatus>),
 }

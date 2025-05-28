@@ -1,6 +1,9 @@
 //! This crate contains utilities for running end-to-end tests for the scroll reth node.
 
-use super::{ScrollRollupNode, ScrollRollupNodeConfig};
+use super::{
+    BeaconProviderArgs, DatabaseArgs, EngineDriverArgs, L1ProviderArgs, ScrollRollupNode,
+    ScrollRollupNodeConfig, SequencerArgs,
+};
 use alloy_primitives::Bytes;
 use reth_chainspec::EthChainSpec;
 use reth_e2e_test_utils::{
@@ -16,7 +19,7 @@ use reth_node_core::args::{DiscoveryArgs, NetworkArgs, RpcServerArgs};
 use reth_provider::providers::BlockchainProvider;
 use reth_rpc_server_types::RpcModuleSelection;
 use reth_tasks::TaskManager;
-use std::sync::Arc;
+use std::{path::PathBuf, sync::Arc};
 use tokio::sync::Mutex;
 use tracing::{span, Level};
 
@@ -37,7 +40,6 @@ pub async fn setup_engine(
     Wallet,
 )>
 where
-    // N: NodeBuilderHelper,
     LocalPayloadAttributesBuilder<<ScrollRollupNode as NodeTypes>::ChainSpec>:
         PayloadAttributesBuilder<
             <<ScrollRollupNode as NodeTypes>::Payload as PayloadTypes>::PayloadAttributes,
@@ -121,4 +123,42 @@ pub async fn generate_tx(wallet: Arc<Mutex<Wallet>>) -> Bytes {
     );
     wallet.inner_nonce += 1;
     tx_fut.await
+}
+
+/// Returns a default [`ScrollRollupNodeConfig`] preconfigured for testing.
+pub fn default_test_scroll_rollup_node_config() -> ScrollRollupNodeConfig {
+    ScrollRollupNodeConfig {
+        test: true,
+        network_args: crate::args::NetworkArgs {
+            enable_eth_scroll_wire_bridge: true,
+            enable_scroll_wire: true,
+        },
+        database_args: DatabaseArgs { path: Some(PathBuf::from("sqlite::memory:")) },
+        l1_provider_args: L1ProviderArgs::default(),
+        engine_driver_args: EngineDriverArgs { en_sync_trigger: 100 },
+        sequencer_args: SequencerArgs::default(),
+        beacon_provider_args: BeaconProviderArgs::default(),
+    }
+}
+
+/// Returns a default [`ScrollRollupNodeConfig`] preconfigured for testing with sequencer.
+pub fn default_sequencer_test_scroll_rollup_node_config() -> ScrollRollupNodeConfig {
+    ScrollRollupNodeConfig {
+        test: true,
+        network_args: crate::args::NetworkArgs {
+            enable_eth_scroll_wire_bridge: true,
+            enable_scroll_wire: true,
+        },
+        database_args: DatabaseArgs { path: Some(PathBuf::from("sqlite::memory:")) },
+        l1_provider_args: L1ProviderArgs::default(),
+        engine_driver_args: EngineDriverArgs { en_sync_trigger: 100 },
+        sequencer_args: SequencerArgs {
+            sequencer_enabled: true,
+            block_time: 50,
+            payload_building_duration: 0,
+            max_l1_messages_per_block: 0,
+            fee_recipient: Default::default(),
+        },
+        beacon_provider_args: BeaconProviderArgs::default(),
+    }
 }

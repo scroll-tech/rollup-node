@@ -1,8 +1,13 @@
 use alloy_chains::NamedChain;
-use alloy_primitives::B256;
+use alloy_eips::{BlockId, BlockNumberOrTag};
+use alloy_primitives::{Sealable, B256};
+use alloy_provider::Provider;
 use alloy_rpc_types_engine::ForkchoiceState as AlloyForkchoiceState;
+use reth_chainspec::EthChainSpec;
+use reth_primitives_traits::BlockHeader;
 use reth_scroll_chainspec::{SCROLL_MAINNET_GENESIS_HASH, SCROLL_SEPOLIA_GENESIS_HASH};
 use rollup_node_primitives::BlockInfo;
+use scroll_alloy_network::Scroll;
 
 /// The fork choice state.
 ///
@@ -36,13 +41,34 @@ impl ForkchoiceState {
         )
     }
 
-    /// Creates a [`ForkchoiceState`] instance setting the `head` hash to the
-    ///  `genesis` hash of the [`NamedChain`] and the `safe` and `finalized` block info to the
-    /// default values.
-    pub const fn head_from_named_chain(chain: NamedChain) -> Option<Self> {
-        let genesis_hash = match chain {
+    /// Creates a [`ForkchoiceState`] instance setting the `head`, `safe` and `finalized` hash to
+    /// the appropriate genesis values by reading from the provider.
+    pub async fn head_from_provider<P: Provider<Scroll>>(provider: P) -> Option<Self> {
+        let latest_block =
+            provider.get_block(BlockId::Number(BlockNumberOrTag::Latest)).await.ok()??;
+        let safe_block =
+            provider.get_block(BlockId::Number(BlockNumberOrTag::Safe)).await.ok()??;
+        let finalized_block =
+            provider.get_block(BlockId::Number(BlockNumberOrTag::Finalized)).await.ok()??;
+        Some(Self {
+            head: BlockInfo { number: latest_block.header.number, hash: latest_block.header.hash },
+            safe: BlockInfo { number: safe_block.header.number, hash: safe_block.header.hash },
+            finalized: BlockInfo {
+                number: finalized_block.header.number,
+                hash: finalized_block.header.hash,
+            },
+        })
+    }
+
+    /// Creates a [`ForkchoiceState`] instance setting the `head`, `safe` and `finalized` hash to
+    /// the appropriate genesis values depending on the named chain.
+    pub fn head_from_chain_spec<CS: EthChainSpec<Header: BlockHeader>>(
+        chain_spec: CS,
+    ) -> Option<Self> {
+        let genesis_hash = match chain_spec.chain().named()? {
             NamedChain::Scroll => SCROLL_MAINNET_GENESIS_HASH,
             NamedChain::ScrollSepolia => SCROLL_SEPOLIA_GENESIS_HASH,
+            NamedChain::Dev => chain_spec.genesis_header().hash_slow(),
             _ => return None,
         };
         Some(Self::head_from_genesis(genesis_hash))
@@ -84,6 +110,16 @@ impl ForkchoiceState {
             head_block_hash: self.head.hash,
             safe_block_hash: self.safe.hash,
             finalized_block_hash: self.finalized.hash,
+        }
+    }
+
+    /// Returns the [`AlloyForkchoiceState`] representation of the fork choice state, with the safe
+    /// and finalized hashes set to 0x0.
+    pub fn get_alloy_optimistic_fcs(&self) -> AlloyForkchoiceState {
+        AlloyForkchoiceState {
+            head_block_hash: self.head.hash,
+            safe_block_hash: B256::default(),
+            finalized_block_hash: B256::default(),
         }
     }
 
