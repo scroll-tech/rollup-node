@@ -19,7 +19,6 @@ use reth_node_core::args::{DiscoveryArgs, NetworkArgs, RpcServerArgs};
 use reth_provider::providers::BlockchainProvider;
 use reth_rpc_server_types::RpcModuleSelection;
 use reth_tasks::TaskManager;
-use rollup_node_manager::RollupManagerCommand;
 use std::{path::PathBuf, sync::Arc};
 use tokio::sync::Mutex;
 use tracing::{span, Level};
@@ -92,13 +91,6 @@ where
         let mut node =
             NodeTestContext::new(node, |_| panic!("should not build payloads using this method"))
                 .await?;
-
-        // Disable sync mode for the engine driver by default in testing.
-        node.inner
-            .add_ons_handle
-            .rollup_manager_handle
-            .send_command(RollupManagerCommand::EndSync)
-            .await;
 
         let genesis = node.block_hash(0);
         node.update_forkchoice(genesis, genesis).await?;

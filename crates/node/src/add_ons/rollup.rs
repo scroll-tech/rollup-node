@@ -6,12 +6,13 @@ use alloy_provider::ProviderBuilder;
 use alloy_rpc_client::RpcClient;
 use alloy_signer_local::PrivateKeySigner;
 use alloy_transport::layers::RetryBackoffLayer;
-use reth_chainspec::EthChainSpec;
+use reth_chainspec::{EthChainSpec, NamedChain};
 use reth_network::{protocol::IntoRlpxSubProtocol, NetworkProtocols};
 use reth_network_api::{block::EthWireBlockListenerProvider, FullNetwork};
 use reth_node_api::{FullNodeTypes, NodeTypes};
 use reth_node_builder::{rpc::RpcHandle, AddOnsContext, FullNodeComponents};
 use reth_rpc_eth_api::EthApiTypes;
+use reth_scroll_chainspec::ScrollChainSpec;
 use reth_scroll_node::ScrollNetworkPrimitives;
 use rollup_node_manager::{
     Consensus, NoopConsensus, RollupManagerHandle, RollupNodeManager, SystemContractConsensus,
@@ -33,7 +34,18 @@ use scroll_wire::{ScrollWireConfig, ScrollWireProtocolHandler};
 use std::{sync::Arc, time::Duration};
 use tokio::sync::mpsc::Sender;
 
-// Replace `Scroll` with the actual network type you use if it's generic
+/// Implementing the trait allows the type to return whether it is configured for dev chain.
+pub trait IsDevChain {
+    /// Returns true if the chain is a dev chain.
+    fn is_dev_chain(&self) -> bool;
+}
+
+impl IsDevChain for ScrollChainSpec {
+    fn is_dev_chain(&self) -> bool {
+        let named: Result<NamedChain, _> = self.chain.try_into();
+        named.is_ok_and(|n| matches!(n, NamedChain::Dev))
+    }
+}
 
 /// The rollup node manager addon.
 #[derive(Debug)]
@@ -54,7 +66,7 @@ impl RollupManagerAddOn {
         rpc: RpcHandle<N, EthApi>,
     ) -> eyre::Result<(RollupManagerHandle, Option<Sender<Arc<L1Notification>>>)>
     where
-        <<N as FullNodeTypes>::Types as NodeTypes>::ChainSpec: ScrollHardforks,
+        <<N as FullNodeTypes>::Types as NodeTypes>::ChainSpec: ScrollHardforks + IsDevChain,
         N::Network: NetworkProtocols + FullNetwork<Primitives = ScrollNetworkPrimitives>,
     {
         // Instantiate the network manager
@@ -110,6 +122,7 @@ impl RollupManagerAddOn {
             ctx.config.chain.clone(),
             l2_provider,
             fcs,
+            !ctx.config.chain.is_dev_chain(),
             self.config.engine_driver_args.en_sync_trigger,
             Duration::from_millis(self.config.sequencer_args.payload_building_duration),
         );

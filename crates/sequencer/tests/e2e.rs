@@ -46,6 +46,7 @@ async fn can_build_blocks() {
         (*SCROLL_DEV).clone(),
         None::<ScrollRootProvider>,
         fcs,
+        false,
         BLOCK_GAP_TRIGGER,
         BLOCK_BUILDING_DURATION,
     );
@@ -164,6 +165,7 @@ async fn can_build_blocks_with_delayed_l1_messages() {
         (*SCROLL_DEV).clone(),
         None::<ScrollRootProvider>,
         fcs,
+        false,
         BLOCK_GAP_TRIGGER,
         BLOCK_BUILDING_DURATION,
     );

@@ -62,6 +62,7 @@ where
         chain_spec: Arc<CS>,
         provider: Option<P>,
         fcs: ForkchoiceState,
+        sync_at_start_up: bool,
         block_gap_sync_trigger: u64,
         block_building_duration: Duration,
     ) -> Self {
@@ -71,7 +72,7 @@ where
             provider,
             fcs,
             block_building_duration,
-            syncing: true,
+            syncing: sync_at_start_up,
             block_gap_sync_trigger,
             l1_payload_attributes: VecDeque::new(),
             block_imports: VecDeque::new(),
@@ -100,11 +101,6 @@ where
     /// Sets the payload building duration.
     pub fn set_payload_building_duration(&mut self, block_building_duration: Duration) {
         self.block_building_duration = block_building_duration;
-    }
-
-    /// Sets the syncing mode of the driver.
-    pub fn set_syncing(&mut self, syncing: bool) {
-        self.syncing = syncing;
     }
 
     /// Handles a block import request by adding it to the queue and waking up the driver.
@@ -377,8 +373,15 @@ mod tests {
             ForkchoiceState::from_block_info(BlockInfo { number: 0, hash: Default::default() });
         let duration = Duration::from_secs(2);
 
-        let mut driver =
-            EngineDriver::new(client, chain_spec, None::<ScrollRootProvider>, fcs, 0, duration);
+        let mut driver = EngineDriver::new(
+            client,
+            chain_spec,
+            None::<ScrollRootProvider>,
+            fcs,
+            false,
+            0,
+            duration,
+        );
 
         // Initially, it should be false
         assert!(!driver.is_payload_building_in_progress());
@@ -403,6 +406,7 @@ mod tests {
             chain_spec.clone(),
             None::<ScrollRootProvider>,
             fcs,
+            false,
             0,
             duration,
         );

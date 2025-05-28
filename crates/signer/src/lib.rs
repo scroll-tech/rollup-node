@@ -76,6 +76,7 @@ impl Signer {
                     }
 
                 }
+                else => ()
             }
         }
     }

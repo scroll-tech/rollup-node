@@ -398,7 +398,6 @@ where
                         }
                     );
                 }
-                RollupManagerCommand::EndSync => this.engine.set_syncing(false),
                 RollupManagerCommand::EventListener(tx) => {
                     let events = this.event_listener();
                     tx.send(events).expect("Failed to send event listener to handle");
