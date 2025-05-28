@@ -82,8 +82,6 @@ tokio.workspace = true
 tracing.workspace = true
 
 [dev-dependencies]
-alloy-eips.workspace = true
-alloy-consensus.workspace = true
 futures.workspace = true
 reth-e2e-test-utils.workspace = true
 reth-node-core.workspace = true

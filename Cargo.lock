@@ -9544,8 +9544,6 @@ dependencies = [
 name = "rollup-node"
 version = "0.0.1"
 dependencies = [
- "alloy-consensus 0.15.11",
- "alloy-eips 0.15.11",
  "alloy-primitives",
  "alloy-provider",
  "alloy-rpc-client",
@@ -10268,11 +10266,9 @@ version = "0.0.1"
 dependencies = [
  "alloy-chains",
  "alloy-eips 0.15.11",
- "alloy-json-rpc",
  "alloy-primitives",
  "alloy-provider",
  "alloy-rpc-types-engine 0.15.11",
- "alloy-transport",
  "arbitrary",
  "async-trait",
  "eyre",
