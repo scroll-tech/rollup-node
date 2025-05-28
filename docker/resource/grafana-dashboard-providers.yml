@@ -1,0 +1,15 @@
+apiVersion: 1
+
+providers:
+  - name: 'Scroll Dashboard Provider'
+    orgId: 1
+    folder: ''
+    folderUid: ''
+    type: file
+    disableDeletion: false
+    updateIntervalSeconds: 10
+    allowUiUpdates: true
+    editable: true
+    options:
+      path: /dashboards
+      foldersFromFilesStructure: true 
