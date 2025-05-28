@@ -180,8 +180,7 @@ where
             event_sender: None,
             sequencer,
             signer,
-            block_building_trigger: block_time
-                .map(|time| tokio::time::interval(tokio::time::Duration::from_millis(time))),
+            block_building_trigger: block_time.map(delayed_interval),
         });
         RollupManagerHandle::new(handle_tx)
     }
@@ -408,6 +407,11 @@ where
             }
         }
 
+        // Drain all EngineDriver events.
+        while let Poll::Ready(Some(event)) = this.engine.poll_next_unpin(cx) {
+            this.handle_engine_driver_event(event);
+        }
+
         proceed_if!(
             en_synced,
             // Handle new block production.
@@ -417,11 +421,6 @@ where
                 this.engine.handle_build_new_payload(attributes);
             }
         );
-
-        // Drain all EngineDriver events.
-        while let Poll::Ready(Some(event)) = this.engine.poll_next_unpin(cx) {
-            this.handle_engine_driver_event(event);
-        }
 
         proceed_if!(
             en_synced,
@@ -497,4 +496,12 @@ where
 
         Poll::Pending
     }
+}
+
+/// Creates a delayed interval that will not skip ticks if the interval is missed but will delay
+/// the next tick until the interval has passed.
+fn delayed_interval(interval: u64) -> Interval {
+    let mut interval = tokio::time::interval(tokio::time::Duration::from_millis(interval));
+    interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
+    interval
 }
