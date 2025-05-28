@@ -295,7 +295,7 @@ pub trait DatabaseOperations: DatabaseConnectionProvider {
         Ok(())
     }
 
-    /// Returns the highest L2 block originating from the provided batch_hash or the highest block
+    /// Returns the highest L2 block originating from the provided batch hash or the highest block
     /// for the batch's index.
     async fn get_highest_block_for_batch(
         &self,

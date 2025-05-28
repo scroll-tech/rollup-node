@@ -1,6 +1,6 @@
 //! This library contains the main manager for the rollup node.
 
-pub use consensus::{Consensus, NoopConsensus, PoAConsensus};
+pub use consensus::{Consensus, NoopConsensus, SystemContractConsensus};
 mod consensus;
 
 mod manager;

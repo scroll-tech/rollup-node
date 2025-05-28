@@ -12,9 +12,9 @@ use alloy_eips::eip2718::Encodable2718;
 use alloy_primitives::Address;
 use alloy_rpc_types_engine::PayloadAttributes;
 use futures::{task::AtomicWaker, Stream};
-use rollup_node_primitives::L1MessageEnvelope;
+use rollup_node_primitives::{L1MessageEnvelope, DEFAULT_BLOCK_DIFFICULTY};
 use rollup_node_providers::L1MessageProvider;
-use scroll_alloy_rpc_types_engine::ScrollPayloadAttributes;
+use scroll_alloy_rpc_types_engine::{BlockDataHint, ScrollPayloadAttributes};
 use std::task::{Context, Poll};
 
 mod error;
@@ -175,7 +175,10 @@ async fn build_payload_attributes<P: L1MessageProvider + Unpin + Send + Sync + '
         payload_attributes,
         transactions: (!l1_messages.is_empty()).then_some(l1_messages),
         no_tx_pool: false,
-        block_data_hint: None,
+        block_data_hint: Some(BlockDataHint {
+            extra_data: Default::default(),
+            difficulty: DEFAULT_BLOCK_DIFFICULTY,
+        }),
     })
 }
 
