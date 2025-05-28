@@ -9,4 +9,3 @@ datasources:
     basicAuth: false
     isDefault: true
     editable: true 
-    

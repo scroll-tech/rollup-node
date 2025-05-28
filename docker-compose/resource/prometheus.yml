@@ -12,4 +12,3 @@ scrape_configs:
           org: "scroll"
           service: 'rollup-node'
     fallback_scrape_protocol: "PrometheusText0.0.4"
-    
