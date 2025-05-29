@@ -14,16 +14,20 @@ workspace = true
 alloy-chains.workspace = true
 alloy-eips.workspace = true
 alloy-primitives.workspace = true
+alloy-provider.workspace = true
 alloy-rpc-types-engine.workspace = true
 
 # scroll-alloy
 scroll-alloy-hardforks.workspace = true
+scroll-alloy-network.workspace = true
 scroll-alloy-provider.workspace = true
 scroll-alloy-rpc-types-engine.workspace = true
 
 # reth
+reth-chainspec.workspace = true
 reth-network-api.workspace = true
 reth-payload-primitives.workspace = true
+reth-primitives-traits.workspace = true
 
 # reth-scroll
 reth-scroll-chainspec.workspace = true
@@ -58,6 +62,8 @@ test-utils = [
     "scroll-engine/test-utils",
     "rollup-node-providers/test-utils",
     "rollup-node-providers/test-utils",
+    "reth-chainspec/test-utils",
+    "reth-primitives-traits/test-utils",
 ]
 serde = [
     "alloy-eips/serde",
@@ -70,4 +76,5 @@ serde = [
     "scroll-network/serde",
     "scroll-engine/serde",
     "scroll-alloy-hardforks/serde",
+    "reth-primitives-traits/serde",
 ]

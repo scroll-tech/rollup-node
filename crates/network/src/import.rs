@@ -1,7 +1,9 @@
-use alloy_primitives::bytes::Bytes;
+use alloy_primitives::{bytes::Bytes, Address};
 use reth_network_peers::PeerId;
+use reth_primitives_traits::{crypto::RecoveryError, GotExpected};
 use reth_scroll_primitives::ScrollBlock;
 use scroll_wire::NewBlock;
+use thiserror::Error;
 
 pub type BlockImportResult = Result<BlockValidation, BlockImportError>;
 
@@ -57,10 +59,14 @@ pub enum BlockImportError {
 }
 
 /// A consensus related error that can occur during block import.
-#[derive(Debug)]
+#[derive(Debug, Error)]
 pub enum ConsensusError {
     /// The signature is invalid.
-    Signature,
+    #[error("signer mismatch: {0}")]
+    IncorrectSigner(GotExpected<Address>),
+    /// Failed to recover signer.
+    #[error(transparent)]
+    Recovery(#[from] RecoveryError),
 }
 
 /// An error that can occur during block validation.

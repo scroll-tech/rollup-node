@@ -2,16 +2,29 @@ use super::*;
 
 /// A type that represents the result of the engine driver future.
 pub(crate) enum EngineDriverFutureResult {
-    BlockImport(Result<(Option<BlockInfo>, Option<BlockImportOutcome>), EngineDriverError>),
+    BlockImport(
+        Result<
+            (Option<BlockInfo>, Option<BlockImportOutcome>, PayloadStatusEnum),
+            EngineDriverError,
+        >,
+    ),
     L1Consolidation(Result<(L2BlockInfoWithL1Messages, bool, BatchInfo), EngineDriverError>),
     PayloadBuildingJob(Result<ScrollBlock, EngineDriverError>),
 }
 
-impl From<Result<(Option<BlockInfo>, Option<BlockImportOutcome>), EngineDriverError>>
-    for EngineDriverFutureResult
+impl
+    From<
+        Result<
+            (Option<BlockInfo>, Option<BlockImportOutcome>, PayloadStatusEnum),
+            EngineDriverError,
+        >,
+    > for EngineDriverFutureResult
 {
     fn from(
-        value: Result<(Option<BlockInfo>, Option<BlockImportOutcome>), EngineDriverError>,
+        value: Result<
+            (Option<BlockInfo>, Option<BlockImportOutcome>, PayloadStatusEnum),
+            EngineDriverError,
+        >,
     ) -> Self {
         Self::BlockImport(value)
     }

@@ -4,6 +4,7 @@
 
 use super::Consensus;
 use alloy_primitives::Signature;
+use alloy_provider::Provider;
 use futures::StreamExt;
 use reth_chainspec::EthChainSpec;
 use reth_network_api::{block::NewBlockWithPeer as RethNewBlockWithPeer, FullNetwork};
@@ -15,6 +16,7 @@ use rollup_node_sequencer::Sequencer;
 use rollup_node_signer::{SignerEvent, SignerHandle};
 use rollup_node_watcher::L1Notification;
 use scroll_alloy_hardforks::ScrollHardforks;
+use scroll_alloy_network::Scroll;
 use scroll_alloy_provider::ScrollEngineApi;
 use scroll_engine::{EngineDriver, EngineDriverEvent};
 use scroll_network::{
@@ -35,7 +37,7 @@ use tokio::{
 use tokio_stream::wrappers::ReceiverStream;
 use tracing::{error, trace, warn};
 
-use rollup_node_providers::{ExecutionPayloadProvider, L1MessageProvider, L1Provider};
+use rollup_node_providers::{L1MessageProvider, L1Provider};
 use scroll_db::Database;
 use scroll_derivation_pipeline::DerivationPipeline;
 
@@ -103,6 +105,13 @@ pub struct RollupNodeManager<
     block_building_trigger: Option<Interval>,
 }
 
+/// The current status of the rollup manager.
+#[derive(Debug)]
+pub struct RollupManagerStatus {
+    /// Whether the rollup manager is syncing.
+    pub syncing: bool,
+}
+
 impl<
         N: FullNetwork<Primitives = ScrollNetworkPrimitives>,
         EC: Debug,
@@ -114,6 +123,7 @@ impl<
 {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         f.debug_struct("RollupNodeManager")
+            .field("chain_spec", &self.chain_spec)
             .field("network", &self.network)
             .field("engine", &self.engine)
             .field("derivation_pipeline", &self.derivation_pipeline)
@@ -132,7 +142,7 @@ impl<N, EC, P, L1P, L1MP, CS> RollupNodeManager<N, EC, P, L1P, L1MP, CS>
 where
     N: FullNetwork<Primitives = ScrollNetworkPrimitives>,
     EC: ScrollEngineApi + Unpin + Sync + Send + 'static,
-    P: ExecutionPayloadProvider + Clone + Unpin + Send + Sync + 'static,
+    P: Provider<Scroll> + Clone + Unpin + Send + Sync + 'static,
     L1P: L1Provider + Clone + Send + Sync + Unpin + 'static,
     L1MP: L1MessageProvider + Unpin + Send + Sync + 'static,
     CS: ScrollHardforks + EthChainSpec + Send + Sync + 'static,
@@ -170,8 +180,7 @@ where
             event_sender: None,
             sequencer,
             signer,
-            block_building_trigger: block_time
-                .map(|time| tokio::time::interval(tokio::time::Duration::from_millis(time))),
+            block_building_trigger: block_time.map(delayed_interval),
         });
         RollupManagerHandle::new(handle_tx)
     }
@@ -259,6 +268,8 @@ where
                 if let Some(sequencer) = self.sequencer.as_mut() {
                     sequencer.handle_reorg(queue_index, l1_block_number);
                 }
+
+                // TODO: should clear the derivation pipeline.
             }
             IndexerEvent::L1MessageIndexed(index) => {
                 if let Some(event_sender) = self.event_sender.as_ref() {
@@ -284,7 +295,7 @@ where
             }
             EngineDriverEvent::NewPayload(payload) => {
                 if let Some(signer) = self.signer.as_mut() {
-                    let _ = signer.sign_block(payload.clone()).inspect_err(|err| tracing::error!(target: "scroll::node::manager", ?err, "Failed to send new payload to signer"));
+                    let _ = signer.sign_block(payload.clone()).inspect_err(|err| error!(target: "scroll::node::manager", ?err, "Failed to send new payload to signer"));
                 }
 
                 if let Some(event_sender) = self.event_sender.as_ref() {
@@ -340,13 +351,15 @@ where
 
     /// Handles an [`L1Notification`] from the L1 watcher.
     fn handle_l1_notification(&mut self, notification: L1Notification) {
-        match notification {
-            L1Notification::Consensus(ref update) => {
-                self.consensus.update_config(update);
-                self.indexer.handle_l1_notification(notification)
-            }
-            _ => self.indexer.handle_l1_notification(notification),
+        if let L1Notification::Consensus(ref update) = notification {
+            self.consensus.update_config(update);
         }
+        self.indexer.handle_l1_notification(notification)
+    }
+
+    /// Returns the current status of the [`RollupNodeManager`].
+    const fn status(&self) -> RollupManagerStatus {
+        RollupManagerStatus { syncing: self.engine.is_syncing() }
     }
 }
 
@@ -354,7 +367,7 @@ impl<N, EC, P, L1P, L1MP, CS> Future for RollupNodeManager<N, EC, P, L1P, L1MP, 
 where
     N: FullNetwork<Primitives = ScrollNetworkPrimitives>,
     EC: ScrollEngineApi + Unpin + Sync + Send + 'static,
-    P: ExecutionPayloadProvider + Clone + Unpin + Send + Sync + 'static,
+    P: Provider<Scroll> + Clone + Unpin + Send + Sync + 'static,
     L1P: L1Provider + Clone + Unpin + Send + Sync + 'static,
     L1MP: L1MessageProvider + Unpin + Send + Sync + 'static,
     CS: ScrollHardforks + EthChainSpec + Unpin + Send + Sync + 'static,
@@ -363,27 +376,35 @@ where
 
     fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
         let this = self.get_mut();
+        // Helper macro, proceeds with the $task if $proceed is true.
+        macro_rules! proceed_if {
+            ($proceed: expr, $task: expr) => {
+                if $proceed {
+                    $task
+                }
+            };
+        }
+        let en_synced = !this.engine.is_syncing();
 
         // Poll the handle receiver for commands.
         while let Poll::Ready(Some(command)) = this.handle_rx.poll_recv(cx) {
             match command {
                 RollupManagerCommand::BuildBlock => {
-                    if let Some(sequencer) = this.sequencer.as_mut() {
-                        sequencer.build_payload_attributes();
-                    }
+                    proceed_if!(
+                        en_synced,
+                        if let Some(sequencer) = this.sequencer.as_mut() {
+                            sequencer.build_payload_attributes();
+                        }
+                    );
                 }
                 RollupManagerCommand::EventListener(tx) => {
                     let events = this.event_listener();
                     tx.send(events).expect("Failed to send event listener to handle");
                 }
+                RollupManagerCommand::Status(tx) => {
+                    tx.send(this.status()).expect("Failed to send status to handle");
+                }
             }
-        }
-
-        // Handle new block production.
-        if let Some(Poll::Ready(Some(attributes))) =
-            this.sequencer.as_mut().map(|x| x.poll_next_unpin(cx))
-        {
-            this.engine.handle_build_new_payload(attributes);
         }
 
         // Drain all EngineDriver events.
@@ -391,12 +412,25 @@ where
             this.handle_engine_driver_event(event);
         }
 
-        // Drain all L1 notifications.
-        while let Some(Poll::Ready(Some(event))) =
-            this.l1_notification_rx.as_mut().map(|rx| rx.poll_next_unpin(cx))
-        {
-            this.handle_l1_notification((*event).clone());
-        }
+        proceed_if!(
+            en_synced,
+            // Handle new block production.
+            if let Some(Poll::Ready(Some(attributes))) =
+                this.sequencer.as_mut().map(|x| x.poll_next_unpin(cx))
+            {
+                this.engine.handle_build_new_payload(attributes);
+            }
+        );
+
+        proceed_if!(
+            en_synced,
+            // Drain all L1 notifications.
+            while let Some(Poll::Ready(Some(event))) =
+                this.l1_notification_rx.as_mut().map(|rx| rx.poll_next_unpin(cx))
+            {
+                this.handle_l1_notification((*event).clone());
+            }
+        );
 
         // Drain all Indexer events.
         while let Poll::Ready(Some(result)) = this.indexer.poll_next_unpin(cx) {
@@ -420,23 +454,26 @@ where
             }
         }
 
-        // Check if we need to trigger the build of a new payload.
-        match (
-            this.block_building_trigger.as_mut().map(|x| x.poll_tick(cx)),
-            this.engine.is_payload_building_in_progress(),
-        ) {
-            (Some(Poll::Ready(_)), false) => {
-                if let Some(sequencer) = this.sequencer.as_mut() {
-                    sequencer.build_payload_attributes();
+        proceed_if!(
+            en_synced,
+            // Check if we need to trigger the build of a new payload.
+            match (
+                this.block_building_trigger.as_mut().map(|x| x.poll_tick(cx)),
+                this.engine.is_payload_building_in_progress(),
+            ) {
+                (Some(Poll::Ready(_)), false) => {
+                    if let Some(sequencer) = this.sequencer.as_mut() {
+                        sequencer.build_payload_attributes();
+                    }
                 }
+                (Some(Poll::Ready(_)), true) => {
+                    // If the sequencer is already building a payload, we don't need to trigger it
+                    // again.
+                    warn!(target: "scroll::node::manager", "Payload building is already in progress skipping slot");
+                }
+                _ => {}
             }
-            (Some(Poll::Ready(_)), true) => {
-                // If the sequencer is already building a payload, we don't need to trigger it
-                // again.
-                warn!(target: "scroll::node::manager", "Payload building is already in progress skipping slot");
-            }
-            _ => {}
-        }
+        );
 
         // Poll Derivation Pipeline and push attribute in queue if any.
         while let Some(Poll::Ready(Some(attributes))) =
@@ -457,8 +494,14 @@ where
             this.handle_network_manager_event(event);
         }
 
-        // Handle commands from the handle.
-
         Poll::Pending
     }
+}
+
+/// Creates a delayed interval that will not skip ticks if the interval is missed but will delay
+/// the next tick until the interval has passed.
+fn delayed_interval(interval: u64) -> Interval {
+    let mut interval = tokio::time::interval(tokio::time::Duration::from_millis(interval));
+    interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
+    interval
 }

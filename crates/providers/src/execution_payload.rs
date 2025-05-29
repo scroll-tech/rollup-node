@@ -24,39 +24,14 @@ pub trait ExecutionPayloadProvider: Sync + Send {
 }
 
 #[async_trait::async_trait]
-impl ExecutionPayloadProvider for () {
-    async fn execution_payload_for_block(
-        &self,
-        _block_id: BlockId,
-    ) -> Result<Option<ExecutionPayload>, ExecutionPayloadProviderError> {
-        Ok(None)
-    }
-}
-
-/// The provider uses an [`Provider`] internally to implement the [`ExecutionPayloadProvider`]
-/// trait.
-#[derive(Default, Clone, Debug)]
-pub struct AlloyExecutionPayloadProvider<P> {
-    /// An alloy provider.
-    provider: P,
-}
-
-impl<P: Provider<Scroll>> AlloyExecutionPayloadProvider<P> {
-    /// Returns a new instance of a [`AlloyExecutionPayloadProvider`].
-    pub const fn new(provider: P) -> Self {
-        Self { provider }
-    }
-}
-
-#[async_trait::async_trait]
-impl<P: Provider<Scroll>> ExecutionPayloadProvider for AlloyExecutionPayloadProvider<P> {
+impl<P: Provider<Scroll>> ExecutionPayloadProvider for P {
     async fn execution_payload_for_block(
         &self,
         block_id: BlockId,
     ) -> Result<Option<ExecutionPayload>, ExecutionPayloadProviderError> {
         tracing::trace!(target: "scroll::providers", ?block_id, "fetching execution payload");
 
-        let block = self.provider.get_block(block_id).full().await?;
+        let block = self.get_block(block_id).full().await?;
         Ok(block.map(|b| {
             ExecutionPayload::from_block_slow(
                 &b.into_consensus().map_transactions(|tx| tx.inner.into_inner()),
@@ -92,10 +67,8 @@ mod tests {
         let client = RpcClient::new_http(url);
         let provider = ProviderBuilder::<_, _, Scroll>::default().connect_client(client);
 
-        let execution_payload_provider = AlloyExecutionPayloadProvider::new(provider);
-
         // Fetch the execution payload for the first block.
-        let payload = execution_payload_provider.execution_payload_for_block(0.into()).await?;
+        let payload = provider.execution_payload_for_block(0.into()).await?;
         assert!(payload.is_some());
 
         Ok(())
