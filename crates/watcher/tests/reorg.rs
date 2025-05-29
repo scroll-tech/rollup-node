@@ -43,7 +43,7 @@ fn generate_chain_with_reorgs(len: usize, fork_cycle: usize, max_fork_depth: usi
 }
 
 #[tokio::test]
-async fn test_reorg_detection() -> eyre::Result<()> {
+async fn test_should_detect_reorg() -> eyre::Result<()> {
     reth_tracing::init_test_tracing();
 
     // Given
@@ -64,6 +64,7 @@ async fn test_reorg_detection() -> eyre::Result<()> {
     };
     let mock_provider = MockProvider::new(
         blocks.clone().into_iter(),
+        std::iter::empty(),
         std::iter::empty(),
         finalized_blocks.clone(),
         latest_blocks.clone(),
@@ -111,7 +112,7 @@ async fn test_reorg_detection() -> eyre::Result<()> {
 }
 
 #[tokio::test]
-async fn test_gap() -> eyre::Result<()> {
+async fn test_should_fetch_gap_in_unfinalized_blocks() -> eyre::Result<()> {
     reth_tracing::init_test_tracing();
 
     // Given
@@ -150,6 +151,7 @@ async fn test_gap() -> eyre::Result<()> {
     };
     let mock_provider = MockProvider::new(
         blocks.clone().into_iter(),
+        std::iter::empty(),
         std::iter::empty(),
         finalized_blocks.clone(),
         latest_blocks.clone(),
