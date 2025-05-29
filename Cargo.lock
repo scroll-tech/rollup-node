@@ -9753,6 +9753,7 @@ dependencies = [
  "alloy-signer-local",
  "futures",
  "reth-scroll-primitives",
+ "reth-tracing",
  "rollup-node-primitives",
  "thiserror 2.0.12",
  "tokio",

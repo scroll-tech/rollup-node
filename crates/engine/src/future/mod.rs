@@ -234,8 +234,7 @@ where
         // this payload has already been passed to the EN in the form of a P2P gossiped
         // execution payload. We can advance the safe head by one by issuing a
         // forkchoiceUpdated.
-        let safe_block_info: L2BlockInfoWithL1Messages =
-            execution_payload.try_into().map_err(EngineDriverError::InvalidExecutionPayload)?;
+        let safe_block_info: L2BlockInfoWithL1Messages = (&execution_payload).into();
         fcs.safe_block_hash = safe_block_info.block_info.hash;
         forkchoice_updated(client, fcs, None).await?;
         Ok((safe_block_info, false, batch_info))
@@ -255,8 +254,7 @@ where
         )
         .await?;
         // issue the execution payload to the EL
-        // TODO: remove clone
-        let safe_block_info: L2BlockInfoWithL1Messages = execution_payload.clone().try_into()?;
+        let safe_block_info: L2BlockInfoWithL1Messages = (&execution_payload).into();
         let result = new_payload(client.clone(), execution_payload.into_v1()).await?;
 
         // we should only have a valid payload when deriving from payload attributes (should not

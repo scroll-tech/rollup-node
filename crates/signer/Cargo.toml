@@ -28,6 +28,7 @@ tracing.workspace = true
 
 [dev-dependencies]
 alloy-signer-local.workspace = true
+reth-tracing.workspace = true
 
 [features]
 default = []

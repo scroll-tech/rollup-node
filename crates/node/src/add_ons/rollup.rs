@@ -2,6 +2,7 @@ use crate::{
     args::{L1ProviderArgs, ScrollRollupNodeConfig},
     constants::PROVIDER_BLOB_CACHE_SIZE,
 };
+
 use alloy_provider::ProviderBuilder;
 use alloy_rpc_client::RpcClient;
 use alloy_signer_local::PrivateKeySigner;
@@ -211,7 +212,7 @@ impl RollupManagerAddOn {
             .then_some(ctx.node.network().eth_wire_block_listener().await?);
 
         // Instantiate the signer
-        let signer = self.config.test.then_some(Signer::spawn(PrivateKeySigner::random()).await);
+        let signer = self.config.test.then_some(Signer::spawn(PrivateKeySigner::random()));
 
         // Spawn the rollup node manager
         let rnm = RollupNodeManager::new(
