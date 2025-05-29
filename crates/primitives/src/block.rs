@@ -93,9 +93,7 @@ impl From<&ExecutionPayload> for L2BlockInfoWithL1Messages {
             .transactions
             .iter()
             .filter_map(|raw| {
-                raw.as_ref()
-                    .first()
-                    .map_or(false, |b| b == &L1_MESSAGE_TRANSACTION_TYPE)
+                (raw.as_ref().first() == Some(&L1_MESSAGE_TRANSACTION_TYPE))
                     .then(|| {
                         let tx = ScrollTransactionSigned::decode_2718(&mut raw.as_ref()).ok()?;
                         Some(*tx.tx_hash())
