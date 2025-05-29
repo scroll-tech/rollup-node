@@ -10309,9 +10309,13 @@ dependencies = [
  "alloy-primitives",
  "async-std",
  "csv",
+ "eyre",
+ "futures",
+ "reqwest",
  "sea-orm",
  "sea-orm-migration",
  "serde",
+ "tokio",
  "tracing",
 ]
 
