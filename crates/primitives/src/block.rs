@@ -3,6 +3,7 @@ use alloy_primitives::{B256, U256};
 use alloy_rpc_types_engine::ExecutionPayload;
 use reth_primitives_traits::transaction::signed::SignedTransaction;
 use reth_scroll_primitives::{ScrollBlock, ScrollTransactionSigned};
+use scroll_alloy_consensus::L1_MESSAGE_TRANSACTION_TYPE;
 use std::vec::Vec;
 
 /// The default block difficulty for a scroll block.
@@ -92,8 +93,14 @@ impl From<&ExecutionPayload> for L2BlockInfoWithL1Messages {
             .transactions
             .iter()
             .filter_map(|raw| {
-                let tx = ScrollTransactionSigned::decode_2718(&mut raw.as_ref()).ok()?;
-                tx.is_l1_message().then(|| *tx.tx_hash())
+                raw.as_ref()
+                    .first()
+                    .map_or(false, |b| b == &L1_MESSAGE_TRANSACTION_TYPE)
+                    .then(|| {
+                        let tx = ScrollTransactionSigned::decode_2718(&mut raw.as_ref()).ok()?;
+                        Some(*tx.tx_hash())
+                    })
+                    .flatten()
             })
             .collect();
         Self { block_info: BlockInfo { number: block_number, hash: block_hash }, l1_messages }
