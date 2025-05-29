@@ -8,7 +8,7 @@
 
 use futures::stream::{FuturesOrdered, StreamExt};
 use std::sync::Arc;
-use tokio::sync::mpsc::UnboundedSender;
+use tokio::{sync::mpsc::UnboundedSender, time::MissedTickBehavior};
 use tokio_stream::wrappers::UnboundedReceiverStream;
 
 mod error;
@@ -55,6 +55,8 @@ impl Signer {
 
     /// Execution loop for the signer.
     async fn run(mut self) {
+        let mut ticker = tokio::time::interval(tokio::time::Duration::from_millis(500));
+        ticker.set_missed_tick_behavior(MissedTickBehavior::Delay);
         loop {
             tokio::select! {
                 Some(request) = self.requests.next() => {
@@ -71,10 +73,13 @@ impl Signer {
                     match result {
                         Ok(event) => self.sender.send(event).expect("The event channel is closed"),
                         Err(err) => {
-                            tracing::error!(target: "node::signer", ?err, "An error occurred while signing");
+                            tracing::error!(target: "scroll::signer", ?err, "An error occurred while signing");
                         }
                     }
 
+                }
+                 _ = ticker.tick() => {
+                    tracing::debug!(target: "scroll::signer", "no work for signer")
                 }
                 else => ()
             }
