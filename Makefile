@@ -80,3 +80,11 @@ pr: lint test docs
 .PHONY: docker
 docker:
 	docker build -t scrolltech/rollup-node:latest . -f Dockerfile
+
+.PHONY: docker-multiarch
+docker-multiarch:
+	docker buildx build --platform linux/amd64,linux/arm64 -t scrolltech/rollup-node:latest . -f Dockerfile
+
+.PHONY: docker-setup-buildx
+docker-setup-buildx:
+	docker buildx create --name multiarch --driver docker-container --bootstrap --use || docker buildx use multiarch
