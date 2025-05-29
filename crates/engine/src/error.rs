@@ -15,7 +15,4 @@ pub enum EngineDriverError {
     /// The execution payload id is missing.
     #[error("missing payload id")]
     MissingExecutionPayloadId,
-    /// The engine driver is syncing.
-    #[error("Engine driver is syncing")]
-    Syncing,
 }

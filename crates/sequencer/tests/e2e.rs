@@ -7,8 +7,9 @@ use reth_e2e_test_utils::transaction::TransactionTestContext;
 use reth_node_core::primitives::SignedTransaction;
 use reth_scroll_chainspec::SCROLL_DEV;
 use reth_scroll_node::test_utils::setup;
+use rollup_node::test_utils::{default_test_scroll_rollup_node_config, setup_engine};
 use rollup_node_primitives::{BlockInfo, L1MessageEnvelope};
-use rollup_node_providers::DatabaseL1MessageProvider;
+use rollup_node_providers::{DatabaseL1MessageProvider, ScrollRootProvider};
 use rollup_node_sequencer::Sequencer;
 use scroll_alloy_consensus::TxL1Message;
 use scroll_alloy_provider::ScrollAuthApiEngineClient;
@@ -21,7 +22,8 @@ use tokio::{sync::Mutex, time::Duration};
 async fn can_build_blocks() {
     reth_tracing::init_test_tracing();
 
-    const BLOCK_BUILDING_DURATION: Duration = tokio::time::Duration::from_millis(0);
+    const BLOCK_BUILDING_DURATION: Duration = Duration::from_millis(0);
+    const BLOCK_GAP_TRIGGER: u64 = 100;
 
     // setup a test node
     let (mut nodes, _tasks, wallet) = setup(1, false).await.unwrap();
@@ -42,9 +44,10 @@ async fn can_build_blocks() {
     let mut engine_driver = EngineDriver::new(
         Arc::new(engine_client),
         (*SCROLL_DEV).clone(),
-        None::<()>,
+        None::<ScrollRootProvider>,
         fcs,
         false,
+        BLOCK_GAP_TRIGGER,
         BLOCK_BUILDING_DURATION,
     );
 
@@ -135,11 +138,14 @@ async fn can_build_blocks() {
 async fn can_build_blocks_with_delayed_l1_messages() {
     reth_tracing::init_test_tracing();
 
+    let chain_spec = SCROLL_DEV.clone();
     const BLOCK_BUILDING_DURATION: Duration = tokio::time::Duration::from_millis(0);
+    const BLOCK_GAP_TRIGGER: u64 = 100;
     const L1_MESSAGE_DELAY: u64 = 2;
 
     // setup a test node
-    let (mut nodes, _tasks, wallet) = setup(1, false).await.unwrap();
+    let (mut nodes, _tasks, wallet) =
+        setup_engine(default_test_scroll_rollup_node_config(), 1, chain_spec, false).await.unwrap();
     let node = nodes.pop().unwrap();
     let wallet = Arc::new(Mutex::new(wallet));
 
@@ -157,9 +163,10 @@ async fn can_build_blocks_with_delayed_l1_messages() {
     let mut engine_driver = EngineDriver::new(
         Arc::new(engine_client),
         (*SCROLL_DEV).clone(),
-        None::<()>,
+        None::<ScrollRootProvider>,
         fcs,
         false,
+        BLOCK_GAP_TRIGGER,
         BLOCK_BUILDING_DURATION,
     );
 
