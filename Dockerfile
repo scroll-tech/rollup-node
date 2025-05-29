@@ -32,4 +32,3 @@ COPY --from=builder /app-target/release/rollup-node /bin/
 EXPOSE 30303 30303/udp 9001 8545 8546
 
 ENTRYPOINT ["rollup-node"]
-

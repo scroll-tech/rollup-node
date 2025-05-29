@@ -1,0 +1,74 @@
+version: '3'
+
+services:
+  rollup-node:
+    image: scrolltech/rollup-node:v0.0.1-rc9
+    container_name: rollup-node
+    entrypoint: ["sh", "-c"]
+    command: >
+      '
+      if [ "$${ENV:-}" = "dev" ]; then
+        exec rollup-node node --chain dev --datadir=/l2reth  --metrics=0.0.0.0:6060 --disable-discovery --http --http.addr=0.0.0.0 --http.port=8545 --http.corsdomain "*" --http.api admin,debug,eth,net,trace,txpool,web3,rpc,reth,ots,flashbots,miner,mev --ws --ws.addr 0.0.0.0 --ws.port 8546 --ws.api admin,debug,eth,net,trace,txpool,web3,rpc,reth,ots,flashbots,miner,mev --log.stdout.format log-fmt -vvv --sequencer.enabled --sequencer.block-time 250 --sequencer.payload-building-duration 230 --txpool.pending-max-count=1000000 --builder.gaslimit=10000000000 --rpc.max-connections=5000
+      elif [ "$${ENV:-}" = "sepolia" ]; then
+        exec rollup-node node --chain scroll-sepolia --datadir=/l2reth --metrics=0.0.0.0:6060 --disable-discovery --http --http.addr=0.0.0.0 --http.port=8545 --http.corsdomain "*" --http.api admin,debug,eth,net,trace,txpool,web3,rpc,reth,ots,flashbots,miner,mev --ws --ws.addr 0.0.0.0 --ws.port 8546 --ws.api admin,debug,eth,net,trace,txpool,web3,rpc,reth,ots,flashbots,miner,mev --log.stdout.format log-fmt -vvv --l1.url http://l1geth-rpc.sepolia.scroll.tech:8545/l1 --l1.cups 10000 --network.bridge --scroll-wire.enabled --optimistic-sync --builder.gaslimit 20000000 --trusted-peers enode://29cee709c400533ae038a875b9ca975c8abef9eade956dcf3585e940acd5c0ae916968f514bd37d1278775aad1b7db30f7032a70202a87fd7365bd8de3c9f5fc@44.242.39.33:30303
+      elif [ "$${ENV:-}" = "mainnet" ]; then
+        exec rollup-node node --chain scroll --datadir=/l2reth --metrics=0.0.0.0:6060 --disable-discovery --http --http.addr=0.0.0.0 --http.port=8545 --http.corsdomain "*" --http.api admin,debug,eth,net,trace,txpool,web3,rpc,reth,ots,flashbots,miner,mev --ws --ws.addr 0.0.0.0 --ws.port 8546 --ws.api admin,debug,eth,net,trace,txpool,web3,rpc,reth,ots,flashbots,miner,mev --log.stdout.format log-fmt -vvv --l1.url http://l1geth-rpc.mainnet.scroll.tech:8545/l1 --l1.cups 10000 --network.bridge --scroll-wire.enabled --optimistic-sync --builder.gaslimit 30000000
+      fi
+      '
+    environment:
+      - ENV=${ENV:-dev}
+    ports:
+      - "8545:8545"  # JSON-RPC
+      - "8546:8546"  # WebSocket
+      - "6060:6060"  # Metrics
+    volumes:
+      - ./l2reth:/l2reth
+    networks:
+      - scroll-network
+
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: prometheus
+    ports:
+      - "19090:9090"  # Prometheus Web UI
+    volumes:
+      - ./resource/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./prometheus_data:/prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--storage.tsdb.retention.time=1d'
+      - '--storage.tsdb.retention.size=512MB'
+      - '--storage.tsdb.wal-compression'
+      - '--web.console.libraries=/etc/prometheus/console_libraries'
+      - '--web.console.templates=/etc/prometheus/consoles'
+      - '--web.enable-lifecycle'
+    networks:
+      - scroll-network
+    depends_on:
+      - rollup-node
+
+  grafana:
+    image: grafana/grafana:latest
+    container_name: grafana
+    ports:
+      - "13000:3000"  # Grafana Web UI
+    volumes:
+      - ./resource/grafana-datasource.yml:/config/datasources/datasource.yml:ro
+      - ./resource/grafana-dashboard-providers.yml:/config/dashboards/dashboard-providers.yml:ro
+      - ./resource/dashboards:/dashboards:ro
+      - ./grafana_data:/var/lib/grafana
+    environment:
+      - GF_AUTH_ANONYMOUS_ENABLED=true
+      - GF_AUTH_ANONYMOUS_ORG_ROLE=Admin
+      - GF_AUTH_ANONYMOUS_ORG_NAME=Main Org.
+      - GF_DASHBOARDS_DEFAULT_HOME_DASHBOARD_PATH=/dashboards/overview.json
+      - GF_PATHS_PROVISIONING=/config
+    networks:
+      - scroll-network
+    depends_on:
+      - prometheus
+
+networks:
+  scroll-network:
+    driver: bridge
