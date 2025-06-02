@@ -1,14 +1,14 @@
 use crate::Block;
 use std::{
-    collections::HashMap,
+    collections::{HashMap, VecDeque},
     sync::{Arc, Mutex},
 };
 
 use alloy_eips::BlockNumberOrTag;
 use alloy_json_rpc::RpcError;
 use alloy_network::Ethereum;
-use alloy_primitives::{BlockNumber, TxHash, B256, U64};
-use alloy_provider::{EthGetBlock, Provider, ProviderCall, RootProvider};
+use alloy_primitives::{Address, BlockNumber, StorageValue, TxHash, B256, U256, U64};
+use alloy_provider::{EthGetBlock, Provider, ProviderCall, RootProvider, RpcWithBlock};
 use alloy_rpc_types_eth::{BlockId, Filter, Log, Transaction};
 use alloy_transport::TransportResult;
 
@@ -17,6 +17,7 @@ use alloy_transport::TransportResult;
 pub struct MockProvider {
     blocks: Arc<Mutex<HashMap<BlockNumber, Vec<Block>>>>,
     transactions: HashMap<B256, Transaction>,
+    logs: Arc<Mutex<VecDeque<Log>>>,
     finalized_blocks: Arc<Mutex<Vec<Block>>>,
     latest_blocks: Arc<Mutex<Vec<Block>>>,
 }
@@ -27,6 +28,7 @@ impl MockProvider {
     pub fn new(
         blocks: impl Iterator<Item = Block>,
         transactions: impl Iterator<Item = Transaction>,
+        logs: impl Iterator<Item = Log>,
         finalized_blocks: Vec<Block>,
         latest_blocks: Vec<Block>,
     ) -> Self {
@@ -37,6 +39,7 @@ impl MockProvider {
         Self {
             blocks: Arc::new(Mutex::new(b)),
             transactions: transactions.map(|tx| (*tx.inner.tx_hash(), tx)).collect(),
+            logs: Arc::new(Mutex::new(logs.collect())),
             finalized_blocks: Arc::new(Mutex::new(finalized_blocks)),
             latest_blocks: Arc::new(Mutex::new(latest_blocks)),
         }
@@ -96,7 +99,16 @@ impl Provider for MockProvider {
     }
 
     async fn get_logs(&self, _filter: &Filter) -> TransportResult<Vec<Log>> {
-        Ok(vec![])
+        let logs = self.logs.lock().unwrap().pop_front().map(|l| vec![l]).unwrap_or_default();
+        Ok(logs)
+    }
+
+    fn get_storage_at(
+        &self,
+        _address: Address,
+        _key: U256,
+    ) -> RpcWithBlock<(Address, U256), StorageValue> {
+        RpcWithBlock::new_provider(|_| ProviderCall::Ready(Some(Ok(StorageValue::ZERO))))
     }
 
     fn get_transaction_by_hash(
