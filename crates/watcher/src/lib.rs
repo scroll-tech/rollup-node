@@ -7,8 +7,6 @@ pub use error::{EthRequestError, FilterLogError, L1WatcherError};
 /// Common test helpers
 pub mod test_utils;
 
-use std::{sync::Arc, time::Duration};
-
 use alloy_network::Ethereum;
 use alloy_primitives::{ruint::UintTryTo, BlockNumber, B256};
 use alloy_provider::{Network, Provider};
@@ -20,6 +18,11 @@ use rollup_node_primitives::{BatchCommitData, BoundedVec, ConsensusUpdate, NodeC
 use rollup_node_providers::SystemContractProvider;
 use scroll_alloy_consensus::TxL1Message;
 use scroll_l1::abi::logs::{try_decode_log, CommitBatch, FinalizeBatch, QueueTransaction};
+use std::{
+    fmt::{Debug, Display, Formatter},
+    sync::Arc,
+    time::Duration,
+};
 use tokio::sync::mpsc;
 
 /// The block range used to fetch L1 logs.
@@ -86,6 +89,8 @@ pub enum L1Notification {
     BatchFinalization {
         /// The hash of the finalized batch.
         hash: B256,
+        /// The index of the finalized batch.
+        index: u64,
         /// The block number the batch was finalized at.
         block_number: BlockNumber,
     },
@@ -104,6 +109,29 @@ pub enum L1Notification {
     NewBlock(u64),
     /// A block has been finalized on the L1.
     Finalized(u64),
+}
+
+impl Display for L1Notification {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Reorg(n) => write!(f, "Reorg({n:?})"),
+            Self::BatchCommit(b) => {
+                write!(f, "BatchCommit {{ hash: {}, index: {} }}", b.hash, b.index)
+            }
+            Self::BatchFinalization { hash, index, block_number } => write!(
+                f,
+                "BatchFinalization{{ hash: {hash}, index: {index}, block_number: {block_number} }}",
+            ),
+            Self::L1Message { message, block_number, .. } => write!(
+                f,
+                "L1Message{{ index: {}, block_number: {} }}",
+                message.queue_index, block_number
+            ),
+            Self::Consensus(u) => write!(f, "{u:?}"),
+            Self::NewBlock(n) => write!(f, "NewBlock({n})"),
+            Self::Finalized(n) => write!(f, "Finalized({n})"),
+        }
+    }
 }
 
 impl<EP> L1Watcher<EP>
@@ -187,12 +215,21 @@ where
             // index the next range of blocks.
             let logs = self.next_filtered_logs(latest.header.number).await?;
 
+            // prepare notifications.
+            let mut notifications = Vec::with_capacity(logs.len());
+
             // handle all events.
-            self.handle_l1_messages(&logs).await?;
-            self.handle_batch_commits(&logs).await?;
-            self.handle_batch_finalization(&logs).await?;
-            // TODO(greg): update with logs once system contract emits logs.
-            self.handle_system_contract_update(&latest).await?;
+            notifications.extend(self.handle_l1_messages(&logs).await?);
+            notifications.extend(self.handle_batch_commits(&logs).await?);
+            notifications.extend(self.handle_batch_finalization(&logs).await?);
+            if let Some(system_contract_update) =
+                self.handle_system_contract_update(&latest).await?
+            {
+                notifications.push(system_contract_update);
+            }
+
+            // send all notifications on the channel.
+            self.notify_all(notifications).await;
 
             // update the latest block the l1 watcher has indexed.
             self.update_current_block(&latest);
@@ -299,7 +336,7 @@ where
 
     /// Filters the logs into L1 messages and sends them over the channel.
     #[tracing::instrument(skip_all)]
-    async fn handle_l1_messages(&self, logs: &[Log]) -> L1WatcherResult<()> {
+    async fn handle_l1_messages(&self, logs: &[Log]) -> L1WatcherResult<Vec<L1Notification>> {
         let mut l1_messages = logs
             .iter()
             .map(|l| (&l.inner, l.block_number, l.block_timestamp))
@@ -308,6 +345,9 @@ where
                     .map(|log| (Into::<TxL1Message>::into(log.data), bn, ts))
             })
             .collect::<Vec<_>>();
+
+        // prepare notifications
+        let mut notifications = Vec::with_capacity(l1_messages.len());
 
         // sort the message by index and group by block number.
         l1_messages.sort_by(|(m1, _, _), (m2, _, _)| m1.queue_index.cmp(&m2.queue_index));
@@ -328,24 +368,21 @@ where
                     .ok_or(FilterLogError::MissingBlockTimestamp)?
             };
 
-            // notify via channel for each message.
+            // push notifications in vector.
             for (msg, _, _) in group {
-                tracing::trace!(target: "scroll::watcher", index = msg.queue_index, ?block_number, "Handled l1 message");
-
-                self.notify(L1Notification::L1Message {
+                notifications.push(L1Notification::L1Message {
                     message: msg,
                     block_number,
                     block_timestamp,
-                })
-                .await;
+                });
             }
         }
-        Ok(())
+        Ok(notifications)
     }
 
     /// Handles the batch commits events.
     #[tracing::instrument(skip_all)]
-    async fn handle_batch_commits(&self, logs: &[Log]) -> L1WatcherResult<()> {
+    async fn handle_batch_commits(&self, logs: &[Log]) -> L1WatcherResult<Vec<L1Notification>> {
         // filter commit logs.
         let mut commit_logs_with_tx = logs
             .iter()
@@ -356,6 +393,9 @@ where
                     .map(|decoded| (log, decoded.data, tx_hash))
             })
             .collect::<Vec<_>>();
+
+        // prepare notifications
+        let mut notifications = Vec::with_capacity(commit_logs_with_tx.len());
 
         // sort the commits and group by tx hash.
         commit_logs_with_tx
@@ -397,62 +437,62 @@ where
                 let batch_index =
                     decoded_log.batch_index.uint_try_to().expect("u256 to u64 conversion error");
 
-                tracing::trace!(target: "scroll::watcher", index = batch_index, hash = ?decoded_log.batch_hash, "Handled batch commit");
-
-                // notify via channel.
-                self.notify(L1Notification::BatchCommit(BatchCommitData {
+                // push in vector.
+                notifications.push(L1Notification::BatchCommit(BatchCommitData {
                     hash: decoded_log.batch_hash,
                     index: batch_index,
                     block_number,
                     block_timestamp,
                     calldata: input.clone(),
                     blob_versioned_hash: blob_versioned_hashes.next(),
-                }))
-                .await;
+                }));
             }
         }
-        Ok(())
+        Ok(notifications)
     }
 
     /// Handles the finalize batch events.
     #[tracing::instrument(skip_all)]
-    async fn handle_batch_finalization(&self, logs: &[Log]) -> L1WatcherResult<()> {
+    async fn handle_batch_finalization(
+        &self,
+        logs: &[Log],
+    ) -> L1WatcherResult<Vec<L1Notification>> {
         // filter finalize logs.
-        let finalize_tx_hashes =
-            logs.iter().map(|l| (l, l.block_number)).filter_map(|(log, bn)| {
+        logs.iter()
+            .map(|l| (l, l.block_number))
+            .filter_map(|(log, bn)| {
                 try_decode_log::<FinalizeBatch>(&log.inner).map(|decoded| (decoded.data, bn))
-            });
-
-        for (decoded_log, maybe_block_number) in finalize_tx_hashes {
-            // fetch the finalize transaction.
-            let block_number = maybe_block_number.ok_or(FilterLogError::MissingBlockNumber)?;
-
-            tracing::trace!(target: "scroll::watcher", index = ?decoded_log.batch_index, hash = ?decoded_log.batch_hash, "Handled batch finalization");
-
-            // send the finalization event in the channel.
-            let _ = self
-                .sender
-                .send(Arc::new(L1Notification::BatchFinalization {
+            })
+            .map(|(decoded_log, maybe_block_number)| {
+                // fetch the finalize transaction.
+                let block_number = maybe_block_number.ok_or(FilterLogError::MissingBlockNumber)?;
+                let index =
+                    decoded_log.batch_index.uint_try_to().expect("u256 to u64 conversion error");
+                Ok(L1Notification::BatchFinalization {
                     hash: decoded_log.batch_hash,
+                    index,
                     block_number,
-                }))
-                .await;
-        }
-        Ok(())
+                })
+            })
+            .collect()
     }
 
     /// Handles the system contract update events.
-    async fn handle_system_contract_update(&self, latest_block: &Block) -> L1WatcherResult<()> {
+    /// TODO(greg): update with logs once system contract emits logs.
+    async fn handle_system_contract_update(
+        &self,
+        latest_block: &Block,
+    ) -> L1WatcherResult<Option<L1Notification>> {
         // refresh the signer every new block.
         if latest_block.header.number != self.l1_state.head {
             let signer = self
                 .execution_provider
                 .authorized_signer(self.config.address_book.system_contract_address)
                 .await?;
-            self.notify(L1Notification::Consensus(ConsensusUpdate::AuthorizedSigner(signer))).await;
+            return Ok(Some(L1Notification::Consensus(ConsensusUpdate::AuthorizedSigner(signer))));
         }
 
-        Ok(())
+        Ok(None)
     }
 
     /// Fetches the chain of unfinalized blocks up to and including the latest block, ensuring no
@@ -502,6 +542,14 @@ where
     /// Returns true if the [`L1Watcher`] is synced to the head of the L1.
     const fn is_synced(&self) -> bool {
         self.current_block_number == self.l1_state.head
+    }
+
+    /// Send all notifications on the channel.
+    async fn notify_all(&self, notifications: Vec<L1Notification>) {
+        for notification in notifications {
+            tracing::trace!(target: "scroll::watcher", %notification, "sending l1 notification");
+            let _ = self.notify(notification).await;
+        }
     }
 
     /// Send the notification in the channel.
