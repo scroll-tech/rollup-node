@@ -843,8 +843,7 @@ mod tests {
     async fn test_should_handle_l1_messages() -> eyre::Result<()> {
         // Given
         let (finalized, latest, chain) = chain(10);
-        let (watcher, mut receiver) =
-            l1_watcher(chain, vec![], vec![], finalized.clone(), latest.clone());
+        let (watcher, _) = l1_watcher(chain, vec![], vec![], finalized.clone(), latest.clone());
 
         // build test logs.
         let mut logs = (0..10).map(|_| random!(Log)).collect::<Vec<_>>();
@@ -857,11 +856,10 @@ mod tests {
         logs.push(queue_transaction);
 
         // When
-        watcher.handle_l1_messages(&logs).await?;
+        let notification = watcher.handle_l1_messages(&logs).await?.pop().unwrap();
 
         // Then
-        let notification = receiver.recv().await.unwrap();
-        assert!(matches!(*notification, L1Notification::L1Message { .. }));
+        assert!(matches!(notification, L1Notification::L1Message { .. }));
 
         Ok(())
     }
@@ -883,7 +881,7 @@ mod tests {
             effective_gas_price: None,
         };
 
-        let (watcher, mut receiver) =
+        let (watcher, _) =
             l1_watcher(chain, vec![], vec![tx.clone()], finalized.clone(), latest.clone());
 
         // build test logs.
@@ -900,11 +898,10 @@ mod tests {
         logs.push(batch_commit);
 
         // When
-        watcher.handle_batch_commits(&logs).await?;
+        let notification = watcher.handle_batch_commits(&logs).await?.pop().unwrap();
 
         // Then
-        let notification = receiver.recv().await.unwrap();
-        assert!(matches!(*notification, L1Notification::BatchCommit { .. }));
+        assert!(matches!(notification, L1Notification::BatchCommit { .. }));
 
         Ok(())
     }
@@ -913,24 +910,24 @@ mod tests {
     async fn test_should_handle_finalize_commits() -> eyre::Result<()> {
         // Given
         let (finalized, latest, chain) = chain(10);
-        let (watcher, mut receiver) =
-            l1_watcher(chain, vec![], vec![], finalized.clone(), latest.clone());
+        let (watcher, _) = l1_watcher(chain, vec![], vec![], finalized.clone(), latest.clone());
 
         // build test logs.
         let mut logs = (0..10).map(|_| random!(Log)).collect::<Vec<_>>();
         let mut finalize_commit = random!(Log);
         let mut inner_log = random!(alloy_primitives::Log);
-        inner_log.data = random!(FinalizeBatch).encode_log_data();
+        let mut batch = random!(FinalizeBatch);
+        batch.batch_index = U256::from(random!(u64));
+        inner_log.data = batch.encode_log_data();
         finalize_commit.inner = inner_log;
         finalize_commit.block_number = Some(random!(u64));
         logs.push(finalize_commit);
 
         // When
-        watcher.handle_batch_finalization(&logs).await?;
+        let notification = watcher.handle_batch_finalization(&logs).await?.pop().unwrap();
 
         // Then
-        let notification = receiver.recv().await.unwrap();
-        assert!(matches!(*notification, L1Notification::BatchFinalization { .. }));
+        assert!(matches!(notification, L1Notification::BatchFinalization { .. }));
 
         Ok(())
     }
