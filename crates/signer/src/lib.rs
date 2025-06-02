@@ -39,8 +39,8 @@ pub struct Signer {
 }
 
 impl Signer {
-    /// Creates a new `Signer` instance.
-    pub async fn spawn(signer: impl alloy_signer::Signer + Send + Sync + 'static) -> SignerHandle {
+    /// Creates a new [`Signer`] instance and [`SignerHandle`] with the provided signer.
+    fn new(signer: impl alloy_signer::Signer + Send + Sync + 'static) -> (Self, SignerHandle) {
         let (req_tx, req_rx) = tokio::sync::mpsc::unbounded_channel();
         let (event_tx, event_rx) = tokio::sync::mpsc::unbounded_channel();
         let signer = Self {
@@ -49,8 +49,14 @@ impl Signer {
             in_progress: FuturesOrdered::new(),
             sender: event_tx,
         };
+        (signer, SignerHandle::new(req_tx, event_rx.into()))
+    }
+
+    /// Spawns a new `Signer` instance onto the tokio runtime.
+    pub fn spawn(signer: impl alloy_signer::Signer + Send + Sync + 'static) -> SignerHandle {
+        let (signer, handle) = Self::new(signer);
         tokio::spawn(signer.run());
-        SignerHandle::new(req_tx, event_rx.into())
+        handle
     }
 
     /// Execution loop for the signer.
@@ -67,16 +73,24 @@ impl Signer {
 
                     }
                 }
-                Some(result) = self.in_progress.next() => {
+                Some(result) = self.in_progress.next(), if !self.in_progress.is_empty() => {
                     match result {
-                        Ok(event) => self.sender.send(event).expect("The event channel is closed"),
+                        Ok(event) => {
+                            if self.sender.send(event).is_err() {
+                                tracing::info!(target: "scroll::signer", "The event channel has been closed - shutting down.");
+                                break;
+                            }
+                        },
                         Err(err) => {
-                            tracing::error!(target: "rollup_node::signer", ?err, "An error occurred while signing");
+                            tracing::error!(target: "scroll::signer", ?err, "An error occurred while signing");
                         }
                     }
-
                 }
-                else => ()
+                else => {
+                    // The request channel is closed, exit the loop.
+                    tracing::info!(target: "scroll::signer", "Signer request channel has been closed - shutting down.");
+                    break;
+                }
             }
         }
     }
@@ -102,8 +116,9 @@ mod tests {
 
     #[tokio::test]
     async fn test_signer_local() {
+        reth_tracing::init_test_tracing();
         let signer = PrivateKeySigner::random();
-        let mut handle = Signer::spawn(Box::new(signer.clone())).await;
+        let mut handle = Signer::spawn(Box::new(signer.clone()));
 
         // Test sending a request
         let block = ScrollBlock::default();
@@ -119,5 +134,70 @@ mod tests {
 
         assert_eq!(event_block, block);
         assert_eq!(recovered_address, signer.address());
+    }
+
+    // The following tests do not have any assertions, they are just to ensure that the
+    // shutdown logic works correctly and does not panic. You can observer the logs to see if the
+    // shutdown logic is executed correctly.
+
+    #[tokio::test]
+    async fn test_drop_signer_handle() {
+        reth_tracing::init_test_tracing();
+
+        // Create a local signer and the signer service
+        let key = PrivateKeySigner::random();
+        let (signer, handle) = Signer::new(Box::new(key.clone()));
+
+        // Spawn the signer task and capture the JoinHandle
+        let task = tokio::spawn(signer.run());
+
+        // Drop the handle to simulate shutdown
+        drop(handle);
+
+        // Wait for the signer task to complete
+        task.await.expect("Signer task panicked");
+    }
+
+    #[tokio::test]
+    async fn test_drop_signer_handle_with_wait() {
+        reth_tracing::init_test_tracing();
+
+        // Create a local signer and the signer service
+        let key = PrivateKeySigner::random();
+        let (signer, handle) = Signer::new(Box::new(key.clone()));
+
+        // Spawn the signer task and capture the JoinHandle
+        let task = tokio::spawn(signer.run());
+
+        // wait to observe if the else block will be executed.
+        tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
+
+        // Drop the handle to simulate shutdown
+        drop(handle);
+
+        // Wait for the signer task to complete
+        task.await.expect("signer task panicked");
+    }
+
+    #[tokio::test]
+    async fn test_drop_signer_handle_with_request() {
+        reth_tracing::init_test_tracing();
+
+        // Create a local signer and the signer service
+        let key = PrivateKeySigner::random();
+        let (signer, handle) = Signer::new(Box::new(key.clone()));
+
+        // Spawn the signer task and capture the JoinHandle
+        let task = tokio::spawn(signer.run());
+
+        // Send a signing request through the handle
+        let block = ScrollBlock::default();
+        handle.sign_block(block.clone()).unwrap();
+
+        // Drop the handle to simulate shutdown
+        drop(handle);
+
+        // Wait for the signer task to complete
+        task.await.expect("Signer task panicked");
     }
 }
