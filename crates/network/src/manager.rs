@@ -199,9 +199,7 @@ impl<N: FullNetwork> Stream for ScrollNetworkManager<N> {
                 }
                 // All network handles have been dropped so we can shutdown the network.
                 Poll::Ready(None) => {
-                    // return std::task::Poll::Ready(());
-                    // For now we will return pending to keep the network running.
-                    break;
+                    return std::task::Poll::Ready(None);
                 }
                 // No additional messages exist break.
                 Poll::Pending => break,

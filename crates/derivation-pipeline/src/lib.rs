@@ -113,6 +113,14 @@ where
         }
         None
     }
+
+    /// Returns a boolean indicating whether the pipeline is idle, meaning it has no active or
+    /// pending tasks.
+    pub fn is_idle(&self) -> bool {
+        self.pipeline_futures.is_empty() &&
+            self.batch_queue.is_empty() &&
+            self.attributes_queue.is_empty()
+    }
 }
 
 impl<P> Stream for DerivationPipeline<P>

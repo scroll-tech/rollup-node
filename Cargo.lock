@@ -9659,6 +9659,7 @@ dependencies = [
  "reth-primitives-traits",
  "reth-scroll-node",
  "reth-scroll-primitives",
+ "reth-tasks",
  "reth-tokio-util",
  "rollup-node-indexer",
  "rollup-node-primitives",

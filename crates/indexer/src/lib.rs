@@ -285,6 +285,11 @@ impl<ChainSpec: ScrollHardforks + EthChainSpec + Send + Sync + 'static> Indexer<
             }
         }))
     }
+
+    /// Returns a boolean indicating whether the indexer is idle, meaning it has no pending futures.
+    pub fn is_idle(&self) -> bool {
+        self.pending_futures.is_empty()
+    }
 }
 
 impl<ChainSpec: ScrollHardforks + 'static> Stream for Indexer<ChainSpec> {

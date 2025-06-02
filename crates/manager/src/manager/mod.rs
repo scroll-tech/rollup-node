@@ -5,11 +5,12 @@
 use super::Consensus;
 use alloy_primitives::Signature;
 use alloy_provider::Provider;
-use futures::StreamExt;
+use futures::{future::poll_fn, StreamExt};
 use reth_chainspec::EthChainSpec;
 use reth_network_api::{block::NewBlockWithPeer as RethNewBlockWithPeer, FullNetwork};
 use reth_scroll_node::ScrollNetworkPrimitives;
 use reth_scroll_primitives::ScrollBlock;
+use reth_tasks::shutdown::GracefulShutdown;
 use reth_tokio_util::{EventSender, EventStream};
 use rollup_node_indexer::{Indexer, IndexerEvent};
 use rollup_node_sequencer::Sequencer;
@@ -23,8 +24,7 @@ use scroll_network::{
     BlockImportOutcome, NetworkManagerEvent, NewBlockWithPeer, ScrollNetworkManager,
 };
 use std::{
-    fmt,
-    fmt::{Debug, Formatter},
+    fmt::{self, Debug, Formatter},
     future::Future,
     pin::Pin,
     sync::Arc,
@@ -34,6 +34,7 @@ use tokio::{
     sync::mpsc::{self, Receiver},
     time::Interval,
 };
+
 use tokio_stream::wrappers::ReceiverStream;
 use tracing::{error, trace, warn};
 
@@ -103,6 +104,8 @@ pub struct RollupNodeManager<
     signer: Option<SignerHandle>,
     /// The trigger for the block building process.
     block_building_trigger: Option<Interval>,
+    /// A flag indicating whether the node is shutting down.
+    shutdown: bool,
 }
 
 /// The current status of the rollup manager.
@@ -162,12 +165,12 @@ where
         sequencer: Option<Sequencer<L1MP>>,
         signer: Option<SignerHandle>,
         block_time: Option<u64>,
-    ) -> RollupManagerHandle {
+    ) -> (Self, RollupManagerHandle) {
         let (handle_tx, handle_rx) = mpsc::channel(EVENT_CHANNEL_SIZE);
         let indexer = Indexer::new(database.clone(), chain_spec.clone());
         let derivation_pipeline =
             l1_provider.map(|provider| DerivationPipeline::new(provider, database));
-        tokio::spawn(Self {
+        let rnm = Self {
             handle_rx,
             chain_spec,
             network,
@@ -181,8 +184,9 @@ where
             sequencer,
             signer,
             block_building_trigger: block_time.map(delayed_interval),
-        });
-        RollupManagerHandle::new(handle_tx)
+            shutdown: false,
+        };
+        (rnm, RollupManagerHandle::new(handle_tx))
     }
 
     /// Returns a new event listener for the rollup node manager.
@@ -361,6 +365,25 @@ where
     const fn status(&self) -> RollupManagerStatus {
         RollupManagerStatus { syncing: self.engine.is_syncing() }
     }
+
+    /// Drives the [`RollupNodeManager`] future until a [`GracefulShutdown`] signal is received.
+    pub async fn run_until_graceful_shutdown(mut self, shutdown: GracefulShutdown) {
+        let mut graceful_guard = None;
+        tokio::select! {
+            _ = &mut self => {},
+            guard = shutdown => {
+                graceful_guard = Some(guard);
+            },
+        }
+
+        self.shutdown = true;
+
+        // we now loop until the future is done, which means that the outstanding tasks have been
+        // completed.
+        poll_fn(|cx| Pin::new(&mut self).poll(cx)).await;
+
+        drop(graceful_guard);
+    }
 }
 
 impl<N, EC, P, L1P, L1MP, CS> Future for RollupNodeManager<N, EC, P, L1P, L1MP, CS>
@@ -387,25 +410,28 @@ where
         let en_synced = !this.engine.is_syncing();
 
         // Poll the handle receiver for commands.
-        while let Poll::Ready(Some(command)) = this.handle_rx.poll_recv(cx) {
-            match command {
-                RollupManagerCommand::BuildBlock => {
-                    proceed_if!(
-                        en_synced,
-                        if let Some(sequencer) = this.sequencer.as_mut() {
-                            sequencer.build_payload_attributes();
-                        }
-                    );
-                }
-                RollupManagerCommand::EventListener(tx) => {
-                    let events = this.event_listener();
-                    tx.send(events).expect("Failed to send event listener to handle");
-                }
-                RollupManagerCommand::Status(tx) => {
-                    tx.send(this.status()).expect("Failed to send status to handle");
+        proceed_if!(
+            !this.shutdown,
+            while let Poll::Ready(Some(command)) = this.handle_rx.poll_recv(cx) {
+                match command {
+                    RollupManagerCommand::BuildBlock => {
+                        proceed_if!(
+                            en_synced,
+                            if let Some(sequencer) = this.sequencer.as_mut() {
+                                sequencer.build_payload_attributes();
+                            }
+                        );
+                    }
+                    RollupManagerCommand::EventListener(tx) => {
+                        let events = this.event_listener();
+                        tx.send(events).expect("Failed to send event listener to handle");
+                    }
+                    RollupManagerCommand::Status(tx) => {
+                        tx.send(this.status()).expect("Failed to send status to handle");
+                    }
                 }
             }
-        }
+        );
 
         // Drain all EngineDriver events.
         while let Poll::Ready(Some(event)) = this.engine.poll_next_unpin(cx) {
@@ -413,7 +439,7 @@ where
         }
 
         proceed_if!(
-            en_synced,
+            en_synced && !this.shutdown,
             // Handle new block production.
             if let Some(Poll::Ready(Some(attributes))) =
                 this.sequencer.as_mut().map(|x| x.poll_next_unpin(cx))
@@ -423,7 +449,7 @@ where
         );
 
         proceed_if!(
-            en_synced,
+            en_synced && !this.shutdown,
             // Drain all L1 notifications.
             while let Some(Poll::Ready(Some(event))) =
                 this.l1_notification_rx.as_mut().map(|rx| rx.poll_next_unpin(cx))
@@ -455,7 +481,7 @@ where
         }
 
         proceed_if!(
-            en_synced,
+            en_synced && !this.shutdown,
             // Check if we need to trigger the build of a new payload.
             match (
                 this.block_building_trigger.as_mut().map(|x| x.poll_tick(cx)),
@@ -483,15 +509,31 @@ where
         }
 
         // Handle blocks received from the eth-wire protocol.
-        while let Some(Poll::Ready(Some(block))) =
-            this.eth_wire_block_rx.as_mut().map(|new_block_rx| new_block_rx.poll_next_unpin(cx))
-        {
-            this.handle_eth_wire_block(block);
-        }
+        proceed_if!(
+            !this.shutdown,
+            while let Some(Poll::Ready(Some(block))) =
+                this.eth_wire_block_rx.as_mut().map(|new_block_rx| new_block_rx.poll_next_unpin(cx))
+            {
+                this.handle_eth_wire_block(block);
+            }
+        );
 
         // Handle network manager events.
-        while let Poll::Ready(Some(event)) = this.network.poll_next_unpin(cx) {
-            this.handle_network_manager_event(event);
+        proceed_if!(
+            !this.shutdown,
+            while let Poll::Ready(Some(event)) = this.network.poll_next_unpin(cx) {
+                this.handle_network_manager_event(event);
+            }
+        );
+
+        // If the shutdown flag is set and all components are idle, we can return ready.
+        if this.shutdown &&
+            this.engine.is_idle() &&
+            this.indexer.is_idle() &&
+            this.derivation_pipeline.as_ref().map(|p| p.is_idle()).unwrap_or(true)
+        {
+            trace!(target: "scroll::node::manager", "RollupNodeManager is shutting down");
+            return Poll::Ready(())
         }
 
         Poll::Pending

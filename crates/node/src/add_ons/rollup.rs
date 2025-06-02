@@ -215,7 +215,7 @@ impl RollupManagerAddOn {
         let signer = self.config.test.then_some(Signer::spawn(PrivateKeySigner::random()));
 
         // Spawn the rollup node manager
-        let rnm = RollupNodeManager::new(
+        let (rnm, rnm_handle) = RollupNodeManager::new(
             scroll_network_manager,
             engine,
             l1_provider,
@@ -228,6 +228,11 @@ impl RollupManagerAddOn {
             signer,
             block_time,
         );
-        Ok((rnm, l1_notification_tx))
+        ctx.node
+            .task_executor()
+            .spawn_critical_with_graceful_shutdown_signal("rollup_node_manager", |shutdown| {
+                rnm.run_until_graceful_shutdown(shutdown)
+            });
+        Ok((rnm_handle, l1_notification_tx))
     }
 }

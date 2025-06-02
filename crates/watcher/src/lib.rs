@@ -177,8 +177,14 @@ where
         };
 
         // notify at spawn.
-        watcher.notify(L1Notification::Finalized(watcher.l1_state.finalized)).await;
-        watcher.notify(L1Notification::NewBlock(watcher.l1_state.head)).await;
+        watcher
+            .notify(L1Notification::Finalized(watcher.l1_state.finalized))
+            .await
+            .expect("channel is open in this context");
+        watcher
+            .notify(L1Notification::NewBlock(watcher.l1_state.head))
+            .await
+            .expect("channel is open in this context");
 
         tokio::spawn(watcher.run());
 
@@ -189,10 +195,14 @@ where
     pub async fn run(mut self) {
         loop {
             // step the watcher.
-            let _ = self
+            if let Err(L1WatcherError::SendError(_)) = self
                 .step()
                 .await
-                .inspect_err(|err| tracing::error!(target: "scroll::watcher", ?err));
+                .inspect_err(|err| tracing::error!(target: "scroll::watcher", ?err))
+            {
+                tracing::warn!(target: "scroll::watcher", "L1 watcher channel closed, stopping the watcher");
+                break;
+            }
 
             // sleep if we are synced.
             if self.is_synced() {
@@ -205,7 +215,7 @@ where
     pub async fn step(&mut self) -> L1WatcherResult<()> {
         // handle the finalized block.
         let finalized = self.finalized_block().await?;
-        self.handle_finalized_block(&finalized.header).await;
+        self.handle_finalized_block(&finalized.header).await?;
 
         // handle the latest block.
         let latest = self.latest_block().await?;
@@ -246,19 +256,19 @@ where
         skip_all,
         fields(curr_finalized = ?self.l1_state.finalized, new_finalized = ?finalized.number)
     )]
-    async fn handle_finalized_block(&mut self, finalized: &Header) {
+    async fn handle_finalized_block(&mut self, finalized: &Header) -> L1WatcherResult<()> {
         // update the state and notify on channel.
         if self.l1_state.finalized < finalized.number {
             tracing::trace!(target: "scroll::watcher", number = finalized.number, hash = ?finalized.hash, "new finalized block");
 
             self.l1_state.finalized = finalized.number;
-            self.notify(L1Notification::Finalized(finalized.number)).await;
+            self.notify(L1Notification::Finalized(finalized.number)).await?;
         }
 
         // shortcircuit.
         if self.unfinalized_blocks.is_empty() {
             tracing::trace!(target: "scroll::watcher", "no unfinalized blocks");
-            return;
+            return Ok(());
         }
 
         let tail_block = self.unfinalized_blocks.last().expect("tail exists");
@@ -266,7 +276,7 @@ where
             // clear, the finalized block is past the tail.
             tracing::trace!(target: "scroll::watcher", tail = ?tail_block.number, finalized = ?finalized.number, "draining all unfinalized blocks");
             self.unfinalized_blocks.clear();
-            return;
+            return Ok(());
         }
 
         let finalized_block_position =
@@ -277,6 +287,8 @@ where
             tracing::trace!(target: "scroll::watcher", "draining range {:?}", 0..=position);
             self.unfinalized_blocks.drain(0..=position);
         }
+
+        Ok(())
     }
 
     /// Handle the latest block:
@@ -322,14 +334,14 @@ where
                 }
 
                 // send the reorg block number on the channel.
-                self.notify(L1Notification::Reorg(number)).await;
+                self.notify(L1Notification::Reorg(number)).await?;
             }
         }
 
         // Update the state and notify on the channel.
         tracing::trace!(target: "scroll::watcher", number = ?latest.number, hash = ?latest.hash, "new block");
         self.l1_state.head = latest.number;
-        self.notify(L1Notification::NewBlock(latest.number)).await;
+        self.notify(L1Notification::NewBlock(latest.number)).await?;
 
         Ok(())
     }
@@ -553,10 +565,10 @@ where
     }
 
     /// Send the notification in the channel.
-    async fn notify(&self, notification: L1Notification) {
-        let _ = self.sender.send(Arc::new(notification)).await.inspect_err(
+    async fn notify(&self, notification: L1Notification) -> L1WatcherResult<()> {
+        Ok(self.sender.send(Arc::new(notification)).await.inspect_err(
             |err| tracing::error!(target: "scroll::watcher", ?err, "failed to send notification"),
-        );
+        )?)
     }
 
     /// Updates the current block number, saturating at the head of the chain.
@@ -715,10 +727,10 @@ mod tests {
     async fn test_should_handle_finalized_with_empty_state() -> eyre::Result<()> {
         // Given
         let (finalized, latest, _) = chain(2);
-        let (mut watcher, _) = l1_watcher(vec![], vec![], vec![], finalized.clone(), latest);
+        let (mut watcher, _rx) = l1_watcher(vec![], vec![], vec![], finalized.clone(), latest);
 
         // When
-        watcher.handle_finalized_block(&finalized).await;
+        watcher.handle_finalized_block(&finalized).await?;
 
         // Then
         assert_eq!(watcher.unfinalized_blocks.len(), 0);
@@ -731,10 +743,10 @@ mod tests {
         // Given
         let (_, latest, chain) = chain(10);
         let finalized = chain[5].clone();
-        let (mut watcher, _) = l1_watcher(chain, vec![], vec![], finalized.clone(), latest);
+        let (mut watcher, _rx) = l1_watcher(chain, vec![], vec![], finalized.clone(), latest);
 
         // When
-        watcher.handle_finalized_block(&finalized).await;
+        watcher.handle_finalized_block(&finalized).await?;
 
         // Then
         assert_eq!(watcher.unfinalized_blocks.len(), 4);
@@ -747,10 +759,10 @@ mod tests {
         // Given
         let (_, latest, chain) = chain(10);
         let finalized = latest.clone();
-        let (mut watcher, _) = l1_watcher(chain, vec![], vec![], finalized.clone(), latest);
+        let (mut watcher, _rx) = l1_watcher(chain, vec![], vec![], finalized.clone(), latest);
 
         // When
-        watcher.handle_finalized_block(&finalized).await;
+        watcher.handle_finalized_block(&finalized).await?;
 
         // Then
         assert_eq!(watcher.unfinalized_blocks.len(), 0);
@@ -779,7 +791,7 @@ mod tests {
         // Given
         let (finalized, latest, chain) = chain(10);
         let unfinalized_chain = chain[..9].to_vec();
-        let (mut watcher, _) =
+        let (mut watcher, _rx) =
             l1_watcher(unfinalized_chain, vec![], vec![], finalized.clone(), latest.clone());
 
         assert_eq!(watcher.unfinalized_blocks.len(), 9);
