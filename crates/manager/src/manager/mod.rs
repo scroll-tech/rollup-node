@@ -252,7 +252,7 @@ where
                 // update the fcs on new finalized block.
                 self.engine.set_finalized_block_info(finalized_block);
             }
-            IndexerEvent::ReorgIndexed {
+            IndexerEvent::UnwindIndexed {
                 l1_block_number,
                 queue_index,
                 l2_head_block_info,
@@ -434,9 +434,12 @@ where
         );
 
         // Drain all EngineDriver events.
-        while let Poll::Ready(Some(event)) = this.engine.poll_next_unpin(cx) {
-            this.handle_engine_driver_event(event);
-        }
+        proceed_if!(
+            !this.shutdown,
+            while let Poll::Ready(Some(event)) = this.engine.poll_next_unpin(cx) {
+                this.handle_engine_driver_event(event);
+            }
+        );
 
         proceed_if!(
             en_synced && !this.shutdown,
@@ -505,7 +508,11 @@ where
         while let Some(Poll::Ready(Some(attributes))) =
             this.derivation_pipeline.as_mut().map(|f| f.poll_next_unpin(cx))
         {
-            this.engine.handle_l1_consolidation(attributes)
+            if this.shutdown {
+                this.indexer.unwind_batch(attributes.batch_info);
+            } else {
+                this.engine.handle_l1_consolidation(attributes);
+            }
         }
 
         // Handle blocks received from the eth-wire protocol.
@@ -528,7 +535,6 @@ where
 
         // If the shutdown flag is set and all components are idle, we can return ready.
         if this.shutdown &&
-            this.engine.is_idle() &&
             this.indexer.is_idle() &&
             this.derivation_pipeline.as_ref().map(|p| p.is_idle()).unwrap_or(true)
         {

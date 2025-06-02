@@ -73,11 +73,31 @@ impl<ChainSpec: ScrollHardforks + EthChainSpec + Send + Sync + 'static> Indexer<
         self.pending_futures.push_back(fut)
     }
 
+    /// Unwinds a batch by deleting all data that was indexed after the block number the batch was
+    /// created.
+    pub fn unwind_batch(&mut self, batch_info: BatchInfo) {
+        let fut = IndexerFuture::HandleUnwindBatch(Box::pin(Self::handle_unwind_batch(
+            self.database.clone(),
+            self.chain_spec.clone(),
+            batch_info,
+        )));
+        self.pending_futures.push_back(fut);
+    }
+
+    async fn handle_unwind_batch(
+        database: Arc<Database>,
+        chain_spec: Arc<ChainSpec>,
+        batch_info: BatchInfo,
+    ) -> Result<IndexerEvent, IndexerError> {
+        let batch = database.get_batch_by_index(batch_info.index).await?.expect("batch must exist");
+        Self::unwind(database, chain_spec, batch.block_number - 1).await
+    }
+
     /// Handles an event from the L1.
     pub fn handle_l1_notification(&mut self, event: L1Notification) {
         let fut = match event {
-            L1Notification::Reorg(block_number) => IndexerFuture::HandleReorg(Box::pin(
-                Self::handle_l1_reorg(self.database.clone(), self.chain_spec.clone(), block_number),
+            L1Notification::Reorg(block_number) => IndexerFuture::HandleUnwind(Box::pin(
+                Self::unwind(self.database.clone(), self.chain_spec.clone(), block_number),
             )),
             L1Notification::NewBlock(_) | L1Notification::Consensus(_) => return,
             L1Notification::Finalized(block_number) => {
@@ -114,9 +134,7 @@ impl<ChainSpec: ScrollHardforks + EthChainSpec + Send + Sync + 'static> Indexer<
         self.pending_futures.push_back(fut);
     }
 
-    /// Handles a reorganization event by deleting all indexed data which is greater than the
-    /// provided block number.
-    async fn handle_l1_reorg(
+    async fn unwind(
         database: Arc<Database>,
         chain_spec: Arc<ChainSpec>,
         l1_block_number: u64,
@@ -164,7 +182,8 @@ impl<ChainSpec: ScrollHardforks + EthChainSpec + Send + Sync + 'static> Indexer<
 
         // commit the transaction
         txn.commit().await?;
-        Ok(IndexerEvent::ReorgIndexed {
+
+        Ok(IndexerEvent::UnwindIndexed {
             l1_block_number,
             queue_index,
             l2_head_block_info,
@@ -586,7 +605,7 @@ mod test {
         let event = indexer.next().await.unwrap().unwrap();
         assert_eq!(
             event,
-            IndexerEvent::ReorgIndexed {
+            IndexerEvent::UnwindIndexed {
                 l1_block_number: 17,
                 queue_index: None,
                 l2_head_block_info: None,
@@ -601,7 +620,7 @@ mod test {
 
         assert_eq!(
             event,
-            IndexerEvent::ReorgIndexed {
+            IndexerEvent::UnwindIndexed {
                 l1_block_number: 7,
                 queue_index: Some(8),
                 l2_head_block_info: Some(blocks[7].block_info),
@@ -615,7 +634,7 @@ mod test {
 
         assert_eq!(
             event,
-            IndexerEvent::ReorgIndexed {
+            IndexerEvent::UnwindIndexed {
                 l1_block_number: 3,
                 queue_index: Some(4),
                 l2_head_block_info: Some(blocks[3].block_info),

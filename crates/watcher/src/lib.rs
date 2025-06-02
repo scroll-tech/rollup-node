@@ -457,6 +457,7 @@ where
                     block_timestamp,
                     calldata: input.clone(),
                     blob_versioned_hash: blob_versioned_hashes.next(),
+                    finalized_block_number: None,
                 }));
             }
         }

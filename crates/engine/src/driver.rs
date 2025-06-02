@@ -221,16 +221,6 @@ where
         self.sequencer_payload_attributes.is_some() || self.payload_building_future.is_some()
     }
 
-    /// Returns a boolean indicating whether the driver is idle, meaning it has no pending
-    /// tasks.
-    pub fn is_idle(&self) -> bool {
-        self.engine_future.is_none() &&
-            self.payload_building_future.is_none() &&
-            self.sequencer_payload_attributes.is_none() &&
-            self.block_imports.is_empty() &&
-            self.l1_payload_attributes.is_empty()
-    }
-
     /// Returns the sync status.
     pub const fn is_syncing(&self) -> bool {
         self.syncing

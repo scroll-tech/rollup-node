@@ -110,9 +110,18 @@ pub trait DatabaseOperations: DatabaseConnectionProvider {
             .map(|res| Ok(res.map(Into::into)?)))
     }
 
+    /// Get the latest batch commit from the database.
+    async fn get_latest_batch_commit(&self) -> Result<Option<BatchCommitData>, DatabaseError> {
+        tracing::trace!(target: "scroll::db", "Fetching latest batch commit from database.");
+        Ok(models::batch_commit::Entity::find()
+            .order_by_desc(models::batch_commit::Column::Index)
+            .one(self.get_connection())
+            .await
+            .map(|x| x.map(Into::into))?)
+    }
+
     /// Insert an [`L1MessageEnvelope`] into the database.
     async fn insert_l1_message(&self, l1_message: L1MessageEnvelope) -> Result<(), DatabaseError> {
-        tracing::trace!(target: "scroll::db", queue_index = l1_message.transaction.queue_index, "Inserting L1 message into database.");
         let l1_message: models::l1_message::ActiveModel = l1_message.into();
         l1_message.insert(self.get_connection()).await?;
         Ok(())
@@ -178,6 +187,15 @@ pub trait DatabaseOperations: DatabaseConnectionProvider {
             .stream(self.get_connection())
             .await?
             .map(|res| Ok(res.map(Into::into)?)))
+    }
+
+    /// Get the latest [`L1MessageEnvelope`] from the database.
+    async fn get_latest_l1_message(&self) -> Result<Option<L1MessageEnvelope>, DatabaseError> {
+        Ok(models::l1_message::Entity::find()
+            .order_by_desc(models::l1_message::Column::L1BlockNumber)
+            .one(self.get_connection())
+            .await
+            .map(|x| x.map(Into::into))?)
     }
 
     /// Get the extra data for the provided [`BlockId`].

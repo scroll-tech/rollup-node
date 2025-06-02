@@ -12,10 +12,13 @@ pub enum IndexerEvent {
     /// A `Finalized` event has been indexed returning the block number and new finalized L2
     /// block.
     FinalizedIndexed(u64, Option<BlockInfo>),
+    /// A batch has been unwound returning the batch info.
+    BatchUnwound(BatchInfo),
     /// A `L1Message` event has been indexed returning the message queue index.
     L1MessageIndexed(u64),
-    /// A `Reorg` event has been indexed returning the reorg block number.
-    ReorgIndexed {
+    /// An unwind event has been processed returning the reorg block number. This can happen if the
+    /// node is shutdown midway through processing of a batch or if the L1 reorgs.
+    UnwindIndexed {
         /// The L1 block number of the new L1 head.
         l1_block_number: u64,
         /// The L1 message queue index of the new L1 head.

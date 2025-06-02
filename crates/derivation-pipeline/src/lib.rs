@@ -367,6 +367,7 @@ mod tests {
             block_timestamp: 1696935971,
             calldata: Arc::new(raw_calldata),
             blob_versioned_hash: None,
+            finalized_block_number: None,
         };
         db.insert_batch(batch_data).await?;
         // load messages in db.
@@ -448,6 +449,7 @@ mod tests {
             block_timestamp: 1696935971,
             calldata: Arc::new(raw_calldata),
             blob_versioned_hash: None,
+            finalized_block_number: None,
         };
 
         let l1_messages = vec![

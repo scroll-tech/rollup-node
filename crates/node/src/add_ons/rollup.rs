@@ -27,7 +27,7 @@ use rollup_node_signer::Signer;
 use rollup_node_watcher::{L1Notification, L1Watcher};
 use scroll_alloy_hardforks::ScrollHardforks;
 use scroll_alloy_provider::ScrollAuthApiEngineClient;
-use scroll_db::{Database, DatabaseConnectionProvider};
+use scroll_db::{Database, DatabaseConnectionProvider, DatabaseOperations};
 use scroll_engine::{EngineDriver, ForkchoiceState};
 use scroll_migration::MigratorTrait;
 use scroll_network::ScrollNetworkManager;
@@ -158,7 +158,13 @@ impl RollupManagerAddOn {
         let (l1_notification_tx, l1_notification_rx) =
             if let Some(provider) = l1_provider.filter(|_| !self.config.test) {
                 // Spawn the L1Watcher
-                (None, Some(L1Watcher::spawn(provider, None, node_config).await))
+                let latest_l1_batch = db
+                    .get_latest_batch_commit()
+                    .await?
+                    .map(|b| b.finalized_block_number.unwrap_or(b.block_number));
+                let latest_l1_message = db.get_latest_l1_message().await?;
+                let start_block = latest_l1_batch.max(latest_l1_message.map(|m| m.l1_block_number));
+                (None, Some(L1Watcher::spawn(provider, start_block, node_config).await))
             } else {
                 // Create a channel for L1 notifications that we can use to inject L1 messages for
                 // testing
