@@ -22,7 +22,7 @@ use rollup_node_primitives::NodeConfig;
 use rollup_node_providers::{
     beacon_provider, DatabaseL1MessageProvider, OnlineL1Provider, SystemContractProvider,
 };
-use rollup_node_sequencer::{L1MessageInclusionMode, Sequencer};
+use rollup_node_sequencer::Sequencer;
 use rollup_node_signer::Signer;
 use rollup_node_watcher::{L1Notification, L1Watcher};
 use scroll_alloy_hardforks::ScrollHardforks;
@@ -193,24 +193,12 @@ impl RollupManagerAddOn {
         let (sequencer, block_time) = if self.config.sequencer_args.sequencer_enabled {
             let args = &self.config.sequencer_args;
 
-            // Parse L1 inclusion mode from CLI args
-            let l1_inclusion_mode = match args.l1_inclusion_mode.as_str() {
-                "finalized" => L1MessageInclusionMode::Finalized,
-                "block-depth" => L1MessageInclusionMode::BlockDepth(args.l1_block_depth),
-                _ => {
-                    return Err(eyre::eyre!(
-                        "Invalid L1 inclusion mode: {}",
-                        args.l1_inclusion_mode
-                    ));
-                }
-            };
-
             let sequencer = Sequencer::new(
                 Arc::new(l1_messages_provider),
                 args.fee_recipient,
                 args.max_l1_messages_per_block,
                 0,
-                l1_inclusion_mode,
+                args.l1_inclusion_mode,
             );
             (Some(sequencer), (args.block_time != 0).then_some(args.block_time))
         } else {

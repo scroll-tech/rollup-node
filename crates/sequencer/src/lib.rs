@@ -16,6 +16,8 @@ use rollup_node_primitives::{L1MessageEnvelope, DEFAULT_BLOCK_DIFFICULTY};
 use rollup_node_providers::L1MessageProvider;
 use scroll_alloy_rpc_types_engine::{BlockDataHint, ScrollPayloadAttributes};
 use std::{
+    fmt,
+    str::FromStr,
     sync::atomic::{AtomicU64, Ordering},
     task::{Context, Poll},
 };
@@ -28,12 +30,43 @@ pub type PayloadBuildingJobFuture =
     Pin<Box<dyn Future<Output = Result<ScrollPayloadAttributes, SequencerError>> + Send>>;
 
 /// Configuration for L1 message inclusion strategy.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Copy)]
 pub enum L1MessageInclusionMode {
     /// Include L1 messages based on block depth.
     BlockDepth(u64),
     /// Include only finalized L1 messages.
     Finalized,
+}
+
+impl Default for L1MessageInclusionMode {
+    fn default() -> Self {
+        Self::Finalized
+    }
+}
+
+impl FromStr for L1MessageInclusionMode {
+    type Err = String;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        if s.eq_ignore_ascii_case("finalized") {
+            Ok(Self::Finalized)
+        } else if let Some(rest) = s.strip_prefix("depth:") {
+            rest.parse::<u64>()
+                .map(Self::BlockDepth)
+                .map_err(|_| format!("Expected a valid number after 'depth:', got '{rest}'"))
+        } else {
+            Err("Expected 'finalized' or 'depth:{number}' (e.g. 'depth:10')".to_string())
+        }
+    }
+}
+
+impl fmt::Display for L1MessageInclusionMode {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Finalized => write!(f, "finalized"),
+            Self::BlockDepth(depth) => write!(f, "depth:{depth}"),
+        }
+    }
 }
 
 /// The sequencer is responsible for sequencing transactions and producing new blocks.
@@ -109,7 +142,7 @@ where
         let max_l1_messages = self.max_l1_messages_per_block;
         let database = self.provider.clone();
         let l1_block_number = self.l1_block_number;
-        let l1_inclusion_mode = self.l1_inclusion_mode.clone();
+        let l1_inclusion_mode = self.l1_inclusion_mode;
         let l1_finalized_block_number = self.l1_finalized_block_number.load(Ordering::Relaxed);
 
         self.payload_attributes_job = Some(Box::pin(async move {

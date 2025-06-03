@@ -21,6 +21,3 @@ pub(crate) const DEFAULT_MAX_L1_MESSAGES_PER_BLOCK: u64 = 4;
 
 /// The gap in blocks between the P2P and EN which triggers sync.
 pub(crate) const BLOCK_GAP_TRIGGER: u64 = 500_000;
-
-/// Default L1 block depth for sequencer (number of confirmations to wait)
-pub(crate) const DEFAULT_L1_BLOCK_DEPTH: u64 = 12;

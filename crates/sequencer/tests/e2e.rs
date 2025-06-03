@@ -10,7 +10,7 @@ use reth_scroll_node::test_utils::setup;
 use rollup_node::test_utils::{default_test_scroll_rollup_node_config, setup_engine};
 use rollup_node_primitives::{BlockInfo, L1MessageEnvelope};
 use rollup_node_providers::{DatabaseL1MessageProvider, ScrollRootProvider};
-use rollup_node_sequencer::Sequencer;
+use rollup_node_sequencer::{L1MessageInclusionMode, Sequencer};
 use scroll_alloy_consensus::TxL1Message;
 use scroll_alloy_provider::ScrollAuthApiEngineClient;
 use scroll_db::{test_utils::setup_test_db, DatabaseOperations};
@@ -56,13 +56,8 @@ async fn can_build_blocks() {
     let provider = Arc::new(DatabaseL1MessageProvider::new(database.clone(), 0));
 
     // create a sequencer
-    let mut sequencer = Sequencer::new(
-        provider,
-        Default::default(),
-        4,
-        1,
-        rollup_node_sequencer::L1MessageInclusionMode::BlockDepth(0),
-    );
+    let mut sequencer =
+        Sequencer::new(provider, Default::default(), 4, 1, L1MessageInclusionMode::BlockDepth(0));
 
     // add a transaction to the pool
     let mut wallet_lock = wallet.lock().await;
@@ -186,7 +181,7 @@ async fn can_build_blocks_with_delayed_l1_messages() {
         Default::default(),
         4,
         0,
-        rollup_node_sequencer::L1MessageInclusionMode::BlockDepth(L1_MESSAGE_DELAY),
+        L1MessageInclusionMode::BlockDepth(L1_MESSAGE_DELAY),
     );
 
     // now lets add an L1 message to the database (this transaction should not be included until the
@@ -311,7 +306,7 @@ async fn can_build_blocks_with_finalized_l1_messages() {
         Default::default(),
         4,
         5, // current L1 block number
-        rollup_node_sequencer::L1MessageInclusionMode::Finalized,
+        L1MessageInclusionMode::Finalized,
     );
 
     // set L1 finalized block number to 2
