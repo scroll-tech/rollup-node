@@ -9769,6 +9769,8 @@ dependencies = [
  "alloy-signer",
  "alloy-signer-local",
  "futures",
+ "metrics",
+ "metrics-derive",
  "reth-scroll-primitives",
  "reth-tracing",
  "rollup-node-primitives",

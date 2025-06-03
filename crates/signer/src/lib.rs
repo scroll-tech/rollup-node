@@ -6,6 +6,8 @@
 //! Currently it only supports signing L2 blocks, however it can be extended to
 //! support signing other artifacts in the future such as pre-commitments.
 
+use std::time::Instant;
+
 use futures::stream::{FuturesOrdered, StreamExt};
 use std::sync::Arc;
 use tokio::sync::mpsc::UnboundedSender;
@@ -23,19 +25,24 @@ pub use future::{sign_block, SignerFuture};
 mod handle;
 pub use handle::SignerHandle;
 
+mod metrics;
+pub use metrics::SignerMetrics;
+
 mod requests;
 pub use requests::SignerRequest;
 
 /// The signer instance is responsible for signing artifacts for the rollup node.
 pub struct Signer {
-    // The signer instance.
+    /// The signer instance.
     signer: Arc<dyn alloy_signer::Signer + Send + Sync>,
-    // A stream of pending signing requests.
+    /// A stream of pending signing requests.
     requests: UnboundedReceiverStream<SignerRequest>,
-    // In progress signing requests.
+    /// In progress signing requests.
     in_progress: FuturesOrdered<SignerFuture>,
     /// A channel to send events to the engine driver.
     sender: UnboundedSender<SignerEvent>,
+    /// The signer metrics.
+    metrics: SignerMetrics,
 }
 
 impl Signer {
@@ -48,6 +55,7 @@ impl Signer {
             requests: req_rx.into(),
             in_progress: FuturesOrdered::new(),
             sender: event_tx,
+            metrics: SignerMetrics::default(),
         };
         (signer, SignerHandle::new(req_tx, event_rx.into()))
     }
@@ -67,7 +75,13 @@ impl Signer {
                     match request {
                         SignerRequest::SignBlock(block) => {
                             let signer = self.signer.clone();
-                            let future = sign_block(block, signer);
+                            let metric = self.metrics.clone();
+                            let future = Box::pin(async move {
+                                let now = Instant::now();
+                                let res = sign_block(block, signer).await;
+                                metric.signing_duration.record(now.elapsed().as_secs_f64());
+                                res
+                            });
                             self.in_progress.push_back(future);
                         }
 
