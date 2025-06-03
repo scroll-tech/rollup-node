@@ -40,7 +40,6 @@ async fn can_bridge_l1_messages() -> eyre::Result<()> {
             block_time: 0,
             max_l1_messages_per_block: 4,
             l1_inclusion_mode: L1MessageInclusionMode::BlockDepth(0),
-
             ..SequencerArgs::default()
         },
         beacon_provider_args: BeaconProviderArgs::default(),

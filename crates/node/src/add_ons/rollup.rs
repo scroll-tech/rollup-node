@@ -192,7 +192,6 @@ impl RollupManagerAddOn {
         // Construct the Sequencer.
         let (sequencer, block_time) = if self.config.sequencer_args.sequencer_enabled {
             let args = &self.config.sequencer_args;
-
             let sequencer = Sequencer::new(
                 Arc::new(l1_messages_provider),
                 args.fee_recipient,

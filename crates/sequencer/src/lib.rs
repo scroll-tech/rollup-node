@@ -18,7 +18,6 @@ use scroll_alloy_rpc_types_engine::{BlockDataHint, ScrollPayloadAttributes};
 use std::{
     fmt,
     str::FromStr,
-    sync::atomic::{AtomicU64, Ordering},
     task::{Context, Poll},
 };
 
@@ -80,7 +79,7 @@ pub struct Sequencer<P> {
     /// The current l1 block number.
     l1_block_number: u64,
     /// The L1 finalized block number.
-    l1_finalized_block_number: Arc<AtomicU64>,
+    l1_finalized_block_number: u64,
     /// The L1 message inclusion mode configuration.
     l1_inclusion_mode: L1MessageInclusionMode,
     /// The inflight payload attributes job
@@ -106,7 +105,7 @@ where
             fee_recipient,
             max_l1_messages_per_block,
             l1_block_number,
-            l1_finalized_block_number: Arc::new(AtomicU64::new(0)),
+            l1_finalized_block_number: 0,
             l1_inclusion_mode,
             payload_attributes_job: None,
             waker: AtomicWaker::new(),
@@ -115,7 +114,7 @@ where
 
     /// Set the L1 finalized block number.
     pub fn set_l1_finalized_block_number(&mut self, l1_finalized_block_number: u64) {
-        self.l1_finalized_block_number.store(l1_finalized_block_number, Ordering::Relaxed);
+        self.l1_finalized_block_number = l1_finalized_block_number;
     }
 
     /// Creates a new block using the pending transactions from the message queue and
@@ -143,7 +142,7 @@ where
         let database = self.provider.clone();
         let l1_block_number = self.l1_block_number;
         let l1_inclusion_mode = self.l1_inclusion_mode;
-        let l1_finalized_block_number = self.l1_finalized_block_number.load(Ordering::Relaxed);
+        let l1_finalized_block_number = self.l1_finalized_block_number;
 
         self.payload_attributes_job = Some(Box::pin(async move {
             build_payload_attributes(
