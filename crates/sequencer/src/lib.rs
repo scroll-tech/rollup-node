@@ -81,7 +81,7 @@ pub struct Sequencer<P> {
     /// The L1 finalized block number.
     l1_finalized_block_number: u64,
     /// The L1 message inclusion mode configuration.
-    l1_inclusion_mode: L1MessageInclusionMode,
+    l1_message_inclusion_mode: L1MessageInclusionMode,
     /// The inflight payload attributes job
     payload_attributes_job: Option<PayloadBuildingJobFuture>,
     /// A waker to notify when the Sequencer should be polled.
@@ -98,7 +98,7 @@ where
         fee_recipient: Address,
         max_l1_messages_per_block: u64,
         l1_block_number: u64,
-        l1_inclusion_mode: L1MessageInclusionMode,
+        l1_message_inclusion_mode: L1MessageInclusionMode,
     ) -> Self {
         Self {
             provider,
@@ -106,7 +106,7 @@ where
             max_l1_messages_per_block,
             l1_block_number,
             l1_finalized_block_number: 0,
-            l1_inclusion_mode,
+            l1_message_inclusion_mode,
             payload_attributes_job: None,
             waker: AtomicWaker::new(),
         }
@@ -141,7 +141,7 @@ where
         let max_l1_messages = self.max_l1_messages_per_block;
         let database = self.provider.clone();
         let l1_block_number = self.l1_block_number;
-        let l1_inclusion_mode = self.l1_inclusion_mode;
+        let l1_message_inclusion_mode = self.l1_message_inclusion_mode;
         let l1_finalized_block_number = self.l1_finalized_block_number;
 
         self.payload_attributes_job = Some(Box::pin(async move {
@@ -150,7 +150,7 @@ where
                 max_l1_messages,
                 payload_attributes,
                 l1_block_number,
-                l1_inclusion_mode,
+                l1_message_inclusion_mode,
                 l1_finalized_block_number,
             )
             .await
@@ -206,17 +206,20 @@ async fn build_payload_attributes<P: L1MessageProvider + Unpin + Send + Sync + '
     max_l1_messages: u64,
     payload_attributes: PayloadAttributes,
     current_l1_block_number: u64,
-    l1_inclusion_mode: L1MessageInclusionMode,
+    l1_message_inclusion_mode: L1MessageInclusionMode,
     l1_finalized_block_number: u64,
 ) -> Result<ScrollPayloadAttributes, SequencerError> {
-    let predicate: Box<dyn Fn(L1MessageEnvelope) -> bool + Send + Sync> = match l1_inclusion_mode {
-        L1MessageInclusionMode::BlockDepth(depth) => Box::new(move |message: L1MessageEnvelope| {
-            message.l1_block_number + depth <= current_l1_block_number
-        }),
-        L1MessageInclusionMode::Finalized => Box::new(move |message: L1MessageEnvelope| {
-            message.l1_block_number <= l1_finalized_block_number
-        }),
-    };
+    let predicate: Box<dyn Fn(L1MessageEnvelope) -> bool + Send + Sync> =
+        match l1_message_inclusion_mode {
+            L1MessageInclusionMode::BlockDepth(depth) => {
+                Box::new(move |message: L1MessageEnvelope| {
+                    message.l1_block_number + depth <= current_l1_block_number
+                })
+            }
+            L1MessageInclusionMode::Finalized => Box::new(move |message: L1MessageEnvelope| {
+                message.l1_block_number <= l1_finalized_block_number
+            }),
+        };
 
     // Collect L1 messages to include in payload.
     let mut l1_messages = vec![];
@@ -253,7 +256,7 @@ impl<SMP> std::fmt::Debug for Sequencer<SMP> {
             .field("fee_recipient", &self.fee_recipient)
             .field("payload_building_job", &"PayloadBuildingJob")
             .field("l1_message_per_block", &self.max_l1_messages_per_block)
-            .field("l1_inclusion_mode", &self.l1_inclusion_mode)
+            .field("l1_message_inclusion_mode", &self.l1_message_inclusion_mode)
             .finish()
     }
 }

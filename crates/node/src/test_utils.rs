@@ -159,7 +159,7 @@ pub fn default_sequencer_test_scroll_rollup_node_config() -> ScrollRollupNodeCon
             payload_building_duration: 0,
             max_l1_messages_per_block: 0,
             fee_recipient: Default::default(),
-            l1_inclusion_mode: L1MessageInclusionMode::BlockDepth(0),
+            l1_message_inclusion_mode: L1MessageInclusionMode::BlockDepth(0),
         },
         beacon_provider_args: BeaconProviderArgs::default(),
     }
