@@ -92,7 +92,7 @@ impl<P> Sequencer<P>
 where
     P: L1MessageProvider + Unpin + Send + Sync + 'static,
 {
-    /// Creates a new sequencer with configurable L1 message inclusion mode.
+    /// Creates a new sequencer.
     pub fn new(
         provider: Arc<P>,
         fee_recipient: Address,
@@ -150,8 +150,8 @@ where
                 max_l1_messages,
                 payload_attributes,
                 l1_block_number,
-                l1_message_inclusion_mode,
                 l1_finalized_block_number,
+                l1_message_inclusion_mode,
             )
             .await
         }));
@@ -206,8 +206,8 @@ async fn build_payload_attributes<P: L1MessageProvider + Unpin + Send + Sync + '
     max_l1_messages: u64,
     payload_attributes: PayloadAttributes,
     current_l1_block_number: u64,
-    l1_message_inclusion_mode: L1MessageInclusionMode,
     l1_finalized_block_number: u64,
+    l1_message_inclusion_mode: L1MessageInclusionMode,
 ) -> Result<ScrollPayloadAttributes, SequencerError> {
     let predicate: Box<dyn Fn(L1MessageEnvelope) -> bool + Send + Sync> =
         match l1_message_inclusion_mode {
