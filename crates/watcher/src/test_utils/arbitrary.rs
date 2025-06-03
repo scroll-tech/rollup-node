@@ -1,3 +1,5 @@
+pub(crate) use arbitrary::Arbitrary;
+
 /// Returns an arbitrary instance of the passed type.
 #[macro_export]
 macro_rules! random {

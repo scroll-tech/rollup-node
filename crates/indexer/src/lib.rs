@@ -105,7 +105,7 @@ impl<ChainSpec: ScrollHardforks + EthChainSpec + Send + Sync + 'static> Indexer<
                     block_timestamp,
                 )))
             }
-            L1Notification::BatchFinalization { hash, block_number } => {
+            L1Notification::BatchFinalization { hash, block_number, .. } => {
                 IndexerFuture::HandleBatchFinalization(Box::pin(Self::handle_batch_finalization(
                     self.database.clone(),
                     hash,
