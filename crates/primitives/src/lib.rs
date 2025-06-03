@@ -16,6 +16,11 @@ pub use batch::{BatchCommitData, BatchInfo};
 mod bounded_vec;
 pub use bounded_vec::BoundedVec;
 
+#[cfg(feature = "std")]
+mod metrics;
+#[cfg(feature = "std")]
+pub use metrics::MeteredFuture;
+
 mod node;
 pub use node::{
     config::{

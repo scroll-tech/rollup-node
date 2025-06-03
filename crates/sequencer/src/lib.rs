@@ -5,7 +5,8 @@ use std::{
     future::Future,
     pin::Pin,
     sync::Arc,
-    time::{SystemTime, UNIX_EPOCH},
+    task::{Context, Poll},
+    time::{Instant, SystemTime, UNIX_EPOCH},
 };
 
 use alloy_eips::eip2718::Encodable2718;
@@ -15,10 +16,12 @@ use futures::{task::AtomicWaker, Stream};
 use rollup_node_primitives::{L1MessageEnvelope, DEFAULT_BLOCK_DIFFICULTY};
 use rollup_node_providers::L1MessageProvider;
 use scroll_alloy_rpc_types_engine::{BlockDataHint, ScrollPayloadAttributes};
-use std::task::{Context, Poll};
 
 mod error;
 pub use error::SequencerError;
+
+mod metrics;
+pub use metrics::SequencerMetrics;
 
 /// A type alias for the payload building job future.
 pub type PayloadBuildingJobFuture =
@@ -38,6 +41,8 @@ pub struct Sequencer<P> {
     l1_block_depth: u64,
     /// The inflight payload attributes job
     payload_attributes_job: Option<PayloadBuildingJobFuture>,
+    /// The sequencer metrics.
+    metrics: SequencerMetrics,
     /// A waker to notify when the Sequencer should be polled.
     waker: AtomicWaker,
 }
@@ -61,6 +66,7 @@ where
             l1_block_number,
             l1_block_depth,
             payload_attributes_job: None,
+            metrics: SequencerMetrics::default(),
             waker: AtomicWaker::new(),
         }
     }
@@ -90,16 +96,20 @@ where
         let database = self.provider.clone();
         let l1_block_number = self.l1_block_number;
         let l1_block_depth = self.l1_block_depth;
+        let metrics = self.metrics.clone();
 
         self.payload_attributes_job = Some(Box::pin(async move {
-            build_payload_attributes(
+            let now = Instant::now();
+            let res = build_payload_attributes(
                 database,
                 max_l1_messages,
                 payload_attributes,
                 l1_block_number,
                 l1_block_depth,
             )
-            .await
+            .await;
+            metrics.payload_attributes_building_duration.record(now.elapsed().as_secs_f64());
+            res
         }));
 
         self.waker.wake();

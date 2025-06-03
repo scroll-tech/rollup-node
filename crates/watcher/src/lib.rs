@@ -324,7 +324,7 @@ where
 
                 // update metrics.
                 self.metrics.reorgs.increment(1);
-                self.metrics.reorg_depths.record((self.l1_state.head - number) as f64);
+                self.metrics.reorg_depths.record(self.l1_state.head.saturating_sub(number) as f64);
 
                 // reset the current block number to the reorged block number if
                 // we have indexed passed the reorg.
