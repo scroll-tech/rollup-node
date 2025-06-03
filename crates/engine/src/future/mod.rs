@@ -1,5 +1,5 @@
 use super::{payload::matching_payloads, EngineDriverError};
-use crate::api::*;
+use crate::{api::*, ForkchoiceState};
 use alloy_rpc_types_engine::{
     ExecutionData, ExecutionPayloadV1, ForkchoiceState as AlloyForkchoiceState, PayloadStatusEnum,
 };
@@ -83,8 +83,7 @@ impl EngineFuture {
     pub(crate) fn l1_consolidation<EC, P>(
         client: Arc<EC>,
         execution_payload_provider: P,
-        safe_block_info: BlockInfo,
-        fcs: AlloyForkchoiceState,
+        fcs: ForkchoiceState,
         payload_attributes: ScrollPayloadAttributesWithBatchInfo,
     ) -> Self
     where
@@ -94,7 +93,6 @@ impl EngineFuture {
         Self::L1Consolidation(Box::pin(handle_payload_attributes(
             client,
             execution_payload_provider,
-            safe_block_info,
             fcs,
             payload_attributes,
         )))
@@ -202,7 +200,6 @@ where
 ///       safe head by one.
 #[instrument(skip_all, level = "trace",
         fields(
-             safe_block_info = ?safe_block_info,
              fcs = ?fcs,
              payload_attributes = ?payload_attributes
         )
@@ -210,8 +207,7 @@ where
 async fn handle_payload_attributes<EC, P>(
     client: Arc<EC>,
     execution_payload_provider: P,
-    safe_block_info: BlockInfo,
-    mut fcs: AlloyForkchoiceState,
+    fcs: ForkchoiceState,
     payload_attributes: ScrollPayloadAttributesWithBatchInfo,
 ) -> Result<(L2BlockInfoWithL1Messages, IsReorg, BatchInfo), EngineDriverError>
 where
@@ -224,10 +220,10 @@ where
         payload_attributes;
 
     let maybe_execution_payload = execution_payload_provider
-        .execution_payload_for_block((safe_block_info.number + 1).into())
+        .execution_payload_for_block((fcs.safe_block_info().number + 1).into())
         .await
         .map_err(|_| EngineDriverError::ExecutionPayloadProviderUnavailable)?
-        .filter(|ep| matching_payloads(&payload_attributes, ep, safe_block_info.hash));
+        .filter(|ep| matching_payloads(&payload_attributes, ep, fcs.safe_block_info().hash));
 
     if let Some(execution_payload) = maybe_execution_payload {
         // if the payload attributes match the execution payload at block safe + 1,
@@ -235,10 +231,16 @@ where
         // execution payload. We can advance the safe head by one by issuing a
         // forkchoiceUpdated.
         let safe_block_info: L2BlockInfoWithL1Messages = (&execution_payload).into();
-        fcs.safe_block_hash = safe_block_info.block_info.hash;
-        forkchoice_updated(client, fcs, None).await?;
+
+        // We only need to update the safe block hash if we are advancing the safe head.
+        if safe_block_info.block_info.number > fcs.safe_block_info().number {
+            let mut fcs = fcs.get_alloy_fcs();
+            fcs.safe_block_hash = safe_block_info.block_info.hash;
+            forkchoice_updated(client, fcs, None).await?;
+        }
         Ok((safe_block_info, false, batch_info))
     } else {
+        let mut fcs = fcs.get_alloy_fcs();
         // Otherwise, we construct a block from the payload attributes on top of the current
         // safe head.
         fcs.head_block_hash = fcs.safe_block_hash;

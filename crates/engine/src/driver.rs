@@ -314,18 +314,12 @@ where
         }
 
         if let Some(payload_attributes) = this.l1_payload_attributes.pop_front() {
-            let safe_block_info = *this.fcs.safe_block_info();
-            let fcs = this.alloy_forkchoice_state();
+            let fcs = this.fcs.clone();
             let client = this.client.clone();
 
             if let Some(provider) = this.provider.clone() {
-                this.engine_future = Some(EngineFuture::l1_consolidation(
-                    client,
-                    provider,
-                    safe_block_info,
-                    fcs,
-                    payload_attributes,
-                ));
+                this.engine_future =
+                    Some(EngineFuture::l1_consolidation(client, provider, fcs, payload_attributes));
                 this.waker.wake();
             } else {
                 tracing::error!(target: "scroll::engine", "l1 consolidation requires an execution payload provider");

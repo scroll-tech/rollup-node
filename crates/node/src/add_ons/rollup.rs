@@ -155,30 +155,35 @@ impl RollupManagerAddOn {
             Box::new(NoopConsensus::default())
         };
 
-        let (l1_notification_tx, l1_notification_rx) =
-            if let Some(provider) = l1_provider.filter(|_| !self.config.test) {
-                // Spawn the L1Watcher
-                let latest_l1_batch = db
-                    .get_latest_batch_commit()
-                    .await?
-                    .map(|b| b.finalized_block_number.unwrap_or(b.block_number));
-                let latest_l1_message = db.get_latest_l1_message().await?;
-                let start_block = latest_l1_batch.max(latest_l1_message.map(|m| m.l1_block_number));
-                (None, Some(L1Watcher::spawn(provider, start_block, node_config).await))
-            } else {
-                // Create a channel for L1 notifications that we can use to inject L1 messages for
-                // testing
-                #[cfg(feature = "test-utils")]
-                {
-                    let (tx, rx) = tokio::sync::mpsc::channel(1000);
-                    (Some(tx), Some(rx))
-                }
+        let (l1_notification_tx, l1_notification_rx) = if let Some(provider) =
+            l1_provider.filter(|_| !self.config.test)
+        {
+            // Spawn the L1Watcher
+            let start_block_number =
+                if let Some((_l2_block_info, batch_info)) = db.get_latest_safe_l2_block().await? {
+                    let batch_commit = db
+                        .get_batch_by_index(batch_info.index)
+                        .await?
+                        .expect("batch commit must be present");
+                    Some(batch_commit.block_number.saturating_sub(1))
+                } else {
+                    None
+                };
+            (None, Some(L1Watcher::spawn(provider, start_block_number, node_config).await))
+        } else {
+            // Create a channel for L1 notifications that we can use to inject L1 messages for
+            // testing
+            #[cfg(feature = "test-utils")]
+            {
+                let (tx, rx) = tokio::sync::mpsc::channel(1000);
+                (Some(tx), Some(rx))
+            }
 
-                #[cfg(not(feature = "test-utils"))]
-                {
-                    (None, None)
-                }
-            };
+            #[cfg(not(feature = "test-utils"))]
+            {
+                (None, None)
+            }
+        };
 
         // Construct the l1 provider.
         let l1_messages_provider = DatabaseL1MessageProvider::new(db.clone(), 0);

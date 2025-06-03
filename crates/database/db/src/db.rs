@@ -449,7 +449,7 @@ mod test {
 
         // Should return the highest safe block (block 201)
         let latest_safe = db.get_latest_safe_l2_block().await.unwrap();
-        assert_eq!(latest_safe, Some(safe_block_2));
+        assert_eq!(latest_safe, Some((safe_block_2, batch_info)));
     }
 
     #[tokio::test]

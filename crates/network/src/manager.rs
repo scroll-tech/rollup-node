@@ -5,7 +5,6 @@ use super::{
     NewBlockWithPeer, ScrollNetworkHandle,
 };
 use alloy_primitives::FixedBytes;
-use core::task::Poll;
 use futures::{FutureExt, Stream, StreamExt};
 use reth_network::{
     cache::LruCache, NetworkConfig as RethNetworkConfig, NetworkHandle as RethNetworkHandle,
@@ -17,6 +16,10 @@ use reth_storage_api::BlockNumReader as BlockNumReaderT;
 use scroll_wire::{
     NewBlock, ScrollWireConfig, ScrollWireEvent, ScrollWireManager, ScrollWireProtocolHandler,
     LRU_CACHE_SIZE,
+};
+use std::{
+    pin::Pin,
+    task::{Context, Poll},
 };
 use tokio::sync::mpsc::{self, UnboundedReceiver};
 use tokio_stream::wrappers::UnboundedReceiverStream;
@@ -184,10 +187,7 @@ impl<N: FullNetwork> ScrollNetworkManager<N> {
 impl<N: FullNetwork> Stream for ScrollNetworkManager<N> {
     type Item = NetworkManagerEvent;
 
-    fn poll_next(
-        self: std::pin::Pin<&mut Self>,
-        cx: &mut std::task::Context<'_>,
-    ) -> Poll<Option<Self::Item>> {
+    fn poll_next(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
         let this = self.get_mut();
 
         // We handle the messages from the network handle.
@@ -199,7 +199,7 @@ impl<N: FullNetwork> Stream for ScrollNetworkManager<N> {
                 }
                 // All network handles have been dropped so we can shutdown the network.
                 Poll::Ready(None) => {
-                    return std::task::Poll::Ready(None);
+                    return Poll::Ready(None);
                 }
                 // No additional messages exist break.
                 Poll::Pending => break,
