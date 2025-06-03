@@ -59,6 +59,11 @@ impl<ChainSpec: ScrollHardforks + EthChainSpec + Send + Sync + 'static> Indexer<
         }
     }
 
+    /// Returns the current L1 finalized block number.
+    pub fn get_l1_finalized_block_number(&self) -> u64 {
+        self.l1_finalized_block_number.load(Ordering::Relaxed)
+    }
+
     /// Handles an L2 block.
     pub fn handle_block(
         &mut self,

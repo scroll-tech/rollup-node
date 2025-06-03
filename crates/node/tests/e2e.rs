@@ -38,6 +38,8 @@ async fn can_bridge_l1_messages() -> eyre::Result<()> {
             sequencer_enabled: true,
             block_time: 0,
             max_l1_messages_per_block: 4,
+            l1_inclusion_mode: "block-depth".to_string(),
+            l1_block_depth: 0,
             ..SequencerArgs::default()
         },
         beacon_provider_args: BeaconProviderArgs::default(),
@@ -100,6 +102,8 @@ async fn can_sequence_and_gossip_blocks() {
             sequencer_enabled: true,
             block_time: 0,
             max_l1_messages_per_block: 4,
+            l1_inclusion_mode: "block-depth".to_string(),
+            l1_block_depth: 0,
             ..SequencerArgs::default()
         },
         beacon_provider_args: BeaconProviderArgs::default(),

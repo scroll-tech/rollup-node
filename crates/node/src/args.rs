@@ -110,4 +110,15 @@ pub struct SequencerArgs {
     /// The fee recipient for the sequencer.
     #[arg(long = "sequencer.fee-recipient", id = "sequencer_fee_recipient", value_name = "SEQUENCER_FEE_RECIPIENT", default_value_t = SCROLL_FEE_VAULT_ADDRESS)]
     pub fee_recipient: Address,
+    /// L1 message inclusion mode: either "block-depth" or "finalized"
+    #[arg(
+        long = "sequencer.l1-inclusion-mode",
+        id = "sequencer_l1_inclusion_mode",
+        value_name = "SEQUENCER_L1_INCLUSION_MODE",
+        default_value = "block-depth"
+    )]
+    pub l1_inclusion_mode: String,
+    /// L1 block depth for block depth mode (number of confirmations to wait)
+    #[arg(long = "sequencer.l1-block-depth", id = "sequencer_l1_block_depth", value_name = "SEQUENCER_L1_BLOCK_DEPTH", default_value_t = constants::DEFAULT_L1_BLOCK_DEPTH)]
+    pub l1_block_depth: u64,
 }
