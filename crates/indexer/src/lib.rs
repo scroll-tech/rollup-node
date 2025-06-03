@@ -11,23 +11,28 @@ use scroll_alloy_consensus::TxL1Message;
 use scroll_alloy_hardforks::{ScrollHardfork, ScrollHardforks};
 use scroll_db::{Database, DatabaseError, DatabaseOperations};
 use std::{
-    collections::VecDeque,
+    collections::{HashMap, VecDeque},
     pin::Pin,
     sync::{
         atomic::{AtomicU64, Ordering},
         Arc,
     },
     task::{Context, Poll},
+    time::Instant,
 };
+use strum::IntoEnumIterator;
 
 mod action;
-use action::IndexerFuture;
+use action::{IndexerFuture, PendingIndexerFuture};
 
 mod event;
 pub use event::IndexerEvent;
 
 mod error;
 pub use error::IndexerError;
+
+mod metrics;
+pub use metrics::{IndexerItem, IndexerMetrics};
 
 const L1_MESSAGE_QUEUE_HASH_MASK: B256 =
     b256!("ffffffffffffffffffffffffffffffffffffffffffffffffffffffff00000000");
@@ -45,6 +50,8 @@ pub struct Indexer<ChainSpec> {
     l2_finalized_block_number: Arc<AtomicU64>,
     /// The chain specification for the indexer.
     chain_spec: Arc<ChainSpec>,
+    /// The metrics for the indexer.
+    metrics: HashMap<IndexerItem, IndexerMetrics>,
 }
 
 impl<ChainSpec: ScrollHardforks + EthChainSpec + Send + Sync + 'static> Indexer<ChainSpec> {
@@ -56,7 +63,29 @@ impl<ChainSpec: ScrollHardforks + EthChainSpec + Send + Sync + 'static> Indexer<
             l1_finalized_block_number: Arc::new(AtomicU64::new(0)),
             l2_finalized_block_number: Arc::new(AtomicU64::new(0)),
             chain_spec,
+            metrics: IndexerItem::iter()
+                .map(|i| {
+                    let label = i.as_str();
+                    (i, IndexerMetrics::new_with_labels(&[("item", label)]))
+                })
+                .collect(),
         }
+    }
+
+    /// Wraps a pending indexer future, metering the completion of it.
+    pub fn handle_metered(
+        &mut self,
+        item: IndexerItem,
+        indexer_fut: PendingIndexerFuture,
+    ) -> PendingIndexerFuture {
+        let metric = self.metrics.get(&item).expect("metric exists").clone();
+        let fut_wrapper = Box::pin(async move {
+            let now = Instant::now();
+            let res = indexer_fut.await;
+            metric.task_duration.record(now.elapsed().as_secs_f64());
+            res
+        });
+        fut_wrapper
     }
 
     /// Handles an L2 block.
@@ -66,48 +95,69 @@ impl<ChainSpec: ScrollHardforks + EthChainSpec + Send + Sync + 'static> Indexer<
         batch_info: Option<BatchInfo>,
     ) {
         let database = self.database.clone();
-        let fut = IndexerFuture::HandleDerivedBlock(Box::pin(async move {
-            database.insert_block(block_info.clone(), batch_info).await?;
-            Result::<_, IndexerError>::Ok(IndexerEvent::BlockIndexed(block_info, batch_info))
-        }));
-        self.pending_futures.push_back(fut)
+        let fut = self.handle_metered(
+            IndexerItem::L2Block,
+            Box::pin(async move {
+                database.insert_block(block_info.clone(), batch_info).await?;
+                Result::<_, IndexerError>::Ok(IndexerEvent::BlockIndexed(block_info, batch_info))
+            }),
+        );
+
+        self.pending_futures.push_back(IndexerFuture::HandleDerivedBlock(fut))
     }
 
     /// Handles an event from the L1.
     pub fn handle_l1_notification(&mut self, event: L1Notification) {
         let fut = match event {
-            L1Notification::Reorg(block_number) => IndexerFuture::HandleReorg(Box::pin(
-                Self::handle_l1_reorg(self.database.clone(), self.chain_spec.clone(), block_number),
+            L1Notification::Reorg(block_number) => IndexerFuture::HandleReorg(self.handle_metered(
+                IndexerItem::L1Reorg,
+                Box::pin(Self::handle_l1_reorg(
+                    self.database.clone(),
+                    self.chain_spec.clone(),
+                    block_number,
+                )),
             )),
             L1Notification::NewBlock(_) | L1Notification::Consensus(_) => return,
             L1Notification::Finalized(block_number) => {
-                IndexerFuture::HandleFinalized(Box::pin(Self::handle_finalized(
-                    self.database.clone(),
-                    block_number,
-                    self.l1_finalized_block_number.clone(),
-                    self.l2_finalized_block_number.clone(),
-                )))
+                IndexerFuture::HandleFinalized(self.handle_metered(
+                    IndexerItem::L1Finalization,
+                    Box::pin(Self::handle_finalized(
+                        self.database.clone(),
+                        block_number,
+                        self.l1_finalized_block_number.clone(),
+                        self.l2_finalized_block_number.clone(),
+                    )),
+                ))
             }
-            L1Notification::BatchCommit(batch) => IndexerFuture::HandleBatchCommit(Box::pin(
-                Self::handle_batch_commit(self.database.clone(), batch),
-            )),
+            L1Notification::BatchCommit(batch) => {
+                IndexerFuture::HandleBatchCommit(self.handle_metered(
+                    IndexerItem::BatchCommit,
+                    Box::pin(Self::handle_batch_commit(self.database.clone(), batch)),
+                ))
+            }
             L1Notification::L1Message { message, block_number, block_timestamp } => {
-                IndexerFuture::HandleL1Message(Box::pin(Self::handle_l1_message(
-                    self.database.clone(),
-                    self.chain_spec.clone(),
-                    message,
-                    block_number,
-                    block_timestamp,
-                )))
+                IndexerFuture::HandleL1Message(self.handle_metered(
+                    IndexerItem::L1Message,
+                    Box::pin(Self::handle_l1_message(
+                        self.database.clone(),
+                        self.chain_spec.clone(),
+                        message,
+                        block_number,
+                        block_timestamp,
+                    )),
+                ))
             }
             L1Notification::BatchFinalization { hash, block_number, .. } => {
-                IndexerFuture::HandleBatchFinalization(Box::pin(Self::handle_batch_finalization(
-                    self.database.clone(),
-                    hash,
-                    block_number,
-                    self.l1_finalized_block_number.clone(),
-                    self.l2_finalized_block_number.clone(),
-                )))
+                IndexerFuture::HandleBatchFinalization(self.handle_metered(
+                    IndexerItem::BatchFinalization,
+                    Box::pin(Self::handle_batch_finalization(
+                        self.database.clone(),
+                        hash,
+                        block_number,
+                        self.l1_finalized_block_number.clone(),
+                        self.l2_finalized_block_number.clone(),
+                    )),
+                ))
             }
         };
 
@@ -299,7 +349,7 @@ impl<ChainSpec: ScrollHardforks + 'static> Stream for Indexer<ChainSpec> {
                     self.pending_futures.push_front(action);
                     Poll::Pending
                 }
-            }
+            };
         }
 
         Poll::Pending

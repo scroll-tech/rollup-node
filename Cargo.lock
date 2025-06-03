@@ -9628,6 +9628,8 @@ dependencies = [
  "alloy-primitives",
  "arbitrary",
  "futures",
+ "metrics",
+ "metrics-derive",
  "rand 0.9.1",
  "reth-chainspec",
  "reth-scroll-chainspec",
@@ -9637,9 +9639,9 @@ dependencies = [
  "scroll-alloy-consensus",
  "scroll-alloy-hardforks",
  "scroll-db",
+ "strum 0.27.1",
  "thiserror 2.0.12",
  "tokio",
- "tracing",
 ]
 
 [[package]]
@@ -10257,6 +10259,8 @@ dependencies = [
  "async-trait",
  "eyre",
  "futures",
+ "metrics",
+ "metrics-derive",
  "rollup-node-primitives",
  "rollup-node-providers",
  "scroll-alloy-consensus",
