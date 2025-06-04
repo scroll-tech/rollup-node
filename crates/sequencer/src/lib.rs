@@ -2,11 +2,11 @@
 //! producing new blocks.
 
 use std::{
+    fmt,
     future::Future,
     pin::Pin,
-    sync::Arc,
-    fmt,
     str::FromStr,
+    sync::Arc,
     task::{Context, Poll},
     time::{Instant, SystemTime, UNIX_EPOCH},
 };
