@@ -15,7 +15,11 @@ use futures::{task::AtomicWaker, Stream};
 use rollup_node_primitives::{L1MessageEnvelope, DEFAULT_BLOCK_DIFFICULTY};
 use rollup_node_providers::L1MessageProvider;
 use scroll_alloy_rpc_types_engine::{BlockDataHint, ScrollPayloadAttributes};
-use std::task::{Context, Poll};
+use std::{
+    fmt,
+    str::FromStr,
+    task::{Context, Poll},
+};
 
 mod error;
 pub use error::SequencerError;
@@ -23,6 +27,46 @@ pub use error::SequencerError;
 /// A type alias for the payload building job future.
 pub type PayloadBuildingJobFuture =
     Pin<Box<dyn Future<Output = Result<ScrollPayloadAttributes, SequencerError>> + Send>>;
+
+/// Configuration for L1 message inclusion strategy.
+#[derive(Debug, Clone, Copy)]
+pub enum L1MessageInclusionMode {
+    /// Include L1 messages based on block depth.
+    BlockDepth(u64),
+    /// Include only finalized L1 messages.
+    Finalized,
+}
+
+impl Default for L1MessageInclusionMode {
+    fn default() -> Self {
+        Self::Finalized
+    }
+}
+
+impl FromStr for L1MessageInclusionMode {
+    type Err = String;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        if s.eq_ignore_ascii_case("finalized") {
+            Ok(Self::Finalized)
+        } else if let Some(rest) = s.strip_prefix("depth:") {
+            rest.parse::<u64>()
+                .map(Self::BlockDepth)
+                .map_err(|_| format!("Expected a valid number after 'depth:', got '{rest}'"))
+        } else {
+            Err("Expected 'finalized' or 'depth:{number}' (e.g. 'depth:10')".to_string())
+        }
+    }
+}
+
+impl fmt::Display for L1MessageInclusionMode {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Finalized => write!(f, "finalized"),
+            Self::BlockDepth(depth) => write!(f, "depth:{depth}"),
+        }
+    }
+}
 
 /// The sequencer is responsible for sequencing transactions and producing new blocks.
 pub struct Sequencer<P> {
@@ -34,8 +78,10 @@ pub struct Sequencer<P> {
     max_l1_messages_per_block: u64,
     /// The current l1 block number.
     l1_block_number: u64,
-    /// The L1 block depth at which L1 messages should be included in the payload.
-    l1_block_depth: u64,
+    /// The L1 finalized block number.
+    l1_finalized_block_number: u64,
+    /// The L1 message inclusion mode configuration.
+    l1_message_inclusion_mode: L1MessageInclusionMode,
     /// The inflight payload attributes job
     payload_attributes_job: Option<PayloadBuildingJobFuture>,
     /// A waker to notify when the Sequencer should be polled.
@@ -52,17 +98,23 @@ where
         fee_recipient: Address,
         max_l1_messages_per_block: u64,
         l1_block_number: u64,
-        l1_block_depth: u64,
+        l1_message_inclusion_mode: L1MessageInclusionMode,
     ) -> Self {
         Self {
             provider,
             fee_recipient,
             max_l1_messages_per_block,
             l1_block_number,
-            l1_block_depth,
+            l1_finalized_block_number: 0,
+            l1_message_inclusion_mode,
             payload_attributes_job: None,
             waker: AtomicWaker::new(),
         }
+    }
+
+    /// Set the L1 finalized block number.
+    pub fn set_l1_finalized_block_number(&mut self, l1_finalized_block_number: u64) {
+        self.l1_finalized_block_number = l1_finalized_block_number;
     }
 
     /// Creates a new block using the pending transactions from the message queue and
@@ -89,7 +141,8 @@ where
         let max_l1_messages = self.max_l1_messages_per_block;
         let database = self.provider.clone();
         let l1_block_number = self.l1_block_number;
-        let l1_block_depth = self.l1_block_depth;
+        let l1_message_inclusion_mode = self.l1_message_inclusion_mode;
+        let l1_finalized_block_number = self.l1_finalized_block_number;
 
         self.payload_attributes_job = Some(Box::pin(async move {
             build_payload_attributes(
@@ -97,7 +150,8 @@ where
                 max_l1_messages,
                 payload_attributes,
                 l1_block_number,
-                l1_block_depth,
+                l1_finalized_block_number,
+                l1_message_inclusion_mode,
             )
             .await
         }));
@@ -152,16 +206,29 @@ async fn build_payload_attributes<P: L1MessageProvider + Unpin + Send + Sync + '
     max_l1_messages: u64,
     payload_attributes: PayloadAttributes,
     current_l1_block_number: u64,
-    l1_block_depth: u64,
+    l1_finalized_block_number: u64,
+    l1_message_inclusion_mode: L1MessageInclusionMode,
 ) -> Result<ScrollPayloadAttributes, SequencerError> {
-    let predicate = |message: L1MessageEnvelope| {
-        message.l1_block_number + l1_block_depth <= current_l1_block_number
-    };
+    let predicate: Box<dyn Fn(L1MessageEnvelope) -> bool + Send + Sync> =
+        match l1_message_inclusion_mode {
+            L1MessageInclusionMode::BlockDepth(depth) => {
+                Box::new(move |message: L1MessageEnvelope| {
+                    message.l1_block_number + depth <= current_l1_block_number
+                })
+            }
+            L1MessageInclusionMode::Finalized => Box::new(move |message: L1MessageEnvelope| {
+                message.l1_block_number <= l1_finalized_block_number
+            }),
+        };
 
     // Collect L1 messages to include in payload.
     let mut l1_messages = vec![];
     for _ in 0..max_l1_messages {
-        match provider.next_l1_message_with_predicate(predicate).await.map_err(Into::into)? {
+        match provider
+            .next_l1_message_with_predicate(predicate.as_ref())
+            .await
+            .map_err(Into::into)?
+        {
             Some(l1_message) => {
                 l1_messages.push(l1_message.encoded_2718().into());
             }
@@ -189,6 +256,7 @@ impl<SMP> std::fmt::Debug for Sequencer<SMP> {
             .field("fee_recipient", &self.fee_recipient)
             .field("payload_building_job", &"PayloadBuildingJob")
             .field("l1_message_per_block", &self.max_l1_messages_per_block)
+            .field("l1_message_inclusion_mode", &self.l1_message_inclusion_mode)
             .finish()
     }
 }
