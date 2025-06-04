@@ -4,7 +4,7 @@ use std::{collections::HashMap, time::Duration};
 use alloy_primitives::{bytes::Buf, B256};
 use eyre::{bail, eyre};
 use futures::{stream::FuturesOrdered, StreamExt};
-use indicatif::{ProgressBar, ProgressState, ProgressStyle};
+use indicatif::{ProgressBar, ProgressFinish, ProgressState, ProgressStyle};
 use reqwest::Client;
 use reqwest_middleware::{ClientBuilder, ClientWithMiddleware};
 use reqwest_retry::{policies::ExponentialBackoff, RetryTransientMiddleware};
@@ -96,17 +96,19 @@ async fn download(url: &str) -> eyre::Result<Vec<u8>> {
     let iterations = total_size / CHUNK_SIZE + if total_size % CHUNK_SIZE != 0 { 1 } else { 0 };
 
     // create a progress bar.
-    let pb = ProgressBar::new(total_size);
-    let mut cursor = 0;
-    pb.set_style(ProgressStyle::with_template("{spinner:.green} [{elapsed_precise}] [{wide_bar:.cyan/blue}] {bytes}/{total_bytes} ({eta})")
-        ?
-        .with_key("eta", |state: &ProgressState, w: &mut dyn Write| write!(w, "{:.1}s", state.eta().as_secs_f64()).unwrap())
-        .progress_chars("#>-"));
-    pb.set_position(cursor as u64);
+    let pb = ProgressBar::new(total_size).
+        with_finish(ProgressFinish::AndLeave).
+        with_style(
+            ProgressStyle::with_template("{spinner:.green} [{elapsed_precise}] [{wide_bar:.cyan/blue}] {bytes}/{total_bytes} ({eta})")?
+                .with_key("eta", |state: &ProgressState, w: &mut dyn Write| write!(w, "{:.1}s", state.eta().as_secs_f64()).unwrap())
+                .progress_chars("#>-")
+        );
+    pb.set_position(0);
 
     // init variables.
     let mut buf = Vec::with_capacity(total_size as usize);
     let mut index = 0;
+    let mut cursor = 0;
     let mut tasks = FuturesOrdered::new();
 
     loop {
@@ -176,7 +178,7 @@ async fn get_file_size(client: &ClientWithMiddleware, url: &str) -> eyre::Result
 fn verify_data_hash(expected_data_hash: B256, data: &[u8]) -> eyre::Result<()> {
     let hash = B256::try_from(Sha256::digest(data).as_slice())?;
     if hash != expected_data_hash {
-        bail!("corrupted data, expected to hash to {expected_data_hash}, got {hash}.")
+        bail!("corrupted data, expected data to hash to {expected_data_hash}, got {hash}.")
     }
 
     Ok(())

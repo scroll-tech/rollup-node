@@ -10211,7 +10211,6 @@ dependencies = [
  "sea-orm",
  "sea-orm-migration",
  "sha2 0.10.9",
- "tracing",
 ]
 
 [[package]]
