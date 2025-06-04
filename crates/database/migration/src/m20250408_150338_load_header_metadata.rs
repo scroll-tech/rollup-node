@@ -25,10 +25,17 @@ impl<MI: MigrationInfo + Send + Sync> MigrationTrait for Migration<MI> {
     async fn up(&self, manager: &SchemaManager) -> Result<(), DbErr> {
         if let (Some(url), Some(hash)) = (MI::data_url(), MI::data_hash()) {
             // download data.
-            let headers =
-                download(&url, hash).await.map_err(|err| DbErr::Custom(err.to_string()))?;
-            let records: Vec<ActiveModel> =
-                headers.into_iter().enumerate().map(|(i, h)| (i as i64, h).into()).collect();
+            let file = download(&url).await.map_err(|err| DbErr::Custom(err.to_string()))?;
+            // verify hash of data.
+            verify_data_hash(hash, &file).map_err(|err| DbErr::Custom(err.to_string()))?;
+
+            // decode data and convert to database model.
+            let records: Vec<ActiveModel> = decode_to_headers(file)
+                .map_err(|err| DbErr::Custom(err.to_string()))?
+                .into_iter()
+                .enumerate()
+                .map(|(i, h)| (i as i64, h).into())
+                .collect();
 
             let db = manager.get_connection();
             // we ignore the `Failed to find inserted item` error.
@@ -66,8 +73,8 @@ impl From<(i64, HeaderMetadata)> for ActiveModel {
     }
 }
 
-/// Download the file and decompress the file.
-async fn download(url: &str, expected_data_hash: B256) -> eyre::Result<Vec<HeaderMetadata>> {
+/// Download the file.
+async fn download(url: &str) -> eyre::Result<Vec<u8>> {
     // initialize reqwest client with retry middleware.
     let retry_policy = ExponentialBackoff::builder()
         .retry_bounds(Duration::from_millis(100), Duration::from_secs(5))
@@ -98,11 +105,9 @@ async fn download(url: &str, expected_data_hash: B256) -> eyre::Result<Vec<Heade
     pb.set_position(cursor as u64);
 
     // init variables.
-    let mut buf = vec![];
-    let mut headers = vec![];
+    let mut buf = Vec::with_capacity(total_size as usize);
     let mut index = 0;
     let mut tasks = FuturesOrdered::new();
-    let mut decoder = MetadataDecoder::default();
 
     loop {
         if index == iterations {
@@ -130,21 +135,7 @@ async fn download(url: &str, expected_data_hash: B256) -> eyre::Result<Vec<Heade
         }
     }
 
-    let hash = B256::try_from(Sha256::digest(&buf).as_slice())?;
-    if hash != expected_data_hash {
-        bail!("corrupted data, expected to hash to {expected_data_hash}, got {hash}.")
-    }
-
-    // initialize vanity.
-    let data_buf = &mut buf.as_slice();
-    decoder.load_vanity(data_buf)?;
-
-    // decode all available data.
-    while let Some(data) = decoder.next(data_buf) {
-        headers.push(data);
-    }
-
-    Ok(headers)
+    Ok(buf)
 }
 
 /// Downloads the next chunk of data.
@@ -157,8 +148,8 @@ async fn download_chunk(
     let response = client.get(url).header("Range", format!("bytes={start}-{end}")).send().await?;
 
     if response.status() != reqwest::StatusCode::PARTIAL_CONTENT {
-        dbg!(response.text().await?);
-        bail!("failed to fetch chunk");
+        let err = response.text().await?;
+        bail!("failed to fetch chunk: {err}");
     }
 
     let bytes = response.bytes().await?.to_vec();
@@ -181,6 +172,34 @@ async fn get_file_size(client: &ClientWithMiddleware, url: &str) -> eyre::Result
     Err(eyre!("server does not support range requests or content-length"))
 }
 
+/// Check the hash of the data.
+fn verify_data_hash(expected_data_hash: B256, data: &[u8]) -> eyre::Result<()> {
+    let hash = B256::try_from(Sha256::digest(data).as_slice())?;
+    if hash != expected_data_hash {
+        bail!("corrupted data, expected to hash to {expected_data_hash}, got {hash}.")
+    }
+
+    Ok(())
+}
+
+const HEADER_LOWER_SIZE_LIMIT: usize = 1 + 1 + 32 + 65;
+
+/// Decode the data to headers metadata.
+fn decode_to_headers(data: Vec<u8>) -> eyre::Result<Vec<HeaderMetadata>> {
+    // initialize vanity.
+    let mut decoder = MetadataDecoder::default();
+    let data_buf = &mut data.as_slice();
+    decoder.load_vanity(data_buf).map_err(|err| DbErr::Custom(err.to_string()))?;
+
+    // decode all available data.
+    let mut headers = Vec::with_capacity(data_buf.len() / HEADER_LOWER_SIZE_LIMIT);
+    while let Some(data) = decoder.next(data_buf) {
+        headers.push(data);
+    }
+
+    Ok(headers)
+}
+
 /// The missing metadata for the header.
 #[derive(Debug, Clone, PartialEq, Eq)]
 struct HeaderMetadata {
@@ -200,13 +219,13 @@ impl MetadataDecoder {
     fn load_vanity(&mut self, buf: &mut &[u8]) -> eyre::Result<()> {
         // sanity check.
         if buf.is_empty() {
-            return Err(eyre!("empty buf"))
+            bail!("empty buf");
         }
 
         // get the vanity count.
         let vanity_len = buf[0] as usize;
         if buf.len() < 32 * vanity_len {
-            return Err(eyre!("missing vanity data"))
+            bail!("missing vanity data");
         }
         buf.advance(1);
 
@@ -227,17 +246,19 @@ impl MetadataDecoder {
             return None
         }
 
+        // get flag and vanity index.
         let flag = buf[0];
         let vanity_index = buf[1];
-        buf.advance(2);
 
         let difficulty = if flag & 0b01000000 == 0 { 2 } else { 1 };
         let seal_length = if flag & 0b10000000 == 0 { 65 } else { 85 };
         let vanity = self.vanity.get(&vanity_index)?;
 
-        if buf.len() < B256::len_bytes() + seal_length {
+        if buf.len() < B256::len_bytes() + seal_length + 2 {
             return None
         }
+        buf.advance(2);
+
         let state_root = buf[..B256::len_bytes()].to_vec();
         buf.advance(B256::len_bytes());
 
