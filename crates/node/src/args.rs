@@ -1,6 +1,7 @@
 use crate::constants;
 use alloy_primitives::Address;
 use reth_scroll_chainspec::SCROLL_FEE_VAULT_ADDRESS;
+use rollup_node_sequencer::L1MessageInclusionMode;
 use std::path::PathBuf;
 
 /// A struct that represents the arguments for the rollup node.
@@ -110,4 +111,14 @@ pub struct SequencerArgs {
     /// The fee recipient for the sequencer.
     #[arg(long = "sequencer.fee-recipient", id = "sequencer_fee_recipient", value_name = "SEQUENCER_FEE_RECIPIENT", default_value_t = SCROLL_FEE_VAULT_ADDRESS)]
     pub fee_recipient: Address,
+    /// L1 message inclusion mode: "finalized" or "depth:{number}"
+    /// Examples: "finalized", "depth:10", "depth:6"
+    #[arg(
+        long = "sequencer.l1-inclusion-mode",
+        id = "sequencer_l1_inclusion_mode",
+        value_name = "MODE",
+        default_value = "finalized",
+        help = "L1 message inclusion mode. Use 'finalized' for finalized messages only, or 'depth:{number}' for block depth confirmation (e.g. 'depth:10')"
+    )]
+    pub l1_message_inclusion_mode: L1MessageInclusionMode,
 }

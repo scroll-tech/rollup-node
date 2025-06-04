@@ -197,7 +197,7 @@ impl RollupManagerAddOn {
                 args.fee_recipient,
                 args.max_l1_messages_per_block,
                 0,
-                0,
+                args.l1_message_inclusion_mode,
             );
             (Some(sequencer), (args.block_time != 0).then_some(args.block_time))
         } else {
