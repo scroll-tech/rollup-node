@@ -7,7 +7,7 @@ use alloy_provider::ProviderBuilder;
 use alloy_rpc_client::RpcClient;
 use alloy_signer_local::PrivateKeySigner;
 use alloy_transport::layers::RetryBackoffLayer;
-use reth_chainspec::EthChainSpec;
+use reth_chainspec::{EthChainSpec, NamedChain};
 use reth_network::{protocol::IntoRlpxSubProtocol, NetworkProtocols};
 use reth_network_api::{block::EthWireBlockListenerProvider, FullNetwork};
 use reth_node_api::{FullNodeTypes, NodeTypes};
@@ -29,7 +29,7 @@ use scroll_alloy_hardforks::ScrollHardforks;
 use scroll_alloy_provider::ScrollAuthApiEngineClient;
 use scroll_db::{Database, DatabaseConnectionProvider};
 use scroll_engine::{EngineDriver, ForkchoiceState};
-use scroll_migration::MigratorTrait;
+use scroll_migration::{MigratorTrait, ScrollMainnetMigrationInfo, ScrollSepoliaMigrationInfo};
 use scroll_network::ScrollNetworkManager;
 use scroll_wire::{ScrollWireConfig, ScrollWireProtocolHandler};
 use std::{sync::Arc, time::Duration};
@@ -65,11 +65,10 @@ impl RollupManagerAddOn {
         ctx.node.network().add_rlpx_sub_protocol(scroll_wire_handler.into_rlpx_sub_protocol());
         let scroll_network_manager =
             ScrollNetworkManager::from_parts(ctx.node.network().clone(), events);
+        let named_chain = ctx.config.chain.chain().named().expect("expected named chain");
 
         // Get the rollup node config.
-        let node_config = Arc::new(NodeConfig::from_named_chain(
-            ctx.config.chain.chain().named().expect("expected named chain"),
-        ));
+        let node_config = Arc::new(NodeConfig::from_named_chain(named_chain));
 
         // Create the engine api client.
         let engine_api = ScrollAuthApiEngineClient::new(rpc.rpc_server_handles.auth.http_client());
@@ -120,7 +119,22 @@ impl RollupManagerAddOn {
         let db = Database::new(&database_path).await?;
 
         // Run the database migrations
-        scroll_migration::Migrator::up(db.get_connection(), None).await?;
+        match named_chain {
+            NamedChain::Scroll => scroll_migration::Migrator::<ScrollMainnetMigrationInfo>::up(
+                db.get_connection(),
+                None,
+            ),
+            NamedChain::ScrollSepolia => {
+                scroll_migration::Migrator::<ScrollSepoliaMigrationInfo>::up(
+                    db.get_connection(),
+                    None,
+                )
+            }
+            NamedChain::Dev => scroll_migration::Migrator::<()>::up(db.get_connection(), None),
+            _ => panic!("expected Scroll Mainnet, Sepolia or Dev"),
+        }
+        .await
+        .expect("failed to download migrate");
 
         // Wrap the database in an Arc
         let db = Arc::new(db);

@@ -1,5 +1,7 @@
 use crate::MigrationInfo;
-use alloy_primitives::{bytes::Buf, Bytes, B256, U256};
+use std::{collections::HashMap, time::Duration};
+
+use alloy_primitives::{bytes::Buf, B256};
 use eyre::{bail, eyre};
 use futures::{stream::FuturesOrdered, StreamExt};
 use indicatif::{ProgressBar, ProgressState, ProgressStyle};
@@ -9,9 +11,6 @@ use reqwest_retry::{policies::ExponentialBackoff, RetryTransientMiddleware};
 use sea_orm::{prelude::*, ActiveValue};
 use sea_orm_migration::{prelude::*, seaql_migrations::Relation};
 use sha2::{Digest, Sha256};
-use std::{collections::HashMap, time::Duration};
-
-const BLOCK_DATA_CSV: &str = include_str!("../migration-data/block_data.csv");
 
 pub struct Migration<MI>(pub std::marker::PhantomData<MI>);
 
@@ -24,16 +23,17 @@ impl<MI> MigrationName for Migration<MI> {
 #[async_trait::async_trait]
 impl<MI: MigrationInfo + Send + Sync> MigrationTrait for Migration<MI> {
     async fn up(&self, manager: &SchemaManager) -> Result<(), DbErr> {
-        // download data.
-        let headers = download(&MI::data_url(), MI::data_hash())
-            .await
-            .map_err(|err| DbErr::Custom(err.to_string()))?;
-        let records: Vec<ActiveModel> =
-            headers.into_iter().enumerate().map(|(i, h)| (i as i64, h).into()).collect();
+        if let (Some(url), Some(hash)) = (MI::data_url(), MI::data_hash()) {
+            // download data.
+            let headers =
+                download(&url, hash).await.map_err(|err| DbErr::Custom(err.to_string()))?;
+            let records: Vec<ActiveModel> =
+                headers.into_iter().enumerate().map(|(i, h)| (i as i64, h).into()).collect();
 
-        let db = manager.get_connection();
-        // we ignore the `Failed to find inserted item` error.
-        let _ = Entity::insert_many(records).exec(db).await;
+            let db = manager.get_connection();
+            // we ignore the `Failed to find inserted item` error.
+            let _ = Entity::insert_many(records).exec(db).await;
+        }
 
         Ok(())
     }
@@ -88,8 +88,6 @@ async fn download(url: &str, expected_data_hash: B256) -> eyre::Result<Vec<Heade
     }
     let iterations = total_size / CHUNK_SIZE + if total_size % CHUNK_SIZE != 0 { 1 } else { 0 };
 
-    tracing::info!(target: "scroll::database", "starting header file download.");
-
     // create a progress bar.
     let pb = ProgressBar::new(total_size);
     let mut cursor = 0;
@@ -112,7 +110,6 @@ async fn download(url: &str, expected_data_hash: B256) -> eyre::Result<Vec<Heade
         }
         // add extra query tasks if below minimum.
         while tasks.len() < MAX_TASKS && index < iterations {
-            let client = &client;
             let start = index * CHUNK_SIZE;
             let end = (start + CHUNK_SIZE - 1).min(total_size);
             tasks.push_back(download_chunk(&client, url, start, end));
@@ -157,8 +154,7 @@ async fn download_chunk(
     start: u64,
     end: u64,
 ) -> eyre::Result<Vec<u8>> {
-    let response =
-        client.get(url).header("Range", format!("bytes={}-{}", start, end)).send().await?;
+    let response = client.get(url).header("Range", format!("bytes={start}-{end}")).send().await?;
 
     if response.status() != reqwest::StatusCode::PARTIAL_CONTENT {
         dbg!(response.text().await?);

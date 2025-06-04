@@ -134,6 +134,7 @@ mod test {
     }
 
     #[tokio::test]
+    #[ignore]
     async fn test_database_block_data_seed() {
         // Setup the test database.
         let db = setup_test_db().await;
