@@ -187,32 +187,32 @@ impl<N: FullNetwork> Stream for ScrollNetworkManager<N> {
     fn poll_next(
         self: std::pin::Pin<&mut Self>,
         cx: &mut std::task::Context<'_>,
-    ) -> std::task::Poll<Option<Self::Item>> {
+    ) -> Poll<Option<Self::Item>> {
         let this = self.get_mut();
 
         // We handle the messages from the network handle.
         loop {
             match this.from_handle_rx.poll_next_unpin(cx) {
                 // A message has been received from the network handle.
-                std::task::Poll::Ready(Some(message)) => {
+                Poll::Ready(Some(message)) => {
                     this.on_handle_message(message);
                 }
                 // All network handles have been dropped so we can shutdown the network.
-                std::task::Poll::Ready(None) => {
+                Poll::Ready(None) => {
                     // return std::task::Poll::Ready(());
                     // For now we will return pending to keep the network running.
                     break;
                 }
                 // No additional messages exist break.
-                std::task::Poll::Pending => break,
+                Poll::Pending => break,
             }
         }
 
         // Next we handle the scroll-wire events.
         if let Poll::Ready(event) = this.scroll_wire.poll_unpin(cx) {
-            return std::task::Poll::Ready(Some(this.on_scroll_wire_event(event)));
+            return Poll::Ready(Some(this.on_scroll_wire_event(event)));
         }
 
-        std::task::Poll::Pending
+        Poll::Pending
     }
 }

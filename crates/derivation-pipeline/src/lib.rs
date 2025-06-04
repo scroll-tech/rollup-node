@@ -163,6 +163,7 @@ where
     }
 }
 
+/// TODO(bench): add criterion bench.
 /// Returns a vector of [`ScrollPayloadAttributes`] from the [`BatchCommitData`] and a
 /// [`L1Provider`].
 pub async fn derive<L1P: L1Provider + Sync + Send, L2P: BlockDataProvider + Sync + Send>(
@@ -213,6 +214,7 @@ pub async fn derive<L1P: L1Provider + Sync + Send, L2P: BlockDataProvider + Sync
 
         // get the block data for the l2 block.
         let number = block.context.number;
+        // TODO(performance): can this be improved by adding block_data_range.
         let block_data = l2_provider.block_data(number).await.map_err(Into::into)?;
 
         // construct the payload attributes.

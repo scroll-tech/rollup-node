@@ -48,6 +48,7 @@ reth-scroll-chainspec.workspace = true
 reth-scroll-node = { workspace = true, features = ["test-utils"] }
 
 # rollup-node
+rollup-node = { workspace = true, features = ["test-utils"] }
 rollup-node-primitives.workspace = true
 rollup-node-providers = { workspace = true, features = ["test-utils"] }
 rollup-node-sequencer.workspace = true

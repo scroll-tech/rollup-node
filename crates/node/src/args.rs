@@ -1,6 +1,7 @@
 use crate::constants;
 use alloy_primitives::Address;
 use reth_scroll_chainspec::SCROLL_FEE_VAULT_ADDRESS;
+use rollup_node_sequencer::L1MessageInclusionMode;
 use std::path::PathBuf;
 
 /// A struct that represents the arguments for the rollup node.
@@ -9,13 +10,12 @@ pub struct ScrollRollupNodeConfig {
     /// Whether the rollup node should be run in test mode.
     #[arg(long)]
     pub test: bool,
-    /// A bool that represents whether optimistic sync of the EN should be performed.
-    /// This is a temp solution and should be removed when implementing issue #23.
-    #[arg(long, default_value_t = false)]
-    pub optimistic_sync: bool,
-    /// Database path
+    /// Database args
     #[command(flatten)]
     pub database_args: DatabaseArgs,
+    /// Engine driver args.
+    #[command(flatten)]
+    pub engine_driver_args: EngineDriverArgs,
     /// The beacon provider arguments.
     #[command(flatten)]
     pub beacon_provider_args: BeaconProviderArgs,
@@ -36,6 +36,15 @@ pub struct DatabaseArgs {
     /// Database path
     #[arg(long)]
     pub path: Option<PathBuf>,
+}
+
+/// The engine driver args.
+#[derive(Debug, Default, Clone, clap::Args)]
+pub struct EngineDriverArgs {
+    /// The amount of block difference between the EN and the latest block received from P2P
+    /// at which the engine driver triggers optimistic sync.
+    #[arg(long = "engine.en-sync-trigger", default_value_t = constants::BLOCK_GAP_TRIGGER)]
+    pub en_sync_trigger: u64,
 }
 
 /// The network arguments.
@@ -102,4 +111,14 @@ pub struct SequencerArgs {
     /// The fee recipient for the sequencer.
     #[arg(long = "sequencer.fee-recipient", id = "sequencer_fee_recipient", value_name = "SEQUENCER_FEE_RECIPIENT", default_value_t = SCROLL_FEE_VAULT_ADDRESS)]
     pub fee_recipient: Address,
+    /// L1 message inclusion mode: "finalized" or "depth:{number}"
+    /// Examples: "finalized", "depth:10", "depth:6"
+    #[arg(
+        long = "sequencer.l1-inclusion-mode",
+        id = "sequencer_l1_inclusion_mode",
+        value_name = "MODE",
+        default_value = "finalized",
+        help = "L1 message inclusion mode. Use 'finalized' for finalized messages only, or 'depth:{number}' for block depth confirmation (e.g. 'depth:10')"
+    )]
+    pub l1_message_inclusion_mode: L1MessageInclusionMode,
 }

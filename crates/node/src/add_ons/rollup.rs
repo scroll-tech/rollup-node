@@ -2,7 +2,7 @@ use crate::{
     args::{L1ProviderArgs, ScrollRollupNodeConfig},
     constants::PROVIDER_BLOB_CACHE_SIZE,
 };
-use alloy_primitives::Sealable;
+
 use alloy_provider::ProviderBuilder;
 use alloy_rpc_client::RpcClient;
 use alloy_signer_local::PrivateKeySigner;
@@ -13,14 +13,14 @@ use reth_network_api::{block::EthWireBlockListenerProvider, FullNetwork};
 use reth_node_api::{FullNodeTypes, NodeTypes};
 use reth_node_builder::{rpc::RpcHandle, AddOnsContext, FullNodeComponents};
 use reth_rpc_eth_api::EthApiTypes;
+use reth_scroll_chainspec::ScrollChainSpec;
 use reth_scroll_node::ScrollNetworkPrimitives;
 use rollup_node_manager::{
     Consensus, NoopConsensus, RollupManagerHandle, RollupNodeManager, SystemContractConsensus,
 };
 use rollup_node_primitives::NodeConfig;
 use rollup_node_providers::{
-    beacon_provider, AlloyExecutionPayloadProvider, DatabaseL1MessageProvider, OnlineL1Provider,
-    SystemContractProvider,
+    beacon_provider, DatabaseL1MessageProvider, OnlineL1Provider, SystemContractProvider,
 };
 use rollup_node_sequencer::Sequencer;
 use rollup_node_signer::Signer;
@@ -35,7 +35,18 @@ use scroll_wire::{ScrollWireConfig, ScrollWireProtocolHandler};
 use std::{sync::Arc, time::Duration};
 use tokio::sync::mpsc::Sender;
 
-// Replace `Scroll` with the actual network type you use if it's generic
+/// Implementing the trait allows the type to return whether it is configured for dev chain.
+pub trait IsDevChain {
+    /// Returns true if the chain is a dev chain.
+    fn is_dev_chain(&self) -> bool;
+}
+
+impl IsDevChain for ScrollChainSpec {
+    fn is_dev_chain(&self) -> bool {
+        let named: Result<NamedChain, _> = self.chain.try_into();
+        named.is_ok_and(|n| matches!(n, NamedChain::Dev))
+    }
+}
 
 /// The rollup node manager addon.
 #[derive(Debug)]
@@ -56,7 +67,7 @@ impl RollupManagerAddOn {
         rpc: RpcHandle<N, EthApi>,
     ) -> eyre::Result<(RollupManagerHandle, Option<Sender<Arc<L1Notification>>>)>
     where
-        <<N as FullNodeTypes>::Types as NodeTypes>::ChainSpec: ScrollHardforks,
+        <<N as FullNodeTypes>::Types as NodeTypes>::ChainSpec: ScrollHardforks + IsDevChain,
         N::Network: NetworkProtocols + FullNetwork<Primitives = ScrollNetworkPrimitives>,
     {
         // Instantiate the network manager
@@ -74,7 +85,7 @@ impl RollupManagerAddOn {
         let engine_api = ScrollAuthApiEngineClient::new(rpc.rpc_server_handles.auth.http_client());
 
         // Get a provider
-        let provider = self.config.l1_provider_args.url.clone().map(|url| {
+        let l1_provider = self.config.l1_provider_args.url.clone().map(|url| {
             let L1ProviderArgs { max_retries, initial_backoff, compute_units_per_second, .. } =
                 self.config.l1_provider_args;
             let client = RpcClient::builder()
@@ -87,23 +98,32 @@ impl RollupManagerAddOn {
             ProviderBuilder::new().connect_client(client)
         });
 
-        // Get a payload provider
-        let payload_provider = ctx.config.rpc.http.then_some({
+        // Get a provider to the execution layer.
+        let l2_provider = ctx.config.rpc.http.then_some({
             rpc.rpc_server_handles
                 .rpc
                 .new_http_provider_for()
                 .map(Arc::new)
-                .map(AlloyExecutionPayloadProvider::new)
                 .expect("failed to create payload provider")
         });
 
-        let fcs = ForkchoiceState::head_from_genesis(ctx.config.chain.genesis_header().hash_slow());
+        let chain_spec_fcs = || {
+            ForkchoiceState::head_from_chain_spec(ctx.config.chain.clone())
+                .expect("failed to derive forkchoice state from chain spec")
+        };
+        let fcs = if let Some(provider) = l2_provider.clone() {
+            ForkchoiceState::head_from_provider(provider).await.unwrap_or_else(chain_spec_fcs)
+        } else {
+            chain_spec_fcs()
+        };
+
         let engine = EngineDriver::new(
             Arc::new(engine_api),
             ctx.config.chain.clone(),
-            payload_provider,
+            l2_provider,
             fcs,
-            true,
+            !ctx.config.chain.is_dev_chain(),
+            self.config.engine_driver_args.en_sync_trigger,
             Duration::from_millis(self.config.sequencer_args.payload_building_duration),
         );
 
@@ -140,7 +160,7 @@ impl RollupManagerAddOn {
         let db = Arc::new(db);
 
         // Create the consensus.
-        let consensus: Box<dyn Consensus> = if let Some(ref provider) = provider {
+        let consensus: Box<dyn Consensus> = if let Some(ref provider) = l1_provider {
             let signer = provider
                 .authorized_signer(node_config.address_book.system_contract_address)
                 .await?;
@@ -150,9 +170,9 @@ impl RollupManagerAddOn {
         };
 
         let (l1_notification_tx, l1_notification_rx) =
-            if let Some(provider) = provider.filter(|_| !self.config.test) {
+            if let Some(provider) = l1_provider.filter(|_| !self.config.test) {
                 // Spawn the L1Watcher
-                (None, Some(L1Watcher::spawn(provider, node_config).await))
+                (None, Some(L1Watcher::spawn(provider, None, node_config).await))
             } else {
                 // Create a channel for L1 notifications that we can use to inject L1 messages for
                 // testing
@@ -191,7 +211,7 @@ impl RollupManagerAddOn {
                 args.fee_recipient,
                 args.max_l1_messages_per_block,
                 0,
-                0,
+                args.l1_message_inclusion_mode,
             );
             (Some(sequencer), (args.block_time != 0).then_some(args.block_time))
         } else {
@@ -206,7 +226,7 @@ impl RollupManagerAddOn {
             .then_some(ctx.node.network().eth_wire_block_listener().await?);
 
         // Instantiate the signer
-        let signer = self.config.test.then_some(Signer::spawn(PrivateKeySigner::random()).await);
+        let signer = self.config.test.then_some(Signer::spawn(PrivateKeySigner::random()));
 
         // Spawn the rollup node manager
         let rnm = RollupNodeManager::new(
