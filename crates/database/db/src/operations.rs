@@ -179,7 +179,7 @@ pub trait DatabaseOperations: DatabaseConnectionProvider {
             .map(|res| Ok(res.map(Into::into)?)))
     }
 
-    /// Get the extra data for the provided [`BlockId`].
+    /// Get the extra data for the provided block number.
     async fn get_l2_block_data_hint(
         &self,
         block_number: u64,
