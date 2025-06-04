@@ -213,7 +213,7 @@ pub async fn derive<L1P: L1Provider + Sync + Send, L2P: BlockDataProvider + Sync
 
         // get the block data for the l2 block.
         let number = block.context.number;
-        let block_data = l2_provider.block_data(number.into()).await.map_err(Into::into)?;
+        let block_data = l2_provider.block_data(number).await.map_err(Into::into)?;
 
         // construct the payload attributes.
         let attribute = ScrollPayloadAttributes {
@@ -239,7 +239,7 @@ mod tests {
     use super::*;
     use std::sync::Arc;
 
-    use alloy_eips::{eip4844::Blob, BlockId};
+    use alloy_eips::eip4844::Blob;
     use alloy_primitives::{address, b256, bytes, U256};
     use core::sync::atomic::{AtomicU64, Ordering};
     use rollup_node_primitives::L1MessageEnvelope;
@@ -338,7 +338,7 @@ mod tests {
 
         async fn block_data(
             &self,
-            _block_id: BlockId,
+            _block_number: u64,
         ) -> Result<Option<BlockDataHint>, Self::Error> {
             Ok(None)
         }

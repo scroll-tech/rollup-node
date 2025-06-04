@@ -2,9 +2,8 @@ use reth_node_api::FullNodeComponents;
 use reth_node_builder::rpc::{RpcHandle, RpcHandleProvider};
 use reth_rpc_eth_api::EthApiTypes;
 use rollup_node_manager::RollupManagerHandle;
-use rollup_node_watcher::L1Notification;
-use std::sync::Arc;
-use tokio::sync::mpsc::Sender;
+#[cfg(feature = "test-utils")]
+use {rollup_node_watcher::L1Notification, std::sync::Arc, tokio::sync::mpsc::Sender};
 
 /// A handle for scroll addons, which includes handles for the rollup manager and RPC server.
 #[derive(Debug, Clone)]

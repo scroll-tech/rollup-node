@@ -8,8 +8,8 @@ use sea_orm::entity::prelude::*;
 pub struct Model {
     #[sea_orm(primary_key)]
     number: i64,
-    hash: Vec<u8>,
     extra_data: Vec<u8>,
+    state_root: Vec<u8>,
     difficulty: Vec<u8>,
 }
 
