@@ -9,7 +9,7 @@ alloy-primitives = { workspace = true, features = ["serde"] }
 eyre.workspace = true
 futures.workspace = true
 indicatif = "0.17.11"
-reqwest = { workspace = true, features = ["stream"] }
+reqwest.workspace = true
 reqwest-retry = "0.7.0"
 reqwest-middleware = "0.4.2"
 sea-orm = { workspace = true, features = ["sqlx-sqlite", "runtime-tokio-native-tls", "macros"] }
