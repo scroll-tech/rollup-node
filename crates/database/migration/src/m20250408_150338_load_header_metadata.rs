@@ -3,7 +3,7 @@ use std::{collections::HashMap, time::Duration};
 
 use alloy_primitives::{bytes::Buf, B256};
 use eyre::{bail, eyre};
-use futures::{stream::FuturesOrdered, StreamExt};
+use futures::{stream::FuturesUnordered, StreamExt};
 use indicatif::{ProgressBar, ProgressFinish, ProgressState, ProgressStyle};
 use reqwest::Client;
 use reqwest_middleware::{ClientBuilder, ClientWithMiddleware};
@@ -109,7 +109,7 @@ async fn download(url: &str) -> eyre::Result<Vec<u8>> {
     let mut buf = Vec::with_capacity(total_size as usize);
     let mut index = 0;
     let mut cursor = 0;
-    let mut tasks = FuturesOrdered::new();
+    let mut tasks = FuturesUnordered::new();
 
     loop {
         if index == iterations {
@@ -119,23 +119,27 @@ async fn download(url: &str) -> eyre::Result<Vec<u8>> {
         while tasks.len() < MAX_TASKS && index < iterations {
             let start = index * CHUNK_SIZE;
             let end = (start + CHUNK_SIZE - 1).min(total_size);
-            tasks.push_back(download_chunk(&client, url, start, end));
+            let client = &client;
+            tasks.push(async move { (index, download_chunk(&client, url, start, end).await) });
             index += 1;
         }
         // polling chunks.
-        while let Some(output) = tasks.next().await {
-            let mut output = output?;
+        while let Some((index, output)) = tasks.next().await {
+            let output = output?;
 
             // advance progress bar.
             cursor += output.len();
             pb.set_position(cursor as u64);
 
-            buf.append(&mut output);
+            buf.push((index, output));
             if tasks.is_empty() {
                 break
             }
         }
     }
+
+    buf.sort_unstable_by(|(a, _), (b, _)| a.cmp(b));
+    let buf = buf.into_iter().flat_map(|(_, data)| data).collect();
 
     Ok(buf)
 }
