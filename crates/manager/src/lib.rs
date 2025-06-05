@@ -5,5 +5,6 @@ mod consensus;
 
 mod manager;
 pub use manager::{
-    RollupManagerCommand, RollupManagerEvent, RollupManagerHandle, RollupNodeManager,
+    compute_watcher_start_block_from_database, RollupManagerCommand, RollupManagerEvent,
+    RollupManagerHandle, RollupNodeManager,
 };

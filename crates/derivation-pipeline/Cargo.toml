@@ -26,6 +26,7 @@ scroll-codec.workspace = true
 scroll-db.workspace = true
 
 # misc
+async-trait = { workspace = true, optional = true }
 futures.workspace = true
 thiserror.workspace = true
 tracing.workspace = true
@@ -48,4 +49,13 @@ std = [
     "scroll-alloy-consensus/std",
     "scroll-alloy-rpc-types-engine/std",
     "futures/std",
+]
+test-utils = [
+    "async-trait",
+    "rollup-node-providers/test-utils",
+    "scroll-codec/test-utils",
+    "scroll-db/test-utils",
+    "rollup-node-providers/test-utils",
+    "scroll-codec/test-utils",
+    "scroll-db/test-utils",
 ]

@@ -19,6 +19,7 @@ use rollup_node_watcher::L1Notification;
 use scroll_alloy_hardforks::ScrollHardforks;
 use scroll_alloy_network::Scroll;
 use scroll_alloy_provider::ScrollEngineApi;
+use scroll_db::{DatabaseError, DatabaseOperations};
 use scroll_engine::{EngineDriver, EngineDriverEvent};
 use scroll_network::{
     BlockImportOutcome, NetworkManagerEvent, NewBlockWithPeer, ScrollNetworkManager,
@@ -305,11 +306,16 @@ where
 
                 self.indexer.handle_block((&payload).into(), None);
             }
-            EngineDriverEvent::L1BlockConsolidated((block_info, batch_info)) => {
-                self.indexer.handle_block(block_info.clone(), Some(batch_info));
+            EngineDriverEvent::L1BlockConsolidated(consolidation_outcome) => {
+                self.indexer.handle_block(
+                    consolidation_outcome.block_info().clone(),
+                    Some(*consolidation_outcome.batch_info()),
+                );
 
                 if let Some(event_sender) = self.event_sender.as_ref() {
-                    event_sender.notify(RollupManagerEvent::L1DerivedBlockConsolidated(block_info));
+                    event_sender.notify(RollupManagerEvent::L1DerivedBlockConsolidated(
+                        consolidation_outcome,
+                    ));
                 }
             }
         }
@@ -519,4 +525,19 @@ fn delayed_interval(interval: u64) -> Interval {
     let mut interval = tokio::time::interval(tokio::time::Duration::from_millis(interval));
     interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
     interval
+}
+
+/// Computes the starting block for the watcher from the database.
+pub async fn compute_watcher_start_block_from_database(
+    database: &Arc<Database>,
+) -> Result<Option<u64>, DatabaseError> {
+    if let Some((_l2_block_info, batch_info)) = database.get_latest_safe_l2_block().await? {
+        let batch_commit = database
+            .get_batch_by_index(batch_info.index)
+            .await?
+            .expect("batch commit must be present");
+        Ok(Some(batch_commit.block_number))
+    } else {
+        Ok(None)
+    }
 }

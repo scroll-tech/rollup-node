@@ -175,20 +175,20 @@ where
                 tracing::info!(target: "scroll::engine", ?result, "handling L1 consolidation result");
 
                 match result {
-                    Ok((block_info, reorg, batch_info)) => {
+                    Ok(consolidation_outcome) => {
+                        let block_info = consolidation_outcome.block_info();
+
                         // Update the safe block info and return the block info
                         tracing::trace!(target: "scroll::engine", ?block_info, "updating safe block info from block derived from L1");
                         self.fcs.update_safe_block_info(block_info.block_info);
 
                         // If we reorged, update the head block info
-                        if reorg {
+                        if consolidation_outcome.is_reorg() {
                             tracing::warn!(target: "scroll::engine", ?block_info, "reorging head to l1 derived block");
                             self.fcs.update_head_block_info(block_info.block_info);
                         }
 
-                        return Some(EngineDriverEvent::L1BlockConsolidated((
-                            block_info, batch_info,
-                        )))
+                        return Some(EngineDriverEvent::L1BlockConsolidated(consolidation_outcome))
                     }
                     Err(err) => {
                         tracing::error!(target: "scroll::engine", ?err, "failed to consolidate block derived from L1")

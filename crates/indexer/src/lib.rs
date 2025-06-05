@@ -294,7 +294,10 @@ impl<ChainSpec: ScrollHardforks + 'static> Stream for Indexer<ChainSpec> {
         // Remove and poll the next future in the queue
         if let Some(mut action) = self.pending_futures.pop_front() {
             return match action.poll(cx) {
-                Poll::Ready(result) => Poll::Ready(Some(result)),
+                Poll::Ready(result) => {
+                    tracing::info!(target: "rollup_node_indexer", "Indexer action completed: {:?}", result);
+                    Poll::Ready(Some(result))
+                }
                 Poll::Pending => {
                     self.pending_futures.push_front(action);
                     Poll::Pending

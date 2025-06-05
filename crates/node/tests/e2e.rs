@@ -1,8 +1,10 @@
 //! End-to-end tests for the rollup node.
 
-use alloy_primitives::{Address, Signature, U256};
-use futures::StreamExt;
+use alloy_eips::BlockNumberOrTag;
+use alloy_primitives::{b256, Address, Bytes, Signature, U256};
+use futures::{task::noop_waker_ref, FutureExt, StreamExt};
 use reth_network::{NetworkConfigBuilder, PeersInfo};
+use reth_rpc_api::EthApiServer;
 use reth_scroll_chainspec::SCROLL_DEV;
 use reth_scroll_node::ScrollNetworkPrimitives;
 use rollup_node::{
@@ -10,12 +12,20 @@ use rollup_node::{
     BeaconProviderArgs, DatabaseArgs, EngineDriverArgs, L1ProviderArgs,
     NetworkArgs as ScrollNetworkArgs, ScrollRollupNodeConfig, SequencerArgs,
 };
-use rollup_node_manager::{RollupManagerEvent, RollupManagerHandle};
+use rollup_node_manager::{
+    compute_watcher_start_block_from_database, RollupManagerEvent, RollupManagerHandle,
+};
+use rollup_node_primitives::BatchCommitData;
 use rollup_node_watcher::L1Notification;
 use scroll_alloy_consensus::TxL1Message;
-use scroll_network::NewBlockWithPeer;
+use scroll_db::Database;
+use scroll_network::{NewBlockWithPeer, SCROLL_MAINNET};
 use scroll_wire::ScrollWireConfig;
-use std::{path::PathBuf, sync::Arc};
+use std::{
+    path::PathBuf,
+    sync::Arc,
+    task::{Context, Poll},
+};
 use tokio::sync::Mutex;
 use tracing::trace;
 
@@ -26,6 +36,7 @@ async fn can_bridge_l1_messages() -> eyre::Result<()> {
     // Create the chain spec for scroll mainnet with Euclid v2 activated and a test genesis.
     let chain_spec = (*SCROLL_DEV).clone();
     let node_args = ScrollRollupNodeConfig {
+        enabled: true,
         test: true,
         network_args: ScrollNetworkArgs {
             enable_eth_scroll_wire_bridge: true,
@@ -88,6 +99,7 @@ async fn can_sequence_and_gossip_blocks() {
     // create 2 nodes
     let chain_spec = (*SCROLL_DEV).clone();
     let rollup_manager_args = ScrollRollupNodeConfig {
+        enabled: true,
         test: true,
         network_args: ScrollNetworkArgs {
             enable_eth_scroll_wire_bridge: true,
@@ -236,5 +248,240 @@ async fn can_bridge_blocks() {
         )
     } else {
         panic!("Failed to receive block from scroll-wire network");
+    }
+}
+
+/// Test that when the rollup node manager is shutdown,
+#[tokio::test]
+async fn graceful_shutdown_consolidates_most_recent_batch_on_startup() -> eyre::Result<()> {
+    reth_tracing::init_test_tracing();
+    let chain_spec = (*SCROLL_MAINNET).clone();
+
+    // disable the rollup node manager in scroll rollup node addons, we will launch it manually.
+    let mut config = default_test_scroll_rollup_node_config();
+    config.enabled = false;
+    let (mut nodes, _tasks, _) = setup_engine(config, 1, chain_spec.clone(), false).await.unwrap();
+    let node = nodes.pop().unwrap();
+
+    // Instantiate the rollup node manager.
+    let mut config = default_test_scroll_rollup_node_config();
+    let path = node.inner.config.datadir().db().join("scroll.db?mode=rwc");
+    let path = PathBuf::from("sqlite://".to_string() + &*path.to_string_lossy());
+    config.database_args.path = Some(path.clone());
+    config.beacon_provider_args.url = Some(
+        "http://dummy:8545"
+            .parse()
+            .expect("valid url that will not be used as test batches use calldata"),
+    );
+
+    let (mut rnm, handle, l1_notification_tx) = config
+        .clone()
+        .build(
+            node.inner.network.clone(),
+            node.inner.config.chain.chain().named().expect("chain is named"),
+            node.inner.add_ons_handle.rpc_handle.rpc_server_handles.clone(),
+            chain_spec.clone(),
+            path.clone(),
+        )
+        .await?;
+
+    // Request an event stream from the rollup node manager and manually poll rnm to process the
+    // event stream request from the handle.
+    let mut rnm_events = Box::pin(handle.get_event_listener());
+    let mut rnm_events = loop {
+        let _ = rnm.poll_unpin(&mut Context::from_waker(noop_waker_ref()));
+        if let Poll::Ready(events) =
+            rnm_events.poll_unpin(&mut Context::from_waker(noop_waker_ref()))
+        {
+            break events.unwrap();
+        }
+    };
+
+    // Extract the L1 notification sender
+    let l1_notification_tx = l1_notification_tx.unwrap();
+
+    // Load test batches
+    let raw_calldata_0 = read_to_bytes("./tests/testdata/batch_0_calldata.bin")?;
+    let batch_0_data = BatchCommitData {
+        hash: b256!("5AAEB6101A47FC16866E80D77FFE090B6A7B3CF7D988BE981646AB6AEDFA2C42"),
+        index: 1,
+        block_number: 18318207,
+        block_timestamp: 1696935971,
+        calldata: Arc::new(raw_calldata_0),
+        blob_versioned_hash: None,
+        finalized_block_number: None,
+    };
+    let raw_calldata_1 = read_to_bytes("./tests/testdata/batch_1_calldata.bin")?;
+    let batch_1_data = BatchCommitData {
+        hash: b256!("AA8181F04F8E305328A6117FA6BC13FA2093A3C4C990C5281DF95A1CB85CA18F"),
+        index: 2,
+        block_number: 18318215,
+        block_timestamp: 1696936000,
+        calldata: Arc::new(raw_calldata_1),
+        blob_versioned_hash: None,
+        finalized_block_number: None,
+    };
+
+    // Send the first batch commit to the rollup node manager.
+    l1_notification_tx.send(Arc::new(L1Notification::BatchCommit(batch_0_data.clone()))).await?;
+
+    // Lets iterate over all blocks expected to be derived from the first batch commit.
+    for i in 1..5 {
+        loop {
+            let event = loop_until_event(&mut rnm, &mut rnm_events).await;
+            if let RollupManagerEvent::L1DerivedBlockConsolidated(consolidation_outcome) = event {
+                assert!(consolidation_outcome.block_info().block_info.number == i);
+                break;
+            }
+        }
+    }
+
+    // Now we send the second batch commit.
+    l1_notification_tx.send(Arc::new(L1Notification::BatchCommit(batch_1_data.clone()))).await?;
+
+    // The second batch commit contains 53 blocks (5-57), lets iterate until the rnm has
+    // consolidated up to block 40.
+    let mut i = 5;
+    let hash = loop {
+        let hash = loop {
+            let event = loop_until_event(&mut rnm, &mut rnm_events).await;
+            if let RollupManagerEvent::L1DerivedBlockConsolidated(consolidation_outcome) = event {
+                assert!(consolidation_outcome.block_info().block_info.number == i);
+                break consolidation_outcome.block_info().block_info.hash;
+            }
+        };
+        if i == 40 {
+            break hash;
+        }
+        i += 1;
+    };
+
+    // Fetch the safe and head block hashes from the EN.
+    let rpc = node.rpc.inner.eth_api();
+    let safe_block_hash =
+        rpc.block_by_number(BlockNumberOrTag::Safe, false).await?.expect("safe block must exist");
+    let head_block_hash =
+        rpc.block_by_number(BlockNumberOrTag::Latest, false).await?.expect("head block must exist");
+
+    // Assert that the safe block hash is the same as the hash of the last consolidated block.
+    assert_eq!(safe_block_hash.header.hash, hash, "Safe block hash does not match expected hash");
+    assert_eq!(head_block_hash.header.hash, hash, "Head block hash does not match expected hash");
+
+    // Simulate a shutdown of the rollup node manager by dropping it.
+    drop(rnm);
+    drop(l1_notification_tx);
+    drop(rnm_events);
+
+    // Create a database and ensure that the function used to determine the l1 start block number is
+    // correct. This is what will be used in `config.build(...)`
+    let path_str = path.to_string_lossy().to_string();
+    let db = Arc::new(Database::new(&path_str).await?);
+    let l1_block_number = compute_watcher_start_block_from_database(&db).await?.unwrap();
+
+    // Assert that the L1 start block number is correct.
+    assert_eq!(l1_block_number, batch_1_data.block_number);
+
+    // Start the RNM again.
+    let (mut rnm, handle, l1_notification_tx) = config
+        .clone()
+        .build(
+            node.inner.network.clone(),
+            node.inner.config.chain.chain().named().expect("chain is named"),
+            node.inner.add_ons_handle.rpc_handle.rpc_server_handles.clone(),
+            chain_spec,
+            path,
+        )
+        .await?;
+    let l1_notification_tx = l1_notification_tx.unwrap();
+
+    // Get a handle to the event stream from the rollup node manager.
+    let mut rnm_events = Box::pin(handle.get_event_listener());
+    let mut rnm_events = loop {
+        let _ = rnm.poll_unpin(&mut Context::from_waker(noop_waker_ref()));
+        if let Poll::Ready(events) =
+            rnm_events.poll_unpin(&mut Context::from_waker(noop_waker_ref()))
+        {
+            break events.unwrap();
+        }
+    };
+
+    // Send the second batch again to mimic the watcher behaviour.
+    l1_notification_tx.send(Arc::new(L1Notification::BatchCommit(batch_1_data.clone()))).await?;
+
+    // Lets fetch the first consolidated block event - this should be the first block of the batch.
+    let l2_block = loop {
+        let event = loop_until_event(&mut rnm, &mut rnm_events).await;
+        if let RollupManagerEvent::L1DerivedBlockConsolidated(consolidation_outcome) = event {
+            break consolidation_outcome.block_info().clone();
+        }
+    };
+
+    // Assert that the consolidated block is the first block of the batch.
+    assert_eq!(
+        l2_block.block_info.number, 5,
+        "Consolidated block number does not match expected number"
+    );
+
+    // Assert that the safe and head block hashes are still the same as before the shutdown.
+    let rpc = node.rpc.inner.eth_api();
+    let safe_block_hash =
+        rpc.block_by_number(BlockNumberOrTag::Safe, false).await?.expect("safe block must exist");
+    let head_block_hash =
+        rpc.block_by_number(BlockNumberOrTag::Latest, false).await?.expect("head block must exist");
+    assert_eq!(
+        safe_block_hash.header.hash, l2_block.block_info.hash,
+        "Safe block should revert to the first consolidated block hash after restart"
+    );
+    assert_eq!(
+        head_block_hash.header.hash, hash,
+        "Head block hash does not match expected hash after restart"
+    );
+
+    // Lets now iterate over all remaining blocks expected to be derived from the second batch
+    // commit.
+    for i in 6..=57 {
+        loop {
+            let event = loop_until_event(&mut rnm, &mut rnm_events).await;
+            if let RollupManagerEvent::L1DerivedBlockConsolidated(consolidation_outcome) = event {
+                assert!(consolidation_outcome.block_info().block_info.number == i);
+                break;
+            }
+        }
+    }
+
+    let safe_block =
+        rpc.block_by_number(BlockNumberOrTag::Safe, false).await?.expect("safe block must exist");
+    let head_block =
+        rpc.block_by_number(BlockNumberOrTag::Latest, false).await?.expect("head block must exist");
+    assert_eq!(
+        safe_block.header.number, 57,
+        "Safe block number should be 57 after all blocks are consolidated"
+    );
+    assert_eq!(
+        head_block.header.number, 57,
+        "Head block number should be 57 after all blocks are consolidated"
+    );
+
+    Ok(())
+}
+
+/// Read the file provided at `path` as a [`Bytes`].
+pub fn read_to_bytes<P: AsRef<std::path::Path>>(path: P) -> eyre::Result<Bytes> {
+    use std::str::FromStr;
+    Ok(Bytes::from_str(&std::fs::read_to_string(path)?)?)
+}
+
+async fn loop_until_event(
+    rnm: &mut (impl futures::Future<Output = ()> + Unpin),
+    rnm_events: &mut (impl futures::Stream<Item = RollupManagerEvent> + Unpin),
+) -> RollupManagerEvent {
+    loop {
+        let _ = rnm.poll_unpin(&mut Context::from_waker(noop_waker_ref()));
+        if let Poll::Ready(Some(event)) =
+            rnm_events.poll_next_unpin(&mut Context::from_waker(noop_waker_ref()))
+        {
+            return event;
+        }
+        tokio::task::yield_now().await;
     }
 }

@@ -128,6 +128,7 @@ pub async fn generate_tx(wallet: Arc<Mutex<Wallet>>) -> Bytes {
 /// Returns a default [`ScrollRollupNodeConfig`] preconfigured for testing.
 pub fn default_test_scroll_rollup_node_config() -> ScrollRollupNodeConfig {
     ScrollRollupNodeConfig {
+        enabled: true,
         test: true,
         network_args: crate::args::NetworkArgs {
             enable_eth_scroll_wire_bridge: true,
@@ -144,6 +145,7 @@ pub fn default_test_scroll_rollup_node_config() -> ScrollRollupNodeConfig {
 /// Returns a default [`ScrollRollupNodeConfig`] preconfigured for testing with sequencer.
 pub fn default_sequencer_test_scroll_rollup_node_config() -> ScrollRollupNodeConfig {
     ScrollRollupNodeConfig {
+        enabled: true,
         test: true,
         network_args: crate::args::NetworkArgs {
             enable_eth_scroll_wire_bridge: true,
