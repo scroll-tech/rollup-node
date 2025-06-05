@@ -37,7 +37,6 @@ async fn can_bridge_l1_messages() -> eyre::Result<()> {
     // Create the chain spec for scroll mainnet with Euclid v2 activated and a test genesis.
     let chain_spec = (*SCROLL_DEV).clone();
     let node_args = ScrollRollupNodeConfig {
-        enabled: true,
         test: true,
         network_args: ScrollNetworkArgs {
             enable_eth_scroll_wire_bridge: true,
@@ -101,7 +100,6 @@ async fn can_sequence_and_gossip_blocks() {
     // create 2 nodes
     let chain_spec = (*SCROLL_DEV).clone();
     let rollup_manager_args = ScrollRollupNodeConfig {
-        enabled: true,
         test: true,
         network_args: ScrollNetworkArgs {
             enable_eth_scroll_wire_bridge: true,
@@ -260,10 +258,11 @@ async fn graceful_shutdown_consolidates_most_recent_batch_on_startup() -> eyre::
     reth_tracing::init_test_tracing();
     let chain_spec = (*SCROLL_MAINNET).clone();
 
-    // disable the rollup node manager in scroll rollup node addons, we will launch it manually.
-    let mut config = default_test_scroll_rollup_node_config();
-    config.enabled = false;
-    let (mut nodes, _tasks, _) = setup_engine(config, 1, chain_spec.clone(), false).await.unwrap();
+    // Launch a node
+    let (mut nodes, _tasks, _) =
+        setup_engine(default_test_scroll_rollup_node_config(), 1, chain_spec.clone(), false)
+            .await
+            .unwrap();
     let node = nodes.pop().unwrap();
 
     // Instantiate the rollup node manager.

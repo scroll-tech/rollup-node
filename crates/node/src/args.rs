@@ -40,9 +40,6 @@ use tokio::sync::mpsc::Sender;
 /// A struct that represents the arguments for the rollup node.
 #[derive(Debug, Clone, clap::Args)]
 pub struct ScrollRollupNodeConfig {
-    /// A bool to represent if the rollup node is enabled.
-    #[arg(long, default_value_t = true)]
-    pub enabled: bool,
     /// Whether the rollup node should be run in test mode.
     #[arg(long)]
     pub test: bool,
@@ -67,11 +64,6 @@ pub struct ScrollRollupNodeConfig {
 }
 
 impl ScrollRollupNodeConfig {
-    /// Set the `enabled` field of the config.
-    pub fn enabled(self, enabled: bool) -> Self {
-        Self { enabled, ..self }
-    }
-
     /// Consumes the [`ScrollRollupNodeConfig`] and builds a [`RollupNodeManager`].
     pub async fn build<
         N: FullNetwork<Primitives = ScrollNetworkPrimitives> + NetworkProtocols,
