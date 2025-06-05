@@ -3,18 +3,16 @@
 //! This crate provides a simple implementation of a derivation pipeline that transforms a batch
 //! into payload attributes for block building.
 
-#![cfg_attr(not(feature = "std"), no_std)]
-
 mod data_source;
 
-pub use error::DerivationPipelineError;
 mod error;
+pub use error::DerivationPipelineError;
 
-#[cfg(not(feature = "std"))]
-extern crate alloc as std;
+mod metrics;
+pub use metrics::DerivationPipelineMetrics;
 
 use crate::data_source::CodecDataSource;
-use std::{boxed::Box, collections::VecDeque, sync::Arc, vec::Vec};
+use std::{boxed::Box, collections::VecDeque, sync::Arc, time::Instant, vec::Vec};
 
 use alloy_primitives::{Address, B256};
 use alloy_rpc_types_engine::PayloadAttributes;
@@ -61,6 +59,8 @@ pub struct DerivationPipeline<P> {
     attributes_queue: VecDeque<ScrollPayloadAttributesWithBatchInfo>,
     /// The waker for the pipeline.
     waker: Option<Waker>,
+    /// The metrics of the pipeline.
+    metrics: DerivationPipelineMetrics,
 }
 
 impl<P> DerivationPipeline<P>
@@ -76,6 +76,7 @@ where
             pipeline_futures: Default::default(),
             attributes_queue: Default::default(),
             waker: None,
+            metrics: DerivationPipelineMetrics::default(),
         }
     }
 
@@ -93,10 +94,13 @@ where
     /// futures.
     fn handle_next_batch(&mut self) -> Option<DerivationPipelineFuture> {
         let database = self.database.clone();
+        let metrics = self.metrics.clone();
         let provider = self.l1_provider.clone();
 
         if let Some(info) = self.batch_queue.pop_front() {
             let fut = Box::pin(async move {
+                let derive_start = Instant::now();
+
                 // get the batch commit data.
                 let batch = database
                     .get_batch_by_index(info.index)
@@ -107,6 +111,12 @@ where
                 // derive the attributes and attach the corresponding batch info.
                 let attrs =
                     derive(batch, provider, database).await.map_err(|err| (info.clone(), err))?;
+
+                // update metrics.
+                metrics.derived_blocks.increment(attrs.len() as u64);
+                let execution_duration = derive_start.elapsed().as_secs_f64();
+                metrics.blocks_per_second.set(attrs.len() as f64 / execution_duration);
+
                 Ok(attrs.into_iter().map(|attr| (attr, *info).into()).collect())
             });
             return Some(fut);
@@ -415,8 +425,8 @@ mod tests {
                 break
             }
         }
-        let expected = ScrollPayloadAttributes{
-            payload_attributes: PayloadAttributes{
+        let expected = ScrollPayloadAttributes {
+            payload_attributes: PayloadAttributes {
                 timestamp: 1696935657,
                 ..Default::default()
             },
@@ -478,20 +488,20 @@ mod tests {
         let attribute =
             attributes.iter().find(|a| a.payload_attributes.timestamp == 1696935384).unwrap();
 
-        let expected = ScrollPayloadAttributes{
-            payload_attributes: PayloadAttributes{
+        let expected = ScrollPayloadAttributes {
+            payload_attributes: PayloadAttributes {
                 timestamp: 1696935384,
                 ..Default::default()
             },
             transactions: Some(vec![bytes!("7ef901b7218302904094781e90f1c8fc4611c9b7497c3b47f99ef6969cbc80b901848ef1332e0000000000000000000000007f2b8c31f88b6006c382775eea88297ec1e3e9050000000000000000000000006ea73e05adc79974b931123675ea8f78ffdacdf0000000000000000000000000000000000000000000000000006a94d74f430000000000000000000000000000000000000000000000000000000000000000002100000000000000000000000000000000000000000000000000000000000000a000000000000000000000000000000000000000000000000000000000000000a4232e8748000000000000000000000000ca266224613396a0e8d4c2497dbc4f33dd6cdeff000000000000000000000000ca266224613396a0e8d4c2497dbc4f33dd6cdeff000000000000000000000000000000000000000000000000006a94d74f4300000000000000000000000000000000000000000000000000000000000000000080000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000947885bcbd5cecef1336b5300fb5186a12ddd8c478"), bytes!("7ef901b7228302904094781e90f1c8fc4611c9b7497c3b47f99ef6969cbc80b901848ef1332e0000000000000000000000007f2b8c31f88b6006c382775eea88297ec1e3e9050000000000000000000000006ea73e05adc79974b931123675ea8f78ffdacdf000000000000000000000000000000000000000000000000000470de4df820000000000000000000000000000000000000000000000000000000000000000002200000000000000000000000000000000000000000000000000000000000000a000000000000000000000000000000000000000000000000000000000000000a4232e8748000000000000000000000000982fe4a7cbd74bb3422ebe46333c3e8046c12c7f000000000000000000000000982fe4a7cbd74bb3422ebe46333c3e8046c12c7f00000000000000000000000000000000000000000000000000470de4df8200000000000000000000000000000000000000000000000000000000000000000080000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000947885bcbd5cecef1336b5300fb5186a12ddd8c478")]),
             no_tx_pool: true,
-            block_data_hint: None
+            block_data_hint: None,
         };
         assert_eq!(attribute, &expected);
 
         let attribute = attributes.last().unwrap();
-        let expected = ScrollPayloadAttributes{
-            payload_attributes: PayloadAttributes{
+        let expected = ScrollPayloadAttributes {
+            payload_attributes: PayloadAttributes {
                 timestamp: 1696935657,
                 ..Default::default()
             },

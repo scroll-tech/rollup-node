@@ -1,7 +1,8 @@
 use super::{SignerError, SignerEvent};
+use std::{future::Future, pin::Pin, sync::Arc};
+
 use reth_scroll_primitives::ScrollBlock;
 use rollup_node_primitives::sig_encode_hash;
-use std::{future::Future, pin::Pin, sync::Arc};
 
 /// A type alias for a future that resolves to a `SignerEvent` or a `SignerError`.
 pub type SignerFuture = Pin<Box<dyn Future<Output = Result<SignerEvent, SignerError>> + Send>>;

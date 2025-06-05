@@ -7,7 +7,7 @@ use std::{
 };
 
 /// A future that resolves to a `Result<IndexerEvent, IndexerError>`.
-type PendingIndexerFuture =
+pub(super) type PendingIndexerFuture =
     Pin<Box<dyn Future<Output = Result<IndexerEvent, IndexerError>> + Send>>;
 
 /// A type that represents a future that is being executed by the indexer.
