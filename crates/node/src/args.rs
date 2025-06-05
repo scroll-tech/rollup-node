@@ -23,7 +23,7 @@ use rollup_node_providers::{
     beacon_provider, DatabaseL1MessageProvider, L1MessageProvider, L1Provider, OnlineL1Provider,
     SystemContractProvider,
 };
-use rollup_node_sequencer::Sequencer;
+use rollup_node_sequencer::{L1MessageInclusionMode, Sequencer};
 use rollup_node_signer::Signer;
 use rollup_node_watcher::{L1Notification, L1Watcher};
 use scroll_alloy_hardforks::ScrollHardforks;
@@ -230,7 +230,7 @@ impl ScrollRollupNodeConfig {
                 args.fee_recipient,
                 args.max_l1_messages_per_block,
                 0,
-                0,
+                self.sequencer_args.l1_message_inclusion_mode,
             );
             (Some(sequencer), (args.block_time != 0).then_some(args.block_time))
         } else {
@@ -345,4 +345,14 @@ pub struct SequencerArgs {
     /// The fee recipient for the sequencer.
     #[arg(long = "sequencer.fee-recipient", id = "sequencer_fee_recipient", value_name = "SEQUENCER_FEE_RECIPIENT", default_value_t = SCROLL_FEE_VAULT_ADDRESS)]
     pub fee_recipient: Address,
+    /// L1 message inclusion mode: "finalized" or "depth:{number}"
+    /// Examples: "finalized", "depth:10", "depth:6"
+    #[arg(
+        long = "sequencer.l1-inclusion-mode",
+        id = "sequencer_l1_inclusion_mode",
+        value_name = "MODE",
+        default_value = "finalized",
+        help = "L1 message inclusion mode. Use 'finalized' for finalized messages only, or 'depth:{number}' for block depth confirmation (e.g. 'depth:10')"
+    )]
+    pub l1_message_inclusion_mode: L1MessageInclusionMode,
 }

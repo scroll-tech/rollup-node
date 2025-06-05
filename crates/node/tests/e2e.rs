@@ -16,6 +16,7 @@ use rollup_node_manager::{
     compute_watcher_start_block_from_database, RollupManagerEvent, RollupManagerHandle,
 };
 use rollup_node_primitives::BatchCommitData;
+use rollup_node_sequencer::L1MessageInclusionMode;
 use rollup_node_watcher::L1Notification;
 use scroll_alloy_consensus::TxL1Message;
 use scroll_db::Database;
@@ -49,6 +50,7 @@ async fn can_bridge_l1_messages() -> eyre::Result<()> {
             sequencer_enabled: true,
             block_time: 0,
             max_l1_messages_per_block: 4,
+            l1_message_inclusion_mode: L1MessageInclusionMode::BlockDepth(0),
             ..SequencerArgs::default()
         },
         beacon_provider_args: BeaconProviderArgs::default(),
@@ -112,6 +114,7 @@ async fn can_sequence_and_gossip_blocks() {
             sequencer_enabled: true,
             block_time: 0,
             max_l1_messages_per_block: 4,
+            l1_message_inclusion_mode: L1MessageInclusionMode::BlockDepth(0),
             ..SequencerArgs::default()
         },
         beacon_provider_args: BeaconProviderArgs::default(),

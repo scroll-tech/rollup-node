@@ -245,8 +245,14 @@ where
                     pipeline.handle_batch_commit(batch_info);
                 }
             }
-            IndexerEvent::BatchFinalizationIndexed(_, Some(finalized_block)) |
-            IndexerEvent::FinalizedIndexed(_, Some(finalized_block)) => {
+            IndexerEvent::BatchFinalizationIndexed(_, Some(finalized_block)) => {
+                // update the fcs on new finalized block.
+                self.engine.set_finalized_block_info(finalized_block);
+            }
+            IndexerEvent::FinalizedIndexed(l1_block_number, Some(finalized_block)) => {
+                if let Some(sequencer) = self.sequencer.as_mut() {
+                    sequencer.set_l1_finalized_block_number(l1_block_number);
+                }
                 // update the fcs on new finalized block.
                 self.engine.set_finalized_block_info(finalized_block);
             }

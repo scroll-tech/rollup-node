@@ -19,6 +19,7 @@ use reth_node_core::args::{DiscoveryArgs, NetworkArgs, RpcServerArgs};
 use reth_provider::providers::BlockchainProvider;
 use reth_rpc_server_types::RpcModuleSelection;
 use reth_tasks::TaskManager;
+use rollup_node_sequencer::L1MessageInclusionMode;
 use std::{path::PathBuf, sync::Arc};
 use tokio::sync::Mutex;
 use tracing::{span, Level};
@@ -160,6 +161,7 @@ pub fn default_sequencer_test_scroll_rollup_node_config() -> ScrollRollupNodeCon
             payload_building_duration: 0,
             max_l1_messages_per_block: 0,
             fee_recipient: Default::default(),
+            l1_message_inclusion_mode: L1MessageInclusionMode::BlockDepth(0),
         },
         beacon_provider_args: BeaconProviderArgs::default(),
     }
