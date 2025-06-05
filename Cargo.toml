@@ -189,6 +189,8 @@ auto_impl = "1.2"
 derive_more = { version = "2.0", default-features = false }
 eyre = "0.6"
 futures = { version = "0.3", default-features = false }
+metrics = "0.24.0"
+metrics-derive = "0.1"
 parking_lot = "0.12"
 rand = { version = "0.9" }
 reqwest = "0.12"

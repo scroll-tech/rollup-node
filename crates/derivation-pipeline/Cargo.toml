@@ -27,6 +27,8 @@ scroll-db.workspace = true
 
 # misc
 futures.workspace = true
+metrics.workspace = true
+metrics-derive.workspace = true
 thiserror.workspace = true
 tracing.workspace = true
 
@@ -36,16 +38,3 @@ eyre.workspace = true
 scroll-db = { workspace = true, features = ["test-utils"] }
 scroll-codec = { workspace = true, features = ["test-utils"] }
 tokio = { workspace = true, features = ["macros"] }
-
-[features]
-default = ["std"]
-std = [
-    "scroll-alloy-consensus/std",
-    "scroll-alloy-rpc-types-engine/std",
-    "alloy-primitives/std",
-    "alloy-rpc-types-engine/std",
-    "alloy-eips/std",
-    "scroll-alloy-consensus/std",
-    "scroll-alloy-rpc-types-engine/std",
-    "futures/std",
-]

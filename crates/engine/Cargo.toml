@@ -45,6 +45,8 @@ scroll-network.workspace = true
 async-trait = { workspace = true, optional = true }
 eyre.workspace = true
 futures.workspace = true
+metrics.workspace = true
+metrics-derive.workspace = true
 thiserror.workspace = true
 tokio.workspace = true
 tracing.workspace = true

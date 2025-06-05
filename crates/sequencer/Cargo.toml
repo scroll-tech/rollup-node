@@ -26,6 +26,8 @@ rollup-node-primitives.workspace = true
 
 # misc
 futures.workspace = true
+metrics.workspace = true
+metrics-derive.workspace = true
 thiserror.workspace = true
 tokio.workspace = true
 tracing.workspace = true
