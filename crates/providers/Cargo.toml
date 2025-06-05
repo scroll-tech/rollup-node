@@ -11,7 +11,6 @@ workspace = true
 
 [dependencies]
 # alloy
-alloy-chains.workspace = true
 alloy-eips = { workspace = true, features = ["kzg"] }
 alloy-primitives.workspace = true
 alloy-provider.workspace = true
@@ -21,7 +20,6 @@ alloy-serde = { version = "0.15.5", default-features = false }
 alloy-transport.workspace = true
 
 # scroll
-reth-scroll-chainspec.workspace = true
 scroll-alloy-consensus.workspace = true
 scroll-alloy-network.workspace = true
 scroll-alloy-rpc-types-engine.workspace = true
@@ -43,11 +41,12 @@ tracing.workspace = true
 [dev-dependencies]
 alloy-rpc-client.workspace = true
 eyre.workspace = true
-reth-payload-primitives.workspace = true
+futures.workspace = true
+reth-scroll-chainspec.workspace = true
 reth-scroll-node.workspace = true
-reth-e2e-test-utils.workspace = true
+rollup-node = { workspace = true, features = ["test-utils"] }
+rollup-node-manager.workspace = true
 scroll-db = { workspace = true, features = ["test-utils"] }
-scroll-network.workspace = true
 tokio = { workspace = true, features = ["macros"] }
 
 [features]

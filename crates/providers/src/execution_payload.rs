@@ -44,39 +44,52 @@ impl<P: Provider<Scroll>> ExecutionPayloadProvider for P {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use alloy_primitives::B256;
+    use std::sync::Arc;
+
     use alloy_provider::ProviderBuilder;
     use alloy_rpc_client::RpcClient;
-    use reth_e2e_test_utils::setup_engine;
-    use reth_payload_primitives::PayloadBuilderAttributes;
-    use reth_scroll_node::{ScrollNode, ScrollPayloadBuilderAttributes};
-    use scroll_alloy_rpc_types_engine::ScrollPayloadAttributes;
-    use scroll_network::SCROLL_MAINNET;
+    use futures::StreamExt;
+    use reth_scroll_chainspec::SCROLL_DEV;
+    use rollup_node::test_utils::{
+        default_sequencer_test_scroll_rollup_node_config, generate_tx, setup_engine,
+    };
+    use rollup_node_manager::RollupManagerEvent;
+    use tokio::sync::Mutex;
 
     #[tokio::test]
     async fn test_should_get_execution_payload() -> eyre::Result<()> {
-        let chain_spec = (*SCROLL_MAINNET).clone();
+        // get a test node.
+        let chain_spec = (*SCROLL_DEV).clone();
+        let node_config = default_sequencer_test_scroll_rollup_node_config();
+        let (mut nodes, _tasks, wallet) =
+            setup_engine(node_config.clone(), 1, chain_spec.clone(), false).await.unwrap();
 
-        // Get a test node.
-        let (mut node, _tasks, _wallet) =
-            setup_engine::<ScrollNode>(1, chain_spec, false, scroll_payload_attributes).await?;
-        let node = node.pop().unwrap();
+        let sequencer = nodes.pop().unwrap();
+        let sequencer_rnm_handle = sequencer.inner.add_ons_handle.rollup_manager_handle.clone();
+        let mut sequencer_events = sequencer_rnm_handle.get_event_listener().await.unwrap();
 
-        // Get a provider to the node.
-        let url = node.rpc_url();
+        // inject a transaction into the pool of the node.
+        let tx = generate_tx(Arc::new(Mutex::new(wallet))).await;
+        sequencer.rpc.inject_tx(tx).await.unwrap();
+
+        // wait for the sequencer to build a block with the transaction.
+        let block_number = loop {
+            if let Some(RollupManagerEvent::BlockSequenced(block)) = sequencer_events.next().await {
+                if block.body.transactions.len() > 0 {
+                    break block.header.number;
+                }
+            }
+        };
+
+        // get a provider to the node.
+        let url = sequencer.rpc_url();
         let client = RpcClient::new_http(url);
         let provider = ProviderBuilder::<_, _, Scroll>::default().connect_client(client);
 
-        // Fetch the execution payload for the first block.
-        let payload = provider.execution_payload_for_block(0.into()).await?;
-        assert!(payload.is_some());
+        // fetch the execution payload for the first block.
+        let payload = provider.execution_payload_for_block(block_number.into()).await?.unwrap();
+        assert!(!payload.as_v1().transactions.is_empty());
 
         Ok(())
-    }
-
-    /// Helper function to create a new eth payload attributes
-    fn scroll_payload_attributes(_timestamp: u64) -> ScrollPayloadBuilderAttributes {
-        let attributes = ScrollPayloadAttributes::default();
-        ScrollPayloadBuilderAttributes::try_new(B256::ZERO, attributes, 0).unwrap()
     }
 }
