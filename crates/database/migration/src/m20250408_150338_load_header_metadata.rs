@@ -38,8 +38,16 @@ impl<MI: MigrationInfo + Send + Sync> MigrationTrait for Migration<MI> {
                 .collect();
 
             let db = manager.get_connection();
-            // we ignore the `Failed to find inserted item` error.
-            let _ = Entity::insert_many(records).exec(db).await;
+
+            // batch the insertion to avoid `too many SQL variables` error.
+            const MAX_BATCH_SIZE: usize = 3000;
+            let mut cursor = 0;
+            while cursor < records.len() {
+                let start = cursor;
+                let end = (start + MAX_BATCH_SIZE).min(records.len());
+                Entity::insert_many(records[start..end].to_vec()).exec(db).await?;
+                cursor = end;
+            }
         }
 
         Ok(())

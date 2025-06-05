@@ -12,8 +12,10 @@ indicatif = "0.17.11"
 reqwest.workspace = true
 reqwest-retry = "0.7.0"
 reqwest-middleware = "0.4.2"
+reth-chainspec.workspace = true
 sea-orm = { workspace = true, features = ["sqlx-sqlite", "runtime-tokio-native-tls", "macros"] }
 sha2 = "0.10.9"
+tracing.workspace = true
 
 [dependencies.sea-orm-migration]
 version = "1.1.0"

@@ -10208,9 +10208,11 @@ dependencies = [
  "reqwest",
  "reqwest-middleware",
  "reqwest-retry",
+ "reth-chainspec",
  "sea-orm",
  "sea-orm-migration",
  "sha2 0.10.9",
+ "tracing",
 ]
 
 [[package]]
