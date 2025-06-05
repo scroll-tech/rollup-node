@@ -29,7 +29,7 @@ use scroll_alloy_hardforks::ScrollHardforks;
 use scroll_alloy_provider::ScrollAuthApiEngineClient;
 use scroll_db::{Database, DatabaseConnectionProvider};
 use scroll_engine::{EngineDriver, ForkchoiceState};
-use scroll_migration::{MigratorTrait, ScrollMainnetMigrationInfo, ScrollSepoliaMigrationInfo};
+use scroll_migration::traits::ScrollMigrator;
 use scroll_network::ScrollNetworkManager;
 use scroll_wire::{ScrollWireConfig, ScrollWireProtocolHandler};
 use std::{sync::Arc, time::Duration};
@@ -139,22 +139,7 @@ impl RollupManagerAddOn {
         let db = Database::new(&database_path).await?;
 
         // Run the database migrations
-        match named_chain {
-            NamedChain::Scroll => scroll_migration::Migrator::<ScrollMainnetMigrationInfo>::up(
-                db.get_connection(),
-                None,
-            ),
-            NamedChain::ScrollSepolia => {
-                scroll_migration::Migrator::<ScrollSepoliaMigrationInfo>::up(
-                    db.get_connection(),
-                    None,
-                )
-            }
-            NamedChain::Dev => scroll_migration::Migrator::<()>::up(db.get_connection(), None),
-            _ => panic!("expected Scroll Mainnet, Sepolia or Dev"),
-        }
-        .await
-        .expect("failed to download migrate");
+        named_chain.migrate(db.get_connection()).await.expect("failed to perform migration");
 
         // Wrap the database in an Arc
         let db = Arc::new(db);

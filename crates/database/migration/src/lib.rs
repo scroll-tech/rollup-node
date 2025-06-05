@@ -22,3 +22,34 @@ impl<MI: MigrationInfo + Send + Sync + 'static> MigratorTrait for Migrator<MI> {
         ]
     }
 }
+
+pub mod traits {
+    use crate::{ScrollMainnetMigrationInfo, ScrollSepoliaMigrationInfo};
+    use reth_chainspec::NamedChain;
+    use sea_orm::{prelude::async_trait::async_trait, DatabaseConnection, DbErr};
+    use sea_orm_migration::MigratorTrait;
+
+    /// An instance of the trait can perform the migration for Scroll.
+    #[async_trait]
+    pub trait ScrollMigrator {
+        /// Migrates the tables.
+        async fn migrate(&self, conn: &DatabaseConnection) -> Result<(), DbErr>;
+    }
+
+    #[async_trait]
+    impl ScrollMigrator for NamedChain {
+        async fn migrate(&self, conn: &DatabaseConnection) -> Result<(), DbErr> {
+            match self {
+                NamedChain::Scroll => {
+                    Ok(super::Migrator::<ScrollMainnetMigrationInfo>::up(conn, None))
+                }
+                NamedChain::ScrollSepolia => {
+                    Ok(super::Migrator::<ScrollSepoliaMigrationInfo>::up(conn, None))
+                }
+                NamedChain::Dev => Ok(super::Migrator::<()>::up(conn, None)),
+                _ => Err(DbErr::Custom("expected Scroll Mainnet, Sepolia or Dev".into())),
+            }?
+            .await
+        }
+    }
+}
