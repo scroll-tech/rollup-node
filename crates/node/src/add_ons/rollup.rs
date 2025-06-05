@@ -1,6 +1,6 @@
 use crate::args::ScrollRollupNodeConfig;
 
-use reth_chainspec::{EthChainSpec, NamedChain};
+use reth_chainspec::NamedChain;
 use reth_network::NetworkProtocols;
 use reth_network_api::FullNetwork;
 use reth_node_api::{FullNodeTypes, NodeTypes};
@@ -54,7 +54,6 @@ impl RollupManagerAddOn {
             .config
             .build(
                 ctx.node.network().clone(),
-                ctx.config.chain.chain().named().expect("chain is named"),
                 rpc.rpc_server_handles,
                 ctx.config.chain.clone(),
                 ctx.config.datadir().db(),

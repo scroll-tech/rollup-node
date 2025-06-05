@@ -278,7 +278,6 @@ async fn graceful_shutdown_consolidates_most_recent_batch_on_startup() -> eyre::
         .clone()
         .build(
             node.inner.network.clone(),
-            node.inner.config.chain.chain().named().expect("chain is named"),
             node.inner.add_ons_handle.rpc_handle.rpc_server_handles.clone(),
             chain_spec.clone(),
             path.clone(),
@@ -386,7 +385,6 @@ async fn graceful_shutdown_consolidates_most_recent_batch_on_startup() -> eyre::
         .clone()
         .build(
             node.inner.network.clone(),
-            node.inner.config.chain.chain().named().expect("chain is named"),
             node.inner.add_ons_handle.rpc_handle.rpc_server_handles.clone(),
             chain_spec,
             path,
@@ -422,7 +420,8 @@ async fn graceful_shutdown_consolidates_most_recent_batch_on_startup() -> eyre::
         "Consolidated block number does not match expected number"
     );
 
-    // Assert that the safe and head block hashes are still the same as before the shutdown.
+    // Assert that the safe block hash has been reverted to the first consolidated block hash
+    // and the head block hash is the same as the hash of the last consolidated block.
     let rpc = node.rpc.inner.eth_api();
     let safe_block_hash =
         rpc.block_by_number(BlockNumberOrTag::Safe, false).await?.expect("safe block must exist");

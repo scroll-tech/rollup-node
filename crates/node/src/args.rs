@@ -7,7 +7,7 @@ use alloy_provider::{Provider, ProviderBuilder};
 use alloy_rpc_client::RpcClient;
 use alloy_signer_local::PrivateKeySigner;
 use alloy_transport::layers::RetryBackoffLayer;
-use reth_chainspec::{EthChainSpec, NamedChain};
+use reth_chainspec::EthChainSpec;
 use reth_network::{protocol::IntoRlpxSubProtocol, NetworkProtocols};
 use reth_network_api::FullNetwork;
 use reth_node_builder::rpc::RethRpcServerHandles;
@@ -85,7 +85,6 @@ impl ScrollRollupNodeConfig {
     >(
         self,
         network: N,
-        named_chain: NamedChain,
         rpc_server_handles: RethRpcServerHandles,
         chain_spec: CS,
         db_path: PathBuf,
@@ -108,7 +107,9 @@ impl ScrollRollupNodeConfig {
         let scroll_network_manager = ScrollNetworkManager::from_parts(network.clone(), events);
 
         // Get the rollup node config.
-        let node_config = Arc::new(NodeConfig::from_named_chain(named_chain));
+        let node_config = Arc::new(NodeConfig::from_named_chain(
+            chain_spec.chain().named().expect("expected named chain"),
+        ));
 
         // Create the engine api client.
         let engine_api = ScrollAuthApiEngineClient::new(rpc_server_handles.auth.http_client());

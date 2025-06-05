@@ -266,8 +266,7 @@ pub trait DatabaseOperations: DatabaseConnectionProvider {
     /// latest block for the previous batch (i.e., the batch before the latest safe block) and
     /// returns the block info.
     async fn get_startup_safe_block(&self) -> Result<Option<BlockInfo>, DatabaseError> {
-        tracing::trace!(target: "scroll::db", "Fetching startup forkchoice state from database.");
-        // let head = self.get_latest_l2_block().await?;
+        tracing::trace!(target: "scroll::db", "Fetching startup safe block from database.");
         let safe = if let Some(batch_info) = self
             .get_latest_safe_l2_block()
             .await?
@@ -284,17 +283,6 @@ pub trait DatabaseOperations: DatabaseConnectionProvider {
         } else {
             None
         };
-        // let finalized =
-        //     if let Some(hash) = self.get_finalized_batch_hash_at_height(u64::MAX).await? {
-        //         models::l2_block::Entity::find()
-        //             .filter(models::l2_block::Column::BatchHash.eq(hash.to_vec()))
-        //             .order_by_desc(models::l2_block::Column::BlockNumber)
-        //             .one(self.get_connection())
-        //             .await?
-        //             .map(|x| x.block_info())
-        //     } else {
-        //         None
-        //     };
 
         Ok(safe)
     }
