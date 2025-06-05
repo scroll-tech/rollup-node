@@ -36,6 +36,8 @@ pub struct BatchCommitData {
     pub calldata: Arc<Bytes>,
     /// The optional blob hash for the commit.
     pub blob_versioned_hash: Option<B256>,
+    /// The block number at which the batch finalized event was emitted.
+    pub finalized_block_number: Option<u64>,
 }
 
 impl From<BatchCommitData> for BatchInfo {
@@ -64,6 +66,7 @@ mod arbitrary_impl {
                 block_timestamp,
                 calldata: Arc::new(bytes),
                 blob_versioned_hash: blob_hash,
+                finalized_block_number: None,
             })
         }
     }

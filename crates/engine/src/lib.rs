@@ -16,6 +16,7 @@ pub use fcs::ForkchoiceState;
 mod fcs;
 
 mod future;
+pub use future::ConsolidationOutcome;
 
 mod payload;
 

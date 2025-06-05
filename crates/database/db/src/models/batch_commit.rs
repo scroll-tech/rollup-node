@@ -65,6 +65,7 @@ impl From<Model> for BatchCommitData {
             blob_versioned_hash: value
                 .blob_hash
                 .map(|b| b.as_slice().try_into().expect("data persisted in database is valid")),
+            finalized_block_number: value.finalized_block_number.map(|b| b as u64),
         }
     }
 }

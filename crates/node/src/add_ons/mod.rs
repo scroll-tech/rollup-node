@@ -29,6 +29,7 @@ mod handle;
 pub use handle::ScrollAddOnsHandle;
 
 mod rollup;
+pub use rollup::IsDevChain;
 use rollup::RollupManagerAddOn;
 
 /// Add-ons for the Scroll follower node.

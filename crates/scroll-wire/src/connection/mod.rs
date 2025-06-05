@@ -67,7 +67,8 @@ impl Stream for ScrollWireConnection {
                 return Poll::Ready(Some(msg.encoded()));
             }
 
-            // We receive a message from the peer.
+            // We receive a message from the peer, if the message is `None` then we shutdown the
+            // connection.
             let Some(msg) = ready!(this.conn.poll_next_unpin(cx)) else {
                 return Poll::Ready(None);
             };

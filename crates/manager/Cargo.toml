@@ -34,6 +34,7 @@ reth-chainspec.workspace = true
 reth-primitives-traits.workspace = true
 reth-scroll-primitives.workspace = true
 reth-scroll-node.workspace = true
+reth-tasks.workspace = true
 
 # scroll
 scroll-db.workspace = true

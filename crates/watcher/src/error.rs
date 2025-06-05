@@ -1,7 +1,10 @@
+use crate::L1Notification;
 use alloy_json_rpc::RpcError;
 use alloy_primitives::B256;
 use alloy_transport::TransportErrorKind;
 use rollup_node_providers::L1ProviderError;
+use std::sync::Arc;
+use tokio::sync::mpsc::error::SendError;
 
 /// A [`Result`] that uses [`L1WatcherError`] as the error type.
 pub(crate) type L1WatcherResult<T> = Result<T, L1WatcherError>;
@@ -21,6 +24,9 @@ pub enum L1WatcherError {
     /// An error related to logs in the L1 watcher.
     #[error(transparent)]
     Logs(#[from] FilterLogError),
+    /// The L1 nofication channel was closed.
+    #[error("l1 notification channel closed")]
+    SendError(#[from] SendError<Arc<L1Notification>>),
 }
 
 /// An error occurred during a request to the Ethereum JSON RPC provider.

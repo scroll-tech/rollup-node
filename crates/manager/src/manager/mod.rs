@@ -10,6 +10,7 @@ use reth_chainspec::EthChainSpec;
 use reth_network_api::{block::NewBlockWithPeer as RethNewBlockWithPeer, FullNetwork};
 use reth_scroll_node::ScrollNetworkPrimitives;
 use reth_scroll_primitives::ScrollBlock;
+use reth_tasks::shutdown::GracefulShutdown;
 use reth_tokio_util::{EventSender, EventStream};
 use rollup_node_indexer::{Indexer, IndexerEvent};
 use rollup_node_sequencer::Sequencer;
@@ -18,13 +19,13 @@ use rollup_node_watcher::L1Notification;
 use scroll_alloy_hardforks::ScrollHardforks;
 use scroll_alloy_network::Scroll;
 use scroll_alloy_provider::ScrollEngineApi;
+use scroll_db::{DatabaseError, DatabaseOperations};
 use scroll_engine::{EngineDriver, EngineDriverEvent};
 use scroll_network::{
     BlockImportOutcome, NetworkManagerEvent, NewBlockWithPeer, ScrollNetworkManager,
 };
 use std::{
-    fmt,
-    fmt::{Debug, Formatter},
+    fmt::{self, Debug, Formatter},
     future::Future,
     pin::Pin,
     sync::Arc,
@@ -34,6 +35,7 @@ use tokio::{
     sync::mpsc::{self, Receiver},
     time::Interval,
 };
+
 use tokio_stream::wrappers::ReceiverStream;
 use tracing::{error, trace, warn};
 
@@ -162,12 +164,12 @@ where
         sequencer: Option<Sequencer<L1MP>>,
         signer: Option<SignerHandle>,
         block_time: Option<u64>,
-    ) -> RollupManagerHandle {
+    ) -> (Self, RollupManagerHandle) {
         let (handle_tx, handle_rx) = mpsc::channel(EVENT_CHANNEL_SIZE);
         let indexer = Indexer::new(database.clone(), chain_spec.clone());
         let derivation_pipeline =
             l1_provider.map(|provider| DerivationPipeline::new(provider, database));
-        tokio::spawn(Self {
+        let rnm = Self {
             handle_rx,
             chain_spec,
             network,
@@ -181,8 +183,8 @@ where
             sequencer,
             signer,
             block_building_trigger: block_time.map(delayed_interval),
-        });
-        RollupManagerHandle::new(handle_tx)
+        };
+        (rnm, RollupManagerHandle::new(handle_tx))
     }
 
     /// Returns a new event listener for the rollup node manager.
@@ -310,11 +312,16 @@ where
 
                 self.indexer.handle_block((&payload).into(), None);
             }
-            EngineDriverEvent::L1BlockConsolidated((block_info, batch_info)) => {
-                self.indexer.handle_block(block_info.clone(), Some(batch_info));
+            EngineDriverEvent::L1BlockConsolidated(consolidation_outcome) => {
+                self.indexer.handle_block(
+                    consolidation_outcome.block_info().clone(),
+                    Some(*consolidation_outcome.batch_info()),
+                );
 
                 if let Some(event_sender) = self.event_sender.as_ref() {
-                    event_sender.notify(RollupManagerEvent::L1DerivedBlockConsolidated(block_info));
+                    event_sender.notify(RollupManagerEvent::L1DerivedBlockConsolidated(
+                        consolidation_outcome,
+                    ));
                 }
             }
         }
@@ -366,6 +373,20 @@ where
     /// Returns the current status of the [`RollupNodeManager`].
     const fn status(&self) -> RollupManagerStatus {
         RollupManagerStatus { syncing: self.engine.is_syncing() }
+    }
+
+    /// Drives the [`RollupNodeManager`] future until a [`GracefulShutdown`] signal is received.
+    pub async fn run_until_graceful_shutdown(mut self, shutdown: GracefulShutdown) {
+        let mut graceful_guard = None;
+
+        tokio::select! {
+            _ = &mut self => {},
+            guard = shutdown => {
+                graceful_guard = Some(guard);
+            },
+        }
+
+        drop(graceful_guard);
     }
 }
 
@@ -510,4 +531,19 @@ fn delayed_interval(interval: u64) -> Interval {
     let mut interval = tokio::time::interval(tokio::time::Duration::from_millis(interval));
     interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
     interval
+}
+
+/// Computes the starting block for the watcher from the database.
+pub async fn compute_watcher_start_block_from_database(
+    database: &Arc<Database>,
+) -> Result<Option<u64>, DatabaseError> {
+    if let Some((_l2_block_info, batch_info)) = database.get_latest_safe_l2_block().await? {
+        let batch_commit = database
+            .get_batch_by_index(batch_info.index)
+            .await?
+            .expect("batch commit must be present");
+        Ok(Some(batch_commit.block_number))
+    } else {
+        Ok(None)
+    }
 }

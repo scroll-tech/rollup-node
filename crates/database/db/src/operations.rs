@@ -20,8 +20,16 @@ pub trait DatabaseOperations: DatabaseConnectionProvider {
     async fn insert_batch(&self, batch_commit: BatchCommitData) -> Result<(), DatabaseError> {
         tracing::trace!(target: "scroll::db", batch_hash = ?batch_commit.hash, batch_index = batch_commit.index, "Inserting batch input into database.");
         let batch_commit: models::batch_commit::ActiveModel = batch_commit.into();
-        batch_commit.insert(self.get_connection()).await?;
-        Ok(())
+        match models::batch_commit::Entity::insert(batch_commit)
+            .on_conflict(
+                OnConflict::column(models::batch_commit::Column::Index).do_nothing().to_owned(),
+            )
+            .exec(self.get_connection())
+            .await
+        {
+            Err(sea_orm::DbErr::RecordNotInserted) => Ok(()),
+            x => Ok(x.map(|_| ())?),
+        }
     }
 
     /// Finalize a [`BatchCommitData`] with the provided `batch_hash` in the database and set the
@@ -114,7 +122,12 @@ pub trait DatabaseOperations: DatabaseConnectionProvider {
     async fn insert_l1_message(&self, l1_message: L1MessageEnvelope) -> Result<(), DatabaseError> {
         tracing::trace!(target: "scroll::db", queue_index = l1_message.transaction.queue_index, "Inserting L1 message into database.");
         let l1_message: models::l1_message::ActiveModel = l1_message.into();
-        l1_message.insert(self.get_connection()).await?;
+        models::l1_message::Entity::insert(l1_message)
+            .on_conflict(
+                OnConflict::column(models::l1_message::Column::QueueIndex).do_nothing().to_owned(),
+            )
+            .exec(self.get_connection())
+            .await?;
         Ok(())
     }
 
@@ -217,14 +230,24 @@ pub trait DatabaseOperations: DatabaseConnectionProvider {
     }
 
     /// Get the latest safe L2 [`BlockInfo`] from the database.
-    async fn get_latest_safe_l2_block(&self) -> Result<Option<BlockInfo>, DatabaseError> {
+    async fn get_latest_safe_l2_block(
+        &self,
+    ) -> Result<Option<(BlockInfo, BatchInfo)>, DatabaseError> {
         tracing::trace!(target: "scroll::db", "Fetching latest safe L2 block from database.");
         Ok(models::l2_block::Entity::find()
             .filter(models::l2_block::Column::BatchIndex.is_not_null())
             .order_by_desc(models::l2_block::Column::BlockNumber)
             .one(self.get_connection())
             .await
-            .map(|x| x.map(|x| x.block_info()))?)
+            .map(|x| {
+                x.map(|x| {
+                    (
+                        x.block_info(),
+                        x.batch_info()
+                            .expect("Batch info must be present due to database query arguments"),
+                    )
+                })
+            })?)
     }
 
     /// Get the latest L2 [`BlockInfo`] from the database.
@@ -235,6 +258,33 @@ pub trait DatabaseOperations: DatabaseConnectionProvider {
             .one(self.get_connection())
             .await
             .map(|x| x.map(|x| x.block_info()))?)
+    }
+
+    /// Get the safe block for startup from the database.
+    ///
+    /// This method fetches the batch info for the latest safe L2 block, it then retrieves the
+    /// latest block for the previous batch (i.e., the batch before the latest safe block) and
+    /// returns the block info.
+    async fn get_startup_safe_block(&self) -> Result<Option<BlockInfo>, DatabaseError> {
+        tracing::trace!(target: "scroll::db", "Fetching startup safe block from database.");
+        let safe = if let Some(batch_info) = self
+            .get_latest_safe_l2_block()
+            .await?
+            .map(|(_, batch_info)| batch_info)
+            .filter(|b| b.index > 1)
+        {
+            let batch = self
+                .get_batch_by_index(batch_info.index - 1)
+                .await?
+                .expect("Batch info must be present due to database query arguments");
+            let block = self.get_highest_block_for_batch(batch.hash).await?;
+            tracing::info!(target:"test", "{:?}", block);
+            block
+        } else {
+            None
+        };
+
+        Ok(safe)
     }
 
     /// Delete all L2 blocks with a block number greater than the provided block number.

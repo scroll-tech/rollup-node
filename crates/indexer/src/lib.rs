@@ -154,7 +154,7 @@ impl<ChainSpec: ScrollHardforks + EthChainSpec + Send + Sync + 'static> Indexer<
         // check if we need to reorg the L2 safe block
         let l2_safe_block_info = if batches_removed > 0 {
             if let Some(x) = txn.get_latest_safe_l2_block().await? {
-                Some(x)
+                Some(x.0)
             } else {
                 Some(BlockInfo::new(0, chain_spec.genesis_hash()))
             }

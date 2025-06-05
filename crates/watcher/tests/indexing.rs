@@ -16,8 +16,6 @@ use tokio::select;
 
 #[tokio::test]
 async fn test_should_not_index_latest_block_multiple_times() -> eyre::Result<()> {
-    reth_tracing::init_test_tracing();
-
     const CHAIN_LEN: usize = 200;
     const HALF_CHAIN_LEN: usize = 100;
 
