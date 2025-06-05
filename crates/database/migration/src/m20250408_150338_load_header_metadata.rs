@@ -128,7 +128,7 @@ async fn download(url: &str) -> eyre::Result<Vec<u8>> {
             let start = index * CHUNK_SIZE;
             let end = (start + CHUNK_SIZE - 1).min(total_size);
             let client = &client;
-            tasks.push(async move { (index, download_chunk(&client, url, start, end).await) });
+            tasks.push(async move { (index, download_chunk(client, url, start, end).await) });
             index += 1;
         }
         // polling chunks.
