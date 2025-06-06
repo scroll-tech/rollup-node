@@ -123,8 +123,10 @@ To run a sequencer node you should build the binary in release mode using the in
 Then, you can run the sequencer node with the following command:
 
 ```sh
-./target/release/rollup-node node --chain dev -d --scroll-sequencer-enabled --http --http.api admin,debug,eth,net,trace,txpool,web3,rpc,reth,ots,flashbots,miner,mev
+./target/release/rollup-node node --chain dev --sequencer.enabled --signer.key-file /path/to/your/private.key --http --http.api admin,debug,eth,net,trace,txpool,web3,rpc,reth,ots,flashbots,miner,mev
 ```
+
+**Note**: When running a sequencer, a signer key file is required unless the `--test` flag is specified. Use the `--signer.key-file` option to specify the path to your private key file. Keep your private key file secure and never commit it to version control.
 
 This will start a dev node in sequencer mode with all rpc apis enabled. You can adjust the `--http.api` flag to include or exclude specific APIs as needed.
 
@@ -147,6 +149,8 @@ A list of sequencer specific configuration options can be seen below:
           The max L1 messages per block for the sequencer [default: 4]
       --fee-recipient <FEE_RECIPIENT>
           The fee recipient for the sequencer [default: 0x5300000000000000000000000000000000000005]
+      --signer.key-file <FILE_PATH>
+          Path to the signer's private key file (required when sequencer is enabled)
 ```
 
 ## Contributing

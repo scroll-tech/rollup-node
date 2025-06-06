@@ -32,7 +32,7 @@ use scroll_engine::{EngineDriver, ForkchoiceState};
 use scroll_migration::MigratorTrait;
 use scroll_network::ScrollNetworkManager;
 use scroll_wire::{ScrollWireConfig, ScrollWireProtocolHandler};
-use std::{sync::Arc, time::Duration};
+use std::{fs, sync::Arc, time::Duration};
 use tokio::sync::mpsc::Sender;
 
 /// Implementing the trait allows the type to return whether it is configured for dev chain.
@@ -70,6 +70,11 @@ impl RollupManagerAddOn {
         <<N as FullNodeTypes>::Types as NodeTypes>::ChainSpec: ScrollHardforks + IsDevChain,
         N::Network: NetworkProtocols + FullNetwork<Primitives = ScrollNetworkPrimitives>,
     {
+        // Validate configuration before starting any components
+        self.config
+            .validate()
+            .map_err(|e| eyre::eyre!("Configuration validation failed: {}", e))?;
+
         // Instantiate the network manager
         let (scroll_wire_handler, events) =
             ScrollWireProtocolHandler::new(ScrollWireConfig::new(true));
@@ -212,7 +217,20 @@ impl RollupManagerAddOn {
             .then_some(ctx.node.network().eth_wire_block_listener().await?);
 
         // Instantiate the signer
-        let signer = self.config.test.then_some(Signer::spawn(PrivateKeySigner::random()));
+        let signer = if self.config.test {
+            Some(Signer::spawn(PrivateKeySigner::random()))
+        } else if let Some(key_file_path) = &self.config.signer_args.key_file {
+            let key_bytes = fs::read(key_file_path).map_err(|e| {
+                eyre::eyre!("Failed to read signer key file {}: {}", key_file_path.display(), e)
+            })?;
+
+            let private_key_signer = PrivateKeySigner::from_slice(&key_bytes)
+                .map_err(|e| eyre::eyre!("Failed to create signer from key file: {}", e))?;
+
+            Some(Signer::spawn(private_key_signer))
+        } else {
+            None
+        };
 
         // Spawn the rollup node manager
         let rnm = RollupNodeManager::new(
@@ -229,5 +247,56 @@ impl RollupManagerAddOn {
             block_time,
         );
         Ok((rnm, l1_notification_tx))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use alloy_signer_local::PrivateKeySigner;
+    use std::io::Write;
+    use tempfile::NamedTempFile;
+
+    #[test]
+    fn test_signer_initialization_with_valid_key_file() {
+        // Test valid key file
+        let mut temp_file = NamedTempFile::new().unwrap();
+        let private_key = [1u8; 32];
+        temp_file.write_all(&private_key).unwrap();
+        temp_file.flush().unwrap();
+
+        let key_bytes = std::fs::read(temp_file.path()).unwrap();
+        let result = PrivateKeySigner::from_slice(&key_bytes);
+
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_signer_initialization_with_invalid_key_file() {
+        // Test invalid key file
+        let mut temp_file = NamedTempFile::new().unwrap();
+        let invalid_key = b"invalid key data";
+        temp_file.write_all(invalid_key).unwrap();
+        temp_file.flush().unwrap();
+
+        let key_bytes = std::fs::read(temp_file.path()).unwrap();
+        let result = PrivateKeySigner::from_slice(&key_bytes);
+
+        assert!(result.is_err());
+
+        let error = result.unwrap_err();
+        assert!(error.to_string().contains("signature error"));
+    }
+
+    #[test]
+    fn test_signer_initialization_with_nonexistent_file() {
+        // Test nonexistent file
+        let nonexistent_path = "/nonexistent/path/to/key";
+        let result = std::fs::read(nonexistent_path);
+
+        assert!(result.is_err());
+
+        let error = result.unwrap_err();
+        assert_eq!(error.kind(), std::io::ErrorKind::NotFound);
+        assert!(error.to_string().contains("No such file or directory (os error 2)"));
     }
 }
