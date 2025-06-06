@@ -93,6 +93,7 @@ reth-tracing.workspace = true
 rollup-node = { workspace = true, features = ["test-utils"] }
 scroll-alloy-rpc-types-engine.workspace = true
 serde_json = { version = "1.0.94", default-features = false, features = ["alloc"] }
+tempfile = "3.0"
 
 [features]
 test-utils = [
