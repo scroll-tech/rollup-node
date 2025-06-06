@@ -1,6 +1,5 @@
 use crate::L1ProviderError;
 
-use alloy_eips::BlockId;
 use scroll_alloy_rpc_types_engine::BlockDataHint;
 use scroll_db::{DatabaseConnectionProvider, DatabaseError, DatabaseOperations};
 
@@ -10,8 +9,8 @@ pub trait BlockDataProvider {
     /// The error type for the provider.
     type Error: Into<L1ProviderError>;
 
-    /// Returns the block data for the provided [`BlockId`].
-    async fn block_data(&self, block_id: BlockId) -> Result<Option<BlockDataHint>, Self::Error>;
+    /// Returns the block data for the provided block number.
+    async fn block_data(&self, block_number: u64) -> Result<Option<BlockDataHint>, Self::Error>;
 }
 
 #[async_trait::async_trait]
@@ -21,7 +20,7 @@ where
 {
     type Error = DatabaseError;
 
-    async fn block_data(&self, block_id: BlockId) -> Result<Option<BlockDataHint>, Self::Error> {
-        self.get_l2_block_data_hint(block_id).await
+    async fn block_data(&self, block_number: u64) -> Result<Option<BlockDataHint>, Self::Error> {
+        self.get_l2_block_data_hint(block_number).await
     }
 }
