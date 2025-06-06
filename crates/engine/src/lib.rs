@@ -17,6 +17,9 @@ mod fcs;
 
 mod future;
 
+pub use metrics::EngineDriverMetrics;
+mod metrics;
+
 mod payload;
 
 #[cfg(any(test, feature = "test-utils"))]
