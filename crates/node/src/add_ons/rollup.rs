@@ -3,6 +3,7 @@ use crate::{
     constants::PROVIDER_BLOB_CACHE_SIZE,
 };
 
+use alloy_primitives::hex;
 use alloy_provider::ProviderBuilder;
 use alloy_rpc_client::RpcClient;
 use alloy_signer_local::PrivateKeySigner;
@@ -219,8 +220,20 @@ impl RollupManagerAddOn {
         let signer = if self.config.test {
             Some(Signer::spawn(PrivateKeySigner::random()))
         } else if let Some(key_file_path) = &self.config.signer_args.key_file {
-            let key_bytes = fs::read(key_file_path).map_err(|e| {
-                eyre::eyre!("Failed to read signer key file {}: {}", key_file_path.display(), e)
+            let key_content = fs::read_to_string(key_file_path)
+                .map_err(|e| {
+                    eyre::eyre!("Failed to read signer key file {}: {}", key_file_path.display(), e)
+                })?
+                .trim()
+                .to_string();
+
+            let hex_str = key_content.strip_prefix("0x").unwrap_or(&key_content);
+            let key_bytes = hex::decode(hex_str).map_err(|e| {
+                eyre::eyre!(
+                    "Failed to decode hex private key from file {}: {}",
+                    key_file_path.display(),
+                    e
+                )
             })?;
 
             let private_key_signer = PrivateKeySigner::from_slice(&key_bytes)
@@ -246,56 +259,5 @@ impl RollupManagerAddOn {
             block_time,
         );
         Ok((rnm, l1_notification_tx))
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use alloy_signer_local::PrivateKeySigner;
-    use std::io::Write;
-    use tempfile::NamedTempFile;
-
-    #[test]
-    fn test_signer_initialization_with_valid_key_file() {
-        // Test valid key file
-        let mut temp_file = NamedTempFile::new().unwrap();
-        let private_key = [1u8; 32];
-        temp_file.write_all(&private_key).unwrap();
-        temp_file.flush().unwrap();
-
-        let key_bytes = std::fs::read(temp_file.path()).unwrap();
-        let result = PrivateKeySigner::from_slice(&key_bytes);
-
-        assert!(result.is_ok());
-    }
-
-    #[test]
-    fn test_signer_initialization_with_invalid_key_file() {
-        // Test invalid key file
-        let mut temp_file = NamedTempFile::new().unwrap();
-        let invalid_key = b"invalid key data";
-        temp_file.write_all(invalid_key).unwrap();
-        temp_file.flush().unwrap();
-
-        let key_bytes = std::fs::read(temp_file.path()).unwrap();
-        let result = PrivateKeySigner::from_slice(&key_bytes);
-
-        assert!(result.is_err());
-
-        let error = result.unwrap_err();
-        assert!(error.to_string().contains("signature error"));
-    }
-
-    #[test]
-    fn test_signer_initialization_with_nonexistent_file() {
-        // Test nonexistent file
-        let nonexistent_path = "/nonexistent/path/to/key";
-        let result = std::fs::read(nonexistent_path);
-
-        assert!(result.is_err());
-
-        let error = result.unwrap_err();
-        assert_eq!(error.kind(), std::io::ErrorKind::NotFound);
-        assert!(error.to_string().contains("No such file or directory (os error 2)"));
     }
 }

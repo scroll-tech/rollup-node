@@ -146,7 +146,7 @@ pub struct SignerArgs {
     #[arg(
         long = "signer.key-file",
         value_name = "FILE_PATH",
-        help = "Path to the signer's private key file (required when sequencer is enabled)"
+        help = "Path to the signer's hex-encoded private key file (optional 0x prefix). Required when sequencer is enabled"
     )]
     pub key_file: Option<PathBuf>,
 }
