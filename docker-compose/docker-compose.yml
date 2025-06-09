@@ -1,6 +1,35 @@
 version: '3'
 
 services:
+  l1-devnet:
+    image: scrolltech/l1-devnet:v0.0.4
+    container_name: l1-devnet
+    entrypoint: ["bash", "-c"]
+    command: >
+      '
+      EXTRA_PARAMS="";
+      if [ "$${FORK_BLOCK_NUMBER}" != "" ]; then
+        EXTRA_PARAMS="--fork-block-number $${FORK_BLOCK_NUMBER}";
+      fi;
+      if [ "$${ENV:-}" = "sepolia" ]; then
+        anvil --fork-url http://l1reth-rpc.sepolia.scroll.tech:8545 --chain-id 11155111 --block-time 12 $EXTRA_PARAMS
+      elif [ "$${ENV:-}" = "mainnet" ]; then
+        anvil --fork-url http://l1geth-rpc.mainnet.scroll.tech:8545/l1 --chain-id 1 --block-time 12 $EXTRA_PARAMS
+      fi
+      '
+    profiles:
+      - shadow-fork
+    environment:
+      - ENV=${ENV}
+      - FORK_BLOCK_NUMBER=${FORK_BLOCK_NUMBER}
+    ports:
+      - "8543:8545"  # JSON-RPC
+      - "8544:8546"  # WebSocket
+    volumes:
+      - ./l1devnet:/l1devnet
+    networks:
+      - scroll-network
+
   rollup-node:
     image: scrolltech/rollup-node:v0.0.1-rc9
     container_name: rollup-node
