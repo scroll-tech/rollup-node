@@ -1,6 +1,5 @@
 use super::{models, DatabaseError};
 use crate::DatabaseConnectionProvider;
-use alloy_eips::{BlockId, BlockNumberOrTag};
 use alloy_primitives::B256;
 use futures::{Stream, StreamExt};
 use rollup_node_primitives::{
@@ -180,20 +179,13 @@ pub trait DatabaseOperations: DatabaseConnectionProvider {
             .map(|res| Ok(res.map(Into::into)?)))
     }
 
-    /// Get the extra data for the provided [`BlockId`].
+    /// Get the extra data for the provided block number.
     async fn get_l2_block_data_hint(
         &self,
-        block_id: BlockId,
+        block_number: u64,
     ) -> Result<Option<BlockDataHint>, DatabaseError> {
-        let filter = match block_id {
-            BlockId::Hash(hash) => models::block_data::Column::Hash.eq(hash.block_hash.to_vec()),
-            BlockId::Number(BlockNumberOrTag::Number(number)) => {
-                models::block_data::Column::Number.eq(number as i64)
-            }
-            x => return Err(DatabaseError::BlockNotFound(x)),
-        };
         Ok(models::block_data::Entity::find()
-            .filter(filter)
+            .filter(models::block_data::Column::Number.eq(block_number as i64))
             .one(self.get_connection())
             .await
             .map(|x| x.map(Into::into))?)

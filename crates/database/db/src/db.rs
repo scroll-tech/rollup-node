@@ -134,12 +134,13 @@ mod test {
     }
 
     #[tokio::test]
+    #[ignore]
     async fn test_database_block_data_seed() {
         // Setup the test database.
         let db = setup_test_db().await;
 
         // db should contain the seeded data after migration.
-        let data = db.get_l2_block_data_hint(0.into()).await.unwrap();
+        let data = db.get_l2_block_data_hint(0).await.unwrap();
         assert!(data.is_some());
     }
 

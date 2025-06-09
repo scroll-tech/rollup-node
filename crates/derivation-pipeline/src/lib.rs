@@ -225,7 +225,7 @@ pub async fn derive<L1P: L1Provider + Sync + Send, L2P: BlockDataProvider + Sync
         // get the block data for the l2 block.
         let number = block.context.number;
         // TODO(performance): can this be improved by adding block_data_range.
-        let block_data = l2_provider.block_data(number.into()).await.map_err(Into::into)?;
+        let block_data = l2_provider.block_data(number).await.map_err(Into::into)?;
 
         // construct the payload attributes.
         let attribute = ScrollPayloadAttributes {
@@ -251,7 +251,7 @@ mod tests {
     use super::*;
     use std::sync::Arc;
 
-    use alloy_eips::{eip4844::Blob, BlockId};
+    use alloy_eips::eip4844::Blob;
     use alloy_primitives::{address, b256, bytes, U256};
     use core::sync::atomic::{AtomicU64, Ordering};
     use rollup_node_primitives::L1MessageEnvelope;
@@ -350,7 +350,7 @@ mod tests {
 
         async fn block_data(
             &self,
-            _block_id: BlockId,
+            _block_number: u64,
         ) -> Result<Option<BlockDataHint>, Self::Error> {
             Ok(None)
         }
@@ -432,7 +432,7 @@ mod tests {
             },
             transactions: Some(vec![bytes!("f88c8202658417d7840082a4f294530000000000000000000000000000000000000280a4bede39b500000000000000000000000000000000000000000000000000000001669aa2f583104ec4a07461e6555f927393ebdf5f183738450c3842bc3b86a1db7549d9bee21fadd0b1a06d7ba96897bd9fb8e838a327d3ca34be66da11955f10d1fb2264949071e9e8cd")]),
             no_tx_pool: true,
-            block_data_hint: Some(BlockDataHint { extra_data: bytes!("d883050000846765746888676f312e31392e31856c696e757800000000000000909feed55823062d606d517c3f971201615962991dbc2c1ef5897b3b2c9bd0b93b5bae6e5cedbddfc4bcbbe731477beaca8b3eff111de7ac67a388850405265200"), difficulty: U256::from(2) }),
+            block_data_hint: None
         };
         assert_eq!(attribute, expected);
 

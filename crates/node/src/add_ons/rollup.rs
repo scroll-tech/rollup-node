@@ -29,7 +29,7 @@ use scroll_alloy_hardforks::ScrollHardforks;
 use scroll_alloy_provider::ScrollAuthApiEngineClient;
 use scroll_db::{Database, DatabaseConnectionProvider};
 use scroll_engine::{EngineDriver, ForkchoiceState};
-use scroll_migration::MigratorTrait;
+use scroll_migration::traits::ScrollMigrator;
 use scroll_network::ScrollNetworkManager;
 use scroll_wire::{ScrollWireConfig, ScrollWireProtocolHandler};
 use std::{fs, sync::Arc, time::Duration};
@@ -81,11 +81,10 @@ impl RollupManagerAddOn {
         ctx.node.network().add_rlpx_sub_protocol(scroll_wire_handler.into_rlpx_sub_protocol());
         let scroll_network_manager =
             ScrollNetworkManager::from_parts(ctx.node.network().clone(), events);
+        let named_chain = ctx.config.chain.chain().named().expect("expected named chain");
 
         // Get the rollup node config.
-        let node_config = Arc::new(NodeConfig::from_named_chain(
-            ctx.config.chain.chain().named().expect("expected named chain"),
-        ));
+        let node_config = Arc::new(NodeConfig::from_named_chain(named_chain));
 
         // Create the engine api client.
         let engine_api = ScrollAuthApiEngineClient::new(rpc.rpc_server_handles.auth.http_client());
@@ -145,7 +144,7 @@ impl RollupManagerAddOn {
         let db = Database::new(&database_path).await?;
 
         // Run the database migrations
-        scroll_migration::Migrator::up(db.get_connection(), None).await?;
+        named_chain.migrate(db.get_connection()).await.expect("failed to perform migration");
 
         // Wrap the database in an Arc
         let db = Arc::new(db);
