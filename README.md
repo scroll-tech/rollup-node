@@ -123,7 +123,7 @@ To run a sequencer node you should build the binary in release mode using the in
 Then, you can run the sequencer node with the following command:
 
 ```sh
-./target/release/rollup-node node --chain dev --sequencer.enabled --signer.key-file /path/to/your/private.key --http --http.api admin,debug,eth,net,trace,txpool,web3,rpc,reth,ots,flashbots,miner,mev
+./target/release/rollup-node node --chain dev -d --sequencer.enabled --signer.key-file /path/to/your/private.key --http --http.api admin,debug,eth,net,trace,txpool,web3,rpc,reth,ots,flashbots,miner,mev
 ```
 
 **Note**: When running a sequencer, a signer key file is required unless the `--test` flag is specified. Use the `--signer.key-file` option to specify the path to your private key file. Keep your private key file secure and never commit it to version control.
