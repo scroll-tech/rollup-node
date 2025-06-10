@@ -150,7 +150,7 @@ A list of sequencer specific configuration options can be seen below:
       --fee-recipient <FEE_RECIPIENT>
           The fee recipient for the sequencer [default: 0x5300000000000000000000000000000000000005]
       --signer.key-file <FILE_PATH>
-          Path to the signer's private key file (required when sequencer is enabled)
+          Path to the signer's hex-encoded private key file (optional 0x prefix). Required when sequencer is enabled
 ```
 
 ## Contributing
