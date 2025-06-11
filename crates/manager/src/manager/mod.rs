@@ -455,6 +455,13 @@ where
             match event {
                 SignerEvent::SignedBlock { block, signature } => {
                     trace!(target: "scroll::node::manager", ?block, ?signature, "Received signed block from signer, announcing to the network");
+                    // Send SignerEvent for test monitoring
+                    if let Some(event_sender) = this.event_sender.as_ref() {
+                        event_sender.notify(RollupManagerEvent::SignerEvent(
+                            SignerEvent::SignedBlock { block: block.clone(), signature },
+                        ));
+                    }
+
                     this.network.handle().announce_block(block, signature);
                 }
             }

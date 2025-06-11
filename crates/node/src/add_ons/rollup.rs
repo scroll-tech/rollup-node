@@ -3,6 +3,7 @@ use crate::{
     constants::PROVIDER_BLOB_CACHE_SIZE,
 };
 
+use alloy_primitives::hex;
 use alloy_provider::ProviderBuilder;
 use alloy_rpc_client::RpcClient;
 use alloy_signer_local::PrivateKeySigner;
@@ -32,7 +33,7 @@ use scroll_engine::{EngineDriver, ForkchoiceState};
 use scroll_migration::traits::ScrollMigrator;
 use scroll_network::ScrollNetworkManager;
 use scroll_wire::{ScrollWireConfig, ScrollWireProtocolHandler};
-use std::{sync::Arc, time::Duration};
+use std::{fs, sync::Arc, time::Duration};
 use tokio::sync::mpsc::Sender;
 
 /// Implementing the trait allows the type to return whether it is configured for dev chain.
@@ -211,7 +212,32 @@ impl RollupManagerAddOn {
             .then_some(ctx.node.network().eth_wire_block_listener().await?);
 
         // Instantiate the signer
-        let signer = self.config.test.then_some(Signer::spawn(PrivateKeySigner::random()));
+        let signer = if self.config.test {
+            Some(Signer::spawn(PrivateKeySigner::random()))
+        } else if let Some(key_file_path) = &self.config.signer_args.key_file {
+            let key_content = fs::read_to_string(key_file_path)
+                .map_err(|e| {
+                    eyre::eyre!("Failed to read signer key file {}: {}", key_file_path.display(), e)
+                })?
+                .trim()
+                .to_string();
+
+            let hex_str = key_content.strip_prefix("0x").unwrap_or(&key_content);
+            let key_bytes = hex::decode(hex_str).map_err(|e| {
+                eyre::eyre!(
+                    "Failed to decode hex private key from file {}: {}",
+                    key_file_path.display(),
+                    e
+                )
+            })?;
+
+            let private_key_signer = PrivateKeySigner::from_slice(&key_bytes)
+                .map_err(|e| eyre::eyre!("Failed to create signer from key file: {}", e))?;
+
+            Some(Signer::spawn(private_key_signer))
+        } else {
+            None
+        };
 
         // Spawn the rollup node manager
         let rnm = RollupNodeManager::new(

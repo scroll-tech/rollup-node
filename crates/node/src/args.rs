@@ -28,6 +28,22 @@ pub struct ScrollRollupNodeConfig {
     /// The network arguments
     #[command(flatten)]
     pub network_args: NetworkArgs,
+    /// The signer arguments
+    #[command(flatten)]
+    pub signer_args: SignerArgs,
+}
+
+impl ScrollRollupNodeConfig {
+    /// Validate that signer key file is provided when sequencer is enabled
+    pub fn validate(&self) -> Result<(), String> {
+        if !self.test &&
+            self.sequencer_args.sequencer_enabled &&
+            self.signer_args.key_file.is_none()
+        {
+            return Err("Signer key file is required when sequencer is enabled".to_string());
+        }
+        Ok(())
+    }
 }
 
 /// The database arguments.
@@ -121,4 +137,90 @@ pub struct SequencerArgs {
         help = "L1 message inclusion mode. Use 'finalized' for finalized messages only, or 'depth:{number}' for block depth confirmation (e.g. 'depth:10')"
     )]
     pub l1_message_inclusion_mode: L1MessageInclusionMode,
+}
+
+/// The arguments for the signer.
+#[derive(Debug, Default, Clone, clap::Args)]
+pub struct SignerArgs {
+    /// Path to the file containing the signer's private key
+    #[arg(
+        long = "signer.key-file",
+        value_name = "FILE_PATH",
+        help = "Path to the signer's hex-encoded private key file (optional 0x prefix). Required when sequencer is enabled"
+    )]
+    pub key_file: Option<PathBuf>,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::path::PathBuf;
+
+    #[test]
+    fn test_validate_sequencer_enabled_without_key_file_fails() {
+        let config = ScrollRollupNodeConfig {
+            test: false,
+            sequencer_args: SequencerArgs { sequencer_enabled: true, ..Default::default() },
+            signer_args: SignerArgs { key_file: None },
+            database_args: DatabaseArgs::default(),
+            engine_driver_args: EngineDriverArgs::default(),
+            l1_provider_args: L1ProviderArgs::default(),
+            beacon_provider_args: BeaconProviderArgs::default(),
+            network_args: NetworkArgs::default(),
+        };
+
+        let result = config.validate();
+        assert!(result.is_err());
+        assert!(result
+            .unwrap_err()
+            .contains("Signer key file is required when sequencer is enabled"));
+    }
+
+    #[test]
+    fn test_validate_sequencer_enabled_with_key_file_succeeds() {
+        let config = ScrollRollupNodeConfig {
+            test: false,
+            sequencer_args: SequencerArgs { sequencer_enabled: true, ..Default::default() },
+            signer_args: SignerArgs { key_file: Some(PathBuf::from("/path/to/key")) },
+            database_args: DatabaseArgs::default(),
+            engine_driver_args: EngineDriverArgs::default(),
+            l1_provider_args: L1ProviderArgs::default(),
+            beacon_provider_args: BeaconProviderArgs::default(),
+            network_args: NetworkArgs::default(),
+        };
+
+        assert!(config.validate().is_ok());
+    }
+
+    #[test]
+    fn test_validate_test_mode_without_key_file_succeeds() {
+        let config = ScrollRollupNodeConfig {
+            test: true,
+            sequencer_args: SequencerArgs { sequencer_enabled: true, ..Default::default() },
+            signer_args: SignerArgs { key_file: None },
+            database_args: DatabaseArgs::default(),
+            engine_driver_args: EngineDriverArgs::default(),
+            l1_provider_args: L1ProviderArgs::default(),
+            beacon_provider_args: BeaconProviderArgs::default(),
+            network_args: NetworkArgs::default(),
+        };
+
+        assert!(config.validate().is_ok());
+    }
+
+    #[test]
+    fn test_validate_sequencer_disabled_without_key_file_succeeds() {
+        let config = ScrollRollupNodeConfig {
+            test: false,
+            sequencer_args: SequencerArgs { sequencer_enabled: false, ..Default::default() },
+            signer_args: SignerArgs { key_file: None },
+            database_args: DatabaseArgs::default(),
+            engine_driver_args: EngineDriverArgs::default(),
+            l1_provider_args: L1ProviderArgs::default(),
+            beacon_provider_args: BeaconProviderArgs::default(),
+            network_args: NetworkArgs::default(),
+        };
+
+        assert!(config.validate().is_ok());
+    }
 }
