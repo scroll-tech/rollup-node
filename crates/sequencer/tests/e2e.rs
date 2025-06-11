@@ -2,6 +2,7 @@
 
 use alloy_consensus::BlockHeader;
 use alloy_primitives::{Address, U256};
+use alloy_rpc_types_engine::PayloadAttributes;
 use futures::stream::StreamExt;
 use reth_e2e_test_utils::transaction::TransactionTestContext;
 use reth_node_core::primitives::SignedTransaction;
@@ -13,9 +14,13 @@ use rollup_node_providers::{DatabaseL1MessageProvider, ScrollRootProvider};
 use rollup_node_sequencer::{L1MessageInclusionMode, Sequencer};
 use scroll_alloy_consensus::TxL1Message;
 use scroll_alloy_provider::ScrollAuthApiEngineClient;
+use scroll_alloy_rpc_types_engine::ScrollPayloadAttributes;
 use scroll_db::{test_utils::setup_test_db, DatabaseOperations};
 use scroll_engine::{EngineDriver, EngineDriverEvent, ForkchoiceState};
-use std::sync::Arc;
+use std::{
+    sync::Arc,
+    time::{Instant, SystemTime, UNIX_EPOCH},
+};
 use tokio::{sync::Mutex, time::Duration};
 
 #[tokio::test]
@@ -391,4 +396,87 @@ async fn can_build_blocks_with_finalized_l1_messages() {
     // now should include the previously unfinalized message
     assert_eq!(block.body.transactions.len(), 1);
     assert_eq!(block.body.transactions.first().unwrap().tx_hash(), &unfinalized_message_hash);
+}
+
+#[tokio::test]
+async fn can_build_blocks_at_fixed_intervals() {
+    reth_tracing::init_test_tracing();
+
+    let chain_spec = SCROLL_DEV.clone();
+    const BLOCK_BUILDING_DURATION: Duration = Duration::from_millis(250);
+    const BLOCK_GAP_TRIGGER: u64 = 100;
+    const TRANSACTIONS_COUNT: usize = 10_000;
+
+    // setup a test node.
+    let (mut nodes, _tasks, wallet) =
+        setup_engine(default_test_scroll_rollup_node_config(), 1, chain_spec, false).await.unwrap();
+    let node = nodes.pop().unwrap();
+    let wallet = Arc::new(Mutex::new(wallet));
+
+    // add transactions.
+    let mut wallet_lock = wallet.lock().await;
+    for _ in 0..TRANSACTIONS_COUNT {
+        let raw_tx = TransactionTestContext::transfer_tx_nonce_bytes(
+            wallet_lock.chain_id,
+            wallet_lock.inner.clone(),
+            wallet_lock.inner_nonce,
+        )
+        .await;
+        wallet_lock.inner_nonce += 1;
+        node.rpc.inject_tx(raw_tx).await.unwrap();
+    }
+    drop(wallet_lock);
+
+    // create a forkchoice state
+    let genesis_hash = node.inner.chain_spec().genesis_hash();
+    let fcs = ForkchoiceState::new(
+        BlockInfo { hash: genesis_hash, number: 0 },
+        Default::default(),
+        Default::default(),
+    );
+
+    // create the engine driver connected to the node
+    let auth_client = node.inner.engine_http_client();
+    let engine_client = ScrollAuthApiEngineClient::new(auth_client);
+    let mut engine_driver = EngineDriver::new(
+        Arc::new(engine_client),
+        (*SCROLL_DEV).clone(),
+        None::<ScrollRootProvider>,
+        fcs,
+        false,
+        BLOCK_GAP_TRIGGER,
+        BLOCK_BUILDING_DURATION,
+    );
+
+    tracing::info!(target: "scroll::e2e", "starting timer");
+    let timer = Instant::now();
+
+    // Issue a new payload to the execution layer.
+    let timestamp =
+        SystemTime::now().duration_since(UNIX_EPOCH).expect("Time can't go backwards").as_secs();
+    engine_driver.handle_build_new_payload(ScrollPayloadAttributes {
+        payload_attributes: PayloadAttributes {
+            timestamp,
+            prev_randao: Default::default(),
+            suggested_fee_recipient: Default::default(),
+            withdrawals: None,
+            parent_beacon_block_root: None,
+        },
+        transactions: None,
+        no_tx_pool: false,
+        block_data_hint: None,
+    });
+
+    if let Some(EngineDriverEvent::NewPayload(block)) = engine_driver.next().await {
+        let elapsed = timer.elapsed().as_millis();
+        let target = BLOCK_BUILDING_DURATION.as_millis();
+        assert!(
+            !block.body.transactions.is_empty() /* TODO: add block.body.transactions.len() < *
+                                                 * TRANSACTIONS_COUNT */
+        );
+        dbg!(elapsed, target, block.body.transactions.len());
+        assert!(elapsed > target * 9 / 10 && elapsed < target * 11 / 10);
+    } else {
+        panic!("expected a new payload event");
+    }
 }
