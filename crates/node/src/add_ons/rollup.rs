@@ -57,11 +57,7 @@ pub struct RollupManagerAddOn {
 
 impl RollupManagerAddOn {
     /// Create a new rollup node manager addon.
-    pub fn new(config: ScrollRollupNodeConfig) -> Self {
-        config
-            .validate()
-            .map_err(|e| eyre::eyre!("Configuration validation failed: {}", e))
-            .expect("Configuration validation failed");
+    pub const fn new(config: ScrollRollupNodeConfig) -> Self {
         Self { config }
     }
 
