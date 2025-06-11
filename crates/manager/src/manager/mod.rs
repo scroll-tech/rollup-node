@@ -453,14 +453,16 @@ where
             this.signer.as_mut().map(|s| s.poll_next_unpin(cx))
         {
             match event {
-                SignerEvent::SignedBlock { ref block, signature } => {
+                SignerEvent::SignedBlock { block, signature } => {
                     trace!(target: "scroll::node::manager", ?block, ?signature, "Received signed block from signer, announcing to the network");
-                    this.network.handle().announce_block(block.clone(), signature);
-
-                    // Send SequencerEvent for test monitoring
+                    // Send SignerEvent for test monitoring
                     if let Some(event_sender) = this.event_sender.as_ref() {
-                        event_sender.notify(RollupManagerEvent::SequencerEvent(event.clone()));
+                        event_sender.notify(RollupManagerEvent::SignerEvent(
+                            SignerEvent::SignedBlock { block: block.clone(), signature },
+                        ));
                     }
+
+                    this.network.handle().announce_block(block, signature);
                 }
             }
         }

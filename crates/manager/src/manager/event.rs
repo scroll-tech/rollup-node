@@ -16,6 +16,6 @@ pub enum RollupManagerEvent {
     L1DerivedBlockConsolidated(L2BlockInfoWithL1Messages),
     /// An L1 message with the given index has been indexed.
     L1MessageIndexed(u64),
-    /// Sequencer event (signing related).
-    SequencerEvent(SignerEvent),
+    /// A new event from the signer.
+    SignerEvent(SignerEvent),
 }

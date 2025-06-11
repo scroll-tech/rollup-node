@@ -57,7 +57,11 @@ pub struct RollupManagerAddOn {
 
 impl RollupManagerAddOn {
     /// Create a new rollup node manager addon.
-    pub const fn new(config: ScrollRollupNodeConfig) -> Self {
+    pub fn new(config: ScrollRollupNodeConfig) -> Self {
+        config
+            .validate()
+            .map_err(|e| eyre::eyre!("Configuration validation failed: {}", e))
+            .expect("Configuration validation failed");
         Self { config }
     }
 
@@ -71,11 +75,6 @@ impl RollupManagerAddOn {
         <<N as FullNodeTypes>::Types as NodeTypes>::ChainSpec: ScrollHardforks + IsDevChain,
         N::Network: NetworkProtocols + FullNetwork<Primitives = ScrollNetworkPrimitives>,
     {
-        // Validate configuration before starting any components
-        self.config
-            .validate()
-            .map_err(|e| eyre::eyre!("Configuration validation failed: {}", e))?;
-
         // Instantiate the network manager
         let (scroll_wire_handler, events) =
             ScrollWireProtocolHandler::new(ScrollWireConfig::new(true));

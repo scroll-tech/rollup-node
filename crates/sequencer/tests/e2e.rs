@@ -465,7 +465,7 @@ async fn can_sequence_blocks_with_private_key_file() -> eyre::Result<()> {
     }
 
     // Verify signing event and signature correctness
-    if let Some(RollupManagerEvent::SequencerEvent(SignerEvent::SignedBlock {
+    if let Some(RollupManagerEvent::SignerEvent(SignerEvent::SignedBlock {
         block: signed_block,
         signature,
     })) = sequencer_events.next().await
@@ -474,7 +474,7 @@ async fn can_sequence_blocks_with_private_key_file() -> eyre::Result<()> {
         let recovered_address = signature.recover_address_from_prehash(&hash)?;
         assert_eq!(recovered_address, expected_address);
     } else {
-        panic!("Failed to receive SequencerEvent with signed block");
+        panic!("Failed to receive SignerEvent with signed block");
     }
 
     Ok(())
@@ -545,7 +545,7 @@ async fn can_sequence_blocks_with_hex_key_file_without_prefix() -> eyre::Result<
     }
 
     // Verify signing event and signature correctness
-    if let Some(RollupManagerEvent::SequencerEvent(SignerEvent::SignedBlock {
+    if let Some(RollupManagerEvent::SignerEvent(SignerEvent::SignedBlock {
         block: signed_block,
         signature,
     })) = sequencer_events.next().await
@@ -554,7 +554,7 @@ async fn can_sequence_blocks_with_hex_key_file_without_prefix() -> eyre::Result<
         let recovered_address = signature.recover_address_from_prehash(&hash)?;
         assert_eq!(recovered_address, expected_address);
     } else {
-        panic!("Failed to receive SequencerEvent with signed block");
+        panic!("Failed to receive SignerEvent with signed block");
     }
 
     Ok(())
