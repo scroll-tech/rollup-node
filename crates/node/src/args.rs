@@ -34,13 +34,15 @@ pub struct ScrollRollupNodeConfig {
 }
 
 impl ScrollRollupNodeConfig {
-    /// Validate that signer key file is provided when sequencer is enabled
+    /// Validate that either signer key file or AWS KMS key ID is provided when sequencer is enabled
     pub fn validate(&self) -> Result<(), String> {
-        if !self.test &&
-            self.sequencer_args.sequencer_enabled &&
-            self.signer_args.key_file.is_none()
-        {
-            return Err("Signer key file is required when sequencer is enabled".to_string());
+        if !self.test && self.sequencer_args.sequencer_enabled {
+            if self.signer_args.key_file.is_none() && self.signer_args.aws_kms_key_id.is_none() {
+                return Err("Either signer key file or AWS KMS key ID is required when sequencer is enabled".to_string());
+            }
+            if self.signer_args.key_file.is_some() && self.signer_args.aws_kms_key_id.is_some() {
+                return Err("Cannot specify both signer key file and AWS KMS key ID".to_string());
+            }
         }
         Ok(())
     }
@@ -146,9 +148,17 @@ pub struct SignerArgs {
     #[arg(
         long = "signer.key-file",
         value_name = "FILE_PATH",
-        help = "Path to the signer's hex-encoded private key file (optional 0x prefix). Required when sequencer is enabled"
+        help = "Path to the hex-encoded private key file for the signer (optional 0x prefix). Mutually exclusive with AWS KMS key ID"
     )]
     pub key_file: Option<PathBuf>,
+
+    /// AWS KMS Key ID for signing transactions
+    #[arg(
+        long = "signer.aws-kms-key-id",
+        value_name = "KEY_ID",
+        help = "AWS KMS Key ID for signing transactions. Mutually exclusive with key file"
+    )]
+    pub aws_kms_key_id: Option<String>,
 }
 
 #[cfg(test)]
@@ -157,11 +167,34 @@ mod tests {
     use std::path::PathBuf;
 
     #[test]
-    fn test_validate_sequencer_enabled_without_key_file_fails() {
+    fn test_validate_sequencer_enabled_without_any_signer_fails() {
         let config = ScrollRollupNodeConfig {
             test: false,
             sequencer_args: SequencerArgs { sequencer_enabled: true, ..Default::default() },
-            signer_args: SignerArgs { key_file: None },
+            signer_args: SignerArgs { key_file: None, aws_kms_key_id: None },
+            database_args: DatabaseArgs::default(),
+            engine_driver_args: EngineDriverArgs::default(),
+            l1_provider_args: L1ProviderArgs::default(),
+            beacon_provider_args: BeaconProviderArgs::default(),
+            network_args: NetworkArgs::default(),
+        };
+
+        let result = config.validate();
+        assert!(result.is_err());
+        assert!(result.unwrap_err().contains(
+            "Either signer key file or AWS KMS key ID is required when sequencer is enabled"
+        ));
+    }
+
+    #[test]
+    fn test_validate_sequencer_enabled_with_both_signers_fails() {
+        let config = ScrollRollupNodeConfig {
+            test: false,
+            sequencer_args: SequencerArgs { sequencer_enabled: true, ..Default::default() },
+            signer_args: SignerArgs {
+                key_file: Some(PathBuf::from("/path/to/key")),
+                aws_kms_key_id: Some("key-id".to_string()),
+            },
             database_args: DatabaseArgs::default(),
             engine_driver_args: EngineDriverArgs::default(),
             l1_provider_args: L1ProviderArgs::default(),
@@ -173,7 +206,7 @@ mod tests {
         assert!(result.is_err());
         assert!(result
             .unwrap_err()
-            .contains("Signer key file is required when sequencer is enabled"));
+            .contains("Cannot specify both signer key file and AWS KMS key ID"));
     }
 
     #[test]
@@ -181,7 +214,10 @@ mod tests {
         let config = ScrollRollupNodeConfig {
             test: false,
             sequencer_args: SequencerArgs { sequencer_enabled: true, ..Default::default() },
-            signer_args: SignerArgs { key_file: Some(PathBuf::from("/path/to/key")) },
+            signer_args: SignerArgs {
+                key_file: Some(PathBuf::from("/path/to/key")),
+                aws_kms_key_id: None,
+            },
             database_args: DatabaseArgs::default(),
             engine_driver_args: EngineDriverArgs::default(),
             l1_provider_args: L1ProviderArgs::default(),
@@ -193,11 +229,27 @@ mod tests {
     }
 
     #[test]
-    fn test_validate_test_mode_without_key_file_succeeds() {
+    fn test_validate_sequencer_enabled_with_aws_kms_succeeds() {
+        let config = ScrollRollupNodeConfig {
+            test: false,
+            sequencer_args: SequencerArgs { sequencer_enabled: true, ..Default::default() },
+            signer_args: SignerArgs { key_file: None, aws_kms_key_id: Some("key-id".to_string()) },
+            database_args: DatabaseArgs::default(),
+            engine_driver_args: EngineDriverArgs::default(),
+            l1_provider_args: L1ProviderArgs::default(),
+            beacon_provider_args: BeaconProviderArgs::default(),
+            network_args: NetworkArgs::default(),
+        };
+
+        assert!(config.validate().is_ok());
+    }
+
+    #[test]
+    fn test_validate_test_mode_without_any_signer_succeeds() {
         let config = ScrollRollupNodeConfig {
             test: true,
             sequencer_args: SequencerArgs { sequencer_enabled: true, ..Default::default() },
-            signer_args: SignerArgs { key_file: None },
+            signer_args: SignerArgs { key_file: None, aws_kms_key_id: None },
             database_args: DatabaseArgs::default(),
             engine_driver_args: EngineDriverArgs::default(),
             l1_provider_args: L1ProviderArgs::default(),
@@ -209,11 +261,11 @@ mod tests {
     }
 
     #[test]
-    fn test_validate_sequencer_disabled_without_key_file_succeeds() {
+    fn test_validate_sequencer_disabled_without_any_signer_succeeds() {
         let config = ScrollRollupNodeConfig {
             test: false,
             sequencer_args: SequencerArgs { sequencer_enabled: false, ..Default::default() },
-            signer_args: SignerArgs { key_file: None },
+            signer_args: SignerArgs { key_file: None, aws_kms_key_id: None },
             database_args: DatabaseArgs::default(),
             engine_driver_args: EngineDriverArgs::default(),
             l1_provider_args: L1ProviderArgs::default(),
