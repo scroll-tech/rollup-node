@@ -6,8 +6,11 @@ use crate::{
 use alloy_primitives::hex;
 use alloy_provider::ProviderBuilder;
 use alloy_rpc_client::RpcClient;
+use alloy_signer::{Result, Signer as AlloySigner};
+use alloy_signer_aws::AwsSigner;
 use alloy_signer_local::PrivateKeySigner;
 use alloy_transport::layers::RetryBackoffLayer;
+use aws_config::BehaviorVersion;
 use reth_chainspec::{EthChainSpec, NamedChain};
 use reth_network::{protocol::IntoRlpxSubProtocol, NetworkProtocols};
 use reth_network_api::{block::EthWireBlockListenerProvider, FullNetwork};
@@ -213,8 +216,10 @@ impl RollupManagerAddOn {
 
         // Instantiate the signer
         let signer = if self.config.test {
+            // Use a random private key signer for testing
             Some(Signer::spawn(PrivateKeySigner::random()))
         } else if let Some(key_file_path) = &self.config.signer_args.key_file {
+            // Use local private key signer
             let key_content = fs::read_to_string(key_file_path)
                 .map_err(|e| {
                     eyre::eyre!("Failed to read signer key file {}: {}", key_file_path.display(), e)
@@ -235,6 +240,14 @@ impl RollupManagerAddOn {
                 .map_err(|e| eyre::eyre!("Failed to create signer from key file: {}", e))?;
 
             Some(Signer::spawn(private_key_signer))
+        } else if let Some(aws_kms_key_id) = &self.config.signer_args.aws_kms_key_id {
+            // Use AWS KMS signer
+            let chain_id = ctx.config.chain.chain().id();
+            let aws_signer = create_aws_kms_signer(aws_kms_key_id.clone(), chain_id)
+                .await
+                .map_err(|e| eyre::eyre!("Failed to create AWS KMS signer: {}", e))?;
+
+            Some(Signer::spawn(aws_signer))
         } else {
             None
         };
@@ -255,4 +268,26 @@ impl RollupManagerAddOn {
         );
         Ok((rnm, l1_notification_tx))
     }
+}
+
+/// Create an AWS KMS signer
+async fn create_aws_kms_signer(key_id: String, chain_id: u64) -> eyre::Result<AwsSigner> {
+    // Load AWS configuration
+    let config_loader = aws_config::defaults(BehaviorVersion::latest());
+
+    let config = config_loader.load().await;
+    let kms_client = aws_sdk_kms::Client::new(&config);
+
+    // Create the AWS KMS signer
+    let aws_signer = AwsSigner::new(kms_client, key_id, Some(chain_id))
+        .await
+        .map_err(|e| eyre::eyre!("Failed to initialize AWS KMS signer: {}", e))?;
+
+    tracing::info!(
+        "Created AWS KMS signer with address: {} for chain ID: {}",
+        aws_signer.address(),
+        chain_id
+    );
+
+    Ok(aws_signer)
 }
