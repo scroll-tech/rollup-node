@@ -134,11 +134,11 @@ Then, you can run the sequencer node with the following command:
 
 ### Signer Configuration Notes
 
+When running a sequencer, a signer is required unless the `--test` flag is specified. The two signing methods are mutually exclusive - use either `--signer.key-file` or `--signer.aws-kms-key-id`, but not both.
+
 **Private Key File**: Keep your private key file secure and never commit it to version control.
 
 **AWS KMS**: Requires KMS permissions `kms:GetPublicKey` and `kms:Sign` for the specified key.
-
-When running a sequencer, a signer is required unless the `--test` flag is specified. The two signing methods are mutually exclusive - use either `--signer.key-file` or `--signer.aws-kms-key-id`, but not both.
 
 ### General Information
 
