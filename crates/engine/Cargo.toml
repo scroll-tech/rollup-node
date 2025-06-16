@@ -32,7 +32,7 @@ reth-primitives-traits.workspace = true
 # reth-scroll
 reth-scroll-chainspec.workspace = true
 reth-scroll-primitives.workspace = true
-reth-scroll-engine-primitives = { git = "https://github.com/scroll-tech/reth.git", default-features = false }
+reth-scroll-engine-primitives = { git = "https://github.com/scroll-tech/reth.git", branch = "feat/bypass-block-data-hint", default-features = false }
 
 # rollup-node
 rollup-node-primitives.workspace = true
@@ -54,7 +54,7 @@ tracing.workspace = true
 [dev-dependencies]
 arbitrary.workspace = true
 async-trait.workspace = true
-reth-testing-utils = { git = "https://github.com/scroll-tech/reth.git", default-features = false }
+reth-testing-utils = { git = "https://github.com/scroll-tech/reth.git", branch = "feat/bypass-block-data-hint", default-features = false }
 rollup-node-providers = { workspace = true, features = ["test-utils"] }
 scroll-engine = { path = "../engine", features = ["test-utils"] }
 
@@ -66,6 +66,8 @@ test-utils = [
     "rollup-node-providers/test-utils",
     "reth-chainspec/test-utils",
     "reth-primitives-traits/test-utils",
+    "reth-scroll-chainspec/test-utils",
+    "reth-scroll-chainspec/test-utils",
 ]
 serde = [
     "alloy-eips/serde",

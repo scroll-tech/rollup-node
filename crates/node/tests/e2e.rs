@@ -256,11 +256,12 @@ async fn can_bridge_blocks() {
 
 /// Test that when the rollup node manager is shutdown, it consolidates the most recent batch
 /// on startup.
-#[ignore]
 #[tokio::test]
 async fn graceful_shutdown_consolidates_most_recent_batch_on_startup() -> eyre::Result<()> {
     reth_tracing::init_test_tracing();
-    let chain_spec = (*SCROLL_MAINNET).clone();
+    let mut chain_spec = Arc::unwrap_or_clone((*SCROLL_MAINNET).clone());
+    chain_spec.config.l1_config.bypass_block_data_hint_checks = true;
+    let chain_spec = Arc::new(chain_spec);
 
     // Launch a node
     let (mut nodes, _tasks, _) =
