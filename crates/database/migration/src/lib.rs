@@ -24,7 +24,10 @@ impl<MI: MigrationInfo + Send + Sync + 'static> MigratorTrait for Migrator<MI> {
 }
 
 pub mod traits {
-    use crate::{ScrollMainnetMigrationInfo, ScrollSepoliaMigrationInfo};
+    use crate::{
+        migration_info::ScrollMainnetTestMigrationInfo, ScrollMainnetMigrationInfo,
+        ScrollSepoliaMigrationInfo,
+    };
     use reth_chainspec::NamedChain;
     use sea_orm::{prelude::async_trait::async_trait, DatabaseConnection, DbErr};
     use sea_orm_migration::MigratorTrait;
@@ -33,20 +36,23 @@ pub mod traits {
     #[async_trait]
     pub trait ScrollMigrator {
         /// Migrates the tables.
-        async fn migrate(&self, conn: &DatabaseConnection) -> Result<(), DbErr>;
+        async fn migrate(&self, conn: &DatabaseConnection, test: bool) -> Result<(), DbErr>;
     }
 
     #[async_trait]
     impl ScrollMigrator for NamedChain {
-        async fn migrate(&self, conn: &DatabaseConnection) -> Result<(), DbErr> {
-            match self {
-                NamedChain::Scroll => {
+        async fn migrate(&self, conn: &DatabaseConnection, test: bool) -> Result<(), DbErr> {
+            match (self, test) {
+                (NamedChain::Scroll, false) => {
                     Ok(super::Migrator::<ScrollMainnetMigrationInfo>::up(conn, None))
                 }
-                NamedChain::ScrollSepolia => {
+                (NamedChain::Scroll, true) => {
+                    Ok(super::Migrator::<ScrollMainnetTestMigrationInfo>::up(conn, None))
+                }
+                (NamedChain::ScrollSepolia, _) => {
                     Ok(super::Migrator::<ScrollSepoliaMigrationInfo>::up(conn, None))
                 }
-                NamedChain::Dev => Ok(super::Migrator::<()>::up(conn, None)),
+                (NamedChain::Dev, _) => Ok(super::Migrator::<()>::up(conn, None)),
                 _ => Err(DbErr::Custom("expected Scroll Mainnet, Sepolia or Dev".into())),
             }?
             .await

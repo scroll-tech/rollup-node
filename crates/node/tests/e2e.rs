@@ -259,9 +259,7 @@ async fn can_bridge_blocks() {
 #[tokio::test]
 async fn graceful_shutdown_consolidates_most_recent_batch_on_startup() -> eyre::Result<()> {
     reth_tracing::init_test_tracing();
-    let mut chain_spec = Arc::unwrap_or_clone((*SCROLL_MAINNET).clone());
-    chain_spec.config.l1_config.bypass_block_data_hint_checks = true;
-    let chain_spec = Arc::new(chain_spec);
+    let chain_spec = (*SCROLL_MAINNET).clone();
 
     // Launch a node
     let (mut nodes, _tasks, _) =

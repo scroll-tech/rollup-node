@@ -31,7 +31,7 @@ use scroll_alloy_network::Scroll;
 use scroll_alloy_provider::{ScrollAuthApiEngineClient, ScrollEngineApi};
 use scroll_db::{Database, DatabaseConnectionProvider, DatabaseOperations};
 use scroll_engine::{EngineDriver, ForkchoiceState};
-use scroll_migration::{traits::ScrollMigrator, Migrator, MigratorTrait};
+use scroll_migration::traits::ScrollMigrator;
 use scroll_network::ScrollNetworkManager;
 use scroll_wire::{ScrollWireConfig, ScrollWireProtocolHandler};
 use std::{fs, path::PathBuf, sync::Arc, time::Duration};
@@ -154,13 +154,10 @@ impl ScrollRollupNodeConfig {
         let db = Database::new(&database_path).await?;
 
         // Run the database migrations
-        if self.test {
-            Migrator::<()>::up(db.get_connection(), None)
-                .await
-                .expect("failed to perform migration in test mode");
-        } else {
-            named_chain.migrate(db.get_connection()).await.expect("failed to perform migration");
-        }
+        named_chain
+            .migrate(db.get_connection(), self.test)
+            .await
+            .expect("failed to perform migration");
 
         // Wrap the database in an Arc
         let db = Arc::new(db);

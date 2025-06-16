@@ -52,12 +52,3 @@ std = [
     "scroll-alloy-rpc-types-engine/std",
     "futures/std",
 ]
-test-utils = [
-    "async-trait",
-    "rollup-node-providers/test-utils",
-    "scroll-codec/test-utils",
-    "scroll-db/test-utils",
-    "rollup-node-providers/test-utils",
-    "scroll-codec/test-utils",
-    "scroll-db/test-utils",
-]
