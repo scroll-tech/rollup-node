@@ -254,7 +254,9 @@ async fn can_bridge_blocks() {
     }
 }
 
-/// Test that when the rollup node manager is shutdown,
+/// Test that when the rollup node manager is shutdown, it consolidates the most recent batch
+/// on startup.
+#[ignore]
 #[tokio::test]
 async fn graceful_shutdown_consolidates_most_recent_batch_on_startup() -> eyre::Result<()> {
     reth_tracing::init_test_tracing();

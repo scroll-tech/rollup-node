@@ -2,7 +2,7 @@ use crate::{
     add_ons::IsDevChain,
     constants::{self, PROVIDER_BLOB_CACHE_SIZE},
 };
-use alloy_primitives::Address;
+use alloy_primitives::{hex, Address};
 use alloy_provider::{Provider, ProviderBuilder};
 use alloy_rpc_client::RpcClient;
 use alloy_signer_local::PrivateKeySigner;
@@ -31,10 +31,10 @@ use scroll_alloy_network::Scroll;
 use scroll_alloy_provider::{ScrollAuthApiEngineClient, ScrollEngineApi};
 use scroll_db::{Database, DatabaseConnectionProvider, DatabaseOperations};
 use scroll_engine::{EngineDriver, ForkchoiceState};
-use scroll_migration::MigratorTrait;
+use scroll_migration::{traits::ScrollMigrator, Migrator, MigratorTrait};
 use scroll_network::ScrollNetworkManager;
 use scroll_wire::{ScrollWireConfig, ScrollWireProtocolHandler};
-use std::{path::PathBuf, sync::Arc, time::Duration};
+use std::{fs, path::PathBuf, sync::Arc, time::Duration};
 use tokio::sync::mpsc::Sender;
 
 /// A struct that represents the arguments for the rollup node.
@@ -115,9 +115,8 @@ impl ScrollRollupNodeConfig {
         let scroll_network_manager = ScrollNetworkManager::from_parts(network.clone(), events);
 
         // Get the rollup node config.
-        let node_config = Arc::new(NodeConfig::from_named_chain(
-            chain_spec.chain().named().expect("expected named chain"),
-        ));
+        let named_chain = chain_spec.chain().named().expect("expected named chain");
+        let node_config = Arc::new(NodeConfig::from_named_chain(named_chain));
 
         // Create the engine api client.
         let engine_api = ScrollAuthApiEngineClient::new(rpc_server_handles.auth.http_client());
@@ -155,7 +154,13 @@ impl ScrollRollupNodeConfig {
         let db = Database::new(&database_path).await?;
 
         // Run the database migrations
-        scroll_migration::Migrator::up(db.get_connection(), None).await?;
+        if self.test {
+            Migrator::<()>::up(db.get_connection(), None)
+                .await
+                .expect("failed to perform migration in test mode");
+        } else {
+            named_chain.migrate(db.get_connection()).await.expect("failed to perform migration");
+        }
 
         // Wrap the database in an Arc
         let db = Arc::new(db);
@@ -252,7 +257,32 @@ impl ScrollRollupNodeConfig {
             .then_some(network.eth_wire_block_listener().await?);
 
         // Instantiate the signer
-        let signer = self.test.then_some(Signer::spawn(PrivateKeySigner::random()));
+        let signer = if self.test {
+            Some(Signer::spawn(PrivateKeySigner::random()))
+        } else if let Some(key_file_path) = &self.signer_args.key_file {
+            let key_content = fs::read_to_string(key_file_path)
+                .map_err(|e| {
+                    eyre::eyre!("Failed to read signer key file {}: {}", key_file_path.display(), e)
+                })?
+                .trim()
+                .to_string();
+
+            let hex_str = key_content.strip_prefix("0x").unwrap_or(&key_content);
+            let key_bytes = hex::decode(hex_str).map_err(|e| {
+                eyre::eyre!(
+                    "Failed to decode hex private key from file {}: {}",
+                    key_file_path.display(),
+                    e
+                )
+            })?;
+
+            let private_key_signer = PrivateKeySigner::from_slice(&key_bytes)
+                .map_err(|e| eyre::eyre!("Failed to create signer from key file: {}", e))?;
+
+            Some(Signer::spawn(private_key_signer))
+        } else {
+            None
+        };
 
         // Spawn the rollup node manager
         let (rnm, handle) = RollupNodeManager::new(
