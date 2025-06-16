@@ -21,6 +21,8 @@ rollup-node-primitives.workspace = true
 
 # misc
 futures = { workspace = true, features = ["std"] }
+metrics.workspace = true
+metrics-derive.workspace = true
 thiserror.workspace = true
 tokio = { workspace = true, features = ["full"] }
 tokio-stream.workspace = true
@@ -28,7 +30,9 @@ tracing.workspace = true
 
 [dev-dependencies]
 alloy-signer-local.workspace = true
+hex = "0.4.3"
 reth-tracing.workspace = true
+tempfile = "3.20.0"
 
 [features]
 default = []

@@ -1,11 +1,12 @@
 use super::{future::EngineFuture, ForkchoiceState};
 use crate::{
     future::{BuildNewPayloadFuture, EngineDriverFutureResult},
+    metrics::EngineDriverMetrics,
     EngineDriverEvent,
 };
 
 use futures::{ready, task::AtomicWaker, FutureExt, Stream};
-use rollup_node_primitives::{BlockInfo, ScrollPayloadAttributesWithBatchInfo};
+use rollup_node_primitives::{BlockInfo, MeteredFuture, ScrollPayloadAttributesWithBatchInfo};
 use rollup_node_providers::ExecutionPayloadProvider;
 use scroll_alloy_hardforks::ScrollHardforks;
 use scroll_alloy_provider::ScrollEngineApi;
@@ -43,9 +44,11 @@ pub struct EngineDriver<EC, CS, P> {
     /// The payload attributes associated with the next block to be built.
     sequencer_payload_attributes: Option<ScrollPayloadAttributes>,
     /// The future related to engine API.
-    engine_future: Option<EngineFuture>,
+    engine_future: Option<MeteredFuture<EngineFuture>>,
     /// The future for the payload building job.
     payload_building_future: Option<BuildNewPayloadFuture>,
+    /// The driver metrics.
+    metrics: EngineDriverMetrics,
     /// The waker to notify when the engine driver should be polled.
     waker: AtomicWaker,
 }
@@ -57,7 +60,7 @@ where
     P: ExecutionPayloadProvider + Clone + Sync + 'static,
 {
     /// Create a new [`EngineDriver`].
-    pub const fn new(
+    pub fn new(
         client: Arc<EC>,
         chain_spec: Arc<CS>,
         provider: Option<P>,
@@ -79,6 +82,7 @@ where
             sequencer_payload_attributes: None,
             payload_building_future: None,
             engine_future: None,
+            metrics: EngineDriverMetrics::default(),
             waker: AtomicWaker::new(),
         }
     }
@@ -144,6 +148,7 @@ where
     fn handle_engine_future_result(
         &mut self,
         result: EngineDriverFutureResult,
+        duration: Duration,
     ) -> Option<EngineDriverEvent> {
         match result {
             EngineDriverFutureResult::BlockImport(result) => {
@@ -162,6 +167,9 @@ where
                             tracing::trace!(target: "scroll::engine", "sync finished");
                             self.syncing = false;
                         }
+
+                        // record the metric.
+                        self.metrics.block_import_duration.record(duration.as_secs_f64());
 
                         // Return the block import outcome
                         return block_import_outcome.map(EngineDriverEvent::BlockImportOutcome)
@@ -188,6 +196,9 @@ where
                             self.fcs.update_head_block_info(block_info.block_info);
                         }
 
+                        // record the metric.
+                        self.metrics.l1_consolidation_duration.record(duration.as_secs_f64());
+
                         return Some(EngineDriverEvent::L1BlockConsolidated(consolidation_outcome))
                     }
                     Err(err) => {
@@ -204,6 +215,11 @@ where
                         let block_info = BlockInfo::new(block.number, block.hash_slow());
                         tracing::trace!(target: "scroll::engine", ?block_info, "updating unsafe block info from new payload");
                         self.fcs.update_head_block_info(block_info);
+
+                        // record the metrics.
+                        self.metrics.build_new_payload_duration.record(duration.as_secs_f64());
+                        self.metrics.gas_per_block.record(block.gas_used as f64);
+
                         return Some(EngineDriverEvent::NewPayload(block))
                     }
                     Err(err) => {
@@ -252,9 +268,9 @@ where
 
         // If we have a future, poll it.
         if let Some(future) = this.engine_future.as_mut() {
-            let result = ready!(future.poll_unpin(cx));
+            let (duration, result) = ready!(future.poll_unpin(cx));
             this.engine_future = None;
-            if let Some(event) = this.handle_engine_future_result(result) {
+            if let Some(event) = this.handle_engine_future_result(result, duration) {
                 return Poll::Ready(Some(event));
             }
         };
@@ -264,13 +280,16 @@ where
             // If the payload build job is done, handle the result - otherwise continue to process
             // another driver job.
             match handle.poll_unpin(cx) {
-                Poll::Ready(result) => match result {
+                Poll::Ready((duration, result)) => match result {
                     Ok(block) => {
-                        this.engine_future = Some(EngineFuture::handle_new_payload_job(
-                            this.client.clone(),
-                            this.alloy_forkchoice_state(),
-                            block,
-                        ));
+                        this.engine_future = Some(
+                            MeteredFuture::new(EngineFuture::handle_new_payload_job(
+                                this.client.clone(),
+                                this.alloy_forkchoice_state(),
+                                block,
+                            ))
+                            .with_initial_duration(duration),
+                        );
                         this.waker.wake();
                     }
                     Err(err) => {
@@ -291,13 +310,14 @@ where
             let chain_spec = this.chain_spec.clone();
             let duration = this.block_building_duration;
 
-            this.payload_building_future = Some(Box::pin(super::future::build_new_payload(
-                client,
-                chain_spec,
-                fcs,
-                duration,
-                payload_attributes,
-            )));
+            this.payload_building_future =
+                Some(MeteredFuture::new(Box::pin(super::future::build_new_payload(
+                    client,
+                    chain_spec,
+                    fcs,
+                    duration,
+                    payload_attributes,
+                ))));
             this.waker.wake();
             return Poll::Pending;
         }
@@ -307,7 +327,8 @@ where
             let fcs = this.alloy_forkchoice_state();
             let client = this.client.clone();
 
-            this.engine_future = Some(EngineFuture::block_import(client, block_with_peer, fcs));
+            this.engine_future =
+                Some(MeteredFuture::new(EngineFuture::block_import(client, block_with_peer, fcs)));
 
             this.waker.wake();
             return Poll::Pending;
@@ -318,8 +339,12 @@ where
             let client = this.client.clone();
 
             if let Some(provider) = this.provider.clone() {
-                this.engine_future =
-                    Some(EngineFuture::l1_consolidation(client, provider, fcs, payload_attributes));
+                this.engine_future = Some(MeteredFuture::new(EngineFuture::l1_consolidation(
+                    client,
+                    provider,
+                    fcs,
+                    payload_attributes,
+                )));
                 this.waker.wake();
             } else {
                 tracing::error!(target: "scroll::engine", "l1 consolidation requires an execution payload provider");
@@ -355,7 +380,7 @@ mod tests {
 
     impl<EC, P, CS> EngineDriver<EC, P, CS> {
         fn with_payload_future(&mut self, future: BuildNewPayloadFuture) {
-            self.payload_building_future = Some(Box::pin(future));
+            self.payload_building_future = Some(future);
         }
     }
 
@@ -409,13 +434,13 @@ mod tests {
         assert!(!driver.is_payload_building_in_progress());
 
         // Set a future to simulate an ongoing job
-        driver.with_payload_future(Box::pin(build_new_payload(
+        driver.with_payload_future(MeteredFuture::new(Box::pin(build_new_payload(
             client,
             chain_spec,
             Default::default(),
             Default::default(),
             Default::default(),
-        )));
+        ))));
 
         // Now, it should return true
         assert!(driver.is_payload_building_in_progress());

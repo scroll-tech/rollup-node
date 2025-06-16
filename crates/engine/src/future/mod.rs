@@ -7,7 +7,8 @@ use eyre::Result;
 use reth_scroll_engine_primitives::try_into_block;
 use reth_scroll_primitives::ScrollBlock;
 use rollup_node_primitives::{
-    BatchInfo, BlockInfo, L2BlockInfoWithL1Messages, ScrollPayloadAttributesWithBatchInfo,
+    BatchInfo, BlockInfo, L2BlockInfoWithL1Messages, MeteredFuture,
+    ScrollPayloadAttributesWithBatchInfo,
 };
 use rollup_node_providers::ExecutionPayloadProvider;
 use scroll_alloy_hardforks::ScrollHardforks;
@@ -84,7 +85,7 @@ type NewPayloadFuture =
 
 /// A future that represents a new payload building job.
 pub(crate) type BuildNewPayloadFuture =
-    Pin<Box<dyn Future<Output = Result<ScrollBlock, EngineDriverError>> + Send>>;
+    MeteredFuture<Pin<Box<dyn Future<Output = Result<ScrollBlock, EngineDriverError>> + Send>>>;
 
 /// An enum that represents the different types of futures that can be executed on the engine API.
 /// It can be a block import job, an L1 consolidation job, or a new payload processing.

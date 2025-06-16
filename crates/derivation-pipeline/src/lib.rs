@@ -3,18 +3,16 @@
 //! This crate provides a simple implementation of a derivation pipeline that transforms a batch
 //! into payload attributes for block building.
 
-#![cfg_attr(not(feature = "std"), no_std)]
-
 mod data_source;
 
-pub use error::DerivationPipelineError;
 mod error;
+pub use error::DerivationPipelineError;
 
-#[cfg(not(feature = "std"))]
-extern crate alloc as std;
+mod metrics;
+pub use metrics::DerivationPipelineMetrics;
 
 use crate::data_source::CodecDataSource;
-use std::{boxed::Box, collections::VecDeque, sync::Arc, vec::Vec};
+use std::{boxed::Box, collections::VecDeque, sync::Arc, time::Instant, vec::Vec};
 
 use alloy_primitives::{Address, B256};
 use alloy_rpc_types_engine::PayloadAttributes;
@@ -61,6 +59,8 @@ pub struct DerivationPipeline<P> {
     attributes_queue: VecDeque<ScrollPayloadAttributesWithBatchInfo>,
     /// The waker for the pipeline.
     waker: Option<Waker>,
+    /// The metrics of the pipeline.
+    metrics: DerivationPipelineMetrics,
 }
 
 impl<P> DerivationPipeline<P>
@@ -76,6 +76,7 @@ where
             pipeline_futures: Default::default(),
             attributes_queue: Default::default(),
             waker: None,
+            metrics: DerivationPipelineMetrics::default(),
         }
     }
 
@@ -93,10 +94,13 @@ where
     /// futures.
     fn handle_next_batch(&mut self) -> Option<DerivationPipelineFuture> {
         let database = self.database.clone();
+        let metrics = self.metrics.clone();
         let provider = self.l1_provider.clone();
 
         if let Some(info) = self.batch_queue.pop_front() {
             let fut = Box::pin(async move {
+                let derive_start = Instant::now();
+
                 // get the batch commit data.
                 let batch = database
                     .get_batch_by_index(info.index)
@@ -107,6 +111,12 @@ where
                 // derive the attributes and attach the corresponding batch info.
                 let attrs =
                     derive(batch, provider, database).await.map_err(|err| (info.clone(), err))?;
+
+                // update metrics.
+                metrics.derived_blocks.increment(attrs.len() as u64);
+                let execution_duration = derive_start.elapsed().as_secs_f64();
+                metrics.blocks_per_second.set(attrs.len() as f64 / execution_duration);
+
                 Ok(attrs.into_iter().map(|attr| (attr, *info).into()).collect())
             });
             return Some(fut);
@@ -215,7 +225,7 @@ pub async fn derive<L1P: L1Provider + Sync + Send, L2P: BlockDataProvider + Sync
         // get the block data for the l2 block.
         let number = block.context.number;
         // TODO(performance): can this be improved by adding block_data_range.
-        let block_data = l2_provider.block_data(number.into()).await.map_err(Into::into)?;
+        let block_data = l2_provider.block_data(number).await.map_err(Into::into)?;
 
         // construct the payload attributes.
         let attribute = ScrollPayloadAttributes {
@@ -241,7 +251,7 @@ mod tests {
     use super::*;
     use std::sync::Arc;
 
-    use alloy_eips::{eip4844::Blob, BlockId};
+    use alloy_eips::eip4844::Blob;
     use alloy_primitives::{address, b256, bytes, U256};
     use core::sync::atomic::{AtomicU64, Ordering};
     use rollup_node_primitives::L1MessageEnvelope;
@@ -340,7 +350,7 @@ mod tests {
 
         async fn block_data(
             &self,
-            _block_id: BlockId,
+            _block_number: u64,
         ) -> Result<Option<BlockDataHint>, Self::Error> {
             Ok(None)
         }
@@ -416,14 +426,14 @@ mod tests {
                 break
             }
         }
-        let expected = ScrollPayloadAttributes{
-            payload_attributes: PayloadAttributes{
+        let expected = ScrollPayloadAttributes {
+            payload_attributes: PayloadAttributes {
                 timestamp: 1696935657,
                 ..Default::default()
             },
             transactions: Some(vec![bytes!("f88c8202658417d7840082a4f294530000000000000000000000000000000000000280a4bede39b500000000000000000000000000000000000000000000000000000001669aa2f583104ec4a07461e6555f927393ebdf5f183738450c3842bc3b86a1db7549d9bee21fadd0b1a06d7ba96897bd9fb8e838a327d3ca34be66da11955f10d1fb2264949071e9e8cd")]),
             no_tx_pool: true,
-            block_data_hint: Some(BlockDataHint{ extra_data: bytes!("d883050000846765746888676f312e31392e31856c696e757800000000000000909feed55823062d606d517c3f971201615962991dbc2c1ef5897b3b2c9bd0b93b5bae6e5cedbddfc4bcbbe731477beaca8b3eff111de7ac67a388850405265200"), difficulty: U256::from(2) }),
+            block_data_hint: None
         };
         assert_eq!(attribute, expected);
 
@@ -480,20 +490,20 @@ mod tests {
         let attribute =
             attributes.iter().find(|a| a.payload_attributes.timestamp == 1696935384).unwrap();
 
-        let expected = ScrollPayloadAttributes{
-            payload_attributes: PayloadAttributes{
+        let expected = ScrollPayloadAttributes {
+            payload_attributes: PayloadAttributes {
                 timestamp: 1696935384,
                 ..Default::default()
             },
             transactions: Some(vec![bytes!("7ef901b7218302904094781e90f1c8fc4611c9b7497c3b47f99ef6969cbc80b901848ef1332e0000000000000000000000007f2b8c31f88b6006c382775eea88297ec1e3e9050000000000000000000000006ea73e05adc79974b931123675ea8f78ffdacdf0000000000000000000000000000000000000000000000000006a94d74f430000000000000000000000000000000000000000000000000000000000000000002100000000000000000000000000000000000000000000000000000000000000a000000000000000000000000000000000000000000000000000000000000000a4232e8748000000000000000000000000ca266224613396a0e8d4c2497dbc4f33dd6cdeff000000000000000000000000ca266224613396a0e8d4c2497dbc4f33dd6cdeff000000000000000000000000000000000000000000000000006a94d74f4300000000000000000000000000000000000000000000000000000000000000000080000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000947885bcbd5cecef1336b5300fb5186a12ddd8c478"), bytes!("7ef901b7228302904094781e90f1c8fc4611c9b7497c3b47f99ef6969cbc80b901848ef1332e0000000000000000000000007f2b8c31f88b6006c382775eea88297ec1e3e9050000000000000000000000006ea73e05adc79974b931123675ea8f78ffdacdf000000000000000000000000000000000000000000000000000470de4df820000000000000000000000000000000000000000000000000000000000000000002200000000000000000000000000000000000000000000000000000000000000a000000000000000000000000000000000000000000000000000000000000000a4232e8748000000000000000000000000982fe4a7cbd74bb3422ebe46333c3e8046c12c7f000000000000000000000000982fe4a7cbd74bb3422ebe46333c3e8046c12c7f00000000000000000000000000000000000000000000000000470de4df8200000000000000000000000000000000000000000000000000000000000000000080000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000947885bcbd5cecef1336b5300fb5186a12ddd8c478")]),
             no_tx_pool: true,
-            block_data_hint: None
+            block_data_hint: None,
         };
         assert_eq!(attribute, &expected);
 
         let attribute = attributes.last().unwrap();
-        let expected = ScrollPayloadAttributes{
-            payload_attributes: PayloadAttributes{
+        let expected = ScrollPayloadAttributes {
+            payload_attributes: PayloadAttributes {
                 timestamp: 1696935657,
                 ..Default::default()
             },

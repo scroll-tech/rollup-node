@@ -3,6 +3,9 @@
 mod error;
 pub use error::{EthRequestError, FilterLogError, L1WatcherError};
 
+mod metrics;
+pub use metrics::WatcherMetrics;
+
 #[cfg(any(test, feature = "test-utils"))]
 /// Common test helpers
 pub mod test_utils;
@@ -76,6 +79,8 @@ pub struct L1Watcher<EP> {
     sender: mpsc::Sender<Arc<L1Notification>>,
     /// The rollup node configuration.
     config: Arc<NodeConfig>,
+    /// The metrics for the watcher.
+    metrics: WatcherMetrics,
 }
 
 /// The L1 notification type yielded by the [`L1Watcher`].
@@ -174,6 +179,7 @@ where
             l1_state,
             sender: tx,
             config,
+            metrics: WatcherMetrics::default(),
         };
 
         // notify at spawn.
@@ -327,6 +333,11 @@ where
 
             if let Some(number) = reorg_block_number {
                 tracing::debug!(target: "scroll::watcher", ?number, "reorg");
+
+                // update metrics.
+                self.metrics.reorgs.increment(1);
+                self.metrics.reorg_depths.record(self.l1_state.head.saturating_sub(number) as f64);
+
                 // reset the current block number to the reorged block number if
                 // we have indexed passed the reorg.
                 if number < self.current_block_number {
@@ -560,6 +571,7 @@ where
     /// Send all notifications on the channel.
     async fn notify_all(&self, notifications: Vec<L1Notification>) {
         for notification in notifications {
+            self.metrics.process_l1_notification(&notification);
             tracing::trace!(target: "scroll::watcher", %notification, "sending l1 notification");
             let _ = self.notify(notification).await;
         }
@@ -669,6 +681,7 @@ mod tests {
                 current_block_number: 0,
                 sender: tx,
                 config: Arc::new(NodeConfig::mainnet()),
+                metrics: WatcherMetrics::default(),
             },
             rx,
         )

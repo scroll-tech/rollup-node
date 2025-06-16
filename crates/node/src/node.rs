@@ -21,7 +21,11 @@ pub struct ScrollRollupNode {
 
 impl ScrollRollupNode {
     /// Create a new instance of [`ScrollRollupNode`].
-    pub const fn new(config: ScrollRollupNodeConfig) -> Self {
+    pub fn new(config: ScrollRollupNodeConfig) -> Self {
+        config
+            .validate()
+            .map_err(|e| eyre::eyre!("Configuration validation failed: {}", e))
+            .expect("Configuration validation failed");
         Self { config }
     }
 }

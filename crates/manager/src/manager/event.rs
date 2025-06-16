@@ -1,4 +1,5 @@
 use reth_scroll_primitives::ScrollBlock;
+use rollup_node_signer::SignerEvent;
 use scroll_engine::ConsolidationOutcome;
 use scroll_network::NewBlockWithPeer;
 
@@ -15,4 +16,6 @@ pub enum RollupManagerEvent {
     L1DerivedBlockConsolidated(ConsolidationOutcome),
     /// An L1 message with the given index has been indexed.
     L1MessageIndexed(u64),
+    /// A new event from the signer.
+    SignerEvent(SignerEvent),
 }

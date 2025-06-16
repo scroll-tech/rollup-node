@@ -139,6 +139,7 @@ pub fn default_test_scroll_rollup_node_config() -> ScrollRollupNodeConfig {
         engine_driver_args: EngineDriverArgs { en_sync_trigger: 100 },
         sequencer_args: SequencerArgs::default(),
         beacon_provider_args: BeaconProviderArgs::default(),
+        signer_args: Default::default(),
     }
 }
 
@@ -162,5 +163,6 @@ pub fn default_sequencer_test_scroll_rollup_node_config() -> ScrollRollupNodeCon
             l1_message_inclusion_mode: L1MessageInclusionMode::BlockDepth(0),
         },
         beacon_provider_args: BeaconProviderArgs::default(),
+        signer_args: Default::default(),
     }
 }

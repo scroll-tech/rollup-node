@@ -2,21 +2,54 @@ pub use sea_orm_migration::prelude::*;
 
 mod m20220101_000001_create_batch_commit_table;
 mod m20250304_125946_add_l1_msg_table;
-mod m20250408_132123_add_block_data_table;
-mod m20250408_150338_seed_block_data_table;
+mod m20250408_132123_add_header_metadata;
+mod m20250408_150338_load_header_metadata;
 mod m20250411_072004_add_l2_block;
+mod migration_info;
+pub use migration_info::{MigrationInfo, ScrollMainnetMigrationInfo, ScrollSepoliaMigrationInfo};
 
-pub struct Migrator;
+pub struct Migrator<MI>(pub std::marker::PhantomData<MI>);
 
 #[async_trait::async_trait]
-impl MigratorTrait for Migrator {
+impl<MI: MigrationInfo + Send + Sync + 'static> MigratorTrait for Migrator<MI> {
     fn migrations() -> Vec<Box<dyn MigrationTrait>> {
         vec![
             Box::new(m20220101_000001_create_batch_commit_table::Migration),
             Box::new(m20250304_125946_add_l1_msg_table::Migration),
-            Box::new(m20250408_132123_add_block_data_table::Migration),
-            Box::new(m20250408_150338_seed_block_data_table::Migration),
+            Box::new(m20250408_132123_add_header_metadata::Migration),
+            Box::new(m20250408_150338_load_header_metadata::Migration::<MI>(Default::default())),
             Box::new(m20250411_072004_add_l2_block::Migration),
         ]
+    }
+}
+
+pub mod traits {
+    use crate::{ScrollMainnetMigrationInfo, ScrollSepoliaMigrationInfo};
+    use reth_chainspec::NamedChain;
+    use sea_orm::{prelude::async_trait::async_trait, DatabaseConnection, DbErr};
+    use sea_orm_migration::MigratorTrait;
+
+    /// An instance of the trait can perform the migration for Scroll.
+    #[async_trait]
+    pub trait ScrollMigrator {
+        /// Migrates the tables.
+        async fn migrate(&self, conn: &DatabaseConnection) -> Result<(), DbErr>;
+    }
+
+    #[async_trait]
+    impl ScrollMigrator for NamedChain {
+        async fn migrate(&self, conn: &DatabaseConnection) -> Result<(), DbErr> {
+            match self {
+                NamedChain::Scroll => {
+                    Ok(super::Migrator::<ScrollMainnetMigrationInfo>::up(conn, None))
+                }
+                NamedChain::ScrollSepolia => {
+                    Ok(super::Migrator::<ScrollSepoliaMigrationInfo>::up(conn, None))
+                }
+                NamedChain::Dev => Ok(super::Migrator::<()>::up(conn, None)),
+                _ => Err(DbErr::Custom("expected Scroll Mainnet, Sepolia or Dev".into())),
+            }?
+            .await
+        }
     }
 }

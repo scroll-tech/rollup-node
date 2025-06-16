@@ -53,6 +53,7 @@ async fn can_bridge_l1_messages() -> eyre::Result<()> {
             ..SequencerArgs::default()
         },
         beacon_provider_args: BeaconProviderArgs::default(),
+        signer_args: Default::default(),
     };
     let (mut nodes, _tasks, _wallet) = setup_engine(node_args, 1, chain_spec, false).await?;
     let node = nodes.pop().unwrap();
@@ -116,6 +117,7 @@ async fn can_sequence_and_gossip_blocks() {
             ..SequencerArgs::default()
         },
         beacon_provider_args: BeaconProviderArgs::default(),
+        signer_args: Default::default(),
     };
 
     let (nodes, _tasks, wallet) =
