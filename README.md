@@ -127,6 +127,8 @@ Then, you can run the sequencer node with the following command:
 ./target/release/rollup-node node --chain dev -d --sequencer.enabled --signer.key-file /path/to/your/private.key --http --http.api admin,debug,eth,net,trace,txpool,web3,rpc,reth,ots,flashbots,miner,mev
 ```
 
+**Note**: The private key file should contain a hex-encoded private key (`64` characters, optionally prefixed with `0x`).
+
 ### Using AWS KMS
 ```sh
 ./target/release/rollup-node node --chain dev -d --sequencer.enabled --signer.aws-kms-key-id arn:aws:kms:REGION:ACCOUNT:key/KEY-ID --http --http.api admin,debug,eth,net,trace,txpool,web3,rpc,reth,ots,flashbots,miner,mev

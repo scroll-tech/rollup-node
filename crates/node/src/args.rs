@@ -1,8 +1,12 @@
 use crate::constants;
-use alloy_primitives::Address;
+use alloy_primitives::{hex, Address};
+use alloy_signer::Signer;
+use alloy_signer_aws::AwsSigner;
+use alloy_signer_local::PrivateKeySigner;
+use aws_sdk_kms::config::BehaviorVersion;
 use reth_scroll_chainspec::SCROLL_FEE_VAULT_ADDRESS;
 use rollup_node_sequencer::L1MessageInclusionMode;
-use std::path::PathBuf;
+use std::{fs, path::PathBuf};
 
 /// A struct that represents the arguments for the rollup node.
 #[derive(Debug, Clone, clap::Args)]
@@ -159,6 +163,72 @@ pub struct SignerArgs {
         help = "AWS KMS Key ID for signing transactions. Mutually exclusive with key file"
     )]
     pub aws_kms_key_id: Option<String>,
+}
+
+impl SignerArgs {
+    /// Create a signer based on the configured arguments
+    pub async fn signer(
+        &self,
+        chain_id: u64,
+    ) -> eyre::Result<Option<Box<dyn Signer + Send + Sync>>> {
+        if let Some(key_file_path) = &self.key_file {
+            // Load the private key from the file
+            let key_content = fs::read_to_string(key_file_path)
+                .map_err(|e| {
+                    eyre::eyre!("Failed to read signer key file {}: {}", key_file_path.display(), e)
+                })?
+                .trim()
+                .to_string();
+
+            let hex_str = key_content.strip_prefix("0x").unwrap_or(&key_content);
+            let key_bytes = hex::decode(hex_str).map_err(|e| {
+                eyre::eyre!(
+                    "Failed to decode hex private key from file {}: {}",
+                    key_file_path.display(),
+                    e
+                )
+            })?;
+
+            // Create the private key signer
+            let private_key_signer = PrivateKeySigner::from_slice(&key_bytes)
+                .map_err(|e| eyre::eyre!("Failed to create signer from key file: {}", e))?
+                .with_chain_id(Some(chain_id));
+
+            tracing::info!(
+                "Created private key signer with address: {} for chain ID: {}",
+                private_key_signer.address(),
+                chain_id
+            );
+
+            Ok(Some(Box::new(private_key_signer)))
+        } else if let Some(aws_kms_key_id) = &self.aws_kms_key_id {
+            // Load AWS configuration
+            let config_loader = aws_config::defaults(BehaviorVersion::latest());
+            let config = config_loader.load().await;
+            let kms_client = aws_sdk_kms::Client::new(&config);
+
+            // Create the AWS KMS signer
+            let aws_signer = AwsSigner::new(kms_client, aws_kms_key_id.clone(), Some(chain_id))
+                .await
+                .map_err(|e| eyre::eyre!("Failed to initialize AWS KMS signer: {}", e))?;
+
+            tracing::info!(
+                "Created AWS KMS signer with address: {} for chain ID: {}",
+                aws_signer.address(),
+                chain_id
+            );
+
+            Ok(Some(Box::new(aws_signer)))
+        } else {
+            // This should not happen because ScrollRollupNodeConfig::validate() should catch this,
+            // but we handle it defensively
+            tracing::error!("No signer configured for chain ID: {}", chain_id);
+            Err(eyre::eyre!(
+                "No signer configured: neither key_file nor aws_kms_key_id is set for chain ID {}",
+                chain_id
+            ))
+        }
+    }
 }
 
 #[cfg(test)]
