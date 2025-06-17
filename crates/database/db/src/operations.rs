@@ -263,8 +263,8 @@ pub trait DatabaseOperations: DatabaseConnectionProvider {
             })?)
     }
 
-    /// Get the latest safe L2 [`BlockInfo`] from the database.
-    async fn get_latest_safe_l2_block(
+    /// Get the latest safe L2 ([`BlockInfo`], [`BatchInfo`]) from the database.
+    async fn get_latest_safe_l2_info(
         &self,
     ) -> Result<Option<(BlockInfo, BatchInfo)>, DatabaseError> {
         tracing::trace!(target: "scroll::db", "Fetching latest safe L2 block from database.");
@@ -294,15 +294,16 @@ pub trait DatabaseOperations: DatabaseConnectionProvider {
             .map(|x| x.map(|x| x.block_info()))?)
     }
 
-    /// Get the safe block for startup from the database.
+    /// Fetch startup metadata from the database.
     ///
-    /// This method fetches the batch info for the latest safe L2 block, it then retrieves the
-    /// latest block for the previous batch (i.e., the batch before the latest safe block) and
-    /// returns the block info.
+    /// This method fetches the batch info for the latest safe L2 block. It then takes note of the
+    /// L1 block number at which this batch was produced. It then retrieves the latest block for
+    /// the previous batch (i.e., the batch before the latest safe block). It then returns a tuple
+    /// of this latest fetched block and the L1 block number of the batch.
     async fn get_startup_data(&self) -> Result<(Option<BlockInfo>, Option<u64>), DatabaseError> {
         tracing::trace!(target: "scroll::db", "Fetching startup safe block from database.");
         let safe = if let Some(batch_info) = self
-            .get_latest_safe_l2_block()
+            .get_latest_safe_l2_info()
             .await?
             .map(|(_, batch_info)| batch_info)
             .filter(|b| b.index > 1)
@@ -316,7 +317,6 @@ pub trait DatabaseOperations: DatabaseConnectionProvider {
                 .await?
                 .expect("Batch info must be present due to database query arguments");
             let l2_block = self.get_highest_block_for_batch(previous_batch.hash).await?;
-            tracing::info!(target:"test", "{:?}", l2_block);
             (l2_block, Some(batch.block_number))
         } else {
             (None, None)
