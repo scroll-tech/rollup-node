@@ -48,7 +48,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Run dprint
-        uses: dprint/check@v2.2
+        uses: dprint/check@v2.3
         with:
           config-path: dprint.json
 
