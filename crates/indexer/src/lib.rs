@@ -9,7 +9,7 @@ use rollup_node_primitives::{
 use rollup_node_watcher::L1Notification;
 use scroll_alloy_consensus::TxL1Message;
 use scroll_alloy_hardforks::{ScrollHardfork, ScrollHardforks};
-use scroll_db::{Database, DatabaseError, DatabaseOperations};
+use scroll_db::{Database, DatabaseError, DatabaseOperations, UnwindResult};
 use std::{
     collections::{HashMap, VecDeque},
     pin::Pin,
@@ -171,7 +171,16 @@ impl<ChainSpec: ScrollHardforks + EthChainSpec + Send + Sync + 'static> Indexer<
         chain_spec: Arc<ChainSpec>,
         l1_block_number: u64,
     ) -> Result<IndexerEvent, IndexerError> {
-        unwind(database, chain_spec, l1_block_number).await
+        let txn = database.tx().await?;
+        let UnwindResult { l1_block_number, queue_index, l2_head_block_info, l2_safe_block_info } =
+            txn.unwind(chain_spec.genesis_hash(), l1_block_number).await?;
+        txn.commit().await?;
+        Ok(IndexerEvent::UnwindIndexed {
+            l1_block_number,
+            queue_index,
+            l2_head_block_info,
+            l2_safe_block_info,
+        })
     }
 
     /// Handles a finalized event by updating the indexer L1 finalized block and returning the new

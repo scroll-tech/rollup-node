@@ -174,9 +174,8 @@ impl ScrollRollupNodeConfig {
         // On startup we replay the latest batch of blocks from the database as such we set the safe
         // block hash to the latest block hash associated with the previous consolidated
         // batch in the database.
-        let finalized_block_number = db.get_finalized_l1_block_number().await?.unwrap_or(0);
-        rollup_node_indexer::unwind(db.clone(), chain_spec.clone(), finalized_block_number).await?;
-        let (startup_safe_block, l1_start_block_number) = db.get_startup_data().await?;
+        let (startup_safe_block, l1_start_block_number) =
+            db.get_startup_data(chain_spec.genesis_hash()).await?;
         if let Some(block_info) = startup_safe_block {
             fcs.update_safe_block_info(block_info);
         } else {
