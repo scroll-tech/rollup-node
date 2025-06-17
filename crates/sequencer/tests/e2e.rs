@@ -1,7 +1,7 @@
 //! e2e tests for the sequencer.
 
 use alloy_consensus::BlockHeader;
-use alloy_primitives::{Address, U256};
+use alloy_primitives::{hex, Address, U256};
 use alloy_rpc_types_engine::PayloadAttributes;
 use futures::stream::StreamExt;
 use reth_e2e_test_utils::transaction::TransactionTestContext;
@@ -10,20 +10,21 @@ use reth_scroll_chainspec::SCROLL_DEV;
 use reth_scroll_node::test_utils::setup;
 use rollup_node::{
     test_utils::{default_test_scroll_rollup_node_config, setup_engine},
-    ScrollRollupNodeConfig, SequencerArgs,
+    BeaconProviderArgs, DatabaseArgs, EngineDriverArgs, L1ProviderArgs, NetworkArgs,
+    ScrollRollupNodeConfig, SequencerArgs, SignerArgs,
 };
-use rollup_node_primitives::{BlockInfo, L1MessageEnvelope};
+use rollup_node_manager::RollupManagerEvent;
+use rollup_node_primitives::{sig_encode_hash, BlockInfo, L1MessageEnvelope};
 use rollup_node_providers::{DatabaseL1MessageProvider, ScrollRootProvider};
 use rollup_node_sequencer::{L1MessageInclusionMode, Sequencer};
+use rollup_node_signer::SignerEvent;
 use scroll_alloy_consensus::TxL1Message;
 use scroll_alloy_provider::ScrollAuthApiEngineClient;
 use scroll_alloy_rpc_types_engine::ScrollPayloadAttributes;
 use scroll_db::{test_utils::setup_test_db, DatabaseOperations};
 use scroll_engine::{EngineDriver, EngineDriverEvent, ForkchoiceState};
-use std::{
-    sync::Arc,
-    time::{SystemTime, UNIX_EPOCH},
-};
+use std::{io::Write, path::PathBuf, sync::Arc, time::{SystemTime, UNIX_EPOCH}};
+use tempfile::NamedTempFile;
 use tokio::{
     sync::Mutex,
     time::{Duration, Instant},
@@ -405,7 +406,167 @@ async fn can_build_blocks_with_finalized_l1_messages() {
 }
 
 #[tokio::test]
-async fn can_build_blocks_and_exit_at_reached_gas_limit() {
+async fn can_sequence_blocks_with_private_key_file() -> eyre::Result<()> {
+    reth_tracing::init_test_tracing();
+
+    // Create temporary private key file
+    let mut temp_file = NamedTempFile::new().unwrap();
+    let private_key_hex = "0x1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef";
+    temp_file.write_all(private_key_hex.as_bytes()).unwrap();
+    temp_file.flush().unwrap();
+
+    // Create expected signer
+    let expected_key_bytes =
+        hex::decode("1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef").unwrap();
+    let expected_signer =
+        alloy_signer_local::PrivateKeySigner::from_slice(&expected_key_bytes).unwrap();
+    let expected_address = expected_signer.address();
+
+    let chain_spec = (*SCROLL_DEV).clone();
+    let rollup_manager_args = ScrollRollupNodeConfig {
+        test: false, // disable test mode to enable real signing
+        network_args: NetworkArgs { enable_eth_scroll_wire_bridge: true, enable_scroll_wire: true },
+        database_args: DatabaseArgs { path: Some(PathBuf::from("sqlite::memory:")) },
+        l1_provider_args: L1ProviderArgs::default(),
+        engine_driver_args: EngineDriverArgs::default(),
+        sequencer_args: SequencerArgs {
+            sequencer_enabled: true,
+            block_time: 0,
+            max_l1_messages_per_block: 4,
+            l1_message_inclusion_mode: L1MessageInclusionMode::BlockDepth(0),
+            ..SequencerArgs::default()
+        },
+        beacon_provider_args: BeaconProviderArgs::default(),
+        signer_args: SignerArgs { key_file: Some(temp_file.path().to_path_buf()) },
+    };
+
+    let (nodes, _tasks, wallet) = setup_engine(rollup_manager_args, 1, chain_spec, false).await?;
+    let wallet = Arc::new(Mutex::new(wallet));
+
+    let sequencer_rnm_handle = nodes[0].inner.add_ons_handle.rollup_manager_handle.clone();
+    let mut sequencer_events = sequencer_rnm_handle.get_event_listener().await?;
+
+    // Generate and inject transaction
+    let mut wallet_lock = wallet.lock().await;
+    let raw_tx = TransactionTestContext::transfer_tx_nonce_bytes(
+        wallet_lock.chain_id,
+        wallet_lock.inner.clone(),
+        wallet_lock.inner_nonce,
+    )
+    .await;
+    wallet_lock.inner_nonce += 1;
+    drop(wallet_lock);
+    let tx_hash = nodes[0].rpc.inject_tx(raw_tx).await?;
+
+    // Build block
+    sequencer_rnm_handle.build_block().await;
+
+    // Verify block was successfully sequenced
+    if let Some(RollupManagerEvent::BlockSequenced(block)) = sequencer_events.next().await {
+        assert_eq!(block.body.transactions.len(), 1);
+        assert_eq!(block.body.transactions.first().unwrap().tx_hash(), &tx_hash);
+    } else {
+        panic!("Failed to receive BlockSequenced event");
+    }
+
+    // Verify signing event and signature correctness
+    if let Some(RollupManagerEvent::SignerEvent(SignerEvent::SignedBlock {
+        block: signed_block,
+        signature,
+    })) = sequencer_events.next().await
+    {
+        let hash = sig_encode_hash(&signed_block);
+        let recovered_address = signature.recover_address_from_prehash(&hash)?;
+        assert_eq!(recovered_address, expected_address);
+    } else {
+        panic!("Failed to receive SignerEvent with signed block");
+    }
+
+    Ok(())
+}
+
+#[tokio::test]
+async fn can_sequence_blocks_with_hex_key_file_without_prefix() -> eyre::Result<()> {
+    reth_tracing::init_test_tracing();
+
+    // Create temporary private key file (without 0x prefix)
+    let mut temp_file = NamedTempFile::new().unwrap();
+    let private_key_hex = "1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef";
+    temp_file.write_all(private_key_hex.as_bytes()).unwrap();
+    temp_file.flush().unwrap();
+
+    // Create expected signer
+    let expected_key_bytes =
+        hex::decode("1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef").unwrap();
+    let expected_signer =
+        alloy_signer_local::PrivateKeySigner::from_slice(&expected_key_bytes).unwrap();
+    let expected_address = expected_signer.address();
+
+    let chain_spec = (*SCROLL_DEV).clone();
+    let rollup_manager_args = ScrollRollupNodeConfig {
+        test: false, // disable test mode to enable real signing
+        network_args: NetworkArgs { enable_eth_scroll_wire_bridge: true, enable_scroll_wire: true },
+        database_args: DatabaseArgs { path: Some(PathBuf::from("sqlite::memory:")) },
+        l1_provider_args: L1ProviderArgs::default(),
+        engine_driver_args: EngineDriverArgs::default(),
+        sequencer_args: SequencerArgs {
+            sequencer_enabled: true,
+            block_time: 0,
+            max_l1_messages_per_block: 4,
+            l1_message_inclusion_mode: L1MessageInclusionMode::BlockDepth(0),
+            ..SequencerArgs::default()
+        },
+        beacon_provider_args: BeaconProviderArgs::default(),
+        signer_args: SignerArgs { key_file: Some(temp_file.path().to_path_buf()) },
+    };
+
+    let (nodes, _tasks, wallet) = setup_engine(rollup_manager_args, 1, chain_spec, false).await?;
+    let wallet = Arc::new(Mutex::new(wallet));
+
+    let sequencer_rnm_handle = nodes[0].inner.add_ons_handle.rollup_manager_handle.clone();
+    let mut sequencer_events = sequencer_rnm_handle.get_event_listener().await?;
+
+    // Generate and inject transaction
+    let mut wallet_lock = wallet.lock().await;
+    let raw_tx = TransactionTestContext::transfer_tx_nonce_bytes(
+        wallet_lock.chain_id,
+        wallet_lock.inner.clone(),
+        wallet_lock.inner_nonce,
+    )
+    .await;
+    wallet_lock.inner_nonce += 1;
+    drop(wallet_lock);
+    let tx_hash = nodes[0].rpc.inject_tx(raw_tx).await?;
+
+    // Build block
+    sequencer_rnm_handle.build_block().await;
+
+    // Verify block was successfully sequenced
+    if let Some(RollupManagerEvent::BlockSequenced(block)) = sequencer_events.next().await {
+        assert_eq!(block.body.transactions.len(), 1);
+        assert_eq!(block.body.transactions.first().unwrap().tx_hash(), &tx_hash);
+    } else {
+        panic!("Failed to receive BlockSequenced event");
+    }
+
+    // Verify signing event and signature correctness
+    if let Some(RollupManagerEvent::SignerEvent(SignerEvent::SignedBlock {
+        block: signed_block,
+        signature,
+    })) = sequencer_events.next().await
+    {
+        let hash = sig_encode_hash(&signed_block);
+        let recovered_address = signature.recover_address_from_prehash(&hash)?;
+        assert_eq!(recovered_address, expected_address);
+    } else {
+        panic!("Failed to receive SignerEvent with signed block");
+    }
+
+    Ok(())
+}
+
+#[tokio::test]
+async fn can_build_blocks_and_exit_at_gas_limit() {
     reth_tracing::init_test_tracing();
 
     let chain_spec = SCROLL_DEV.clone();
@@ -425,8 +586,8 @@ async fn can_build_blocks_and_exit_at_reached_gas_limit() {
         chain_spec,
         false,
     )
-    .await
-    .unwrap();
+        .await
+        .unwrap();
     let node = nodes.pop().unwrap();
     let wallet = Arc::new(Mutex::new(wallet));
 
@@ -438,7 +599,7 @@ async fn can_build_blocks_and_exit_at_reached_gas_limit() {
             wallet_lock.inner.clone(),
             wallet_lock.inner_nonce,
         )
-        .await;
+            .await;
         wallet_lock.inner_nonce += 1;
         node.rpc.inject_tx(raw_tx).await.unwrap();
     }
@@ -510,8 +671,8 @@ async fn can_build_blocks_and_exit_at_time_limit() {
         chain_spec,
         false,
     )
-    .await
-    .unwrap();
+        .await
+        .unwrap();
     let node = nodes.pop().unwrap();
     let wallet = Arc::new(Mutex::new(wallet));
 
@@ -523,7 +684,7 @@ async fn can_build_blocks_and_exit_at_time_limit() {
             wallet_lock.inner.clone(),
             wallet_lock.inner_nonce,
         )
-        .await;
+            .await;
         wallet_lock.inner_nonce += 1;
         node.rpc.inject_tx(raw_tx).await.unwrap();
     }

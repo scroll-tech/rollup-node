@@ -31,11 +31,15 @@ metrics-derive.workspace = true
 thiserror.workspace = true
 tokio.workspace = true
 tracing.workspace = true
+eyre.workspace = true
 
 [dev-dependencies]
 # alloy
 alloy-consensus.workspace = true
 alloy-primitives.workspace = true
+
+rollup-node-manager.workspace = true
+rollup-node-signer.workspace = true
 
 # scroll-alloy
 scroll-alloy-consensus.workspace = true
@@ -59,3 +63,5 @@ scroll-engine.workspace = true
 
 # misc
 futures.workspace = true
+tempfile = "3.20.0"
+alloy-signer-local.workspace = true
