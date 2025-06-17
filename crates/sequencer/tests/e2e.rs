@@ -8,7 +8,10 @@ use reth_e2e_test_utils::transaction::TransactionTestContext;
 use reth_node_core::primitives::SignedTransaction;
 use reth_scroll_chainspec::SCROLL_DEV;
 use reth_scroll_node::test_utils::setup;
-use rollup_node::test_utils::{default_test_scroll_rollup_node_config, setup_engine};
+use rollup_node::{
+    test_utils::{default_test_scroll_rollup_node_config, setup_engine},
+    ScrollRollupNodeConfig, SequencerArgs,
+};
 use rollup_node_primitives::{BlockInfo, L1MessageEnvelope};
 use rollup_node_providers::{DatabaseL1MessageProvider, ScrollRootProvider};
 use rollup_node_sequencer::{L1MessageInclusionMode, Sequencer};
@@ -19,9 +22,12 @@ use scroll_db::{test_utils::setup_test_db, DatabaseOperations};
 use scroll_engine::{EngineDriver, EngineDriverEvent, ForkchoiceState};
 use std::{
     sync::Arc,
-    time::{Instant, SystemTime, UNIX_EPOCH},
+    time::{SystemTime, UNIX_EPOCH},
 };
-use tokio::{sync::Mutex, time::Duration};
+use tokio::{
+    sync::Mutex,
+    time::{Duration, Instant},
+};
 
 #[tokio::test]
 async fn can_build_blocks() {
@@ -399,17 +405,28 @@ async fn can_build_blocks_with_finalized_l1_messages() {
 }
 
 #[tokio::test]
-async fn can_build_blocks_at_fixed_intervals() {
+async fn can_build_blocks_and_exit_at_reached_gas_limit() {
     reth_tracing::init_test_tracing();
 
     let chain_spec = SCROLL_DEV.clone();
+    const MIN_TRANSACTION_GAS_COST: u64 = 21_000;
     const BLOCK_BUILDING_DURATION: Duration = Duration::from_millis(250);
     const BLOCK_GAP_TRIGGER: u64 = 100;
-    const TRANSACTIONS_COUNT: usize = 10_000;
+    const TRANSACTIONS_COUNT: usize = 2000;
 
-    // setup a test node.
-    let (mut nodes, _tasks, wallet) =
-        setup_engine(default_test_scroll_rollup_node_config(), 1, chain_spec, false).await.unwrap();
+    // setup a test node. use a high value for the payload building duration to be sure we don't
+    // exit early.
+    let (mut nodes, _tasks, wallet) = setup_engine(
+        ScrollRollupNodeConfig {
+            sequencer_args: SequencerArgs { payload_building_duration: 1000, ..Default::default() },
+            ..default_test_scroll_rollup_node_config()
+        },
+        1,
+        chain_spec,
+        false,
+    )
+    .await
+    .unwrap();
     let node = nodes.pop().unwrap();
     let wallet = Arc::new(Mutex::new(wallet));
 
@@ -448,10 +465,95 @@ async fn can_build_blocks_at_fixed_intervals() {
         BLOCK_BUILDING_DURATION,
     );
 
-    tracing::info!(target: "scroll::e2e", "starting timer");
-    let timer = Instant::now();
+    // issue a new payload to the execution layer.
+    let timestamp =
+        SystemTime::now().duration_since(UNIX_EPOCH).expect("Time can't go backwards").as_secs();
+    engine_driver.handle_build_new_payload(ScrollPayloadAttributes {
+        payload_attributes: PayloadAttributes {
+            timestamp,
+            prev_randao: Default::default(),
+            suggested_fee_recipient: Default::default(),
+            withdrawals: None,
+            parent_beacon_block_root: None,
+        },
+        transactions: None,
+        no_tx_pool: false,
+        block_data_hint: None,
+    });
 
-    // Issue a new payload to the execution layer.
+    // verify the gas used is within MIN_TRANSACTION_GAS_COST of the gas limit.
+    if let Some(EngineDriverEvent::NewPayload(block)) = engine_driver.next().await {
+        assert!(block.header.gas_used >= block.gas_limit - MIN_TRANSACTION_GAS_COST);
+    } else {
+        panic!("expected a new payload event");
+    }
+}
+
+#[tokio::test]
+async fn can_build_blocks_and_exit_at_time_limit() {
+    reth_tracing::init_test_tracing();
+
+    let chain_spec = SCROLL_DEV.clone();
+    const MIN_TRANSACTION_GAS_COST: u64 = 21_000;
+    const BLOCK_BUILDING_DURATION: Duration = Duration::from_secs(1);
+    const BLOCK_GAP_TRIGGER: u64 = 100;
+    const TRANSACTIONS_COUNT: usize = 2000;
+
+    // setup a test node. use a low payload building duration in order to exit before we reach the
+    // gas limit.
+    let (mut nodes, _tasks, wallet) = setup_engine(
+        ScrollRollupNodeConfig {
+            sequencer_args: SequencerArgs { payload_building_duration: 10, ..Default::default() },
+            ..default_test_scroll_rollup_node_config()
+        },
+        1,
+        chain_spec,
+        false,
+    )
+    .await
+    .unwrap();
+    let node = nodes.pop().unwrap();
+    let wallet = Arc::new(Mutex::new(wallet));
+
+    // add transactions.
+    let mut wallet_lock = wallet.lock().await;
+    for _ in 0..TRANSACTIONS_COUNT {
+        let raw_tx = TransactionTestContext::transfer_tx_nonce_bytes(
+            wallet_lock.chain_id,
+            wallet_lock.inner.clone(),
+            wallet_lock.inner_nonce,
+        )
+        .await;
+        wallet_lock.inner_nonce += 1;
+        node.rpc.inject_tx(raw_tx).await.unwrap();
+    }
+    drop(wallet_lock);
+
+    // create a forkchoice state
+    let genesis_hash = node.inner.chain_spec().genesis_hash();
+    let fcs = ForkchoiceState::new(
+        BlockInfo { hash: genesis_hash, number: 0 },
+        Default::default(),
+        Default::default(),
+    );
+
+    // create the engine driver connected to the node
+    let auth_client = node.inner.engine_http_client();
+    let engine_client = ScrollAuthApiEngineClient::new(auth_client);
+    let mut engine_driver = EngineDriver::new(
+        Arc::new(engine_client),
+        (*SCROLL_DEV).clone(),
+        None::<ScrollRootProvider>,
+        fcs,
+        false,
+        BLOCK_GAP_TRIGGER,
+        BLOCK_BUILDING_DURATION,
+    );
+
+    // start timer.
+    let start = Instant::now();
+
+    // issue a new payload to the execution layer.
     let timestamp =
         SystemTime::now().duration_since(UNIX_EPOCH).expect("Time can't go backwards").as_secs();
     engine_driver.handle_build_new_payload(ScrollPayloadAttributes {
@@ -468,14 +570,11 @@ async fn can_build_blocks_at_fixed_intervals() {
     });
 
     if let Some(EngineDriverEvent::NewPayload(block)) = engine_driver.next().await {
-        let elapsed = timer.elapsed().as_millis();
-        let target = BLOCK_BUILDING_DURATION.as_millis();
-        assert!(
-            !block.body.transactions.is_empty() /* TODO: add block.body.transactions.len() < *
-                                                 * TRANSACTIONS_COUNT */
-        );
-        dbg!(elapsed, target, block.body.transactions.len());
-        assert!(elapsed > target * 9 / 10 && elapsed < target * 11 / 10);
+        let payload_building_duration = start.elapsed();
+        // verify that the block building duration is within 10% of the target (we allow for 10%
+        // mismatch due to slower performance of debug mode).
+        assert!(payload_building_duration < BLOCK_BUILDING_DURATION * 110 / 100);
+        assert!(block.gas_used < block.gas_limit - MIN_TRANSACTION_GAS_COST);
     } else {
         panic!("expected a new payload event");
     }

@@ -67,7 +67,7 @@ impl Consensus for SystemContractConsensus {
             return Err(ConsensusError::IncorrectSigner(GotExpected {
                 got: signer,
                 expected: self.authorized_signer,
-            }));
+            }))
         }
         Ok(())
     }
