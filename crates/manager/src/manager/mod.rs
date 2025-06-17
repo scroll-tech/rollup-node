@@ -256,7 +256,7 @@ where
                 // update the fcs on new finalized block.
                 self.engine.set_finalized_block_info(finalized_block);
             }
-            IndexerEvent::ReorgIndexed {
+            IndexerEvent::UnwindIndexed {
                 l1_block_number,
                 queue_index,
                 l2_head_block_info,

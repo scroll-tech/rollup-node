@@ -15,10 +15,9 @@ use reth_node_core::primitives::BlockHeader;
 use reth_scroll_chainspec::SCROLL_FEE_VAULT_ADDRESS;
 use reth_scroll_node::ScrollNetworkPrimitives;
 use rollup_node_manager::{
-    compute_watcher_start_block_from_database, Consensus, NoopConsensus, RollupManagerHandle,
-    RollupNodeManager, SystemContractConsensus,
+    Consensus, NoopConsensus, RollupManagerHandle, RollupNodeManager, SystemContractConsensus,
 };
-use rollup_node_primitives::NodeConfig;
+use rollup_node_primitives::{BlockInfo, NodeConfig};
 use rollup_node_providers::{
     beacon_provider, DatabaseL1MessageProvider, L1MessageProvider, L1Provider, OnlineL1Provider,
     SystemContractProvider,
@@ -30,7 +29,7 @@ use scroll_alloy_hardforks::ScrollHardforks;
 use scroll_alloy_network::Scroll;
 use scroll_alloy_provider::{ScrollAuthApiEngineClient, ScrollEngineApi};
 use scroll_db::{Database, DatabaseConnectionProvider, DatabaseOperations};
-use scroll_engine::{EngineDriver, ForkchoiceState};
+use scroll_engine::{genesis_hash_from_chain_spec, EngineDriver, ForkchoiceState};
 use scroll_migration::traits::ScrollMigrator;
 use scroll_network::ScrollNetworkManager;
 use scroll_wire::{ScrollWireConfig, ScrollWireProtocolHandler};
@@ -170,16 +169,26 @@ impl ScrollRollupNodeConfig {
             .await
             .unwrap_or_else(chain_spec_fcs);
 
+        let chain_spec = Arc::new(chain_spec.clone());
+
         // On startup we replay the latest batch of blocks from the database as such we set the safe
         // block hash to the latest block hash associated with the previous consolidated
         // batch in the database.
-        if let Some(block_info) = db.get_startup_safe_block().await? {
+        let finalized_block_number = db.get_finalized_l1_block_number().await?.unwrap_or(0);
+        rollup_node_indexer::unwind(db.clone(), chain_spec.clone(), finalized_block_number).await?;
+        let (startup_safe_block, l1_start_block_number) = db.get_startup_data().await?;
+        if let Some(block_info) = startup_safe_block {
             fcs.update_safe_block_info(block_info);
-        };
+        } else {
+            fcs.update_safe_block_info(BlockInfo {
+                hash: genesis_hash_from_chain_spec(chain_spec.clone()).unwrap(),
+                number: 0,
+            });
+        }
 
         let engine = EngineDriver::new(
             Arc::new(engine_api),
-            Arc::new(chain_spec.clone()),
+            chain_spec.clone(),
             Some(l2_provider),
             fcs,
             !self.test && !chain_spec.is_dev_chain(),
@@ -200,8 +209,8 @@ impl ScrollRollupNodeConfig {
         let (l1_notification_tx, l1_notification_rx): (Option<Sender<Arc<L1Notification>>>, _) =
             if let Some(provider) = l1_provider.filter(|_| !self.test) {
                 // Determine the start block number for the L1 watcher
-                let start_block_number = compute_watcher_start_block_from_database(&db).await?;
-                (None, Some(L1Watcher::spawn(provider, start_block_number, node_config).await))
+                // let start_block_number = compute_watcher_start_block_from_database(&db).await?;
+                (None, Some(L1Watcher::spawn(provider, l1_start_block_number, node_config).await))
             } else {
                 // Create a channel for L1 notifications that we can use to inject L1 messages for
                 // testing
@@ -289,7 +298,7 @@ impl ScrollRollupNodeConfig {
             db,
             l1_notification_rx,
             consensus,
-            chain_spec.into(),
+            chain_spec,
             eth_wire_listener,
             sequencer,
             signer,

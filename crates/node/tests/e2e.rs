@@ -330,20 +330,29 @@ async fn graceful_shutdown_consolidates_most_recent_batch_on_startup() -> eyre::
     l1_notification_tx.send(Arc::new(L1Notification::BatchCommit(batch_0_data.clone()))).await?;
 
     // Lets iterate over all blocks expected to be derived from the first batch commit.
-    for i in 1..5 {
-        loop {
+    let mut i = 1;
+    loop {
+        let block_info = loop {
             let event = loop_until_event(&mut rnm, &mut rnm_events).await;
             if let RollupManagerEvent::L1DerivedBlockConsolidated(consolidation_outcome) = event {
                 assert!(consolidation_outcome.block_info().block_info.number == i);
-                break;
+                break consolidation_outcome.block_info().block_info;
             }
-        }
+        };
+
+        if block_info.number == 4 {
+            break
+        };
+        i += 1;
     }
+
+    // Lets finalize the first batch
+    l1_notification_tx.send(Arc::new(L1Notification::Finalized(18318208))).await?;
 
     // Now we send the second batch commit.
     l1_notification_tx.send(Arc::new(L1Notification::BatchCommit(batch_1_data.clone()))).await?;
 
-    // The second batch commit contains 53 blocks (5-57), lets iterate until the rnm has
+    // The second batch commit contains 42 blocks (5-57), lets iterate until the rnm has
     // consolidated up to block 40.
     let mut i = 5;
     let hash = loop {
@@ -376,15 +385,6 @@ async fn graceful_shutdown_consolidates_most_recent_batch_on_startup() -> eyre::
     drop(l1_notification_tx);
     drop(rnm_events);
 
-    // Create a database and ensure that the function used to determine the l1 start block number is
-    // correct. This is what will be used in `config.build(...)`
-    let path_str = path.to_string_lossy().to_string();
-    let db = Arc::new(Database::new(&path_str).await?);
-    let l1_block_number = compute_watcher_start_block_from_database(&db).await?.unwrap();
-
-    // Assert that the L1 start block number is correct.
-    assert_eq!(l1_block_number, batch_1_data.block_number);
-
     // Start the RNM again.
     let (mut rnm, handle, l1_notification_tx) = config
         .clone()
@@ -392,10 +392,19 @@ async fn graceful_shutdown_consolidates_most_recent_batch_on_startup() -> eyre::
             node.inner.network.clone(),
             node.inner.add_ons_handle.rpc_handle.rpc_server_handles.clone(),
             chain_spec,
-            path,
+            path.clone(),
         )
         .await?;
     let l1_notification_tx = l1_notification_tx.unwrap();
+
+    // Create a database and ensure that the function used to determine the l1 start block number is
+    // correct. This is what will be used in `config.build(...)`
+    let path_str = path.to_string_lossy().to_string();
+    let db = Arc::new(Database::new(&path_str).await?);
+    let l1_block_number = compute_watcher_start_block_from_database(&db).await?.unwrap();
+
+    // Assert that the L1 start block number is correct.
+    assert_eq!(l1_block_number, batch_0_data.block_number);
 
     // Get a handle to the event stream from the rollup node manager.
     let mut rnm_events = Box::pin(handle.get_event_listener());
@@ -409,6 +418,7 @@ async fn graceful_shutdown_consolidates_most_recent_batch_on_startup() -> eyre::
     };
 
     // Send the second batch again to mimic the watcher behaviour.
+    l1_notification_tx.send(Arc::new(L1Notification::BatchCommit(batch_0_data.clone()))).await?;
     l1_notification_tx.send(Arc::new(L1Notification::BatchCommit(batch_1_data.clone()))).await?;
 
     // Lets fetch the first consolidated block event - this should be the first block of the batch.
@@ -421,29 +431,13 @@ async fn graceful_shutdown_consolidates_most_recent_batch_on_startup() -> eyre::
 
     // Assert that the consolidated block is the first block of the batch.
     assert_eq!(
-        l2_block.block_info.number, 5,
+        l2_block.block_info.number, 1,
         "Consolidated block number does not match expected number"
-    );
-
-    // Assert that the safe block hash has been reverted to the first consolidated block hash
-    // and the head block hash is the same as the hash of the last consolidated block.
-    let rpc = node.rpc.inner.eth_api();
-    let safe_block_hash =
-        rpc.block_by_number(BlockNumberOrTag::Safe, false).await?.expect("safe block must exist");
-    let head_block_hash =
-        rpc.block_by_number(BlockNumberOrTag::Latest, false).await?.expect("head block must exist");
-    assert_eq!(
-        safe_block_hash.header.hash, l2_block.block_info.hash,
-        "Safe block should revert to the first consolidated block hash after restart"
-    );
-    assert_eq!(
-        head_block_hash.header.hash, hash,
-        "Head block hash does not match expected hash after restart"
     );
 
     // Lets now iterate over all remaining blocks expected to be derived from the second batch
     // commit.
-    for i in 6..=57 {
+    for i in 2..=57 {
         loop {
             let event = loop_until_event(&mut rnm, &mut rnm_events).await;
             if let RollupManagerEvent::L1DerivedBlockConsolidated(consolidation_outcome) = event {

@@ -3,7 +3,7 @@ use crate::DatabaseConnectionProvider;
 use alloy_primitives::B256;
 use futures::{Stream, StreamExt};
 use rollup_node_primitives::{
-    BatchCommitData, BatchInfo, BlockInfo, L1MessageEnvelope, L2BlockInfoWithL1Messages,
+    BatchCommitData, BatchInfo, BlockInfo, L1MessageEnvelope, L2BlockInfoWithL1Messages, Metadata,
 };
 use scroll_alloy_rpc_types_engine::BlockDataHint;
 use sea_orm::{
@@ -76,6 +76,37 @@ pub trait DatabaseOperations: DatabaseConnectionProvider {
         .map(|x| x.map(Into::into))?)
     }
 
+    /// Set the latest finalized L1 block number.
+    async fn set_latest_finalized_l1_block_number(
+        &self,
+        block_number: u64,
+    ) -> Result<(), DatabaseError> {
+        tracing::trace!(target: "scroll::db", block_number, "Updating the latest finalized L1 block number in the database.");
+        let metadata: models::metadata::ActiveModel =
+            Metadata { l1_finalized_block: block_number }.into();
+        Ok(models::metadata::Entity::insert(metadata)
+            .on_conflict(
+                OnConflict::column(models::metadata::Column::Key)
+                    .update_column(models::metadata::Column::Value)
+                    .to_owned(),
+            )
+            .exec(self.get_connection())
+            .await
+            .map(|_| ())?)
+    }
+
+    /// Get the finalized L1 block number from the database.
+    async fn get_finalized_l1_block_number(&self) -> Result<Option<u64>, DatabaseError> {
+        Ok(models::metadata::Entity::find()
+            .filter(models::metadata::Column::Key.eq("l1_finalized_block"))
+            .select_only()
+            .column(models::metadata::Column::Value)
+            .into_tuple::<String>()
+            .one(self.get_connection())
+            .await
+            .map(|x| x.and_then(|x| x.parse::<u64>().ok()))?)
+    }
+
     /// Get the newest finalized batch hash up to or at the provided height.
     async fn get_finalized_batch_hash_at_height(
         &self,
@@ -123,7 +154,18 @@ pub trait DatabaseOperations: DatabaseConnectionProvider {
         let l1_message: models::l1_message::ActiveModel = l1_message.into();
         models::l1_message::Entity::insert(l1_message)
             .on_conflict(
-                OnConflict::column(models::l1_message::Column::QueueIndex).do_nothing().to_owned(),
+                OnConflict::column(models::l1_message::Column::QueueIndex)
+                    .update_columns(vec![
+                        models::l1_message::Column::QueueHash,
+                        models::l1_message::Column::Hash,
+                        models::l1_message::Column::L1BlockNumber,
+                        models::l1_message::Column::GasLimit,
+                        models::l1_message::Column::To,
+                        models::l1_message::Column::Value,
+                        models::l1_message::Column::Sender,
+                        models::l1_message::Column::Input,
+                    ])
+                    .to_owned(),
             )
             .exec(self.get_connection())
             .await?;
@@ -257,7 +299,7 @@ pub trait DatabaseOperations: DatabaseConnectionProvider {
     /// This method fetches the batch info for the latest safe L2 block, it then retrieves the
     /// latest block for the previous batch (i.e., the batch before the latest safe block) and
     /// returns the block info.
-    async fn get_startup_safe_block(&self) -> Result<Option<BlockInfo>, DatabaseError> {
+    async fn get_startup_data(&self) -> Result<(Option<BlockInfo>, Option<u64>), DatabaseError> {
         tracing::trace!(target: "scroll::db", "Fetching startup safe block from database.");
         let safe = if let Some(batch_info) = self
             .get_latest_safe_l2_block()
@@ -266,14 +308,18 @@ pub trait DatabaseOperations: DatabaseConnectionProvider {
             .filter(|b| b.index > 1)
         {
             let batch = self
+                .get_batch_by_index(batch_info.index)
+                .await?
+                .expect("Batch info must be present due to database query arguments");
+            let previous_batch = self
                 .get_batch_by_index(batch_info.index - 1)
                 .await?
                 .expect("Batch info must be present due to database query arguments");
-            let block = self.get_highest_block_for_batch(batch.hash).await?;
-            tracing::info!(target:"test", "{:?}", block);
-            block
+            let l2_block = self.get_highest_block_for_batch(previous_batch.hash).await?;
+            tracing::info!(target:"test", "{:?}", l2_block);
+            (l2_block, Some(batch.block_number))
         } else {
-            None
+            (None, None)
         };
 
         Ok(safe)

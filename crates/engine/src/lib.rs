@@ -12,7 +12,7 @@ mod error;
 pub use event::EngineDriverEvent;
 mod event;
 
-pub use fcs::ForkchoiceState;
+pub use fcs::{genesis_hash_from_chain_spec, ForkchoiceState};
 mod fcs;
 
 mod future;

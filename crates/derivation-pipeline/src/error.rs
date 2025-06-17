@@ -1,5 +1,5 @@
 use rollup_node_providers::L1ProviderError;
-use scroll_codec::CodecError;
+use scroll_codec::{CodecError, L2Block};
 use scroll_db::DatabaseError;
 
 /// An error occurred during the derivation process.
@@ -9,8 +9,8 @@ pub enum DerivationPipelineError {
     #[error("missing l1 message queue cursor")]
     MissingL1MessageQueueCursor,
     /// Missing L1 message.
-    #[error("missing l1 message")]
-    MissingL1Message,
+    #[error("missing l1 message for L2 block {0:?}")]
+    MissingL1Message(L2Block),
     /// Unknown batch.
     #[error("unknown batch for index {0}")]
     UnknownBatch(u64),
