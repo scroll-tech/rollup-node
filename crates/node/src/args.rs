@@ -220,13 +220,7 @@ impl SignerArgs {
 
             Ok(Some(Box::new(aws_signer)))
         } else {
-            // This should not happen because ScrollRollupNodeConfig::validate() should catch this,
-            // but we handle it defensively
-            tracing::error!("No signer configured for chain ID: {}", chain_id);
-            Err(eyre::eyre!(
-                "No signer configured: neither key_file nor aws_kms_key_id is set for chain ID {}",
-                chain_id
-            ))
+            Ok(None)
         }
     }
 }
