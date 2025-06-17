@@ -2,7 +2,6 @@
 
 pub mod add_ons;
 mod args;
-mod bridge;
 mod constants;
 mod node;
 #[cfg(feature = "test-utils")]

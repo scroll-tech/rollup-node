@@ -76,7 +76,7 @@ async fn can_bridge_l1_messages() -> eyre::Result<()> {
     rnm_handle.build_block().await;
     if let Some(RollupManagerEvent::BlockSequenced(block)) = rnm_events.next().await {
         assert_eq!(block.body.transactions.len(), 1);
-        assert_eq!(block.body.transactions[0].transaction.l1_message().unwrap(), &l1_message,);
+        assert_eq!(block.body.transactions[0].as_l1_message().unwrap().inner(), &l1_message,);
     } else {
         panic!("Failed to receive block from rollup node");
     }
@@ -104,6 +104,7 @@ async fn can_sequence_and_gossip_blocks() {
             block_time: 0,
             max_l1_messages_per_block: 4,
             l1_message_inclusion_mode: L1MessageInclusionMode::BlockDepth(0),
+            payload_building_duration: 1000,
             ..SequencerArgs::default()
         },
         beacon_provider_args: BeaconProviderArgs::default(),
