@@ -19,6 +19,8 @@ alloy-primitives.workspace = true
 alloy-provider.workspace = true
 alloy-rpc-client.workspace = true
 alloy-signer-local.workspace = true
+alloy-signer-aws = "1.0.9"
+alloy-signer = "1.0.9"
 alloy-transport.workspace = true
 
 scroll-alloy-consensus.workspace = true
@@ -63,6 +65,10 @@ rollup-node-providers.workspace = true
 rollup-node-sequencer.workspace = true
 rollup-node-signer.workspace = true
 rollup-node-watcher.workspace = true
+
+# AWS dependencies
+aws-config = "1.8.0"
+aws-sdk-kms = "1.76.0"
 
 # test-utils
 alloy-rpc-types-engine = { workspace = true, optional = true }

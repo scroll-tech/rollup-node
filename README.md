@@ -122,19 +122,36 @@ To run a sequencer node you should build the binary in release mode using the in
 
 Then, you can run the sequencer node with the following command:
 
+### Using Private Key File
 ```sh
 ./target/release/rollup-node node --chain dev -d --sequencer.enabled --signer.key-file /path/to/your/private.key --http --http.api admin,debug,eth,net,trace,txpool,web3,rpc,reth,ots,flashbots,miner,mev
 ```
 
-**Note**: When running a sequencer, a signer key file is required unless the `--test` flag is specified. Use the `--signer.key-file` option to specify the path to your private key file. Keep your private key file secure and never commit it to version control.
+**Note**: The private key file should contain a hex-encoded private key (`64` characters, optionally prefixed with `0x`).
 
-This will start a dev node in sequencer mode with all rpc apis enabled. You can adjust the `--http.api` flag to include or exclude specific APIs as needed.
+### Using AWS KMS
+```sh
+./target/release/rollup-node node --chain dev -d --sequencer.enabled --signer.aws-kms-key-id arn:aws:kms:REGION:ACCOUNT:key/KEY-ID --http --http.api admin,debug,eth,net,trace,txpool,web3,rpc,reth,ots,flashbots,miner,mev
+```
+
+### Signer Configuration Notes
+
+When running a sequencer, a signer is required unless the `--test` flag is specified. The two signing methods are mutually exclusive - use either `--signer.key-file` or `--signer.aws-kms-key-id`, but not both.
+
+**Private Key File**: Keep your private key file secure and never commit it to version control.
+
+**AWS KMS**: Requires KMS permissions `kms:GetPublicKey` and `kms:Sign` for the specified key.
+
+### General Information
+
+The above commands will start a dev node in sequencer mode with all rpc apis enabled. You can adjust the `--http.api` flag to include or exclude specific APIs as needed.
 
 The chain will be configured with a genesis that funds 20 addresses derived from the mnemonic:
 ```
 test test test test test test test test test test test junk
 ```
 
+### Configuration Options
 
 A list of sequencer specific configuration options can be seen below:
 
@@ -150,7 +167,9 @@ A list of sequencer specific configuration options can be seen below:
       --fee-recipient <FEE_RECIPIENT>
           The fee recipient for the sequencer [default: 0x5300000000000000000000000000000000000005]
       --signer.key-file <FILE_PATH>
-          Path to the signer's hex-encoded private key file (optional 0x prefix). Required when sequencer is enabled
+          Path to the hex-encoded private key file for the signer (optional 0x prefix). Mutually exclusive with AWS KMS key ID
+      --signer.aws-kms-key-id <KEY_ID>
+          AWS KMS Key ID or ARN for signing transactions. Mutually exclusive with key file
 ```
 
 ## Contributing

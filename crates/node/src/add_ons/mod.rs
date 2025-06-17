@@ -86,7 +86,7 @@ where
     ) -> eyre::Result<Self::Handle> {
         let Self { rpc_add_ons, rollup_manager_addon: rollup_node_manager_addon } = self;
         let rpc_handle: RpcHandle<N, ScrollEthApi<N>> =
-            rpc_add_ons.launch_add_ons_with(ctx.clone(), |_, _, _| Ok(())).await?;
+            rpc_add_ons.launch_add_ons_with(ctx.clone(), |_| Ok(())).await?;
         let (rollup_manager_handle, l1_watcher_tx) =
             rollup_node_manager_addon.launch(ctx.clone(), rpc_handle.clone()).await?;
         Ok(ScrollAddOnsHandle {

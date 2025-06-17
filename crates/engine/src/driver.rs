@@ -207,7 +207,7 @@ where
                 }
             }
             EngineDriverFutureResult::PayloadBuildingJob(result) => {
-                tracing::info!(target: "scroll::engine", ?result, "handling payload building result");
+                tracing::info!(target: "scroll::engine", result = ?result.as_ref().map(|b| b.header.as_ref()), "handling payload building result");
 
                 match result {
                     Ok(block) => {
