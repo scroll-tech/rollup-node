@@ -44,4 +44,5 @@ serde = [
     "reth-scroll-primitives/serde",
     "scroll-wire/serde",
     "reth-primitives-traits/serde",
+    "reth-storage-api/serde",
 ]

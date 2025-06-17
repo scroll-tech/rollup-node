@@ -23,7 +23,12 @@ use scroll_alloy_provider::ScrollAuthApiEngineClient;
 use scroll_alloy_rpc_types_engine::ScrollPayloadAttributes;
 use scroll_db::{test_utils::setup_test_db, DatabaseOperations};
 use scroll_engine::{EngineDriver, EngineDriverEvent, ForkchoiceState};
-use std::{io::Write, path::PathBuf, sync::Arc, time::{SystemTime, UNIX_EPOCH}};
+use std::{
+    io::Write,
+    path::PathBuf,
+    sync::Arc,
+    time::{SystemTime, UNIX_EPOCH},
+};
 use tempfile::NamedTempFile;
 use tokio::{
     sync::Mutex,
@@ -434,6 +439,7 @@ async fn can_sequence_blocks_with_private_key_file() -> eyre::Result<()> {
             block_time: 0,
             max_l1_messages_per_block: 4,
             l1_message_inclusion_mode: L1MessageInclusionMode::BlockDepth(0),
+            payload_building_duration: 1000,
             ..SequencerArgs::default()
         },
         beacon_provider_args: BeaconProviderArgs::default(),
@@ -514,6 +520,7 @@ async fn can_sequence_blocks_with_hex_key_file_without_prefix() -> eyre::Result<
             block_time: 0,
             max_l1_messages_per_block: 4,
             l1_message_inclusion_mode: L1MessageInclusionMode::BlockDepth(0),
+            payload_building_duration: 1000,
             ..SequencerArgs::default()
         },
         beacon_provider_args: BeaconProviderArgs::default(),
@@ -586,8 +593,8 @@ async fn can_build_blocks_and_exit_at_gas_limit() {
         chain_spec,
         false,
     )
-        .await
-        .unwrap();
+    .await
+    .unwrap();
     let node = nodes.pop().unwrap();
     let wallet = Arc::new(Mutex::new(wallet));
 
@@ -599,7 +606,7 @@ async fn can_build_blocks_and_exit_at_gas_limit() {
             wallet_lock.inner.clone(),
             wallet_lock.inner_nonce,
         )
-            .await;
+        .await;
         wallet_lock.inner_nonce += 1;
         node.rpc.inject_tx(raw_tx).await.unwrap();
     }
@@ -671,8 +678,8 @@ async fn can_build_blocks_and_exit_at_time_limit() {
         chain_spec,
         false,
     )
-        .await
-        .unwrap();
+    .await
+    .unwrap();
     let node = nodes.pop().unwrap();
     let wallet = Arc::new(Mutex::new(wallet));
 
@@ -684,7 +691,7 @@ async fn can_build_blocks_and_exit_at_time_limit() {
             wallet_lock.inner.clone(),
             wallet_lock.inner_nonce,
         )
-            .await;
+        .await;
         wallet_lock.inner_nonce += 1;
         node.rpc.inject_tx(raw_tx).await.unwrap();
     }
