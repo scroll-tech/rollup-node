@@ -443,7 +443,10 @@ async fn can_sequence_blocks_with_private_key_file() -> eyre::Result<()> {
             ..SequencerArgs::default()
         },
         beacon_provider_args: BeaconProviderArgs::default(),
-        signer_args: SignerArgs { key_file: Some(temp_file.path().to_path_buf()) },
+        signer_args: SignerArgs {
+            key_file: Some(temp_file.path().to_path_buf()),
+            aws_kms_key_id: None,
+        },
     };
 
     let (nodes, _tasks, wallet) = setup_engine(rollup_manager_args, 1, chain_spec, false).await?;
@@ -524,7 +527,10 @@ async fn can_sequence_blocks_with_hex_key_file_without_prefix() -> eyre::Result<
             ..SequencerArgs::default()
         },
         beacon_provider_args: BeaconProviderArgs::default(),
-        signer_args: SignerArgs { key_file: Some(temp_file.path().to_path_buf()) },
+        signer_args: SignerArgs {
+            key_file: Some(temp_file.path().to_path_buf()),
+            aws_kms_key_id: None,
+        },
     };
 
     let (nodes, _tasks, wallet) = setup_engine(rollup_manager_args, 1, chain_spec, false).await?;
