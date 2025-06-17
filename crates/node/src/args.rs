@@ -209,7 +209,6 @@ impl ScrollRollupNodeConfig {
         let (l1_notification_tx, l1_notification_rx): (Option<Sender<Arc<L1Notification>>>, _) =
             if let Some(provider) = l1_provider.filter(|_| !self.test) {
                 // Determine the start block number for the L1 watcher
-                // let start_block_number = compute_watcher_start_block_from_database(&db).await?;
                 (None, Some(L1Watcher::spawn(provider, l1_start_block_number, node_config).await))
             } else {
                 // Create a channel for L1 notifications that we can use to inject L1 messages for

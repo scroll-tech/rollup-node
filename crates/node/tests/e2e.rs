@@ -12,14 +12,11 @@ use rollup_node::{
     BeaconProviderArgs, DatabaseArgs, EngineDriverArgs, L1ProviderArgs,
     NetworkArgs as ScrollNetworkArgs, ScrollRollupNodeConfig, SequencerArgs,
 };
-use rollup_node_manager::{
-    compute_watcher_start_block_from_database, RollupManagerEvent, RollupManagerHandle,
-};
+use rollup_node_manager::{RollupManagerEvent, RollupManagerHandle};
 use rollup_node_primitives::BatchCommitData;
 use rollup_node_sequencer::L1MessageInclusionMode;
 use rollup_node_watcher::L1Notification;
 use scroll_alloy_consensus::TxL1Message;
-use scroll_db::Database;
 use scroll_network::{NewBlockWithPeer, SCROLL_MAINNET};
 use scroll_wire::ScrollWireConfig;
 use std::{
@@ -396,15 +393,6 @@ async fn graceful_shutdown_consolidates_most_recent_batch_on_startup() -> eyre::
         )
         .await?;
     let l1_notification_tx = l1_notification_tx.unwrap();
-
-    // Create a database and ensure that the function used to determine the l1 start block number is
-    // correct. This is what will be used in `config.build(...)`
-    let path_str = path.to_string_lossy().to_string();
-    let db = Arc::new(Database::new(&path_str).await?);
-    let l1_block_number = compute_watcher_start_block_from_database(&db).await?.unwrap();
-
-    // Assert that the L1 start block number is correct.
-    assert_eq!(l1_block_number, batch_0_data.block_number);
 
     // Get a handle to the event stream from the rollup node manager.
     let mut rnm_events = Box::pin(handle.get_event_listener());
