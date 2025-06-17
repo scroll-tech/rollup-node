@@ -67,7 +67,7 @@ impl Consensus for SystemContractConsensus {
             return Err(ConsensusError::IncorrectSigner(GotExpected {
                 got: signer,
                 expected: self.authorized_signer,
-            }))
+            }));
         }
         Ok(())
     }
@@ -76,11 +76,10 @@ impl Consensus for SystemContractConsensus {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use alloy_consensus::TxEip1559;
+    use alloy_consensus::{Signed, TxEip1559};
     use alloy_primitives::{address, b256, bloom, bytes, TxKind, B64, U256};
     use reth_primitives_traits::Header;
-    use reth_scroll_primitives::{ScrollBlockBody, ScrollTransactionSigned};
-    use scroll_alloy_consensus::ScrollTypedTransaction;
+    use reth_scroll_primitives::ScrollBlockBody;
     use std::{str::FromStr, sync::OnceLock};
 
     #[test]
@@ -119,11 +118,8 @@ mod tests {
                 requests_hash: None,
             },
             body: ScrollBlockBody {
-                transactions: vec![ScrollTransactionSigned {
-                    hash: tx_hash,
-                    signature:
-                    Signature::new(U256::from_str("12217337930795921874768983252881296563512928283585900928219483692173266513447").unwrap(), U256::from_str("37490897792770890087946325233571758133021734266092518377537449521790010698782").unwrap(), true) ,
-                    transaction: ScrollTypedTransaction::Eip1559(TxEip1559{
+                transactions: vec![
+                    Signed::new_unhashed(TxEip1559 {
                         chain_id: 534352,
                         nonce: 145014,
                         gas_limit: 600000,
@@ -133,13 +129,11 @@ mod tests {
                         value: U256::ZERO,
                         access_list: Default::default(),
                         input: bytes!("a00597a00000000000000000000000000000000000000000000000000000000001826cbe0000000000000000000000000000000000005eb6831c1aa0faf2055c7d53270e00000000000000000000000006efdbff2a14a7c8e15944d1f4a48f9f95f663a40000000000000000000000000000000000000000000000000000000000000001000000000000000000000000813df550a32d4a9d42010d057386429ad2328ed9000000000000000000000000000000000000000000000000000000006807befd"),
-                    }) ,
-                }],
+                    }, Signature::new(U256::from_str("12217337930795921874768983252881296563512928283585900928219483692173266513447").unwrap(), U256::from_str("37490897792770890087946325233571758133021734266092518377537449521790010698782").unwrap(), true)).into()],
                 ommers: vec![],
                 withdrawals: None,
             },
         };
-
         consensus.validate_new_block(&block, &signature).unwrap()
     }
 }

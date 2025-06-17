@@ -31,13 +31,9 @@ impl BridgeBlockImport {
     }
 
     /// Bridges a new block from the eth-wire protocol to the scroll-wire protocol.
-    fn bridge_new_block_to_scroll_wire(
-        &self,
-        peer_id: PeerId,
-        block: Arc<reth_eth_wire_types::NewBlock<ScrollBlock>>,
-    ) {
+    fn bridge_new_block_to_scroll_wire(&self, peer_id: PeerId, block: Arc<ScrollBlock>) {
         // We create a reference to the extra data of the incoming block.
-        let extra_data = &block.block.extra_data;
+        let extra_data = &block.extra_data;
 
         // If we can extract a signature from the extra data we send the block to the scroll-wire
         // protocol. The signature is extracted from the last `ECDSA_SIGNATURE_LEN` bytes of the
@@ -47,26 +43,26 @@ impl BridgeBlockImport {
             .checked_sub(ECDSA_SIGNATURE_LEN)
             .and_then(|i| Signature::from_raw(&extra_data[i..]).ok())
         {
-            let block = block.block.clone();
+            let block = &*block;
             trace!(target: "scroll::bridge::import", peer_id = %peer_id, block = ?block.hash_slow(), "Received new block from eth-wire protocol");
 
             // We trigger a new block event to be sent to the rollup node's network manager. If this
             // results in an error it means the network manager has been dropped.
-            let _ = self.new_block_tx.send(NewBlockWithPeer { peer_id, block, signature });
+            let _ = self.new_block_tx.send(NewBlockWithPeer {
+                peer_id,
+                block: block.clone(),
+                signature,
+            });
         } else {
             warn!(target: "scroll::bridge::import", peer_id = %peer_id, "Failed to extract signature from block extra data");
         }
     }
 }
 
-impl RethBlockImport<reth_scroll_primitives::ScrollBlock> for BridgeBlockImport {
+impl RethBlockImport<ScrollBlock> for BridgeBlockImport {
     /// This function is called when a new block is received from the network, it delegates the
     /// block import to the inner block import.
-    fn on_new_block(
-        &mut self,
-        peer_id: PeerId,
-        incoming_block: NewBlockEvent<reth_scroll_primitives::ScrollBlock>,
-    ) {
+    fn on_new_block(&mut self, peer_id: PeerId, incoming_block: NewBlockEvent<ScrollBlock>) {
         // We then delegate the block import to the inner block import.
         match incoming_block {
             NewBlockEvent::Block(block) => {

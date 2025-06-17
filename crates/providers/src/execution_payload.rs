@@ -58,8 +58,14 @@ mod tests {
         let chain_spec = (*SCROLL_MAINNET).clone();
 
         // Get a test node.
-        let (mut node, _tasks, _wallet) =
-            setup_engine::<ScrollNode>(1, chain_spec, false, scroll_payload_attributes).await?;
+        let (mut node, _tasks, _wallet) = setup_engine::<ScrollNode>(
+            1,
+            chain_spec,
+            false,
+            Default::default(),
+            scroll_payload_attributes,
+        )
+        .await?;
         let node = node.pop().unwrap();
 
         // Get a provider to the node.

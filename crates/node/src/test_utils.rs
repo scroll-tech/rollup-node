@@ -15,12 +15,12 @@ use reth_node_builder::{
     rpc::RpcHandleProvider, EngineNodeLauncher, Node, NodeBuilder, NodeConfig, NodeHandle,
     NodeTypes, NodeTypesWithDBAdapter, PayloadAttributesBuilder, PayloadTypes,
 };
-use reth_node_core::args::{DiscoveryArgs, NetworkArgs, PayloadBuilderArgs, RpcServerArgs};
+use reth_node_core::args::{DiscoveryArgs, NetworkArgs, RpcServerArgs};
 use reth_provider::providers::BlockchainProvider;
 use reth_rpc_server_types::RpcModuleSelection;
 use reth_tasks::TaskManager;
 use rollup_node_sequencer::L1MessageInclusionMode;
-use std::{path::PathBuf, sync::Arc, time::Duration};
+use std::{path::PathBuf, sync::Arc};
 use tokio::sync::Mutex;
 use tracing::{span, Level};
 
@@ -63,11 +63,6 @@ where
         let node_config = NodeConfig::new(chain_spec.clone())
             .with_network(network_config.clone())
             .with_unused_ports()
-            .with_payload_builder(PayloadBuilderArgs {
-                gas_limit: Some(100_000_000),
-                block_time: Some(Duration::from_millis(200)),
-                ..Default::default()
-            })
             .with_rpc(
                 RpcServerArgs::default()
                     .with_unused_ports()

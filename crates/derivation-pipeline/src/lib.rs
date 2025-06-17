@@ -209,6 +209,7 @@ pub async fn derive<L1P: L1Provider + Sync + Send, L2P: BlockDataProvider + Sync
         // query the appropriate amount of l1 messages.
         let mut txs = Vec::with_capacity(block.context.num_transactions as usize);
         for _ in 0..block.context.num_l1_messages {
+            // TODO: fetch L1 messages range.
             let l1_message = l1_provider
                 .next_l1_message()
                 .await
