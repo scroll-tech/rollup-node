@@ -9,7 +9,7 @@ use rollup_node_primitives::{
 use rollup_node_watcher::L1Notification;
 use scroll_alloy_consensus::TxL1Message;
 use scroll_alloy_hardforks::{ScrollHardfork, ScrollHardforks};
-use scroll_db::{Database, DatabaseError, DatabaseOperations};
+use scroll_db::{Database, DatabaseError, DatabaseOperations, UnwindResult};
 use std::{
     collections::{HashMap, VecDeque},
     pin::Pin,
@@ -171,50 +171,11 @@ impl<ChainSpec: ScrollHardforks + EthChainSpec + Send + Sync + 'static> Indexer<
         chain_spec: Arc<ChainSpec>,
         l1_block_number: u64,
     ) -> Result<IndexerEvent, IndexerError> {
-        // create a database transaction so this operation is atomic
         let txn = database.tx().await?;
-
-        // delete batch inputs and l1 messages
-        let batches_removed = txn.delete_batches_gt(l1_block_number).await?;
-        let deleted_messages = txn.delete_l1_messages_gt(l1_block_number).await?;
-
-        // filter and sort the executed L1 messages
-        let mut removed_executed_l1_messages: Vec<_> =
-            deleted_messages.into_iter().filter(|x| x.l2_block_number.is_some()).collect();
-        removed_executed_l1_messages
-            .sort_by(|a, b| a.transaction.queue_index.cmp(&b.transaction.queue_index));
-
-        // check if we need to reorg the L2 head and delete some L2 blocks
-        let (queue_index, l2_head_block_info) =
-            if let Some(msg) = removed_executed_l1_messages.first() {
-                let l2_reorg_block_number = msg
-                    .l2_block_number
-                    .expect("we guarantee that this is Some(u64) due to the filter on line 130") -
-                    1;
-                let l2_block_info = txn
-                    .get_l2_block_info_by_number(l2_reorg_block_number)
-                    .await?
-                    .ok_or(IndexerError::L2BlockNotFound(l2_reorg_block_number))?;
-                txn.delete_l2_blocks_gt(l2_reorg_block_number).await?;
-                (Some(msg.transaction.queue_index), Some(l2_block_info))
-            } else {
-                (None, None)
-            };
-
-        // check if we need to reorg the L2 safe block
-        let l2_safe_block_info = if batches_removed > 0 {
-            if let Some(x) = txn.get_latest_safe_l2_block().await? {
-                Some(x)
-            } else {
-                Some(BlockInfo::new(0, chain_spec.genesis_hash()))
-            }
-        } else {
-            None
-        };
-
-        // commit the transaction
+        let UnwindResult { l1_block_number, queue_index, l2_head_block_info, l2_safe_block_info } =
+            txn.unwind(chain_spec.genesis_hash(), l1_block_number).await?;
         txn.commit().await?;
-        Ok(IndexerEvent::ReorgIndexed {
+        Ok(IndexerEvent::UnwindIndexed {
             l1_block_number,
             queue_index,
             l2_head_block_info,
@@ -230,6 +191,9 @@ impl<ChainSpec: ScrollHardforks + EthChainSpec + Send + Sync + 'static> Indexer<
         l1_block_number: Arc<AtomicU64>,
         l2_block_number: Arc<AtomicU64>,
     ) -> Result<IndexerEvent, IndexerError> {
+        // Set the latest finalized L1 block in the database.
+        database.set_latest_finalized_l1_block_number(block_number).await?;
+
         // get the newest finalized batch.
         let batch_hash = database.get_finalized_batch_hash_at_height(block_number).await?;
 
@@ -335,6 +299,63 @@ impl<ChainSpec: ScrollHardforks + EthChainSpec + Send + Sync + 'static> Indexer<
             }
         }))
     }
+}
+
+/// Unwinds the indexer by deleting all indexed data greater than the provided L1 block number.
+pub async fn unwind<ChainSpec: ScrollHardforks + EthChainSpec + Send + Sync + 'static>(
+    database: Arc<Database>,
+    chain_spec: Arc<ChainSpec>,
+    l1_block_number: u64,
+) -> Result<IndexerEvent, IndexerError> {
+    // create a database transaction so this operation is atomic
+    let txn = database.tx().await?;
+
+    // delete batch inputs and l1 messages
+    let batches_removed = txn.delete_batches_gt(l1_block_number).await?;
+    let deleted_messages = txn.delete_l1_messages_gt(l1_block_number).await?;
+
+    // filter and sort the executed L1 messages
+    let mut removed_executed_l1_messages: Vec<_> =
+        deleted_messages.into_iter().filter(|x| x.l2_block_number.is_some()).collect();
+    removed_executed_l1_messages
+        .sort_by(|a, b| a.transaction.queue_index.cmp(&b.transaction.queue_index));
+
+    // check if we need to reorg the L2 head and delete some L2 blocks
+    let (queue_index, l2_head_block_info) = if let Some(msg) = removed_executed_l1_messages.first()
+    {
+        let l2_reorg_block_number = msg
+            .l2_block_number
+            .expect("we guarantee that this is Some(u64) due to the filter on line 130") -
+            1;
+        let l2_block_info = txn
+            .get_l2_block_info_by_number(l2_reorg_block_number)
+            .await?
+            .ok_or(IndexerError::L2BlockNotFound(l2_reorg_block_number))?;
+        txn.delete_l2_blocks_gt(l2_reorg_block_number).await?;
+        (Some(msg.transaction.queue_index), Some(l2_block_info))
+    } else {
+        (None, None)
+    };
+
+    // check if we need to reorg the L2 safe block
+    let l2_safe_block_info = if batches_removed > 0 {
+        if let Some(x) = txn.get_latest_safe_l2_info().await? {
+            Some(x.0)
+        } else {
+            Some(BlockInfo::new(0, chain_spec.genesis_hash()))
+        }
+    } else {
+        None
+    };
+
+    // commit the transaction
+    txn.commit().await?;
+    Ok(IndexerEvent::UnwindIndexed {
+        l1_block_number,
+        queue_index,
+        l2_head_block_info,
+        l2_safe_block_info,
+    })
 }
 
 impl<ChainSpec: ScrollHardforks + 'static> Stream for Indexer<ChainSpec> {
@@ -631,7 +652,7 @@ mod test {
         let event = indexer.next().await.unwrap().unwrap();
         assert_eq!(
             event,
-            IndexerEvent::ReorgIndexed {
+            IndexerEvent::UnwindIndexed {
                 l1_block_number: 17,
                 queue_index: None,
                 l2_head_block_info: None,
@@ -646,7 +667,7 @@ mod test {
 
         assert_eq!(
             event,
-            IndexerEvent::ReorgIndexed {
+            IndexerEvent::UnwindIndexed {
                 l1_block_number: 7,
                 queue_index: Some(8),
                 l2_head_block_info: Some(blocks[7].block_info),
@@ -660,7 +681,7 @@ mod test {
 
         assert_eq!(
             event,
-            IndexerEvent::ReorgIndexed {
+            IndexerEvent::UnwindIndexed {
                 l1_block_number: 3,
                 queue_index: Some(4),
                 l2_head_block_info: Some(blocks[3].block_info),

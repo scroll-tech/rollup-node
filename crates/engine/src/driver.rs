@@ -183,13 +183,15 @@ where
                 tracing::info!(target: "scroll::engine", ?result, "handling L1 consolidation result");
 
                 match result {
-                    Ok((block_info, reorg, batch_info)) => {
+                    Ok(consolidation_outcome) => {
+                        let block_info = consolidation_outcome.block_info();
+
                         // Update the safe block info and return the block info
                         tracing::trace!(target: "scroll::engine", ?block_info, "updating safe block info from block derived from L1");
                         self.fcs.update_safe_block_info(block_info.block_info);
 
                         // If we reorged, update the head block info
-                        if reorg {
+                        if consolidation_outcome.is_reorg() {
                             tracing::warn!(target: "scroll::engine", ?block_info, "reorging head to l1 derived block");
                             self.fcs.update_head_block_info(block_info.block_info);
                         }
@@ -197,9 +199,7 @@ where
                         // record the metric.
                         self.metrics.l1_consolidation_duration.record(duration.as_secs_f64());
 
-                        return Some(EngineDriverEvent::L1BlockConsolidated((
-                            block_info, batch_info,
-                        )))
+                        return Some(EngineDriverEvent::L1BlockConsolidated(consolidation_outcome))
                     }
                     Err(err) => {
                         tracing::error!(target: "scroll::engine", ?err, "failed to consolidate block derived from L1")
@@ -335,15 +335,13 @@ where
         }
 
         if let Some(payload_attributes) = this.l1_payload_attributes.pop_front() {
-            let safe_block_info = *this.fcs.safe_block_info();
-            let fcs = this.alloy_forkchoice_state();
+            let fcs = this.fcs.clone();
             let client = this.client.clone();
 
             if let Some(provider) = this.provider.clone() {
                 this.engine_future = Some(MeteredFuture::new(EngineFuture::l1_consolidation(
                     client,
                     provider,
-                    safe_block_info,
                     fcs,
                     payload_attributes,
                 )));

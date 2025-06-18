@@ -1,12 +1,42 @@
-use crate::constants;
+use crate::{
+    add_ons::IsDevChain,
+    constants::{self, PROVIDER_BLOB_CACHE_SIZE},
+};
 use alloy_primitives::{hex, Address};
+use alloy_provider::{Provider, ProviderBuilder};
+use alloy_rpc_client::RpcClient;
 use alloy_signer::Signer;
 use alloy_signer_aws::AwsSigner;
 use alloy_signer_local::PrivateKeySigner;
+use alloy_transport::layers::RetryBackoffLayer;
 use aws_sdk_kms::config::BehaviorVersion;
+use reth_chainspec::EthChainSpec;
+use reth_network::{protocol::IntoRlpxSubProtocol, NetworkProtocols};
+use reth_network_api::FullNetwork;
+use reth_node_builder::rpc::RethRpcServerHandles;
+use reth_node_core::primitives::BlockHeader;
 use reth_scroll_chainspec::SCROLL_FEE_VAULT_ADDRESS;
-use rollup_node_sequencer::L1MessageInclusionMode;
-use std::{fs, path::PathBuf};
+use reth_scroll_node::ScrollNetworkPrimitives;
+use rollup_node_manager::{
+    Consensus, NoopConsensus, RollupManagerHandle, RollupNodeManager, SystemContractConsensus,
+};
+use rollup_node_primitives::{BlockInfo, NodeConfig};
+use rollup_node_providers::{
+    beacon_provider, DatabaseL1MessageProvider, L1MessageProvider, L1Provider, OnlineL1Provider,
+    SystemContractProvider,
+};
+use rollup_node_sequencer::{L1MessageInclusionMode, Sequencer};
+use rollup_node_watcher::{L1Notification, L1Watcher};
+use scroll_alloy_hardforks::ScrollHardforks;
+use scroll_alloy_network::Scroll;
+use scroll_alloy_provider::{ScrollAuthApiEngineClient, ScrollEngineApi};
+use scroll_db::{Database, DatabaseConnectionProvider, DatabaseOperations};
+use scroll_engine::{genesis_hash_from_chain_spec, EngineDriver, ForkchoiceState};
+use scroll_migration::traits::ScrollMigrator;
+use scroll_network::ScrollNetworkManager;
+use scroll_wire::{ScrollWireConfig, ScrollWireProtocolHandler};
+use std::{fs, path::PathBuf, sync::Arc, time::Duration};
+use tokio::sync::mpsc::Sender;
 
 /// A struct that represents the arguments for the rollup node.
 #[derive(Debug, Clone, clap::Args)]
@@ -49,6 +79,217 @@ impl ScrollRollupNodeConfig {
             }
         }
         Ok(())
+    }
+}
+
+impl ScrollRollupNodeConfig {
+    /// Consumes the [`ScrollRollupNodeConfig`] and builds a [`RollupNodeManager`].
+    pub async fn build<
+        N: FullNetwork<Primitives = ScrollNetworkPrimitives> + NetworkProtocols,
+        CS: ScrollHardforks
+            + EthChainSpec<Header: BlockHeader>
+            + IsDevChain
+            + Clone
+            + Send
+            + Sync
+            + 'static,
+    >(
+        self,
+        network: N,
+        rpc_server_handles: RethRpcServerHandles,
+        chain_spec: CS,
+        db_path: PathBuf,
+    ) -> eyre::Result<(
+        RollupNodeManager<
+            N,
+            impl ScrollEngineApi,
+            impl Provider<Scroll> + Clone,
+            impl L1Provider + Clone,
+            impl L1MessageProvider,
+            impl ScrollHardforks + EthChainSpec<Header: BlockHeader> + IsDevChain + Clone + 'static,
+        >,
+        RollupManagerHandle,
+        Option<Sender<Arc<L1Notification>>>,
+    )> {
+        // Instantiate the network manager
+        let (scroll_wire_handler, events) =
+            ScrollWireProtocolHandler::new(ScrollWireConfig::new(true));
+        network.add_rlpx_sub_protocol(scroll_wire_handler.into_rlpx_sub_protocol());
+        let scroll_network_manager = ScrollNetworkManager::from_parts(network.clone(), events);
+
+        // Get the rollup node config.
+        let named_chain = chain_spec.chain().named().expect("expected named chain");
+        let node_config = Arc::new(NodeConfig::from_named_chain(named_chain));
+
+        // Create the engine api client.
+        let engine_api = ScrollAuthApiEngineClient::new(rpc_server_handles.auth.http_client());
+
+        // Get a provider
+        let l1_provider = self.l1_provider_args.url.clone().map(|url| {
+            let L1ProviderArgs { max_retries, initial_backoff, compute_units_per_second, .. } =
+                self.l1_provider_args;
+            let client = RpcClient::builder()
+                .layer(RetryBackoffLayer::new(
+                    max_retries,
+                    initial_backoff,
+                    compute_units_per_second,
+                ))
+                .http(url);
+            ProviderBuilder::new().connect_client(client)
+        });
+
+        // Get a provider to the execution layer.
+        let l2_provider = rpc_server_handles
+            .rpc
+            .new_http_provider_for()
+            .map(Arc::new)
+            .expect("failed to create payload provider");
+
+        // Instantiate the database
+        let database_path = if let Some(database_path) = self.database_args.path {
+            database_path.to_string_lossy().to_string()
+        } else {
+            // append the path using strings as using `join(...)` overwrites "sqlite://"
+            // if the path is absolute.
+            let path = db_path.join("scroll.db?mode=rwc");
+            "sqlite://".to_string() + &*path.to_string_lossy()
+        };
+        let db = Database::new(&database_path).await?;
+
+        // Run the database migrations
+        named_chain
+            .migrate(db.get_connection(), self.test)
+            .await
+            .expect("failed to perform migration");
+
+        // Wrap the database in an Arc
+        let db = Arc::new(db);
+
+        let chain_spec_fcs = || {
+            ForkchoiceState::head_from_chain_spec(chain_spec.clone())
+                .expect("failed to derive forkchoice state from chain spec")
+        };
+        let mut fcs = ForkchoiceState::head_from_provider(l2_provider.clone())
+            .await
+            .unwrap_or_else(chain_spec_fcs);
+
+        let chain_spec = Arc::new(chain_spec.clone());
+
+        // On startup we replay the latest batch of blocks from the database as such we set the safe
+        // block hash to the latest block hash associated with the previous consolidated
+        // batch in the database.
+        let (startup_safe_block, l1_start_block_number) =
+            db.prepare_on_startup(chain_spec.genesis_hash()).await?;
+        if let Some(block_info) = startup_safe_block {
+            fcs.update_safe_block_info(block_info);
+        } else {
+            fcs.update_safe_block_info(BlockInfo {
+                hash: genesis_hash_from_chain_spec(chain_spec.clone()).unwrap(),
+                number: 0,
+            });
+        }
+
+        let engine = EngineDriver::new(
+            Arc::new(engine_api),
+            chain_spec.clone(),
+            Some(l2_provider),
+            fcs,
+            !self.test && !chain_spec.is_dev_chain(),
+            self.engine_driver_args.en_sync_trigger,
+            Duration::from_millis(self.sequencer_args.payload_building_duration),
+        );
+
+        // Create the consensus.
+        let consensus: Box<dyn Consensus> = if let Some(ref provider) = l1_provider {
+            let signer = provider
+                .authorized_signer(node_config.address_book.system_contract_address)
+                .await?;
+            Box::new(SystemContractConsensus::new(signer))
+        } else {
+            Box::new(NoopConsensus::default())
+        };
+
+        let (l1_notification_tx, l1_notification_rx): (Option<Sender<Arc<L1Notification>>>, _) =
+            if let Some(provider) = l1_provider.filter(|_| !self.test) {
+                // Determine the start block number for the L1 watcher
+                (None, Some(L1Watcher::spawn(provider, l1_start_block_number, node_config).await))
+            } else {
+                // Create a channel for L1 notifications that we can use to inject L1 messages for
+                // testing
+                #[cfg(feature = "test-utils")]
+                {
+                    let (tx, rx) = tokio::sync::mpsc::channel(1000);
+                    (Some(tx), Some(rx))
+                }
+
+                #[cfg(not(feature = "test-utils"))]
+                {
+                    (None, None)
+                }
+            };
+
+        // Construct the l1 provider.
+        let l1_messages_provider = DatabaseL1MessageProvider::new(db.clone(), 0);
+        let l1_provider = if let Some(url) = self.beacon_provider_args.url {
+            let beacon_provider = beacon_provider(url.to_string());
+            let l1_provider = OnlineL1Provider::new(
+                beacon_provider,
+                PROVIDER_BLOB_CACHE_SIZE,
+                l1_messages_provider.clone(),
+            )
+            .await;
+            Some(l1_provider)
+        } else {
+            None
+        };
+
+        // Construct the Sequencer.
+        let (sequencer, block_time) = if self.sequencer_args.sequencer_enabled {
+            let args = &self.sequencer_args;
+            let sequencer = Sequencer::new(
+                Arc::new(l1_messages_provider),
+                args.fee_recipient,
+                args.max_l1_messages_per_block,
+                0,
+                self.sequencer_args.l1_message_inclusion_mode,
+            );
+            (Some(sequencer), (args.block_time != 0).then_some(args.block_time))
+        } else {
+            (None, None)
+        };
+
+        // Instantiate the eth wire listener
+        let eth_wire_listener = self
+            .network_args
+            .enable_eth_scroll_wire_bridge
+            .then_some(network.eth_wire_block_listener().await?);
+
+        // Instantiate the signer
+        // Instantiate the signer
+        let signer = if self.test {
+            // Use a random private key signer for testing
+            Some(rollup_node_signer::Signer::spawn(PrivateKeySigner::random()))
+        } else {
+            // Use the signer configured by SignerArgs
+            let chain_id = chain_spec.chain().id();
+            self.signer_args.signer(chain_id).await?.map(rollup_node_signer::Signer::spawn)
+        };
+
+        // Spawn the rollup node manager
+        let (rnm, handle) = RollupNodeManager::new(
+            scroll_network_manager,
+            engine,
+            l1_provider,
+            db,
+            l1_notification_rx,
+            consensus,
+            chain_spec,
+            eth_wire_listener,
+            sequencer,
+            signer,
+            block_time,
+        );
+        Ok((rnm, handle, l1_notification_tx))
     }
 }
 

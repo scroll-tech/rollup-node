@@ -1,4 +1,4 @@
-use crate::MigrationInfo;
+use crate::{migration_info::DataSource, MigrationInfo};
 use std::{collections::HashMap, time::Duration};
 
 use alloy_primitives::{bytes::Buf, B256};
@@ -23,31 +23,37 @@ impl<MI> MigrationName for Migration<MI> {
 #[async_trait::async_trait]
 impl<MI: MigrationInfo + Send + Sync> MigrationTrait for Migration<MI> {
     async fn up(&self, manager: &SchemaManager) -> Result<(), DbErr> {
-        if let (Some(url), Some(hash)) = (MI::data_url(), MI::data_hash()) {
-            // download data.
-            let file = download(&url).await.map_err(|err| DbErr::Custom(err.to_string()))?;
-            // verify hash of data.
-            verify_data_hash(hash, &file).map_err(|err| DbErr::Custom(err.to_string()))?;
+        match (MI::data_source(), MI::data_hash()) {
+            (Some(DataSource::Url(url)), Some(hash)) => {
+                // download data.
+                let file = download(&url).await.map_err(|err| DbErr::Custom(err.to_string()))?;
+                // verify hash of data.
+                verify_data_hash(hash, &file).map_err(|err| DbErr::Custom(err.to_string()))?;
 
-            // decode data and convert to database model.
-            let records: Vec<ActiveModel> = decode_to_headers(file)
-                .map_err(|err| DbErr::Custom(err.to_string()))?
-                .into_iter()
-                .enumerate()
-                .map(|(i, h)| (i as i64, h).into())
-                .collect();
+                // decode data and convert to database model.
+                let records: Vec<ActiveModel> = decode_to_headers(file)
+                    .map_err(|err| DbErr::Custom(err.to_string()))?
+                    .into_iter()
+                    .enumerate()
+                    .map(|(i, h)| (i as i64, h).into())
+                    .collect();
 
-            let db = manager.get_connection();
+                let db = manager.get_connection();
 
-            // batch the insertion to avoid `too many SQL variables` error.
-            const MAX_BATCH_SIZE: usize = 3000;
-            let mut cursor = 0;
-            while cursor < records.len() {
-                let start = cursor;
-                let end = (start + MAX_BATCH_SIZE).min(records.len());
-                Entity::insert_many(records[start..end].to_vec()).exec(db).await?;
-                cursor = end;
+                // batch the insertion to avoid `too many SQL variables` error.
+                const MAX_BATCH_SIZE: usize = 3000;
+                let mut cursor = 0;
+                while cursor < records.len() {
+                    let start = cursor;
+                    let end = (start + MAX_BATCH_SIZE).min(records.len());
+                    Entity::insert_many(records[start..end].to_vec()).exec(db).await?;
+                    cursor = end;
+                }
             }
+            (Some(DataSource::Sql(sql)), _) => {
+                manager.get_connection().execute_unprepared(&sql).await?;
+            }
+            _ => (),
         }
 
         Ok(())
@@ -94,7 +100,7 @@ async fn download(url: &str) -> eyre::Result<Vec<u8>> {
     .build();
 
     const CHUNK_SIZE: u64 = 16_000_000;
-    const MAX_TASKS: usize = 32;
+    const MAX_TASKS: usize = 4;
 
     // get file size and verify range support.
     let total_size = get_file_size(&client, url).await?;

@@ -214,7 +214,7 @@ pub async fn derive<L1P: L1Provider + Sync + Send, L2P: BlockDataProvider + Sync
                 .next_l1_message()
                 .await
                 .map_err(Into::into)?
-                .ok_or(DerivationPipelineError::MissingL1Message)?;
+                .ok_or(DerivationPipelineError::MissingL1Message(block.clone()))?;
             let mut bytes = Vec::with_capacity(l1_message.eip2718_encoded_length());
             l1_message.eip2718_encode(&mut bytes);
             txs.push(bytes.into());
@@ -370,6 +370,7 @@ mod tests {
             block_timestamp: 1696935971,
             calldata: Arc::new(raw_calldata),
             blob_versioned_hash: None,
+            finalized_block_number: None,
         };
         db.insert_batch(batch_data).await?;
         // load messages in db.
@@ -451,6 +452,7 @@ mod tests {
             block_timestamp: 1696935971,
             calldata: Arc::new(raw_calldata),
             blob_versioned_hash: None,
+            finalized_block_number: None,
         };
 
         let l1_messages = vec![

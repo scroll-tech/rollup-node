@@ -10029,6 +10029,7 @@ dependencies = [
 name = "rollup-node"
 version = "0.0.1"
 dependencies = [
+ "alloy-eips 1.0.9",
  "alloy-primitives",
  "alloy-provider",
  "alloy-rpc-client",
@@ -10037,6 +10038,7 @@ dependencies = [
  "alloy-signer-aws",
  "alloy-signer-local",
  "alloy-transport",
+ "auto_impl",
  "aws-config",
  "aws-sdk-kms",
  "clap",
@@ -10058,6 +10060,8 @@ dependencies = [
  "reth-node-types",
  "reth-provider",
  "reth-revm",
+ "reth-rpc-api",
+ "reth-rpc-builder",
  "reth-rpc-eth-api",
  "reth-rpc-eth-types",
  "reth-rpc-server-types",
@@ -10073,6 +10077,7 @@ dependencies = [
  "reth-transaction-pool",
  "reth-trie-db",
  "rollup-node",
+ "rollup-node-indexer",
  "rollup-node-manager",
  "rollup-node-primitives",
  "rollup-node-providers",
@@ -10086,6 +10091,7 @@ dependencies = [
  "scroll-alloy-provider",
  "scroll-alloy-rpc-types-engine",
  "scroll-db",
+ "scroll-derivation-pipeline",
  "scroll-engine",
  "scroll-migration",
  "scroll-network",
@@ -10136,6 +10142,7 @@ dependencies = [
  "reth-primitives-traits",
  "reth-scroll-node",
  "reth-scroll-primitives",
+ "reth-tasks",
  "reth-tokio-util",
  "rollup-node-indexer",
  "rollup-node-primitives",

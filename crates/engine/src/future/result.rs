@@ -8,7 +8,7 @@ pub(crate) enum EngineDriverFutureResult {
             EngineDriverError,
         >,
     ),
-    L1Consolidation(Result<(L2BlockInfoWithL1Messages, bool, BatchInfo), EngineDriverError>),
+    L1Consolidation(Result<ConsolidationOutcome, EngineDriverError>),
     PayloadBuildingJob(Result<ScrollBlock, EngineDriverError>),
 }
 
@@ -30,12 +30,8 @@ impl
     }
 }
 
-impl From<Result<(L2BlockInfoWithL1Messages, bool, BatchInfo), EngineDriverError>>
-    for EngineDriverFutureResult
-{
-    fn from(
-        value: Result<(L2BlockInfoWithL1Messages, bool, BatchInfo), EngineDriverError>,
-    ) -> Self {
+impl From<Result<ConsolidationOutcome, EngineDriverError>> for EngineDriverFutureResult {
+    fn from(value: Result<ConsolidationOutcome, EngineDriverError>) -> Self {
         Self::L1Consolidation(value)
     }
 }
