@@ -298,13 +298,15 @@ pub trait DatabaseOperations: DatabaseConnectionProvider {
             .map(|x| x.map(|x| x.block_info()))?)
     }
 
-    /// Fetch startup metadata from the database.
+    /// Prepare the database on startup and return metadata used for other components in the
+    /// rollup-node.
     ///
-    /// This method fetches the batch info for the latest safe L2 block. It then takes note of the
-    /// L1 block number at which this batch was produced. It then retrieves the latest block for
-    /// the previous batch (i.e., the batch before the latest safe block). It then returns a tuple
-    /// of this latest fetched block and the L1 block number of the batch.
-    async fn get_startup_data(
+    /// This method first unwinds the database to the finalized L1 block. It then fetches the batch
+    /// info for the latest safe L2 block. It takes note of the L1 block number at which
+    /// this batch was produced. It then retrieves the latest block for the previous batch
+    /// (i.e., the batch before the latest safe block). It returns a tuple of this latest
+    /// fetched block and the L1 block number of the batch.
+    async fn prepare_on_startup(
         &self,
         genesis_hash: B256,
     ) -> Result<(Option<BlockInfo>, Option<u64>), DatabaseError> {

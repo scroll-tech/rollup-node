@@ -179,7 +179,7 @@ impl ScrollRollupNodeConfig {
         // block hash to the latest block hash associated with the previous consolidated
         // batch in the database.
         let (startup_safe_block, l1_start_block_number) =
-            db.get_startup_data(chain_spec.genesis_hash()).await?;
+            db.prepare_on_startup(chain_spec.genesis_hash()).await?;
         if let Some(block_info) = startup_safe_block {
             fcs.update_safe_block_info(block_info);
         } else {
