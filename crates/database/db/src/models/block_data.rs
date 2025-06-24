@@ -10,6 +10,8 @@ pub struct Model {
     number: i64,
     extra_data: Vec<u8>,
     state_root: Vec<u8>,
+    coinbase: Option<Vec<u8>>,
+    nonce: Option<String>,
     difficulty: Vec<u8>,
 }
 

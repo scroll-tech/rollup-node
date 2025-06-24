@@ -52,10 +52,12 @@ tokio.workspace = true
 tracing.workspace = true
 
 [dev-dependencies]
+alloy-consensus.workspace = true
 arbitrary.workspace = true
 async-trait.workspace = true
 reth-testing-utils = { git = "https://github.com/scroll-tech/reth.git", default-features = false }
 rollup-node-providers = { workspace = true, features = ["test-utils"] }
+scroll-alloy-consensus.workspace = true
 scroll-engine = { path = "../engine", features = ["test-utils"] }
 
 [features]
