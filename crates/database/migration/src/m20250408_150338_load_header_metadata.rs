@@ -1,7 +1,7 @@
 use crate::MigrationInfo;
 use std::{collections::HashMap, time::Duration};
 
-use alloy_primitives::{bytes::Buf, B256};
+use alloy_primitives::{bytes::Buf, Address, B256};
 use eyre::{bail, eyre};
 use futures::{stream::FuturesUnordered, StreamExt};
 use indicatif::{ProgressBar, ProgressFinish, ProgressState, ProgressStyle};
@@ -66,6 +66,8 @@ pub struct Model {
     number: i64,
     extra_data: Vec<u8>,
     state_root: Vec<u8>,
+    coinbase: Option<Vec<u8>>,
+    nonce: Option<String>,
     difficulty: i8,
 }
 impl ActiveModelBehavior for ActiveModel {}
@@ -76,6 +78,8 @@ impl From<(i64, HeaderMetadata)> for ActiveModel {
             number: ActiveValue::Set(bn),
             extra_data: ActiveValue::Set(header.extra_data),
             state_root: ActiveValue::Set(header.state_root.to_vec()),
+            coinbase: ActiveValue::Set(header.coinbase.map(|c| c.to_vec())),
+            nonce: ActiveValue::Set(header.nonce.map(|x| format!("{x:x}"))),
             difficulty: ActiveValue::Set(header.difficulty as i8),
         }
     }
@@ -219,6 +223,8 @@ fn decode_to_headers(data: Vec<u8>) -> eyre::Result<Vec<HeaderMetadata>> {
 struct HeaderMetadata {
     extra_data: Vec<u8>,
     state_root: Vec<u8>,
+    coinbase: Option<Vec<u8>>,
+    nonce: Option<u64>,
     difficulty: u8,
 }
 
@@ -264,11 +270,20 @@ impl MetadataDecoder {
         let flag = buf[0];
         let vanity_index = buf[1];
 
+        let has_coinbase = (flag & 0b00010000) != 0;
+        let has_nonce = (flag & 0b00100000) != 0;
         let difficulty = if flag & 0b01000000 == 0 { 2 } else { 1 };
         let seal_length = if flag & 0b10000000 == 0 { 65 } else { 85 };
         let vanity = self.vanity.get(&vanity_index)?;
 
-        if buf.len() < B256::len_bytes() + seal_length + 2 {
+        // flag + vanity index + state root + coinbase + nonce + seal
+        let total_expected_size = 2 * size_of::<u8>() +
+            B256::len_bytes() +
+            Address::len_bytes() * has_coinbase as usize +
+            size_of::<u64>() * has_nonce as usize +
+            seal_length;
+
+        if buf.len() < total_expected_size {
             return None
         }
         buf.advance(2);
@@ -276,11 +291,25 @@ impl MetadataDecoder {
         let state_root = buf[..B256::len_bytes()].to_vec();
         buf.advance(B256::len_bytes());
 
+        let mut coinbase = None;
+        if has_coinbase {
+            coinbase = Some(buf[..Address::len_bytes()].to_vec());
+            buf.advance(Address::len_bytes());
+        }
+
+        let mut nonce = None;
+        if has_nonce {
+            nonce = Some(u64::from_be_bytes(
+                buf[..size_of::<u64>()].try_into().expect("32 bytes slice"),
+            ));
+            buf.advance(size_of::<u64>());
+        }
+
         let seal = &buf[..seal_length];
         let extra_data = [vanity, seal].concat();
         buf.advance(seal_length);
 
-        Some(HeaderMetadata { extra_data, state_root, difficulty })
+        Some(HeaderMetadata { extra_data, state_root, coinbase, nonce, difficulty })
     }
 }
 
@@ -310,7 +339,13 @@ mod tests {
         let header_data = bytes!("c00020695989e9038823e35f0e88fbc44659ffdbfa1fe89fbeb2689b43f15fa64cb548c3f81f3d998b6652900e1c3183736c238fe4290000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000");
         let header = decoder.next(&mut header_data.as_ref()).unwrap();
 
-        let expected_header = HeaderMetadata{ extra_data: bytes!("0x000000000000000000000000000000000000000000000000000000000000000048c3f81f3d998b6652900e1c3183736c238fe4290000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000").to_vec(), state_root: b256!("20695989e9038823e35f0e88fbc44659ffdbfa1fe89fbeb2689b43f15fa64cb5").to_vec(), difficulty: 1 };
+        let expected_header = HeaderMetadata {
+            extra_data: bytes!("0x000000000000000000000000000000000000000000000000000000000000000048c3f81f3d998b6652900e1c3183736c238fe4290000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000").to_vec(),
+            state_root: b256!("20695989e9038823e35f0e88fbc44659ffdbfa1fe89fbeb2689b43f15fa64cb5").to_vec(),
+            coinbase: None,
+            nonce: None,
+            difficulty: 1,
+        };
         assert_eq!(header, expected_header)
     }
 }
