@@ -55,7 +55,7 @@ where
     let forkchoice_updated = client
         .fork_choice_updated_v1(fcs, attributes)
         .await
-        .map_err(|_| EngineDriverError::EngineUnavailable)?;
+        .map_err(EngineDriverError::ForkchoiceUpdateFailed)?;
 
     // TODO: should never enter the `Syncing`, `Accepted` or `Invalid` variants when called from
     // `handle_payload_attributes`.

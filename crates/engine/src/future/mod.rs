@@ -1,5 +1,5 @@
 use super::{payload::matching_payloads, EngineDriverError};
-use crate::api::*;
+use crate::{api::*, ForkchoiceState};
 use alloy_rpc_types_engine::{
     ExecutionData, ExecutionPayloadV1, ForkchoiceState as AlloyForkchoiceState, PayloadStatusEnum,
 };
@@ -39,17 +39,45 @@ type BlockImportFuture = Pin<
     >,
 >;
 
-// A boolean type indicating if the L1 consolidation job resulted in a reorg.
-type IsReorg = bool;
+/// An enum that represents the different outcomes of an L1 consolidation job.
+#[derive(Debug, Clone)]
+pub enum ConsolidationOutcome {
+    /// Represents a successful consolidation outcome with the consolidated block info and batch
+    /// info.
+    Consolidation(L2BlockInfoWithL1Messages, BatchInfo),
+    /// Represents a reorganization outcome with the consolidated block info and batch info.
+    Reorg(L2BlockInfoWithL1Messages, BatchInfo),
+}
+
+impl ConsolidationOutcome {
+    /// Returns the consolidated block info.
+    pub const fn block_info(&self) -> &L2BlockInfoWithL1Messages {
+        match self {
+            Self::Consolidation(info, _) | Self::Reorg(info, _) => info,
+        }
+    }
+
+    /// Returns the batch info associated with the consolidation outcome.
+    pub const fn batch_info(&self) -> &BatchInfo {
+        match self {
+            Self::Consolidation(_, batch_info) | Self::Reorg(_, batch_info) => batch_info,
+        }
+    }
+
+    /// Returns a boolean indicating whether the consolidation outcome is a reorg.
+    pub const fn is_reorg(&self) -> bool {
+        matches!(self, Self::Reorg(_, _))
+    }
+
+    /// Returns a boolean indicating whether the consolidation outcome is a consolidation.
+    pub const fn is_consolidate(&self) -> bool {
+        matches!(self, Self::Consolidation(_, _))
+    }
+}
 
 /// A future that represents an L1 consolidation job.
-type L1ConsolidationFuture = Pin<
-    Box<
-        dyn Future<
-                Output = Result<(L2BlockInfoWithL1Messages, IsReorg, BatchInfo), EngineDriverError>,
-            > + Send,
-    >,
->;
+type L1ConsolidationFuture =
+    Pin<Box<dyn Future<Output = Result<ConsolidationOutcome, EngineDriverError>> + Send>>;
 
 /// A future that represents a new payload processing.
 type NewPayloadFuture =
@@ -84,8 +112,7 @@ impl EngineFuture {
     pub(crate) fn l1_consolidation<EC, P>(
         client: Arc<EC>,
         execution_payload_provider: P,
-        safe_block_info: BlockInfo,
-        fcs: AlloyForkchoiceState,
+        fcs: ForkchoiceState,
         payload_attributes: ScrollPayloadAttributesWithBatchInfo,
     ) -> Self
     where
@@ -95,7 +122,6 @@ impl EngineFuture {
         Self::L1Consolidation(Box::pin(handle_payload_attributes(
             client,
             execution_payload_provider,
-            safe_block_info,
             fcs,
             payload_attributes,
         )))
@@ -203,7 +229,6 @@ where
 ///       safe head by one.
 #[instrument(skip_all, level = "trace",
         fields(
-             safe_block_info = ?safe_block_info,
              fcs = ?fcs,
              payload_attributes = ?payload_attributes
         )
@@ -211,10 +236,9 @@ where
 async fn handle_payload_attributes<EC, P>(
     client: Arc<EC>,
     execution_payload_provider: P,
-    safe_block_info: BlockInfo,
-    mut fcs: AlloyForkchoiceState,
+    fcs: ForkchoiceState,
     payload_attributes: ScrollPayloadAttributesWithBatchInfo,
-) -> Result<(L2BlockInfoWithL1Messages, IsReorg, BatchInfo), EngineDriverError>
+) -> Result<ConsolidationOutcome, EngineDriverError>
 where
     EC: ScrollEngineApi + Unpin + Send + Sync + 'static,
     P: ExecutionPayloadProvider + Unpin + Send + Sync + 'static,
@@ -225,10 +249,10 @@ where
         payload_attributes;
 
     let maybe_execution_payload = execution_payload_provider
-        .execution_payload_for_block((safe_block_info.number + 1).into())
+        .execution_payload_for_block((fcs.safe_block_info().number + 1).into())
         .await
         .map_err(|_| EngineDriverError::ExecutionPayloadProviderUnavailable)?
-        .filter(|ep| matching_payloads(&payload_attributes, ep, safe_block_info.hash));
+        .filter(|ep| matching_payloads(&payload_attributes, ep, fcs.safe_block_info().hash));
 
     if let Some(execution_payload) = maybe_execution_payload {
         // if the payload attributes match the execution payload at block safe + 1,
@@ -236,10 +260,19 @@ where
         // execution payload. We can advance the safe head by one by issuing a
         // forkchoiceUpdated.
         let safe_block_info: L2BlockInfoWithL1Messages = (&execution_payload).into();
-        fcs.safe_block_hash = safe_block_info.block_info.hash;
-        forkchoice_updated(client, fcs, None).await?;
-        Ok((safe_block_info, false, batch_info))
+
+        // We only need to update the safe block hash if we are advancing the safe head past the
+        // finalized head. There is a possible edge case where on startup,
+        // when we reconsolidate the latest batch, the finalized head is ahead of the safe
+        // head.
+        if fcs.safe_block_info().number > fcs.finalized_block_info().number {
+            let mut fcs = fcs.get_alloy_fcs();
+            fcs.safe_block_hash = safe_block_info.block_info.hash;
+            forkchoice_updated(client, fcs, None).await?;
+        }
+        Ok(ConsolidationOutcome::Consolidation(safe_block_info, batch_info))
     } else {
+        let mut fcs = fcs.get_alloy_fcs();
         // Otherwise, we construct a block from the payload attributes on top of the current
         // safe head.
         fcs.head_block_hash = fcs.safe_block_hash;
@@ -267,7 +300,7 @@ where
         fcs.safe_block_hash = safe_block_info.block_info.hash;
         forkchoice_updated(client, fcs, None).await?;
 
-        Ok((safe_block_info, true, batch_info))
+        Ok(ConsolidationOutcome::Reorg(safe_block_info, batch_info))
     }
 }
 

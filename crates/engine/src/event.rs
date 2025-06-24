@@ -1,5 +1,5 @@
+use super::ConsolidationOutcome;
 use reth_scroll_primitives::ScrollBlock;
-use rollup_node_primitives::{BatchInfo, L2BlockInfoWithL1Messages};
 use scroll_network::BlockImportOutcome;
 
 /// An enum representing the events that can be emitted by the engine driver.
@@ -10,5 +10,5 @@ pub enum EngineDriverEvent {
     /// The result of attempting a block import.
     BlockImportOutcome(BlockImportOutcome),
     /// A block derived from L1 has been consolidated.
-    L1BlockConsolidated((L2BlockInfoWithL1Messages, BatchInfo)),
+    L1BlockConsolidated(ConsolidationOutcome),
 }

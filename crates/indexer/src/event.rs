@@ -14,8 +14,8 @@ pub enum IndexerEvent {
     FinalizedIndexed(u64, Option<BlockInfo>),
     /// A `L1Message` event has been indexed returning the message queue index.
     L1MessageIndexed(u64),
-    /// A `Reorg` event has been indexed returning the reorg block number.
-    ReorgIndexed {
+    /// A `Unwind` event has been indexed returning the reorg block number.
+    UnwindIndexed {
         /// The L1 block number of the new L1 head.
         l1_block_number: u64,
         /// The L1 message queue index of the new L1 head.
