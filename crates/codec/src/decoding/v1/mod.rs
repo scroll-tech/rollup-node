@@ -52,12 +52,19 @@ pub fn decode_v1(calldata: &[u8], blob: &[u8]) -> Result<Batch, DecodingError> {
     // move pass chunk information.
     buf.advance(TRANSACTION_DATA_BLOB_INDEX_OFFSET);
 
-    decode_v1_chunk(call.version(), l1_message_start_index, chunks, buf)
+    decode_v1_chunk(
+        call.version(),
+        call.skipped_l1_message_bitmap(),
+        l1_message_start_index,
+        chunks,
+        buf,
+    )
 }
 
 /// Decode the provided chunks and blob data into [`L2Block`].
 pub(crate) fn decode_v1_chunk(
     version: u8,
+    skipped_l1_message_bitmap: Option<Vec<u8>>,
     l1_message_start_index: u64,
     chunks: Vec<&[u8]>,
     blob: &[u8],
@@ -98,8 +105,11 @@ pub(crate) fn decode_v1_chunk(
         }
     }
 
-    let payload =
-        PayloadData { blocks: l2_blocks, l1_message_queue_info: l1_message_start_index.into() };
+    let payload = PayloadData {
+        blocks: l2_blocks,
+        l1_message_queue_info: l1_message_start_index.into(),
+        skipped_l1_message_bitmap,
+    };
 
     Ok(Batch::new(version, Some(chunks_block_count), payload))
 }
