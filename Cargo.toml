@@ -162,7 +162,7 @@ reth-tracing = { git = "https://github.com/scroll-tech/reth.git", default-featur
 reth-scroll-chainspec = { git = "https://github.com/scroll-tech/reth.git", default-features = false }
 reth-scroll-engine-primitives = { git = "https://github.com/scroll-tech/reth.git", default-features = false }
 reth-scroll-forks = { git = "https://github.com/scroll-tech/reth.git", default-features = false }
-reth-scroll-node = { git = "https://github.com/scroll-tech/reth.git", default-features = false }
+reth-scroll-node = { git = "https://github.com/scroll-tech/reth.git", rev = "bddce20d8", default-features = false }
 reth-scroll-primitives = { git = "https://github.com/scroll-tech/reth.git", default-features = false }
 
 # rollup node

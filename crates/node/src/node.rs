@@ -49,7 +49,12 @@ where
     >;
 
     fn components_builder(&self) -> Self::ComponentsBuilder {
-        ScrollNode::components().payload(BasicPayloadServiceBuilder::new(
+        ScrollNode{
+            disable_tx_broadcast: self.config.network_args.disable_tx_broadcast,
+            disable_tx_receive: self.config.network_args.disable_tx_receive,
+        }
+        .components()
+        .payload(BasicPayloadServiceBuilder::new(
             ScrollPayloadBuilderBuilder {
                 payload_building_time_limit: Duration::from_millis(
                     self.config.sequencer_args.payload_building_duration,
