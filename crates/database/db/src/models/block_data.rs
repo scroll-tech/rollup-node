@@ -1,4 +1,4 @@
-use alloy_primitives::U256;
+use alloy_primitives::{Address, B256, U256};
 use scroll_alloy_rpc_types_engine::BlockDataHint;
 use sea_orm::entity::prelude::*;
 
@@ -12,7 +12,7 @@ pub struct Model {
     state_root: Vec<u8>,
     coinbase: Option<Vec<u8>>,
     nonce: Option<String>,
-    difficulty: Vec<u8>,
+    difficulty: i8,
 }
 
 /// The relation for the extra data model.
@@ -26,7 +26,12 @@ impl From<Model> for BlockDataHint {
     fn from(value: Model) -> Self {
         Self {
             extra_data: value.extra_data.into(),
-            difficulty: U256::from_be_slice(value.difficulty.as_ref()),
+            state_root: B256::from_slice(&value.state_root),
+            coinbase: value.coinbase.as_deref().map(Address::from_slice),
+            nonce: value.nonce.map(|n| {
+                u64::from_str_radix(&n, 16).expect("nonce stored as hex string in database")
+            }),
+            difficulty: U256::from(value.difficulty),
         }
     }
 }

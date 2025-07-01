@@ -11,17 +11,14 @@ workspace = true
 
 [dependencies]
 # alloy
-alloy-chains.workspace = true
 alloy-eips = { workspace = true, features = ["kzg"] }
 alloy-primitives.workspace = true
 alloy-provider.workspace = true
 alloy-rpc-types-beacon = "0.14"
-alloy-rpc-types-engine.workspace = true
 alloy-serde = { version = "0.15.5", default-features = false }
 alloy-transport.workspace = true
 
 # scroll
-reth-scroll-chainspec.workspace = true
 scroll-alloy-consensus.workspace = true
 scroll-alloy-network.workspace = true
 scroll-alloy-rpc-types-engine.workspace = true
@@ -38,20 +35,13 @@ reqwest = { workspace = true, features = ["json"] }
 serde = { workspace = true, features = ["derive"] }
 thiserror.workspace = true
 tokio = { workspace = true, default-features = false }
-tracing.workspace = true
 
 [dev-dependencies]
-alloy-rpc-client.workspace = true
 eyre.workspace = true
-reth-payload-primitives.workspace = true
-reth-scroll-node.workspace = true
-reth-e2e-test-utils.workspace = true
 scroll-db = { workspace = true, features = ["test-utils"] }
-scroll-network.workspace = true
 tokio = { workspace = true, features = ["macros"] }
 
 [features]
 test-utils = [
     "scroll-db/test-utils",
-    "reth-scroll-node/test-utils",
 ]
