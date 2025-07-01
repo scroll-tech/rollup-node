@@ -480,7 +480,6 @@ where
                             SignerEvent::SignedBlock { block: block.clone(), signature },
                         ));
                     }
-
                     this.network.handle().announce_block(block, signature);
                 }
             }

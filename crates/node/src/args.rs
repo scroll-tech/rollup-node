@@ -326,6 +326,9 @@ pub struct NetworkArgs {
     /// A bool that represents if the transaction receiving should be disabled.
     #[arg(long = "network.disable-tx-receive", default_value_t = false)]
     pub disable_tx_receive: bool,
+    /// The URL for the Sequencer RPC. (can be both HTTP and WS)
+    #[arg(long = "network.sequencer-url", id = "network_sequencer_url", value_name = "NETWORK_SEQUENCER_URL")]
+    pub sequencer_url: Option<String>,
 }
 
 /// The arguments for the L1 provider.
