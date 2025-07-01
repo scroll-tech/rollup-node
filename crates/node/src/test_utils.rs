@@ -133,6 +133,7 @@ pub fn default_test_scroll_rollup_node_config() -> ScrollRollupNodeConfig {
         network_args: crate::args::NetworkArgs {
             enable_eth_scroll_wire_bridge: true,
             enable_scroll_wire: true,
+            ..Default::default()
         },
         database_args: DatabaseArgs { path: Some(PathBuf::from("sqlite::memory:")) },
         l1_provider_args: L1ProviderArgs::default(),
@@ -150,6 +151,12 @@ pub fn default_sequencer_test_scroll_rollup_node_config() -> ScrollRollupNodeCon
         network_args: crate::args::NetworkArgs {
             enable_eth_scroll_wire_bridge: true,
             enable_scroll_wire: true,
+<<<<<<< HEAD
+=======
+            disable_tx_broadcast: false,
+            disable_tx_receive: false,
+            sequencer_url: None,
+>>>>>>> 1055c8b (feat: support forward tx to sequencer)
         },
         database_args: DatabaseArgs { path: Some(PathBuf::from("sqlite::memory:")) },
         l1_provider_args: L1ProviderArgs::default(),
