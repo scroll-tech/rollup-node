@@ -58,9 +58,14 @@ where
 {
     /// Create a new instance of [`ScrollRollupNodeAddOns`].
     pub fn new(config: ScrollRollupNodeConfig) -> Self {
-        let rpc_add_ons = RpcAddOns::default();
+
+        let rpc_add_ons= RpcAddOns::new(
+            ScrollEthApiBuilder::default().with_sequencer(config.network_args.sequencer_url.clone()),
+            Default::default(),
+            Default::default(),
+        );
         let rollup_manager_addon = RollupManagerAddOn::new(config);
-        Self { rpc_add_ons, rollup_manager_addon }
+        Self { rpc_add_ons, rollup_manager_addon}
     }
 }
 impl<N> NodeAddOns<N> for ScrollRollupNodeAddOns<N>
@@ -84,7 +89,7 @@ where
         self,
         ctx: reth_node_api::AddOnsContext<'_, N>,
     ) -> eyre::Result<Self::Handle> {
-        let Self { rpc_add_ons, rollup_manager_addon: rollup_node_manager_addon } = self;
+        let Self { rpc_add_ons, rollup_manager_addon: rollup_node_manager_addon , .. } = self;
         let rpc_handle: RpcHandle<N, ScrollEthApi<N>> =
             rpc_add_ons.launch_add_ons_with(ctx.clone(), |_| Ok(())).await?;
         let (rollup_manager_handle, l1_watcher_tx) =
