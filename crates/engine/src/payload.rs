@@ -1,4 +1,4 @@
-use alloy_primitives::B256;
+use alloy_primitives::{B256, B64};
 use reth_primitives_traits::{AlloyBlockHeader, Block, BlockBody};
 use scroll_alloy_rpc_types_engine::ScrollPayloadAttributes;
 
@@ -60,25 +60,44 @@ pub(crate) fn block_matches_attributes<B: Block>(
         return false;
     }
 
-    if let Some(block_data_hint) = &attributes.block_data_hint {
-        if &block_data_hint.extra_data != header.extra_data() {
-            debug!(
-                target: "scroll::engine::driver",
-                expected = ?block_data_hint.extra_data,
-                got = ?header.extra_data(),
-                "reorg: mismatch in extra_data"
-            );
-            return false;
-        }
-        if block_data_hint.difficulty != header.difficulty() {
-            debug!(
-                target: "scroll::engine::driver",
-                expected = ?block_data_hint.extra_data,
-                got = ?header.difficulty(),
-                "reorg: mismatch in difficulty"
-            );
-            return false;
-        }
+    let block_data = &attributes.block_data_hint;
+    if block_data.extra_data.as_ref().is_some_and(|ex| ex != header.extra_data()) {
+        debug!(
+            target: "scroll::engine::driver",
+            expected = ?block_data.extra_data,
+            got = ?header.extra_data(),
+            "reorg: mismatch in extra_data"
+        );
+        return false;
+    }
+    if block_data.state_root.is_some_and(|d| d != header.state_root()) {
+        debug!(
+            target: "scroll::engine::driver",
+            expected = ?block_data.state_root,
+            got = ?header.state_root(),
+            "reorg: mismatch in state_root"
+        );
+        return false;
+    }
+    if block_data.coinbase.is_some_and(|d| d != header.beneficiary()) {
+        debug!(
+            target: "scroll::engine::driver",
+            expected = ?block_data.coinbase,
+            got = ?header.beneficiary(),
+            "reorg: mismatch in coinbase"
+        );
+        return false;
+    }
+
+    // nonce defaults to `Some(0x0000000000000000)` for `ScrollBlock`.
+    if B64::from(block_data.nonce.unwrap_or_default()) != header.nonce().unwrap_or_default() {
+        debug!(
+            target: "scroll::engine::driver",
+            expected = ?block_data.nonce,
+            got = ?header.nonce(),
+            "reorg: mismatch in nonce"
+        );
+        return false;
     }
 
     true
@@ -118,14 +137,17 @@ mod tests {
         attributes.transactions = Some(encoded_transactions);
         attributes.payload_attributes.timestamp = timestamp;
         attributes.payload_attributes.prev_randao = prev_randao;
-        attributes.block_data_hint = Some(block_data_hint.clone());
+        attributes.block_data_hint = block_data_hint.clone();
 
         let block = ScrollBlock {
             header: Header {
                 parent_hash,
                 timestamp,
-                difficulty: block_data_hint.difficulty,
-                extra_data: block_data_hint.extra_data,
+                difficulty: block_data_hint.difficulty.unwrap_or_default(),
+                nonce: block_data_hint.nonce.unwrap_or_default().into(),
+                beneficiary: block_data_hint.coinbase.unwrap_or_default(),
+                extra_data: block_data_hint.extra_data.unwrap_or_default(),
+                state_root: block_data_hint.state_root.unwrap_or_default(),
                 mix_hash: prev_randao,
                 ..Default::default()
             },

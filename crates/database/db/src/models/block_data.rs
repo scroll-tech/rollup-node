@@ -8,11 +8,11 @@ use sea_orm::entity::prelude::*;
 pub struct Model {
     #[sea_orm(primary_key)]
     number: i64,
-    extra_data: Vec<u8>,
-    state_root: Vec<u8>,
+    extra_data: Option<Vec<u8>>,
+    state_root: Option<Vec<u8>>,
     coinbase: Option<Vec<u8>>,
     nonce: Option<String>,
-    difficulty: i8,
+    difficulty: Option<i8>,
 }
 
 /// The relation for the extra data model.
@@ -25,13 +25,13 @@ impl ActiveModelBehavior for ActiveModel {}
 impl From<Model> for BlockDataHint {
     fn from(value: Model) -> Self {
         Self {
-            extra_data: value.extra_data.into(),
-            state_root: B256::from_slice(&value.state_root),
+            extra_data: value.extra_data.map(Into::into),
+            state_root: value.state_root.map(|s| B256::from_slice(&s)),
             coinbase: value.coinbase.as_deref().map(Address::from_slice),
             nonce: value.nonce.map(|n| {
                 u64::from_str_radix(&n, 16).expect("nonce stored as hex string in database")
             }),
-            difficulty: U256::from(value.difficulty),
+            difficulty: value.difficulty.map(U256::from),
         }
     }
 }

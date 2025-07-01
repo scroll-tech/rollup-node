@@ -250,10 +250,10 @@ async fn build_payload_attributes<P: L1MessageProvider + Unpin + Send + Sync + '
         payload_attributes,
         transactions: (!l1_messages.is_empty()).then_some(l1_messages),
         no_tx_pool: false,
-        block_data_hint: Some(BlockDataHint {
-            difficulty: DEFAULT_BLOCK_DIFFICULTY,
+        block_data_hint: BlockDataHint {
+            difficulty: Some(DEFAULT_BLOCK_DIFFICULTY),
             ..Default::default()
-        }),
+        },
         // If setting the gas limit to None, the Reth payload builder will use the gas limit passed
         // via the `builder.gaslimit` CLI arg.
         gas_limit: None,

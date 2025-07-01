@@ -70,11 +70,11 @@ impl<MI: MigrationInfo + Send + Sync> MigrationTrait for Migration<MI> {
 pub struct Model {
     #[sea_orm(primary_key)]
     number: i64,
-    extra_data: Vec<u8>,
-    state_root: Vec<u8>,
+    extra_data: Option<Vec<u8>>,
+    state_root: Option<Vec<u8>>,
     coinbase: Option<Vec<u8>>,
     nonce: Option<String>,
-    difficulty: i8,
+    difficulty: Option<i8>,
 }
 impl ActiveModelBehavior for ActiveModel {}
 
@@ -82,11 +82,11 @@ impl From<(i64, HeaderMetadata)> for ActiveModel {
     fn from((bn, header): (i64, HeaderMetadata)) -> Self {
         Self {
             number: ActiveValue::Set(bn),
-            extra_data: ActiveValue::Set(header.extra_data),
-            state_root: ActiveValue::Set(header.state_root.to_vec()),
+            extra_data: ActiveValue::Set(Some(header.extra_data)),
+            state_root: ActiveValue::Set(Some(header.state_root.to_vec())),
             coinbase: ActiveValue::Set(header.coinbase.map(|c| c.to_vec())),
             nonce: ActiveValue::Set(header.nonce.map(|x| format!("{x:x}"))),
-            difficulty: ActiveValue::Set(header.difficulty as i8),
+            difficulty: ActiveValue::Set(Some(header.difficulty as i8)),
         }
     }
 }
