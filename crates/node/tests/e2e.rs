@@ -38,6 +38,8 @@ async fn can_bridge_l1_messages() -> eyre::Result<()> {
         network_args: ScrollNetworkArgs {
             enable_eth_scroll_wire_bridge: true,
             enable_scroll_wire: true,
+            disable_tx_broadcast: false,
+            disable_tx_receive: false,
         },
         database_args: DatabaseArgs { path: Some(PathBuf::from("sqlite::memory:")) },
         l1_provider_args: L1ProviderArgs::default(),
@@ -102,6 +104,8 @@ async fn can_sequence_and_gossip_blocks() {
         network_args: ScrollNetworkArgs {
             enable_eth_scroll_wire_bridge: true,
             enable_scroll_wire: true,
+            disable_tx_broadcast: false,
+            disable_tx_receive: false,
         },
         database_args: DatabaseArgs { path: Some(PathBuf::from("sqlite::memory:")) },
         l1_provider_args: L1ProviderArgs::default(),
