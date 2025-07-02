@@ -40,7 +40,7 @@ async fn can_build_blocks() {
     reth_tracing::init_test_tracing();
 
     const BLOCK_BUILDING_DURATION: Duration = Duration::from_millis(0);
-    const BLOCK_GAP_TRIGGER: u64 = 100;
+    // const BLOCK_GAP_TRIGGER: u64 = 100;
 
     // setup a test node
     let (mut nodes, _tasks, wallet) = setup(1, false).await.unwrap();
@@ -281,7 +281,7 @@ async fn can_build_blocks_with_finalized_l1_messages() {
 
     let chain_spec = SCROLL_DEV.clone();
     const BLOCK_BUILDING_DURATION: Duration = tokio::time::Duration::from_millis(0);
-    const BLOCK_GAP_TRIGGER: u64 = 100;
+    // const BLOCK_GAP_TRIGGER: u64 = 100;
 
     // setup a test node
     let (mut nodes, _tasks, wallet) =
@@ -581,7 +581,7 @@ async fn can_build_blocks_and_exit_at_gas_limit() {
     let chain_spec = SCROLL_DEV.clone();
     const MIN_TRANSACTION_GAS_COST: u64 = 21_000;
     const BLOCK_BUILDING_DURATION: Duration = Duration::from_millis(250);
-    const BLOCK_GAP_TRIGGER: u64 = 100;
+    // const BLOCK_GAP_TRIGGER: u64 = 100;
     const TRANSACTIONS_COUNT: usize = 2000;
 
     // setup a test node. use a high value for the payload building duration to be sure we don't
@@ -666,7 +666,7 @@ async fn can_build_blocks_and_exit_at_time_limit() {
     let chain_spec = SCROLL_DEV.clone();
     const MIN_TRANSACTION_GAS_COST: u64 = 21_000;
     const BLOCK_BUILDING_DURATION: Duration = Duration::from_secs(1);
-    const BLOCK_GAP_TRIGGER: u64 = 100;
+    // const BLOCK_GAP_TRIGGER: u64 = 100;
     const TRANSACTIONS_COUNT: usize = 2000;
 
     // setup a test node. use a low payload building duration in order to exit before we reach the

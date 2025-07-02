@@ -48,4 +48,5 @@ serde = [
     "scroll-wire/serde",
     "reth-primitives-traits/serde",
     "reth-storage-api/serde",
+    "scroll-alloy-hardforks/serde",
 ]

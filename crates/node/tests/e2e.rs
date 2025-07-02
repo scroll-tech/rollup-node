@@ -92,6 +92,19 @@ async fn can_bridge_l1_messages() -> eyre::Result<()> {
 }
 
 #[tokio::test]
+async fn follower_can_reorg() -> eyre::Result<()> {
+    reth_tracing::init_test_tracing();
+
+    // create 2 nodes
+    let chain_spec = (*SCROLL_DEV).clone();
+    let (mut _nodes, _tasks, _) =
+        setup_engine(default_test_scroll_rollup_node_config(), 2, chain_spec.clone(), false)
+            .await?;
+
+    Ok(())
+}
+
+#[tokio::test]
 async fn can_sequence_and_gossip_blocks() {
     reth_tracing::init_test_tracing();
 
@@ -151,7 +164,6 @@ async fn can_sequence_and_gossip_blocks() {
 
     // assert that a chain extension is triggered on the follower node
     if let Some(RollupManagerEvent::ChainExtensionTriggered(_)) = follower_events.next().await {
-        ()
     } else {
         panic!("Failed to receive chain extension event from rollup node");
     }

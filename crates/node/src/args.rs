@@ -277,7 +277,7 @@ impl ScrollRollupNodeConfig {
             self.signer_args.signer(chain_id).await?.map(rollup_node_signer::Signer::spawn)
         };
 
-        // Insantiate the chain orchestrator
+        // Instantiate the chain orchestrator
         let block_client = scroll_network_manager
             .handle()
             .inner()
