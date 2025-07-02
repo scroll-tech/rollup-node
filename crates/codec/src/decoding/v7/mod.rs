@@ -97,7 +97,6 @@ pub(crate) fn decode_v7_payload(blob: &[u8]) -> Result<Batch, DecodingError> {
     let payload = PayloadData {
         blocks: l2_blocks,
         l1_message_queue_info: (prev_message_queue_hash, post_message_queue_hash).into(),
-        skipped_l1_message_bitmap: None,
     };
 
     Ok(Batch::new(7, None, payload))

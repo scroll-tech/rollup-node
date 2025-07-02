@@ -61,11 +61,8 @@ pub fn decode_v0(calldata: &[u8]) -> Result<Batch, DecodingError> {
     let parent_header = BatchHeaderV0::try_from_buf(&mut (&*raw_parent_header))?;
     let l1_message_start_index = parent_header.total_l1_message_popped;
 
-    let payload = PayloadData {
-        blocks: l2_blocks,
-        l1_message_queue_info: l1_message_start_index.into(),
-        skipped_l1_message_bitmap: call.skipped_l1_message_bitmap(),
-    };
+    let payload =
+        PayloadData { blocks: l2_blocks, l1_message_queue_info: l1_message_start_index.into() };
 
     Ok(Batch::new(call.version(), Some(chunks_block_count), payload))
 }

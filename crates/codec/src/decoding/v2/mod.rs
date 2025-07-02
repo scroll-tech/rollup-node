@@ -50,13 +50,7 @@ pub fn decode_v2(calldata: &[u8], blob: &[u8]) -> Result<Batch, DecodingError> {
     // clone buf and move pass chunk information.
     buf.advance(TRANSACTION_DATA_BLOB_INDEX_OFFSET);
 
-    decode_v1_chunk(
-        call.version(),
-        call.skipped_l1_message_bitmap(),
-        l1_message_start_index,
-        chunks,
-        buf,
-    )
+    decode_v1_chunk(call.version(), l1_message_start_index, chunks, buf)
 }
 
 #[cfg(test)]

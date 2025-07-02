@@ -5,7 +5,7 @@ use crate::{
 
 use alloy_primitives::{
     bytes::{Buf, BufMut},
-    keccak256, B256,
+    keccak256, B256, U256,
 };
 
 /// The batch header for V1.
@@ -26,7 +26,7 @@ pub struct BatchHeaderV1 {
     /// The parent batch hash.
     pub parent_batch_hash: B256,
     /// A bitmap to indicate which L1 messages are skipped in the batch.
-    pub skipped_l1_message_bitmap: Vec<u8>,
+    pub skipped_l1_message_bitmap: Vec<U256>,
 }
 
 impl BatchHeaderV1 {
@@ -42,7 +42,7 @@ impl BatchHeaderV1 {
         data_hash: B256,
         blob_versioned_hash: B256,
         parent_batch_hash: B256,
-        skipped_l1_message_bitmap: Vec<u8>,
+        skipped_l1_message_bitmap: Vec<U256>,
     ) -> Self {
         Self {
             version,
@@ -73,8 +73,10 @@ impl BatchHeaderV1 {
         let blob_versioned_hash = from_slice_and_advance_buf!(B256, buf);
         let parent_batch_hash = from_slice_and_advance_buf!(B256, buf);
 
-        let skipped_l1_message_bitmap: Vec<_> =
-            buf.chunks(SKIPPED_L1_MESSAGE_BITMAP_ITEM_BYTES_SIZE).flatten().copied().collect();
+        let skipped_l1_message_bitmap: Vec<_> = buf
+            .chunks(SKIPPED_L1_MESSAGE_BITMAP_ITEM_BYTES_SIZE)
+            .map(|chunk| U256::from_be_slice(chunk))
+            .collect();
 
         // check leftover bytes are correct.
         if buf.len() as u64 !=
@@ -82,7 +84,7 @@ impl BatchHeaderV1 {
         {
             return Err(DecodingError::Eof)
         }
-        buf.advance(skipped_l1_message_bitmap.len());
+        buf.advance(skipped_l1_message_bitmap.len() * SKIPPED_L1_MESSAGE_BITMAP_ITEM_BYTES_SIZE);
 
         Ok(Self {
             version,
@@ -110,7 +112,12 @@ impl BatchHeaderV1 {
         bytes.put_slice(&self.blob_versioned_hash.0);
         bytes.put_slice(&self.parent_batch_hash.0);
 
-        bytes.put_slice(&self.skipped_l1_message_bitmap);
+        let skipped_l1_message_flat_bitmap = self
+            .skipped_l1_message_bitmap
+            .iter()
+            .flat_map(|u| u.to_be_bytes::<32>())
+            .collect::<Vec<_>>();
+        bytes.put_slice(&skipped_l1_message_flat_bitmap);
 
         keccak256(bytes)
     }
