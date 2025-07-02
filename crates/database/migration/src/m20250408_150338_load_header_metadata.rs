@@ -218,8 +218,8 @@ fn decode_to_headers(data: Vec<u8>) -> eyre::Result<Vec<HeaderMetadata>> {
 
     // decode all available data.
     let mut headers = Vec::with_capacity(data_buf.len() / HEADER_LOWER_SIZE_LIMIT);
-    while let Some(data) = decoder.next(data_buf) {
-        headers.push(data);
+    while !data_buf.is_empty() {
+        headers.push(decoder.next(data_buf).map_err(|err| DbErr::Custom(err.to_string()))?);
     }
 
     Ok(headers)
@@ -267,10 +267,10 @@ impl MetadataDecoder {
     }
 
     /// Decodes the next header metadata from the buffer, advancing it.
-    fn next(&self, buf: &mut &[u8]) -> Option<HeaderMetadata> {
+    fn next(&self, buf: &mut &[u8]) -> eyre::Result<HeaderMetadata> {
         // sanity check.
         if buf.len() < 2 {
-            return None
+            bail!("header buffer too small to read seal flag and vanity index");
         }
 
         // get flag and vanity index.
@@ -281,7 +281,7 @@ impl MetadataDecoder {
         let has_nonce = (flag & 0b00100000) != 0;
         let difficulty = if flag & 0b01000000 == 0 { 2 } else { 1 };
         let seal_length = if flag & 0b10000000 == 0 { 65 } else { 85 };
-        let vanity = self.vanity.get(&vanity_index)?;
+        let vanity = self.vanity.get(&vanity_index).ok_or(eyre!("vanity not found"))?;
 
         // flag + vanity index + state root + coinbase + nonce + seal
         let total_expected_size = 2 * size_of::<u8>() +
@@ -291,7 +291,7 @@ impl MetadataDecoder {
             seal_length;
 
         if buf.len() < total_expected_size {
-            return None
+            bail!("header buffer too small: got {}, expected {}", buf.len(), total_expected_size);
         }
         buf.advance(2);
 
@@ -316,7 +316,7 @@ impl MetadataDecoder {
         let extra_data = [vanity, seal].concat();
         buf.advance(seal_length);
 
-        Some(HeaderMetadata { extra_data, state_root, coinbase, nonce, difficulty })
+        Ok(HeaderMetadata { extra_data, state_root, coinbase, nonce, difficulty })
     }
 }
 
