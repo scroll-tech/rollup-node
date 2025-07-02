@@ -111,7 +111,8 @@ async fn download(url: &str) -> eyre::Result<Vec<u8>> {
     if total_size == 0 {
         bail!("empty file");
     }
-    let iterations = total_size / CHUNK_SIZE + if total_size % CHUNK_SIZE != 0 { 1 } else { 0 };
+    let iterations =
+        total_size / CHUNK_SIZE + if !total_size.is_multiple_of(CHUNK_SIZE) { 1 } else { 0 };
 
     // create a progress bar.
     let pb = ProgressBar::new(total_size).
