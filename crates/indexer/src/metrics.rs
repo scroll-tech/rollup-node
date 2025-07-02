@@ -36,7 +36,7 @@ impl IndexerItem {
     }
 }
 
-/// The metrics for the [`super::Indexer`].
+/// The metrics for the [`super::ChainOrchestrator`].
 #[derive(Metrics, Clone)]
 #[metrics(scope = "indexer")]
 pub struct IndexerMetrics {

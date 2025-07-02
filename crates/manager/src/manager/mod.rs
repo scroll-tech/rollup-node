@@ -1,6 +1,6 @@
 //! The [`RollupNodeManager`] is the main component of the rollup node that manages the
-//! [`ScrollNetworkManager`], [`EngineDriver`], [`Indexer`] and [`Consensus`] components. It is
-//! responsible for handling events from these components and coordinating their actions.
+//! [`ScrollNetworkManager`], [`EngineDriver`], [`ChainOrchestrator`] and [`Consensus`] components.
+//! It is responsible for handling events from these components and coordinating their actions.
 
 use super::Consensus;
 use alloy_provider::Provider;

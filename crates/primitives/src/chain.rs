@@ -1,6 +1,7 @@
 use alloy_primitives::Signature;
 use reth_network_peers::PeerId;
 use reth_scroll_primitives::ScrollBlock;
+use std::vec::Vec;
 
 /// A structure representing a chain import, which includes a vector of blocks,
 /// the peer ID from which the blocks were received, and a signature for the import of the chain
