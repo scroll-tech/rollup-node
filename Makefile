@@ -70,6 +70,16 @@ test:
 	--all-features \
 	--no-fail-fast
 
+# Used to update the mainnet-sample.sql data. Provide the path to the sqlite database that should be read from
+# using `DB_PATH`.
+.PHONY: test-data
+export-sample-test-data:
+	sqlite3 "$(DB_PATH)" <<EOF > mainnet-sample.sql
+	.headers on
+	.mode insert block_data
+	SELECT * FROM block_data LIMIT 2000;
+	EOF
+
 .PHONY: docs
 docs:
 	cargo docs --document-private-items
