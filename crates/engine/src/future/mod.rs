@@ -1,5 +1,7 @@
-use super::{payload::matching_payloads, EngineDriverError};
+use super::{payload::block_matches_attributes, EngineDriverError};
 use crate::{api::*, ForkchoiceState};
+
+use alloy_provider::Provider;
 use alloy_rpc_types_engine::{
     ExecutionData, ExecutionPayloadV1, ForkchoiceState as AlloyForkchoiceState, ForkchoiceUpdated,
     PayloadStatusEnum,
@@ -11,8 +13,8 @@ use rollup_node_primitives::{
     BatchInfo, BlockInfo, ChainImport, L2BlockInfoWithL1Messages, MeteredFuture,
     ScrollPayloadAttributesWithBatchInfo,
 };
-use rollup_node_providers::ExecutionPayloadProvider;
 use scroll_alloy_hardforks::ScrollHardforks;
+use scroll_alloy_network::Scroll;
 use scroll_alloy_provider::ScrollEngineApi;
 use scroll_alloy_rpc_types_engine::ScrollPayloadAttributes;
 use scroll_network::BlockImportOutcome;
@@ -129,7 +131,7 @@ impl EngineFuture {
     ) -> Self
     where
         EC: ScrollEngineApi + Unpin + Send + Sync + 'static,
-        P: ExecutionPayloadProvider + Unpin + Send + Sync + 'static,
+        P: Provider<Scroll> + Unpin + Send + Sync + 'static,
     {
         Self::L1Consolidation(Box::pin(handle_payload_attributes(
             client,
@@ -254,24 +256,26 @@ where
     )]
 async fn handle_payload_attributes<EC, P>(
     client: Arc<EC>,
-    execution_payload_provider: P,
+    provider: P,
     fcs: ForkchoiceState,
     payload_attributes: ScrollPayloadAttributesWithBatchInfo,
 ) -> Result<ConsolidationOutcome, EngineDriverError>
 where
     EC: ScrollEngineApi + Unpin + Send + Sync + 'static,
-    P: ExecutionPayloadProvider + Unpin + Send + Sync + 'static,
+    P: Provider<Scroll> + Unpin + Send + Sync + 'static,
 {
     tracing::trace!(target: "scroll::engine::future", ?fcs, ?payload_attributes, "handling payload attributes");
 
     let ScrollPayloadAttributesWithBatchInfo { mut payload_attributes, batch_info } =
         payload_attributes;
 
-    let maybe_execution_payload = execution_payload_provider
-        .execution_payload_for_block((fcs.safe_block_info().number + 1).into())
+    let maybe_execution_payload = provider
+        .get_block((fcs.safe_block_info().number + 1).into())
+        .full()
         .await
         .map_err(|_| EngineDriverError::ExecutionPayloadProviderUnavailable)?
-        .filter(|ep| matching_payloads(&payload_attributes, ep, fcs.safe_block_info().hash));
+        .map(|b| b.into_consensus().map_transactions(|tx| tx.inner.into_inner()))
+        .filter(|b| block_matches_attributes(&payload_attributes, b, fcs.safe_block_info().hash));
 
     if let Some(execution_payload) = maybe_execution_payload {
         // if the payload attributes match the execution payload at block safe + 1,

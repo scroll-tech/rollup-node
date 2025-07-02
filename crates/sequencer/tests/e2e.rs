@@ -20,7 +20,7 @@ use rollup_node_sequencer::{L1MessageInclusionMode, Sequencer};
 use rollup_node_signer::SignerEvent;
 use scroll_alloy_consensus::TxL1Message;
 use scroll_alloy_provider::ScrollAuthApiEngineClient;
-use scroll_alloy_rpc_types_engine::ScrollPayloadAttributes;
+use scroll_alloy_rpc_types_engine::{BlockDataHint, ScrollPayloadAttributes};
 use scroll_db::{test_utils::setup_test_db, DatabaseOperations};
 use scroll_engine::{EngineDriver, EngineDriverEvent, ForkchoiceState};
 use std::{
@@ -647,7 +647,8 @@ async fn can_build_blocks_and_exit_at_gas_limit() {
         },
         transactions: None,
         no_tx_pool: false,
-        block_data_hint: None,
+        block_data_hint: BlockDataHint::none(),
+        gas_limit: None,
     });
 
     // verify the gas used is within MIN_TRANSACTION_GAS_COST of the gas limit.
@@ -734,7 +735,8 @@ async fn can_build_blocks_and_exit_at_time_limit() {
         },
         transactions: None,
         no_tx_pool: false,
-        block_data_hint: None,
+        block_data_hint: BlockDataHint::none(),
+        gas_limit: None,
     });
 
     if let Some(EngineDriverEvent::NewPayload(block)) = engine_driver.next().await {
