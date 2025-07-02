@@ -3,8 +3,7 @@ use crate::{api::*, ForkchoiceState};
 
 use alloy_provider::Provider;
 use alloy_rpc_types_engine::{
-    ExecutionData, ExecutionPayload, ExecutionPayloadV1, ForkchoiceState as AlloyForkchoiceState,
-    PayloadStatusEnum,
+    ExecutionData, ExecutionPayloadV1, ForkchoiceState as AlloyForkchoiceState, PayloadStatusEnum,
 };
 use eyre::Result;
 use reth_scroll_engine_primitives::try_into_block;
@@ -257,8 +256,7 @@ where
         .await
         .map_err(|_| EngineDriverError::ExecutionPayloadProviderUnavailable)?
         .map(|b| b.into_consensus().map_transactions(|tx| tx.inner.into_inner()))
-        .filter(|b| block_matches_attributes(&payload_attributes, b, fcs.safe_block_info().hash))
-        .map(|b| ExecutionPayload::from_block_slow(&b).0);
+        .filter(|b| block_matches_attributes(&payload_attributes, b, fcs.safe_block_info().hash));
 
     if let Some(execution_payload) = maybe_execution_payload {
         // if the payload attributes match the execution payload at block safe + 1,
