@@ -30,7 +30,7 @@ pub struct NewBlock {
 }
 
 impl NewBlock {
-    /// Returns a [`NewBlocks`] instance with the provided signature and blocks.
+    /// Returns a [`NewBlock`] instance with the provided signature and blocks.
     pub fn new(signature: Signature, block: reth_scroll_primitives::ScrollBlock) -> Self {
         Self { signature: Bytes::from(Into::<Vec<u8>>::into(signature)), block }
     }
