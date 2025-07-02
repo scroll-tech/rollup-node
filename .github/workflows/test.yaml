@@ -33,24 +33,6 @@ jobs:
       - name: Run unit tests
         run: cargo nextest run --all-features --workspace --locked -E '!kind(test)'
 
-  can-bridge-blocks:
-    runs-on: ubuntu-latest
-    timeout-minutes: 60
-    env:
-      RUST_BACKTRACE: 1
-    steps:
-      - uses: actions/checkout@v4
-      - uses: rui314/setup-mold@v1
-      - uses: dtolnay/rust-toolchain@nightly
-        with:
-          toolchain: 'nightly'
-      - uses: Swatinem/rust-cache@v2
-        with:
-          cache-on-failure: true
-      - name: Run failing test with logs
-        run: RUST_LOG=debug cargo test can_bridge_blocks
-
-
   integration:
     runs-on: ubuntu-latest
     timeout-minutes: 60
