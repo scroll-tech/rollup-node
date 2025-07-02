@@ -11,9 +11,6 @@ pub use beacon::{beacon_provider, BeaconProvider, OnlineBeaconClient};
 mod block;
 pub use block::BlockDataProvider;
 
-mod execution_payload;
-pub use execution_payload::ExecutionPayloadProvider;
-
 mod l1;
 pub use l1::{
     blob::L1BlobProvider,

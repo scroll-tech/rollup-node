@@ -5,10 +5,11 @@ use crate::{
     EngineDriverEvent,
 };
 
+use alloy_provider::Provider;
 use futures::{ready, task::AtomicWaker, FutureExt, Stream};
 use rollup_node_primitives::{BlockInfo, MeteredFuture, ScrollPayloadAttributesWithBatchInfo};
-use rollup_node_providers::ExecutionPayloadProvider;
 use scroll_alloy_hardforks::ScrollHardforks;
+use scroll_alloy_network::Scroll;
 use scroll_alloy_provider::ScrollEngineApi;
 use scroll_alloy_rpc_types_engine::ScrollPayloadAttributes;
 use scroll_network::NewBlockWithPeer;
@@ -57,7 +58,7 @@ impl<EC, CS, P> EngineDriver<EC, CS, P>
 where
     EC: ScrollEngineApi + Sync + 'static,
     CS: ScrollHardforks + Sync + 'static,
-    P: ExecutionPayloadProvider + Clone + Sync + 'static,
+    P: Provider<Scroll> + Clone + Sync + 'static,
 {
     /// Create a new [`EngineDriver`].
     pub fn new(
@@ -256,7 +257,7 @@ impl<EC, CS, P> Stream for EngineDriver<EC, CS, P>
 where
     EC: ScrollEngineApi + Unpin + Send + Sync + 'static,
     CS: ScrollHardforks + Send + Sync + 'static,
-    P: ExecutionPayloadProvider + Clone + Unpin + Send + Sync + 'static,
+    P: Provider<Scroll> + Clone + Unpin + Send + Sync + 'static,
 {
     type Item = EngineDriverEvent;
 
