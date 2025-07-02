@@ -1,21 +1,29 @@
 //! A library responsible for indexing data relevant to the L1.
 
+use alloy_consensus::Header;
+use alloy_eips::BlockHashOrNumber;
 use alloy_primitives::{b256, keccak256, B256};
-use futures::Stream;
+use alloy_provider::Provider;
+use futures::{task::AtomicWaker, Stream, StreamExt, TryStreamExt};
 use reth_chainspec::EthChainSpec;
+use reth_network_p2p::{BlockClient, BodiesClient};
+use reth_scroll_primitives::ScrollBlock;
 use rollup_node_primitives::{
-    BatchCommitData, BatchInfo, BlockInfo, L1MessageEnvelope, L2BlockInfoWithL1Messages,
+    BatchCommitData, BatchInfo, BlockInfo, BoundedVec, ChainImport, L1MessageEnvelope,
+    L2BlockInfoWithL1Messages,
 };
 use rollup_node_watcher::L1Notification;
 use scroll_alloy_consensus::TxL1Message;
 use scroll_alloy_hardforks::{ScrollHardfork, ScrollHardforks};
+use scroll_alloy_network::Scroll;
 use scroll_db::{Database, DatabaseError, DatabaseOperations, UnwindResult};
+use scroll_network::NewBlockWithPeer;
 use std::{
     collections::{HashMap, VecDeque},
     pin::Pin,
     sync::{
         atomic::{AtomicU64, Ordering},
-        Arc,
+        Arc, Mutex,
     },
     task::{Context, Poll},
     time::Instant,
@@ -26,7 +34,7 @@ mod action;
 use action::{IndexerFuture, PendingIndexerFuture};
 
 mod event;
-pub use event::IndexerEvent;
+pub use event::ChainOrchestratorEvent;
 
 mod error;
 pub use error::IndexerError;
@@ -37,9 +45,24 @@ pub use metrics::{IndexerItem, IndexerMetrics};
 const L1_MESSAGE_QUEUE_HASH_MASK: B256 =
     b256!("ffffffffffffffffffffffffffffffffffffffffffffffffffffffff00000000");
 
+/// The number of block headers we keep in memory.
+const CHAIN_BUFFER_SIZE: usize = 2000;
+
+/// The threshold for optimistic syncing. If the received block is more than this many blocks
+/// ahead of the current chain, we optimistically sync the chain.
+const OPTIMISTIC_SYNC_THRESHOLD: u64 = 100;
+
+type Chain = BoundedVec<Header>;
+
 /// The indexer is responsible for indexing data relevant to the L1.
 #[derive(Debug)]
-pub struct Indexer<ChainSpec> {
+pub struct ChainOrchestrator<ChainSpec, BC, P> {
+    /// The `BlockClient` that is used to fetch blocks from peers over p2p.
+    network_client: Arc<BC>,
+    /// The L2 client that is used to interact with the L2 chain.
+    l2_client: Arc<P>,
+    /// An in-memory representation of the optimistic chain we are following.
+    chain: Arc<Mutex<Chain>>,
     /// A reference to the database used to persist the indexed data.
     database: Arc<Database>,
     /// A queue of pending futures.
@@ -52,12 +75,32 @@ pub struct Indexer<ChainSpec> {
     chain_spec: Arc<ChainSpec>,
     /// The metrics for the indexer.
     metrics: HashMap<IndexerItem, IndexerMetrics>,
+    /// A boolean to represent if the [`ChainOrchestrator`] is in optimistic mode.
+    optimistic_mode: Arc<Mutex<bool>>,
+    /// A boolean to represent if the L1 has been synced.
+    l1_synced: bool,
+    /// The waker to notify when the engine driver should be polled.
+    waker: AtomicWaker,
 }
 
-impl<ChainSpec: ScrollHardforks + EthChainSpec + Send + Sync + 'static> Indexer<ChainSpec> {
+impl<
+        ChainSpec: ScrollHardforks + EthChainSpec + Send + Sync + 'static,
+        BC: BlockClient<Block = ScrollBlock> + Send + Sync + 'static,
+        P: Provider<Scroll> + 'static,
+    > ChainOrchestrator<ChainSpec, BC, P>
+{
     /// Creates a new indexer with the given [`Database`].
-    pub fn new(database: Arc<Database>, chain_spec: Arc<ChainSpec>) -> Self {
+    pub async fn new(
+        database: Arc<Database>,
+        chain_spec: Arc<ChainSpec>,
+        block_client: BC,
+        l2_client: P,
+    ) -> Self {
+        let chain = init_chain_from_db(&database, &l2_client).await;
         Self {
+            network_client: Arc::new(block_client),
+            l2_client: Arc::new(l2_client),
+            chain: Arc::new(Mutex::new(chain)),
             database,
             pending_futures: Default::default(),
             l1_finalized_block_number: Arc::new(AtomicU64::new(0)),
@@ -69,6 +112,9 @@ impl<ChainSpec: ScrollHardforks + EthChainSpec + Send + Sync + 'static> Indexer<
                     (i, IndexerMetrics::new_with_labels(&[("item", label)]))
                 })
                 .collect(),
+            optimistic_mode: Arc::new(Mutex::new(false)),
+            l1_synced: false,
+            waker: AtomicWaker::new(),
         }
     }
 
@@ -88,18 +134,288 @@ impl<ChainSpec: ScrollHardforks + EthChainSpec + Send + Sync + 'static> Indexer<
         fut_wrapper
     }
 
-    /// Handles an L2 block.
-    pub fn handle_block(
+    /// Sets the L1 synced status to the provided value.
+    pub fn set_l1_synced_status(&mut self, l1_synced: bool) {
+        self.l1_synced = l1_synced;
+    }
+
+    /// Handles a new block received from a peer.
+    pub fn handle_block_from_peer(&mut self, block_with_peer: NewBlockWithPeer) {
+        let chain = self.chain.clone();
+        let l2_client = self.l2_client.clone();
+        let optimistic_mode = self.optimistic_mode.clone();
+        let network_client = self.network_client.clone();
+        let database = self.database.clone();
+        let fut = self.handle_metered(
+            IndexerItem::NewBlock,
+            Box::pin(async move {
+                Self::handle_new_block(
+                    chain,
+                    l2_client,
+                    optimistic_mode,
+                    network_client,
+                    database,
+                    block_with_peer,
+                )
+                .await
+            }),
+        );
+        self.pending_futures.push_back(IndexerFuture::HandleL2Block(fut));
+        self.waker.wake();
+    }
+
+    /// Handles a new block received from the network.
+    pub async fn handle_new_block(
+        chain: Arc<Mutex<Chain>>,
+        l2_client: Arc<P>,
+        optimistic_mode: Arc<Mutex<bool>>,
+        network_client: Arc<BC>,
+        database: Arc<Database>,
+        block_with_peer: NewBlockWithPeer,
+    ) -> Result<ChainOrchestratorEvent, IndexerError> {
+        let NewBlockWithPeer { block: received_block, peer_id, signature } = block_with_peer;
+        let mut current_chain_headers = std::mem::take(&mut *chain.lock().unwrap());
+        let max_block_number = current_chain_headers.last().expect("chain can not be empty").number;
+        let min_block_number =
+            current_chain_headers.first().expect("chain can not be empty").number;
+        let optimistic_mode_local: bool = {
+            let guard = optimistic_mode.lock().unwrap();
+            *guard
+        };
+
+        // If the received block has a block number that is greater than the tip
+        // of the chain by the optimistic sync threshold, we optimistically sync the chain and
+        // update the in-memory buffer.
+        if (received_block.header.number - max_block_number) >= OPTIMISTIC_SYNC_THRESHOLD {
+            // fetch the latest `OPTIMISTIC_CHAIN_BUFFER_SIZE` blocks from the network for the
+            // optimistic chain.
+            let mut optimistic_headers = vec![received_block.header.clone()];
+            while optimistic_headers.len() < CHAIN_BUFFER_SIZE &&
+                optimistic_headers.last().unwrap().number != 0
+            {
+                tracing::trace!(target: "scroll::watcher", number = ?(optimistic_headers.last().unwrap().number - 1), "fetching block");
+                let header = network_client
+                    .get_header(BlockHashOrNumber::Hash(
+                        optimistic_headers.last().unwrap().parent_hash,
+                    ))
+                    .await
+                    .unwrap()
+                    .into_data()
+                    .unwrap();
+                optimistic_headers.push(header);
+            }
+            optimistic_headers.reverse();
+            let mut new_chain = Chain::new(CHAIN_BUFFER_SIZE);
+            new_chain.extend(optimistic_headers);
+            *chain.lock().unwrap() = new_chain;
+            *optimistic_mode.lock().unwrap() = true;
+            return Ok(ChainOrchestratorEvent::OptimisticSync(received_block));
+        }
+
+        // Check if we have already have this block in memory.
+        if received_block.number <= max_block_number &&
+            received_block.number >= min_block_number &&
+            current_chain_headers.iter().any(|h| h == &received_block.header)
+        {
+            tracing::debug!(target: "scroll::watcher", block_hash = ?received_block.header.hash_slow(), "block already in chain");
+            return Ok(ChainOrchestratorEvent::BlockAlreadyKnown(
+                received_block.header.hash_slow(),
+                peer_id,
+            ));
+        }
+
+        // Perform preliminary checks on received block that are dependent on database state due to
+        // not being in in-memory chain.
+        if received_block.header.number <= min_block_number {
+            // If we are in optimistic mode, we return an event indicating that we have insufficient
+            // data to process the block.
+            if optimistic_mode_local {
+                return Ok(ChainOrchestratorEvent::InsufficientDataForReceivedBlock(
+                    received_block.header.hash_slow(),
+                ));
+            }
+
+            // We check the database to see if this block is already known.
+            if database
+                .get_l2_block_and_batch_info_by_hash(received_block.header.hash_slow())
+                .await?
+                .is_some()
+            {
+                tracing::debug!(target: "scroll::watcher", block_hash = ?received_block.header.hash_slow(), "block already in database");
+                return Ok(ChainOrchestratorEvent::BlockAlreadyKnown(
+                    received_block.header.hash_slow(),
+                    peer_id,
+                ));
+            }
+        };
+
+        let mut new_chain_headers = vec![received_block.header.clone()];
+        let mut new_header_tail = received_block.header.clone();
+
+        enum ReorgIndex {
+            Memory(usize),
+            Database(BlockInfo),
+        }
+
+        // We should never have a re-org that is deeper than the current safe head.
+        let (latest_safe_block, _) =
+            database.get_latest_safe_l2_info().await?.expect("safe block must exist");
+
+        // We search for the re-org index in the in-memory chain or the database.
+        let reorg_index = {
+            loop {
+                // If the current header block number is greater than the in-memory chain then we
+                // should search the in-memory chain.
+                if new_header_tail.number >= min_block_number {
+                    if let Some(pos) = current_chain_headers
+                        .iter()
+                        .rposition(|h| h.hash_slow() == new_header_tail.parent_hash)
+                    {
+                        // If the received fork is older than the current chain, we return an event
+                        // indicating that we have received an old fork.
+                        if (pos < current_chain_headers.len() - 1) &&
+                            current_chain_headers.get(pos + 1).unwrap().timestamp >=
+                                new_header_tail.timestamp
+                        {
+                            return Ok(ChainOrchestratorEvent::OldForkReceived {
+                                headers: new_chain_headers,
+                                peer_id,
+                                signature,
+                            });
+                        }
+                        break Some(ReorgIndex::Memory(pos));
+                    }
+                // If we are in optimistic mode, we terminate the search as we don't have the
+                // necessary data in the database. This is fine because very deep
+                // re-orgs are rare and in any case will be resolved once optimistic sync is
+                // completed.If the current header block number is less than the
+                // latest safe block number then this would suggest a reorg of a
+                // safe block which is not invalid - terminate the search.
+                } else if optimistic_mode_local ||
+                    new_header_tail.number <= latest_safe_block.number
+                {
+                    break None
+
+                // If the block is not in the in-memory chain, we search the database.
+                } else if let Some((l2_block, _batch_info)) = database
+                    .get_l2_block_and_batch_info_by_hash(new_header_tail.parent_hash)
+                    .await?
+                {
+                    let diverged_block = database
+                        .get_l2_block_info_by_number(l2_block.number + 1)
+                        .await?
+                        .expect("diverged block must exist");
+                    let diverged_block =
+                        l2_client.get_block_by_hash(diverged_block.hash).await.unwrap().unwrap();
+
+                    // If the received fork is older than the current chain, we return an event
+                    // indicating that we have received an old fork.
+                    if diverged_block.header.timestamp >= new_header_tail.timestamp {
+                        return Ok(ChainOrchestratorEvent::OldForkReceived {
+                            headers: new_chain_headers,
+                            peer_id,
+                            signature,
+                        });
+                    }
+
+                    break Some(ReorgIndex::Database(l2_block))
+                }
+
+                tracing::trace!(target: "scroll::watcher", number = ?(new_header_tail.number - 1), "fetching block");
+                let header = network_client
+                    .get_header(BlockHashOrNumber::Hash(new_header_tail.parent_hash))
+                    .await
+                    .unwrap()
+                    .into_data()
+                    .unwrap();
+                new_chain_headers.push(header.clone());
+                new_header_tail = header;
+            }
+        };
+
+        // Reverse the new chain headers to have them in the correct order.
+        new_chain_headers.reverse();
+
+        // Fetch the blocks associated with the new chain headers.
+        let new_blocks = if new_chain_headers.len() == 1 {
+            vec![received_block]
+        } else {
+            fetch_blocks(new_chain_headers.clone(), network_client.clone()).await
+        };
+
+        // If we are not in optimistic mode, we validate the L1 messages in the new blocks.
+        if !optimistic_mode_local {
+            validate_l1_messages(&new_blocks, database.clone()).await?;
+        }
+
+        match reorg_index {
+            // If this is a simple chain extension, we can just extend the in-memory chain and emit
+            // a ChainExtended event.
+            Some(ReorgIndex::Memory(index)) if index == current_chain_headers.len() - 1 => {
+                // Update the chain with the new blocks.
+                current_chain_headers.extend(new_blocks.iter().map(|b| b.header.clone()));
+                *chain.lock().unwrap() = current_chain_headers;
+
+                Ok(ChainOrchestratorEvent::ChainExtended(ChainImport::new(
+                    new_blocks, peer_id, signature,
+                )))
+            }
+            // If we are re-organizing the in-memory chain, we need to split the chain at the reorg
+            // point and extend it with the new blocks.
+            Some(ReorgIndex::Memory(position)) => {
+                // reorg the in-memory chain to the new chain and issue a reorg event.
+                let mut new_chain = Chain::new(CHAIN_BUFFER_SIZE);
+                new_chain.extend(current_chain_headers.iter().take(position).cloned());
+                new_chain.extend(new_chain_headers);
+                *chain.lock().unwrap() = new_chain;
+
+                Ok(ChainOrchestratorEvent::ChainReorged(ChainImport::new(
+                    new_blocks, peer_id, signature,
+                )))
+            }
+            // If we have a deep reorg that impacts the database, we need to delete the blocks from
+            // the database, update the in-memory chain and emit a ChainReorged event.
+            Some(ReorgIndex::Database(l2_block)) => {
+                // remove old chain data from the database.
+                database.delete_l2_blocks_gt(l2_block.number).await?;
+
+                // Update the in-memory chain with the new blocks.
+                let mut new_chain = Chain::new(CHAIN_BUFFER_SIZE);
+                new_chain.extend(new_chain_headers);
+                *chain.lock().unwrap() = new_chain;
+
+                Ok(ChainOrchestratorEvent::ChainReorged(ChainImport::new(
+                    new_blocks, peer_id, signature,
+                )))
+            }
+            None => Err(IndexerError::L2SafeBlockReorgDetected),
+        }
+    }
+
+    /// Inserts an L2 block in the database.
+    pub fn consolidate_l2_blocks(
         &mut self,
-        block_info: L2BlockInfoWithL1Messages,
+        block_info: Vec<L2BlockInfoWithL1Messages>,
         batch_info: Option<BatchInfo>,
     ) {
         let database = self.database.clone();
+        let l1_synced = self.l1_synced;
+        let optimistic_mode = self.optimistic_mode.clone();
+        let chain = self.chain.clone();
         let fut = self.handle_metered(
-            IndexerItem::L2Block,
+            IndexerItem::InsertL2Block,
             Box::pin(async move {
-                database.insert_block(block_info.clone(), batch_info).await?;
-                Result::<_, IndexerError>::Ok(IndexerEvent::BlockIndexed(block_info, batch_info))
+                // If we are in optimistic mode and the L1 is synced, we consolidate the chain and
+                // disable optimistic mode.
+                if l1_synced && *optimistic_mode.lock().unwrap() {
+                    consolidate_chain(database.clone(), chain).await?;
+                }
+                let head = block_info.last().expect("block info must not be empty").clone();
+                database.insert_blocks(block_info, batch_info).await?;
+                *optimistic_mode.lock().unwrap() = false;
+                Result::<_, IndexerError>::Ok(ChainOrchestratorEvent::L2BlockCommitted(
+                    head, batch_info,
+                ))
             }),
         );
 
@@ -170,12 +486,12 @@ impl<ChainSpec: ScrollHardforks + EthChainSpec + Send + Sync + 'static> Indexer<
         database: Arc<Database>,
         chain_spec: Arc<ChainSpec>,
         l1_block_number: u64,
-    ) -> Result<IndexerEvent, IndexerError> {
+    ) -> Result<ChainOrchestratorEvent, IndexerError> {
         let txn = database.tx().await?;
         let UnwindResult { l1_block_number, queue_index, l2_head_block_info, l2_safe_block_info } =
             txn.unwind(chain_spec.genesis_hash(), l1_block_number).await?;
         txn.commit().await?;
-        Ok(IndexerEvent::UnwindIndexed {
+        Ok(ChainOrchestratorEvent::ChainUnwound {
             l1_block_number,
             queue_index,
             l2_head_block_info,
@@ -190,7 +506,7 @@ impl<ChainSpec: ScrollHardforks + EthChainSpec + Send + Sync + 'static> Indexer<
         block_number: u64,
         l1_block_number: Arc<AtomicU64>,
         l2_block_number: Arc<AtomicU64>,
-    ) -> Result<IndexerEvent, IndexerError> {
+    ) -> Result<ChainOrchestratorEvent, IndexerError> {
         // Set the latest finalized L1 block in the database.
         database.set_latest_finalized_l1_block_number(block_number).await?;
 
@@ -207,7 +523,7 @@ impl<ChainSpec: ScrollHardforks + EthChainSpec + Send + Sync + 'static> Indexer<
         // update the indexer l1 block number.
         l1_block_number.store(block_number, Ordering::Relaxed);
 
-        Ok(IndexerEvent::FinalizedIndexed(block_number, finalized_block))
+        Ok(ChainOrchestratorEvent::L1BlockFinalized(block_number, finalized_block))
     }
 
     /// Handles an L1 message by inserting it into the database.
@@ -217,8 +533,8 @@ impl<ChainSpec: ScrollHardforks + EthChainSpec + Send + Sync + 'static> Indexer<
         l1_message: TxL1Message,
         l1_block_number: u64,
         block_timestamp: u64,
-    ) -> Result<IndexerEvent, IndexerError> {
-        let event = IndexerEvent::L1MessageIndexed(l1_message.queue_index);
+    ) -> Result<ChainOrchestratorEvent, IndexerError> {
+        let event = ChainOrchestratorEvent::L1MessageCommitted(l1_message.queue_index);
 
         let queue_hash = if chain_spec
             .scroll_fork_activation(ScrollHardfork::EuclidV2)
@@ -248,8 +564,8 @@ impl<ChainSpec: ScrollHardforks + EthChainSpec + Send + Sync + 'static> Indexer<
     async fn handle_batch_commit(
         database: Arc<Database>,
         batch: BatchCommitData,
-    ) -> Result<IndexerEvent, IndexerError> {
-        let event = IndexerEvent::BatchCommitIndexed(BatchInfo::new(batch.index, batch.hash));
+    ) -> Result<ChainOrchestratorEvent, IndexerError> {
+        let event = ChainOrchestratorEvent::BatchCommitted(BatchInfo::new(batch.index, batch.hash));
         database.insert_batch(batch).await?;
         Ok(event)
     }
@@ -261,7 +577,7 @@ impl<ChainSpec: ScrollHardforks + EthChainSpec + Send + Sync + 'static> Indexer<
         block_number: u64,
         l1_block_number: Arc<AtomicU64>,
         l2_block_number: Arc<AtomicU64>,
-    ) -> Result<IndexerEvent, IndexerError> {
+    ) -> Result<ChainOrchestratorEvent, IndexerError> {
         // finalized the batch.
         database.finalize_batch(batch_hash, block_number).await?;
 
@@ -274,7 +590,7 @@ impl<ChainSpec: ScrollHardforks + EthChainSpec + Send + Sync + 'static> Indexer<
                 Self::fetch_highest_finalized_block(database, batch_hash, l2_block_number).await?;
         }
 
-        let event = IndexerEvent::BatchFinalizationIndexed(batch_hash, finalized_block);
+        let event = ChainOrchestratorEvent::BatchFinalized(batch_hash, finalized_block);
         Ok(event)
     }
 
@@ -301,12 +617,37 @@ impl<ChainSpec: ScrollHardforks + EthChainSpec + Send + Sync + 'static> Indexer<
     }
 }
 
+async fn init_chain_from_db<P: Provider<Scroll> + 'static>(
+    database: &Arc<Database>,
+    l2_client: &P,
+) -> BoundedVec<Header> {
+    let blocks = {
+        let mut blocks = Vec::with_capacity(CHAIN_BUFFER_SIZE);
+        let mut blocks_stream = database.get_l2_blocks().await.unwrap().take(CHAIN_BUFFER_SIZE);
+        while let Some(block_info) = blocks_stream.try_next().await.unwrap() {
+            let header = l2_client
+                .get_block_by_hash(block_info.hash)
+                .await
+                .unwrap()
+                .unwrap()
+                .header
+                .into_consensus();
+            blocks.push(header);
+        }
+        blocks.reverse();
+        blocks
+    };
+    let mut chain: Chain = Chain::new(CHAIN_BUFFER_SIZE);
+    chain.extend(blocks);
+    chain
+}
+
 /// Unwinds the indexer by deleting all indexed data greater than the provided L1 block number.
 pub async fn unwind<ChainSpec: ScrollHardforks + EthChainSpec + Send + Sync + 'static>(
     database: Arc<Database>,
     chain_spec: Arc<ChainSpec>,
     l1_block_number: u64,
-) -> Result<IndexerEvent, IndexerError> {
+) -> Result<ChainOrchestratorEvent, IndexerError> {
     // create a database transaction so this operation is atomic
     let txn = database.tx().await?;
 
@@ -350,7 +691,7 @@ pub async fn unwind<ChainSpec: ScrollHardforks + EthChainSpec + Send + Sync + 's
 
     // commit the transaction
     txn.commit().await?;
-    Ok(IndexerEvent::UnwindIndexed {
+    Ok(ChainOrchestratorEvent::ChainUnwound {
         l1_block_number,
         queue_index,
         l2_head_block_info,
@@ -358,10 +699,18 @@ pub async fn unwind<ChainSpec: ScrollHardforks + EthChainSpec + Send + Sync + 's
     })
 }
 
-impl<ChainSpec: ScrollHardforks + 'static> Stream for Indexer<ChainSpec> {
-    type Item = Result<IndexerEvent, IndexerError>;
+impl<
+        ChainSpec: ScrollHardforks + 'static,
+        BC: BlockClient<Block = ScrollBlock> + Send + Sync + 'static,
+        P: Provider<Scroll> + Send + Sync + 'static,
+    > Stream for ChainOrchestrator<ChainSpec, BC, P>
+{
+    type Item = Result<ChainOrchestratorEvent, IndexerError>;
 
     fn poll_next(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
+        // Register the waker such that we can wake when required.
+        self.waker.register(cx.waker());
+
         // Remove and poll the next future in the queue
         if let Some(mut action) = self.pending_futures.pop_front() {
             return match action.poll(cx) {
@@ -377,23 +726,266 @@ impl<ChainSpec: ScrollHardforks + 'static> Stream for Indexer<ChainSpec> {
     }
 }
 
+async fn consolidate_chain(
+    _database: Arc<Database>,
+    _chain: Arc<Mutex<Chain>>,
+) -> Result<(), IndexerError> {
+    // TODO: implement the logic to consolidate the chain.
+    // If we are in optimistic mode, we consolidate the chain and disable optimistic
+    // mode.
+    // let mut chain = chain.lock().unwrap();
+    // if !chain.is_empty() {
+    //     database.insert_chain(chain.drain(..).collect()).await?;
+    // }
+    Ok(())
+}
+
+async fn fetch_blocks<BC: BlockClient<Block = ScrollBlock> + Send + Sync + 'static>(
+    headers: Vec<Header>,
+    client: Arc<BC>,
+) -> Vec<ScrollBlock> {
+    let mut blocks = Vec::new();
+    // TODO: migrate to `get_block_bodies_with_range_hint`.
+    let bodies = client
+        .get_block_bodies(headers.iter().map(|h| h.hash_slow()).collect())
+        .await
+        .expect("Failed to fetch block bodies")
+        .into_data();
+
+    // TODO: can we assume the bodies are in the same order as the headers?
+    for (header, body) in headers.into_iter().zip(bodies) {
+        blocks.push(ScrollBlock::new(header, body));
+    }
+
+    blocks
+}
+
+async fn validate_l1_messages(
+    _blocks: &[ScrollBlock],
+    _database: Arc<Database>,
+) -> Result<(), IndexerError> {
+    // TODO: implement L1 message validation logic.
+    Ok(())
+}
+
 #[cfg(test)]
 mod test {
     use std::vec;
 
     use super::*;
-    use alloy_primitives::{address, bytes, U256};
-
+    use alloy_consensus::Header;
+    use alloy_eips::{BlockHashOrNumber, BlockNumHash};
+    use alloy_primitives::{address, bytes, B256, U256};
+    use alloy_provider::{ProviderBuilder, RootProvider};
+    use alloy_transport::mock::Asserter;
     use arbitrary::{Arbitrary, Unstructured};
     use futures::StreamExt;
+    use parking_lot::Mutex;
     use rand::Rng;
+    use reth_eth_wire_types::HeadersDirection;
+    use reth_network_p2p::{
+        download::DownloadClient,
+        error::PeerRequestResult,
+        headers::client::{HeadersClient, HeadersRequest},
+        priority::Priority,
+        BodiesClient,
+    };
+    use reth_network_peers::{PeerId, WithPeerId};
+    use reth_primitives_traits::Block;
     use reth_scroll_chainspec::{ScrollChainSpec, SCROLL_MAINNET};
     use rollup_node_primitives::BatchCommitData;
+    use scroll_alloy_network::Scroll;
     use scroll_db::test_utils::setup_test_db;
+    use std::{collections::HashMap, ops::RangeInclusive, sync::Arc};
 
-    async fn setup_test_indexer() -> (Indexer<ScrollChainSpec>, Arc<Database>) {
+    type ScrollBody = <ScrollBlock as Block>::Body;
+
+    /// A headers+bodies client that stores the headers and bodies in memory, with an artificial
+    /// soft bodies response limit that is set to 20 by default.
+    ///
+    /// This full block client can be [Clone]d and shared between multiple tasks.
+    #[derive(Clone, Debug)]
+    struct TestScrollFullBlockClient {
+        headers: Arc<Mutex<HashMap<B256, Header>>>,
+        bodies: Arc<Mutex<HashMap<B256, <ScrollBlock as Block>::Body>>>,
+        // soft response limit, max number of bodies to respond with
+        soft_limit: usize,
+    }
+
+    impl Default for TestScrollFullBlockClient {
+        fn default() -> Self {
+            let mainnet_genesis: reth_scroll_primitives::ScrollBlock =
+                serde_json::from_str(include_str!("../testdata/genesis_block.json")).unwrap();
+            let (header, body) = mainnet_genesis.split();
+            let hash = header.hash_slow();
+            let headers = HashMap::from([(hash, header)]);
+            let bodies = HashMap::from([(hash, body)]);
+            Self {
+                headers: Arc::new(Mutex::new(headers)),
+                bodies: Arc::new(Mutex::new(bodies)),
+                soft_limit: 20,
+            }
+        }
+    }
+
+    // impl TestScrollFullBlockClient {
+    //     /// Insert a header and body into the client maps.
+    //     fn insert(&self, header: SealedHeader, body: ScrollBody) {
+    //         let hash = header.hash();
+    //         self.headers.lock().insert(hash, header.unseal());
+    //         self.bodies.lock().insert(hash, body);
+    //     }
+
+    //     /// Set the soft response limit.
+    //     const fn set_soft_limit(&mut self, limit: usize) {
+    //         self.soft_limit = limit;
+    //     }
+
+    //     /// Get the block with the highest block number.
+    //     fn highest_block(&self) -> Option<SealedBlock<ScrollBlock>> {
+    //         self.headers.lock().iter().max_by_key(|(_, header)| header.number).and_then(
+    //             |(hash, header)| {
+    //                 self.bodies.lock().get(hash).map(|body| {
+    //                     SealedBlock::from_parts_unchecked(header.clone(), body.clone(), *hash)
+    //                 })
+    //             },
+    //         )
+    //     }
+    // }
+
+    impl DownloadClient for TestScrollFullBlockClient {
+        /// Reports a bad message from a specific peer.
+        fn report_bad_message(&self, _peer_id: PeerId) {}
+
+        /// Retrieves the number of connected peers.
+        ///
+        /// Returns the number of connected peers in the test scenario (1).
+        fn num_connected_peers(&self) -> usize {
+            1
+        }
+    }
+
+    /// Implements the `HeadersClient` trait for the `TestFullBlockClient` struct.
+    impl HeadersClient for TestScrollFullBlockClient {
+        type Header = Header;
+        /// Specifies the associated output type.
+        type Output = futures::future::Ready<PeerRequestResult<Vec<Header>>>;
+
+        /// Retrieves headers with a given priority level.
+        ///
+        /// # Arguments
+        ///
+        /// * `request` - A `HeadersRequest` indicating the headers to retrieve.
+        /// * `_priority` - A `Priority` level for the request.
+        ///
+        /// # Returns
+        ///
+        /// A `Ready` future containing a `PeerRequestResult` with a vector of retrieved headers.
+        fn get_headers_with_priority(
+            &self,
+            request: HeadersRequest,
+            _priority: Priority,
+        ) -> Self::Output {
+            let headers = self.headers.lock();
+
+            // Initializes the block hash or number.
+            let mut block: BlockHashOrNumber = match request.start {
+                BlockHashOrNumber::Hash(hash) => headers.get(&hash).cloned(),
+                BlockHashOrNumber::Number(num) => {
+                    headers.values().find(|h| h.number == num).cloned()
+                }
+            }
+            .map(|h| h.number.into())
+            .unwrap();
+
+            // Retrieves headers based on the provided limit and request direction.
+            let resp = (0..request.limit)
+                .filter_map(|_| {
+                    headers.iter().find_map(|(hash, header)| {
+                        // Checks if the header matches the specified block or number.
+                        BlockNumHash::new(header.number, *hash).matches_block_or_num(&block).then(
+                            || {
+                                match request.direction {
+                                    HeadersDirection::Falling => block = header.parent_hash.into(),
+                                    HeadersDirection::Rising => block = (header.number + 1).into(),
+                                }
+                                header.clone()
+                            },
+                        )
+                    })
+                })
+                .collect::<Vec<_>>();
+
+            // Returns a future containing the retrieved headers with a random peer ID.
+            futures::future::ready(Ok(WithPeerId::new(PeerId::random(), resp)))
+        }
+    }
+
+    /// Implements the `BodiesClient` trait for the `TestFullBlockClient` struct.
+    impl BodiesClient for TestScrollFullBlockClient {
+        type Body = ScrollBody;
+        /// Defines the output type of the function.
+        type Output = futures::future::Ready<PeerRequestResult<Vec<Self::Body>>>;
+
+        /// Retrieves block bodies corresponding to provided hashes with a given priority.
+        ///
+        /// # Arguments
+        ///
+        /// * `hashes` - A vector of block hashes to retrieve bodies for.
+        /// * `_priority` - Priority level for block body retrieval (unused in this implementation).
+        ///
+        /// # Returns
+        ///
+        /// A future containing the result of the block body retrieval operation.
+        fn get_block_bodies_with_priority_and_range_hint(
+            &self,
+            hashes: Vec<B256>,
+            _priority: Priority,
+            _range_hint: Option<RangeInclusive<u64>>,
+        ) -> Self::Output {
+            // Acquire a lock on the bodies.
+            let bodies = self.bodies.lock();
+
+            // Create a future that immediately returns the result of the block body retrieval
+            // operation.
+            futures::future::ready(Ok(WithPeerId::new(
+                PeerId::random(),
+                hashes
+                    .iter()
+                    .filter_map(|hash| bodies.get(hash).cloned())
+                    .take(self.soft_limit)
+                    .collect(),
+            )))
+        }
+    }
+
+    impl BlockClient for TestScrollFullBlockClient {
+        type Block = ScrollBlock;
+    }
+
+    async fn setup_test_indexer() -> (
+        ChainOrchestrator<ScrollChainSpec, TestScrollFullBlockClient, RootProvider<Scroll>>,
+        Arc<Database>,
+    ) {
+        // Get a provider to the node.
+        // TODO: update to use a real node URL.
+        let assertor = Asserter::new();
+        let mainnet_genesis: <Scroll as scroll_alloy_network::Network>::BlockResponse =
+            serde_json::from_str(include_str!("../testdata/genesis_block_rpc.json"))
+                .expect("Failed to parse mainnet genesis block");
+        assertor.push_success(&mainnet_genesis);
+        let provider = ProviderBuilder::<_, _, Scroll>::default().connect_mocked_client(assertor);
         let db = Arc::new(setup_test_db().await);
-        (Indexer::new(db.clone(), SCROLL_MAINNET.clone()), db)
+        (
+            ChainOrchestrator::new(
+                db.clone(),
+                SCROLL_MAINNET.clone(),
+                TestScrollFullBlockClient::default(),
+                provider,
+            )
+            .await,
+            db,
+        )
     }
 
     #[tokio::test]
@@ -561,7 +1153,7 @@ mod test {
         let batch_commits =
             db.get_batches().await.unwrap().map(|res| res.unwrap()).collect::<Vec<_>>().await;
 
-        assert_eq!(2, batch_commits.len());
+        assert_eq!(3, batch_commits.len());
         assert!(batch_commits.contains(&batch_commit_block_1));
         assert!(batch_commits.contains(&batch_commit_block_20));
 
@@ -641,7 +1233,7 @@ mod test {
             } else {
                 None
             };
-            indexer.handle_block(l2_block.clone(), batch_info);
+            indexer.consolidate_l2_blocks(vec![l2_block.clone()], batch_info);
             indexer.next().await.unwrap().unwrap();
             blocks.push(l2_block);
         }
@@ -652,7 +1244,7 @@ mod test {
         let event = indexer.next().await.unwrap().unwrap();
         assert_eq!(
             event,
-            IndexerEvent::UnwindIndexed {
+            ChainOrchestratorEvent::ChainUnwound {
                 l1_block_number: 17,
                 queue_index: None,
                 l2_head_block_info: None,
@@ -667,7 +1259,7 @@ mod test {
 
         assert_eq!(
             event,
-            IndexerEvent::UnwindIndexed {
+            ChainOrchestratorEvent::ChainUnwound {
                 l1_block_number: 7,
                 queue_index: Some(8),
                 l2_head_block_info: Some(blocks[7].block_info),
@@ -681,7 +1273,7 @@ mod test {
 
         assert_eq!(
             event,
-            IndexerEvent::UnwindIndexed {
+            ChainOrchestratorEvent::ChainUnwound {
                 l1_block_number: 3,
                 queue_index: Some(4),
                 l2_head_block_info: Some(blocks[3].block_info),

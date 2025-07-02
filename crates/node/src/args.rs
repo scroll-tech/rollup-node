@@ -17,6 +17,7 @@ use reth_node_builder::rpc::RethRpcServerHandles;
 use reth_node_core::primitives::BlockHeader;
 use reth_scroll_chainspec::SCROLL_FEE_VAULT_ADDRESS;
 use reth_scroll_node::ScrollNetworkPrimitives;
+use rollup_node_indexer::ChainOrchestrator;
 use rollup_node_manager::{
     Consensus, NoopConsensus, RollupManagerHandle, RollupNodeManager, SystemContractConsensus,
 };
@@ -111,12 +112,6 @@ impl ScrollRollupNodeConfig {
         RollupManagerHandle,
         Option<Sender<Arc<L1Notification>>>,
     )> {
-        // Instantiate the network manager
-        let (scroll_wire_handler, events) =
-            ScrollWireProtocolHandler::new(ScrollWireConfig::new(true));
-        network.add_rlpx_sub_protocol(scroll_wire_handler.into_rlpx_sub_protocol());
-        let scroll_network_manager = ScrollNetworkManager::from_parts(network.clone(), events);
-
         // Get the rollup node config.
         let named_chain = chain_spec.chain().named().expect("expected named chain");
         let node_config = Arc::new(NodeConfig::from_named_chain(named_chain));
@@ -142,8 +137,8 @@ impl ScrollRollupNodeConfig {
         let l2_provider = rpc_server_handles
             .rpc
             .new_http_provider_for()
-            .map(Arc::new)
             .expect("failed to create payload provider");
+        let l2_provider = Arc::new(l2_provider);
 
         // Instantiate the database
         let database_path = if let Some(database_path) = self.database_args.path {
@@ -175,6 +170,21 @@ impl ScrollRollupNodeConfig {
 
         let chain_spec = Arc::new(chain_spec.clone());
 
+        // Instantiate the network manager
+        let eth_wire_listener = self
+            .network_args
+            .enable_eth_scroll_wire_bridge
+            .then_some(network.eth_wire_block_listener().await?);
+        let (scroll_wire_handler, events) =
+            ScrollWireProtocolHandler::new(ScrollWireConfig::new(true));
+        network.add_rlpx_sub_protocol(scroll_wire_handler.into_rlpx_sub_protocol());
+        let scroll_network_manager = ScrollNetworkManager::from_parts(
+            chain_spec.clone(),
+            network.clone(),
+            events,
+            eth_wire_listener,
+        );
+
         // On startup we replay the latest batch of blocks from the database as such we set the safe
         // block hash to the latest block hash associated with the previous consolidated
         // batch in the database.
@@ -192,10 +202,9 @@ impl ScrollRollupNodeConfig {
         let engine = EngineDriver::new(
             Arc::new(engine_api),
             chain_spec.clone(),
-            Some(l2_provider),
+            Some(l2_provider.clone()),
             fcs,
             !self.test && !chain_spec.is_dev_chain(),
-            self.engine_driver_args.en_sync_trigger,
             Duration::from_millis(self.sequencer_args.payload_building_duration),
         );
 
@@ -258,13 +267,6 @@ impl ScrollRollupNodeConfig {
             (None, None)
         };
 
-        // Instantiate the eth wire listener
-        let eth_wire_listener = self
-            .network_args
-            .enable_eth_scroll_wire_bridge
-            .then_some(network.eth_wire_block_listener().await?);
-
-        // Instantiate the signer
         // Instantiate the signer
         let signer = if self.test {
             // Use a random private key signer for testing
@@ -275,6 +277,16 @@ impl ScrollRollupNodeConfig {
             self.signer_args.signer(chain_id).await?.map(rollup_node_signer::Signer::spawn)
         };
 
+        // Insantiate the chain orchestrator
+        let block_client = scroll_network_manager
+            .handle()
+            .inner()
+            .fetch_client()
+            .await
+            .expect("failed to fetch block client");
+        let chain_orchestrator =
+            ChainOrchestrator::new(db.clone(), chain_spec.clone(), block_client, l2_provider).await;
+
         // Spawn the rollup node manager
         let (rnm, handle) = RollupNodeManager::new(
             scroll_network_manager,
@@ -284,11 +296,12 @@ impl ScrollRollupNodeConfig {
             l1_notification_rx,
             consensus,
             chain_spec,
-            eth_wire_listener,
             sequencer,
             signer,
             block_time,
-        );
+            chain_orchestrator,
+        )
+        .await;
         Ok((rnm, handle, l1_notification_tx))
     }
 }

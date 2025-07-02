@@ -22,6 +22,7 @@ scroll-alloy-consensus.workspace = true
 scroll-alloy-rpc-types-engine.workspace = true
 
 # reth
+reth-network-peers.workspace = true
 reth-primitives-traits.workspace = true
 reth-scroll-primitives.workspace = true
 

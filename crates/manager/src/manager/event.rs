@@ -1,4 +1,6 @@
 use reth_scroll_primitives::ScrollBlock;
+use rollup_node_indexer::ChainOrchestratorEvent;
+use rollup_node_primitives::ChainImport;
 use rollup_node_signer::SignerEvent;
 use scroll_engine::ConsolidationOutcome;
 use scroll_network::NewBlockWithPeer;
@@ -18,4 +20,10 @@ pub enum RollupManagerEvent {
     L1MessageIndexed(u64),
     /// A new event from the signer.
     SignerEvent(SignerEvent),
+    /// An event from the chain orchestrator.
+    ChainOrchestratorEvent(ChainOrchestratorEvent),
+    /// An optimistic sync has been triggered by the chain orchestrator.
+    OptimisticSyncTriggered(ScrollBlock),
+    /// A chain extension has been triggered by the chain orchestrator.
+    ChainExtensionTriggered(ChainImport),
 }

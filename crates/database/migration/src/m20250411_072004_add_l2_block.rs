@@ -1,12 +1,18 @@
-use super::m20220101_000001_create_batch_commit_table::BatchCommit;
+use super::{m20220101_000001_create_batch_commit_table::BatchCommit, MigrationInfo};
 
+use sea_orm::Statement;
 use sea_orm_migration::{prelude::*, schema::*};
 
-#[derive(DeriveMigrationName)]
-pub struct Migration;
+pub struct Migration<MI>(pub std::marker::PhantomData<MI>);
+
+impl<MI> MigrationName for Migration<MI> {
+    fn name(&self) -> &str {
+        sea_orm_migration::util::get_file_stem(file!())
+    }
+}
 
 #[async_trait::async_trait]
-impl MigrationTrait for Migration {
+impl<MI: MigrationInfo + Send + Sync> MigrationTrait for Migration<MI> {
     async fn up(&self, manager: &SchemaManager) -> Result<(), DbErr> {
         manager
             .create_table(
@@ -35,7 +41,24 @@ impl MigrationTrait for Migration {
                     )
                     .to_owned(),
             )
-            .await
+            .await?;
+
+        // Insert the genesis block.
+        let genesis_hash = MI::genesis_hash();
+
+        manager
+            .get_connection()
+            .execute(Statement::from_sql_and_values(
+                manager.get_database_backend(),
+                r#"
+        INSERT INTO l2_block (block_number, block_hash, batch_index, batch_hash)
+        VALUES (?, ?, ?, ?)
+        "#,
+                vec![0u64.into(), genesis_hash.to_vec().into(), 0u64.into(), vec![0u8; 32].into()],
+            ))
+            .await?;
+
+        Ok(())
     }
 
     async fn down(&self, manager: &SchemaManager) -> Result<(), DbErr> {

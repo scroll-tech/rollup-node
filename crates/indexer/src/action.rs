@@ -1,4 +1,4 @@
-use super::{IndexerError, IndexerEvent};
+use super::{ChainOrchestratorEvent, IndexerError};
 use std::{
     fmt,
     future::Future,
@@ -8,7 +8,7 @@ use std::{
 
 /// A future that resolves to a `Result<IndexerEvent, IndexerError>`.
 pub(super) type PendingIndexerFuture =
-    Pin<Box<dyn Future<Output = Result<IndexerEvent, IndexerError>> + Send>>;
+    Pin<Box<dyn Future<Output = Result<ChainOrchestratorEvent, IndexerError>> + Send>>;
 
 /// A type that represents a future that is being executed by the indexer.
 pub(super) enum IndexerFuture {
@@ -18,6 +18,7 @@ pub(super) enum IndexerFuture {
     HandleBatchFinalization(PendingIndexerFuture),
     HandleL1Message(PendingIndexerFuture),
     HandleDerivedBlock(PendingIndexerFuture),
+    HandleL2Block(PendingIndexerFuture),
 }
 
 impl IndexerFuture {
@@ -25,14 +26,15 @@ impl IndexerFuture {
     pub(super) fn poll(
         &mut self,
         cx: &mut Context<'_>,
-    ) -> Poll<Result<IndexerEvent, IndexerError>> {
+    ) -> Poll<Result<ChainOrchestratorEvent, IndexerError>> {
         match self {
             Self::HandleReorg(fut) |
             Self::HandleFinalized(fut) |
             Self::HandleBatchCommit(fut) |
             Self::HandleBatchFinalization(fut) |
             Self::HandleL1Message(fut) |
-            Self::HandleDerivedBlock(fut) => fut.as_mut().poll(cx),
+            Self::HandleDerivedBlock(fut) |
+            Self::HandleL2Block(fut) => fut.as_mut().poll(cx),
         }
     }
 }
@@ -48,6 +50,7 @@ impl fmt::Debug for IndexerFuture {
             Self::HandleBatchFinalization(_) => write!(f, "HandleBatchFinalization"),
             Self::HandleL1Message(_) => write!(f, "HandleL1Message"),
             Self::HandleDerivedBlock(_) => write!(f, "HandleDerivedBlock"),
+            Self::HandleL2Block(_) => write!(f, "HandleL2Block"),
         }
     }
 }

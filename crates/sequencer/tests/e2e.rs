@@ -64,7 +64,6 @@ async fn can_build_blocks() {
         None::<ScrollRootProvider>,
         fcs,
         false,
-        BLOCK_GAP_TRIGGER,
         BLOCK_BUILDING_DURATION,
     );
 
@@ -158,7 +157,6 @@ async fn can_build_blocks_with_delayed_l1_messages() {
 
     let chain_spec = SCROLL_DEV.clone();
     const BLOCK_BUILDING_DURATION: Duration = tokio::time::Duration::from_millis(0);
-    const BLOCK_GAP_TRIGGER: u64 = 100;
     const L1_MESSAGE_DELAY: u64 = 2;
 
     // setup a test node
@@ -184,7 +182,6 @@ async fn can_build_blocks_with_delayed_l1_messages() {
         None::<ScrollRootProvider>,
         fcs,
         false,
-        BLOCK_GAP_TRIGGER,
         BLOCK_BUILDING_DURATION,
     );
 
@@ -309,7 +306,6 @@ async fn can_build_blocks_with_finalized_l1_messages() {
         None::<ScrollRootProvider>,
         fcs,
         false,
-        BLOCK_GAP_TRIGGER,
         BLOCK_BUILDING_DURATION,
     );
 
@@ -635,7 +631,6 @@ async fn can_build_blocks_and_exit_at_gas_limit() {
         None::<ScrollRootProvider>,
         fcs,
         false,
-        BLOCK_GAP_TRIGGER,
         BLOCK_BUILDING_DURATION,
     );
 
@@ -720,7 +715,6 @@ async fn can_build_blocks_and_exit_at_time_limit() {
         None::<ScrollRootProvider>,
         fcs,
         false,
-        BLOCK_GAP_TRIGGER,
         BLOCK_BUILDING_DURATION,
     );
 

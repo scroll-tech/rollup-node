@@ -250,6 +250,24 @@ pub trait DatabaseOperations: DatabaseConnectionProvider {
             .map(|x| x.map(Into::into))?)
     }
 
+    /// Get the [`BlockInfo`] and optional [`BatchInfo`] for the provided block hash.
+    async fn get_l2_block_and_batch_info_by_hash(
+        &self,
+        block_hash: B256,
+    ) -> Result<Option<(BlockInfo, Option<BatchInfo>)>, DatabaseError> {
+        tracing::trace!(target: "scroll::db", ?block_hash, "Fetching L2 block and batch info by hash from database.");
+        Ok(models::l2_block::Entity::find()
+            .filter(models::l2_block::Column::BlockHash.eq(block_hash.to_vec()))
+            .one(self.get_connection())
+            .await
+            .map(|x| {
+                x.map(|x| {
+                    let (block_info, batch_info): (BlockInfo, Option<BatchInfo>) = x.into();
+                    (block_info, batch_info)
+                })
+            })?)
+    }
+
     /// Get a [`BlockInfo`] from the database by its block number.
     async fn get_l2_block_info_by_number(
         &self,
@@ -298,6 +316,18 @@ pub trait DatabaseOperations: DatabaseConnectionProvider {
             .map(|x| x.map(|x| x.block_info()))?)
     }
 
+    /// Get an iterator over all L2 blocks in the database starting from the most recent one.
+    async fn get_l2_blocks<'a>(
+        &'a self,
+    ) -> Result<impl Stream<Item = Result<BlockInfo, DatabaseError>> + 'a, DatabaseError> {
+        tracing::trace!(target: "scroll::db", "Fetching L2 blocks from database.");
+        Ok(models::l2_block::Entity::find()
+            .order_by_desc(models::l2_block::Column::BlockNumber)
+            .stream(self.get_connection())
+            .await?
+            .map(|res| Ok(res.map(|res| res.block_info())?)))
+    }
+
     /// Prepare the database on startup and return metadata used for other components in the
     /// rollup-node.
     ///
@@ -344,6 +374,18 @@ pub trait DatabaseOperations: DatabaseConnectionProvider {
             .exec(self.get_connection())
             .await
             .map(|x| x.rows_affected)?)
+    }
+
+    /// Insert multiple blocks into the database.
+    async fn insert_blocks(
+        &self,
+        blocks: Vec<L2BlockInfoWithL1Messages>,
+        batch_info: Option<BatchInfo>,
+    ) -> Result<(), DatabaseError> {
+        for block in blocks {
+            self.insert_block(block, batch_info).await?;
+        }
+        Ok(())
     }
 
     /// Insert a new block in the database.

@@ -149,6 +149,13 @@ async fn can_sequence_and_gossip_blocks() {
         panic!("Failed to receive block from rollup node");
     }
 
+    // assert that a chain extension is triggered on the follower node
+    if let Some(RollupManagerEvent::ChainExtensionTriggered(_)) = follower_events.next().await {
+        ()
+    } else {
+        panic!("Failed to receive chain extension event from rollup node");
+    }
+
     // assert that the block was successfully imported by the follower node
     if let Some(RollupManagerEvent::BlockImported(block)) = follower_events.next().await {
         assert_eq!(block.body.transactions.len(), 1);
@@ -189,8 +196,13 @@ async fn can_bridge_blocks() {
         .with_pow()
         .build_with_noop_provider(chain_spec.clone());
     let scroll_wire_config = ScrollWireConfig::new(true);
-    let mut scroll_network =
-        scroll_network::ScrollNetworkManager::new(network_config, scroll_wire_config).await;
+    let mut scroll_network = scroll_network::ScrollNetworkManager::new(
+        chain_spec.clone(),
+        network_config,
+        scroll_wire_config,
+        None,
+    )
+    .await;
     let scroll_network_handle = scroll_network.handle();
 
     // Connect the scroll-wire node to the scroll NetworkManager.

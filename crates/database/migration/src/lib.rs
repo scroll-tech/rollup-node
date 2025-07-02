@@ -19,7 +19,7 @@ impl<MI: MigrationInfo + Send + Sync + 'static> MigratorTrait for Migrator<MI> {
             Box::new(m20250304_125946_add_l1_msg_table::Migration),
             Box::new(m20250408_132123_add_header_metadata::Migration),
             Box::new(m20250408_150338_load_header_metadata::Migration::<MI>(Default::default())),
-            Box::new(m20250411_072004_add_l2_block::Migration),
+            Box::new(m20250411_072004_add_l2_block::Migration::<MI>(Default::default())),
             Box::new(m20250616_223947_add_metadata::Migration),
         ]
     }

@@ -39,6 +39,11 @@ impl<T> BoundedVec<T> {
         self.data.back()
     }
 
+    /// Returns the first element in the vector, if any.
+    pub fn first(&self) -> Option<&T> {
+        self.data.front()
+    }
+
     /// Clears the structure by removing all the elements.
     pub fn clear(&mut self) {
         self.data.clear()

@@ -4,26 +4,34 @@ use super::{
     BlockImportOutcome, BlockValidation, NetworkHandleMessage, NetworkManagerEvent,
     NewBlockWithPeer, ScrollNetworkHandle,
 };
-use alloy_primitives::FixedBytes;
+use alloy_primitives::{FixedBytes, Signature};
 use futures::{FutureExt, Stream, StreamExt};
+use reth_chainspec::EthChainSpec;
 use reth_network::{
     cache::LruCache, NetworkConfig as RethNetworkConfig, NetworkHandle as RethNetworkHandle,
     NetworkManager as RethNetworkManager,
 };
-use reth_network_api::FullNetwork;
+use reth_network_api::{block::NewBlockWithPeer as RethNewBlockWithPeer, FullNetwork};
 use reth_scroll_node::ScrollNetworkPrimitives;
+use reth_scroll_primitives::ScrollBlock;
 use reth_storage_api::BlockNumReader as BlockNumReaderT;
+use reth_tokio_util::EventStream;
+use scroll_alloy_hardforks::ScrollHardforks;
 use scroll_wire::{
     NewBlock, ScrollWireConfig, ScrollWireEvent, ScrollWireManager, ScrollWireProtocolHandler,
     LRU_CACHE_SIZE,
 };
 use std::{
     pin::Pin,
+    sync::Arc,
     task::{Context, Poll},
 };
 use tokio::sync::mpsc::{self, UnboundedReceiver};
 use tokio_stream::wrappers::UnboundedReceiverStream;
 use tracing::trace;
+
+/// The size of the ECDSA signature in bytes.
+const ECDSA_SIGNATURE_LEN: usize = 65;
 
 /// [`ScrollNetworkManager`] manages the state of the scroll p2p network.
 ///
@@ -34,22 +42,30 @@ use tracing::trace;
 /// - `from_handle_rx`: Receives commands from the [`FullNetwork`].
 /// - `scroll_wire`: The type that manages connections and state of the scroll wire protocol.
 #[derive(Debug)]
-pub struct ScrollNetworkManager<N> {
+pub struct ScrollNetworkManager<N, CS> {
+    /// The chain spec used by the rollup node.
+    chain_spec: Arc<CS>,
     /// A handle used to interact with the network manager.
     handle: ScrollNetworkHandle<N>,
     /// Receiver half of the channel set up between this type and the [`FullNetwork`], receives
     /// [`NetworkHandleMessage`]s.
     from_handle_rx: UnboundedReceiverStream<NetworkHandleMessage>,
+    /// The receiver for new blocks received from the network (used to bridge from eth-wire).
+    eth_wire_listener: Option<EventStream<RethNewBlockWithPeer<ScrollBlock>>>,
     /// The scroll wire protocol manager.
     scroll_wire: ScrollWireManager,
 }
 
-impl ScrollNetworkManager<RethNetworkHandle<ScrollNetworkPrimitives>> {
+impl<CS: ScrollHardforks + EthChainSpec + Send + Sync + 'static>
+    ScrollNetworkManager<RethNetworkHandle<ScrollNetworkPrimitives>, CS>
+{
     /// Creates a new [`ScrollNetworkManager`] instance from the provided configuration and block
     /// import.
     pub async fn new<C: BlockNumReaderT + 'static>(
+        chain_spec: Arc<CS>,
         mut network_config: RethNetworkConfig<C, ScrollNetworkPrimitives>,
         scroll_wire_config: ScrollWireConfig,
+        eth_wire_listener: Option<EventStream<RethNewBlockWithPeer<ScrollBlock>>>,
     ) -> Self {
         // Create the scroll-wire protocol handler.
         let (scroll_wire_handler, events) = ScrollWireProtocolHandler::new(scroll_wire_config);
@@ -73,16 +89,29 @@ impl ScrollNetworkManager<RethNetworkHandle<ScrollNetworkPrimitives>> {
         // Spawn the inner network manager.
         tokio::spawn(inner_network_manager);
 
-        Self { handle, from_handle_rx: from_handle_rx.into(), scroll_wire }
+        Self {
+            chain_spec,
+            handle,
+            from_handle_rx: from_handle_rx.into(),
+            scroll_wire,
+            eth_wire_listener,
+        }
     }
 }
 
-impl<N: FullNetwork> ScrollNetworkManager<N> {
+impl<N: FullNetwork, CS: ScrollHardforks + EthChainSpec + Send + Sync + 'static>
+    ScrollNetworkManager<N, CS>
+{
     /// Creates a new [`ScrollNetworkManager`] instance from the provided parts.
     ///
     /// This is used when the scroll-wire [`ScrollWireProtocolHandler`] and the inner network
     /// manager [`RethNetworkManager`] are instantiated externally.
-    pub fn from_parts(inner_network_handle: N, events: UnboundedReceiver<ScrollWireEvent>) -> Self {
+    pub fn from_parts(
+        chain_spec: Arc<CS>,
+        inner_network_handle: N,
+        events: UnboundedReceiver<ScrollWireEvent>,
+        eth_wire_listener: Option<EventStream<RethNewBlockWithPeer<ScrollBlock>>>,
+    ) -> Self {
         // Create the channel for sending messages to the network manager from the network handle.
         let (to_manager_tx, from_handle_rx) = mpsc::unbounded_channel();
 
@@ -91,7 +120,13 @@ impl<N: FullNetwork> ScrollNetworkManager<N> {
 
         let handle = ScrollNetworkHandle::new(to_manager_tx, inner_network_handle);
 
-        Self { handle, from_handle_rx: from_handle_rx.into(), scroll_wire }
+        Self {
+            chain_spec,
+            handle,
+            from_handle_rx: from_handle_rx.into(),
+            scroll_wire,
+            eth_wire_listener,
+        }
     }
 
     /// Returns a new [`ScrollNetworkHandle`] instance.
@@ -182,9 +217,45 @@ impl<N: FullNetwork> ScrollNetworkManager<N> {
             }
         }
     }
+
+    /// Handles a new block received from the eth-wire protocol.
+    fn handle_eth_wire_block(
+        &mut self,
+        block: reth_network_api::block::NewBlockWithPeer<ScrollBlock>,
+    ) -> Option<NetworkManagerEvent> {
+        trace!(target: "scroll::node::manager", ?block, "Received new block from eth-wire protocol");
+        let reth_network_api::block::NewBlockWithPeer { peer_id, mut block } = block;
+
+        // We purge the extra data field post euclid v2 to align with protocol specification.
+        let extra_data = if self.chain_spec.is_euclid_v2_active_at_timestamp(block.timestamp) {
+            let extra_data = block.extra_data.clone();
+            block.header.extra_data = Default::default();
+            extra_data
+        } else {
+            block.extra_data.clone()
+        };
+
+        // If we can extract a signature from the extra data we validate consensus and then attempt
+        // import via the EngineAPI in the `handle_new_block` method. The signature is extracted
+        // from the last `ECDSA_SIGNATURE_LEN` bytes of the extra data field as specified by
+        // the protocol.
+        if let Some(signature) = extra_data
+            .len()
+            .checked_sub(ECDSA_SIGNATURE_LEN)
+            .and_then(|i| Signature::from_raw(&extra_data[i..]).ok())
+        {
+            trace!(target: "scroll::bridge::import", peer_id = %peer_id, block = ?block.hash_slow(), "Received new block from eth-wire protocol");
+            Some(NetworkManagerEvent::NewBlock(NewBlockWithPeer { peer_id, block, signature }))
+        } else {
+            tracing::warn!(target: "scroll::bridge::import", peer_id = %peer_id, "Failed to extract signature from block extra data");
+            None
+        }
+    }
 }
 
-impl<N: FullNetwork> Stream for ScrollNetworkManager<N> {
+impl<N: FullNetwork, CS: ScrollHardforks + EthChainSpec + Send + Sync + 'static> Stream
+    for ScrollNetworkManager<N, CS>
+{
     type Item = NetworkManagerEvent;
 
     fn poll_next(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
@@ -209,6 +280,15 @@ impl<N: FullNetwork> Stream for ScrollNetworkManager<N> {
         // Next we handle the scroll-wire events.
         if let Poll::Ready(event) = this.scroll_wire.poll_unpin(cx) {
             return Poll::Ready(Some(this.on_scroll_wire_event(event)));
+        }
+
+        // Handle blocks received from the eth-wire protocol.
+        while let Some(Poll::Ready(Some(block))) =
+            this.eth_wire_listener.as_mut().map(|new_block_rx| new_block_rx.poll_next_unpin(cx))
+        {
+            if let Some(event) = this.handle_eth_wire_block(block) {
+                return Poll::Ready(Some(event));
+            }
         }
 
         Poll::Pending

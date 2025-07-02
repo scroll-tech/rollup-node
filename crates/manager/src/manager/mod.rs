@@ -3,16 +3,16 @@
 //! responsible for handling events from these components and coordinating their actions.
 
 use super::Consensus;
-use alloy_primitives::Signature;
 use alloy_provider::Provider;
 use futures::StreamExt;
 use reth_chainspec::EthChainSpec;
-use reth_network_api::{block::NewBlockWithPeer as RethNewBlockWithPeer, FullNetwork};
+use reth_network::BlockDownloaderProvider;
+use reth_network_api::FullNetwork;
 use reth_scroll_node::ScrollNetworkPrimitives;
-use reth_scroll_primitives::ScrollBlock;
 use reth_tasks::shutdown::GracefulShutdown;
 use reth_tokio_util::{EventSender, EventStream};
-use rollup_node_indexer::{Indexer, IndexerEvent};
+use rollup_node_indexer::{ChainOrchestrator, ChainOrchestratorEvent};
+use rollup_node_primitives::BlockInfo;
 use rollup_node_sequencer::Sequencer;
 use rollup_node_signer::{SignerEvent, SignerHandle};
 use rollup_node_watcher::L1Notification;
@@ -53,9 +53,6 @@ pub use handle::RollupManagerHandle;
 /// The size of the event channel.
 const EVENT_CHANNEL_SIZE: usize = 100;
 
-/// The size of the ECDSA signature in bytes.
-const ECDSA_SIGNATURE_LEN: usize = 65;
-
 /// The main manager for the rollup node.
 ///
 /// This is an endless [`Future`] that drives the state of the entire network forward and includes
@@ -82,19 +79,17 @@ pub struct RollupNodeManager<
     /// The chain spec used by the rollup node.
     chain_spec: Arc<CS>,
     /// The network manager that manages the scroll p2p network.
-    network: ScrollNetworkManager<N>,
+    network: ScrollNetworkManager<N, CS>,
     /// The engine driver used to communicate with the engine.
     engine: EngineDriver<EC, CS, P>,
     /// The derivation pipeline, used to derive payload attributes from batches.
     derivation_pipeline: Option<DerivationPipeline<L1P>>,
     /// A receiver for [`L1Notification`]s from the [`rollup_node_watcher::L1Watcher`].
     l1_notification_rx: Option<ReceiverStream<Arc<L1Notification>>>,
-    /// An indexer used to index data for the rollup node.
-    indexer: Indexer<CS>,
+    /// The chain orchestrator.
+    chain: ChainOrchestrator<CS, <N as BlockDownloaderProvider>::Client, P>,
     /// The consensus algorithm used by the rollup node.
     consensus: Box<dyn Consensus>,
-    /// The receiver for new blocks received from the network (used to bridge from eth-wire).
-    eth_wire_block_rx: Option<EventStream<RethNewBlockWithPeer<ScrollBlock>>>,
     /// An event sender for sending events to subscribers of the rollup node manager.
     event_sender: Option<EventSender<RollupManagerEvent>>,
     /// The sequencer which is responsible for sequencing transactions and producing new blocks.
@@ -128,7 +123,7 @@ impl<
             .field("engine", &self.engine)
             .field("derivation_pipeline", &self.derivation_pipeline)
             .field("l1_notification_rx", &self.l1_notification_rx)
-            .field("indexer", &self.indexer)
+            .field("indexer", &self.chain)
             .field("consensus", &self.consensus)
             .field("eth_wire_block_rx", &"eth_wire_block_rx")
             .field("event_sender", &self.event_sender)
@@ -150,21 +145,20 @@ where
     /// Create a new [`RollupNodeManager`] instance.
     #[allow(clippy::too_many_arguments)]
     #[allow(clippy::new_ret_no_self)]
-    pub fn new(
-        network: ScrollNetworkManager<N>,
+    pub async fn new(
+        network: ScrollNetworkManager<N, CS>,
         engine: EngineDriver<EC, CS, P>,
         l1_provider: Option<L1P>,
         database: Arc<Database>,
         l1_notification_rx: Option<Receiver<Arc<L1Notification>>>,
         consensus: Box<dyn Consensus>,
         chain_spec: Arc<CS>,
-        eth_wire_block_rx: Option<EventStream<RethNewBlockWithPeer<ScrollBlock>>>,
         sequencer: Option<Sequencer<L1MP>>,
         signer: Option<SignerHandle>,
         block_time: Option<u64>,
+        chain_orchestrator: ChainOrchestrator<CS, <N as BlockDownloaderProvider>::Client, P>,
     ) -> (Self, RollupManagerHandle) {
         let (handle_tx, handle_rx) = mpsc::channel(EVENT_CHANNEL_SIZE);
-        let indexer = Indexer::new(database.clone(), chain_spec.clone());
         let derivation_pipeline =
             l1_provider.map(|provider| DerivationPipeline::new(provider, database));
         let rnm = Self {
@@ -174,9 +168,8 @@ where
             engine,
             derivation_pipeline,
             l1_notification_rx: l1_notification_rx.map(Into::into),
-            indexer,
+            chain: chain_orchestrator,
             consensus,
-            eth_wire_block_rx,
             event_sender: None,
             sequencer,
             signer,
@@ -220,7 +213,7 @@ where
                 result: Err(err.into()),
             });
         } else {
-            self.engine.handle_block_import(block_with_peer);
+            self.chain.handle_block_from_peer(block_with_peer);
         }
     }
 
@@ -234,27 +227,27 @@ where
     }
 
     /// Handles an indexer event.
-    fn handle_indexer_event(&mut self, event: IndexerEvent) {
+    fn handle_indexer_event(&mut self, event: ChainOrchestratorEvent) {
         trace!(target: "scroll::node::manager", ?event, "Received indexer event");
         match event {
-            IndexerEvent::BatchCommitIndexed(batch_info) => {
+            ChainOrchestratorEvent::BatchCommitted(batch_info) => {
                 // push the batch info into the derivation pipeline.
                 if let Some(pipeline) = &mut self.derivation_pipeline {
                     pipeline.handle_batch_commit(batch_info);
                 }
             }
-            IndexerEvent::BatchFinalizationIndexed(_, Some(finalized_block)) => {
+            ChainOrchestratorEvent::BatchFinalized(_, Some(finalized_block)) => {
                 // update the fcs on new finalized block.
                 self.engine.set_finalized_block_info(finalized_block);
             }
-            IndexerEvent::FinalizedIndexed(l1_block_number, Some(finalized_block)) => {
+            ChainOrchestratorEvent::L1BlockFinalized(l1_block_number, Some(finalized_block)) => {
                 if let Some(sequencer) = self.sequencer.as_mut() {
                     sequencer.set_l1_finalized_block_number(l1_block_number);
                 }
                 // update the fcs on new finalized block.
                 self.engine.set_finalized_block_info(finalized_block);
             }
-            IndexerEvent::UnwindIndexed {
+            ChainOrchestratorEvent::ChainUnwound {
                 l1_block_number,
                 queue_index,
                 l2_head_block_info,
@@ -277,12 +270,52 @@ where
 
                 // TODO: should clear the derivation pipeline.
             }
-            IndexerEvent::L1MessageIndexed(index) => {
+            ChainOrchestratorEvent::L1MessageCommitted(index) => {
                 if let Some(event_sender) = self.event_sender.as_ref() {
                     event_sender.notify(RollupManagerEvent::L1MessageIndexed(index));
                 }
             }
-            _ => (),
+            ChainOrchestratorEvent::OldForkReceived { ref headers, ref peer_id, signature: _ } => {
+                trace!(target: "scroll::node::manager", ?headers, ?peer_id, "Received old fork from peer");
+                if let Some(event_sender) = self.event_sender.as_ref() {
+                    event_sender.notify(RollupManagerEvent::ChainOrchestratorEvent(event));
+                }
+            }
+            ChainOrchestratorEvent::ChainExtended(chain_import) => {
+                trace!(target: "scroll::node::manager", head = ?chain_import.chain.last().unwrap().header.clone(), peer_id = ?chain_import.peer_id.clone(),  "Received chain extension from peer");
+                if let Some(event_sender) = self.event_sender.as_ref() {
+                    event_sender
+                        .notify(RollupManagerEvent::ChainExtensionTriggered(chain_import.clone()));
+                }
+
+                // Issue the new chain to the engine driver for processing.
+                self.engine.handle_chain_import(chain_import)
+            }
+            ChainOrchestratorEvent::ChainReorged(chain_import) => {
+                trace!(target: "scroll::node::manager", head = ?chain_import.chain.last().unwrap().header, ?chain_import.peer_id, "Received chain reorg from peer");
+                // if let Some(event_sender) = self.event_sender.as_ref() {
+                //     event_sender.notify(RollupManagerEvent::ChainOrchestratorEvent(event));
+                // }
+
+                // Issue the new chain to the engine driver for processing.
+                self.engine.handle_chain_import(chain_import)
+            }
+            ChainOrchestratorEvent::OptimisticSync(block) => {
+                let block_info: BlockInfo = (&block).into();
+                trace!(target: "scroll::node::manager", ?block_info, "Received optimistic sync from peer");
+                if let Some(event_sender) = self.event_sender.as_ref() {
+                    event_sender.notify(RollupManagerEvent::OptimisticSyncTriggered(block));
+                }
+
+                // Issue the new block info to the engine driver for processing.
+                self.engine.handle_optimistic_sync(block_info)
+            }
+            event => {
+                trace!(target: "scroll::node::manager", ?event, "Received chain orchestrator event");
+                if let Some(event_sender) = self.event_sender.as_ref() {
+                    event_sender.notify(RollupManagerEvent::ChainOrchestratorEvent(event));
+                }
+            }
         }
     }
 
@@ -295,7 +328,7 @@ where
                     if let Some(event_sender) = self.event_sender.as_ref() {
                         event_sender.notify(RollupManagerEvent::BlockImported(block.clone()));
                     }
-                    self.indexer.handle_block((&block).into(), None);
+                    self.chain.consolidate_l2_blocks(vec![(&block).into()], None);
                 }
                 self.network.handle().block_import_outcome(outcome);
             }
@@ -308,11 +341,11 @@ where
                     event_sender.notify(RollupManagerEvent::BlockSequenced(payload.clone()));
                 }
 
-                self.indexer.handle_block((&payload).into(), None);
+                self.chain.consolidate_l2_blocks(vec![(&payload).into()], None);
             }
             EngineDriverEvent::L1BlockConsolidated(consolidation_outcome) => {
-                self.indexer.handle_block(
-                    consolidation_outcome.block_info().clone(),
+                self.chain.consolidate_l2_blocks(
+                    vec![consolidation_outcome.block_info().clone()],
                     Some(*consolidation_outcome.batch_info()),
                 );
 
@@ -322,42 +355,19 @@ where
                     ));
                 }
             }
+            EngineDriverEvent::ChainImportOutcome(outcome) => {
+                if let Some(block) = outcome.outcome.block() {
+                    if let Some(event_sender) = self.event_sender.as_ref() {
+                        event_sender.notify(RollupManagerEvent::BlockImported(block));
+                    }
+                    self.chain.consolidate_l2_blocks(
+                        outcome.chain.iter().map(|b| b.into()).collect(),
+                        None,
+                    );
+                }
+                self.network.handle().block_import_outcome(outcome.outcome);
+            }
         }
-    }
-
-    fn handle_eth_wire_block(
-        &mut self,
-        block: reth_network_api::block::NewBlockWithPeer<ScrollBlock>,
-    ) {
-        trace!(target: "scroll::node::manager", ?block, "Received new block from eth-wire protocol");
-        let reth_network_api::block::NewBlockWithPeer { peer_id, mut block } = block;
-
-        // We purge the extra data field post euclid v2 to align with protocol specification.
-        let extra_data = if self.chain_spec.is_euclid_v2_active_at_timestamp(block.timestamp) {
-            let extra_data = block.extra_data.clone();
-            block.header.extra_data = Default::default();
-            extra_data
-        } else {
-            block.extra_data.clone()
-        };
-
-        // If we can extract a signature from the extra data we validate consensus and then attempt
-        // import via the EngineAPI in the `handle_new_block` method. The signature is extracted
-        // from the last `ECDSA_SIGNATURE_LEN` bytes of the extra data field as specified by
-        // the protocol.
-        let block = if let Some(signature) = extra_data
-            .len()
-            .checked_sub(ECDSA_SIGNATURE_LEN)
-            .and_then(|i| Signature::from_raw(&extra_data[i..]).ok())
-        {
-            trace!(target: "scroll::bridge::import", peer_id = %peer_id, block = ?block.hash_slow(), "Received new block from eth-wire protocol");
-            NewBlockWithPeer { peer_id, block, signature }
-        } else {
-            warn!(target: "scroll::bridge::import", peer_id = %peer_id, "Failed to extract signature from block extra data");
-            return;
-        };
-
-        self.handle_new_block(block);
     }
 
     /// Handles an [`L1Notification`] from the L1 watcher.
@@ -365,7 +375,7 @@ where
         if let L1Notification::Consensus(ref update) = notification {
             self.consensus.update_config(update);
         }
-        self.indexer.handle_l1_notification(notification)
+        self.chain.handle_l1_notification(notification)
     }
 
     /// Returns the current status of the [`RollupNodeManager`].
@@ -458,7 +468,7 @@ where
         );
 
         // Drain all Indexer events.
-        while let Poll::Ready(Some(result)) = this.indexer.poll_next_unpin(cx) {
+        while let Poll::Ready(Some(result)) = this.chain.poll_next_unpin(cx) {
             match result {
                 Ok(event) => this.handle_indexer_event(event),
                 Err(err) => {
@@ -512,13 +522,6 @@ where
             this.derivation_pipeline.as_mut().map(|f| f.poll_next_unpin(cx))
         {
             this.engine.handle_l1_consolidation(attributes)
-        }
-
-        // Handle blocks received from the eth-wire protocol.
-        while let Some(Poll::Ready(Some(block))) =
-            this.eth_wire_block_rx.as_mut().map(|new_block_rx| new_block_rx.poll_next_unpin(cx))
-        {
-            this.handle_eth_wire_block(block);
         }
 
         // Handle network manager events.

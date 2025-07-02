@@ -5,8 +5,10 @@ use strum::EnumIter;
 /// An enum representing the items the indexer can handle.
 #[derive(Debug, PartialEq, Eq, Hash, EnumIter)]
 pub enum IndexerItem {
+    /// Handle a block received from the network.
+    NewBlock,
     /// L2 block.
-    L2Block,
+    InsertL2Block,
     /// L1 reorg.
     L1Reorg,
     /// L1 finalization.
@@ -23,7 +25,8 @@ impl IndexerItem {
     /// Returns the str representation of the [`IndexerItem`].
     pub const fn as_str(&self) -> &'static str {
         match self {
-            Self::L2Block => "l2_block",
+            Self::NewBlock => "new_block",
+            Self::InsertL2Block => "l2_block",
             Self::L1Reorg => "l1_reorg",
             Self::L1Finalization => "l1_finalization",
             Self::L1Message => "l1_message",
