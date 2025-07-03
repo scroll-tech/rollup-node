@@ -42,7 +42,7 @@ type DerivationPipelineFuture = Pin<
 >;
 
 /// Limit the amount of pipeline futures allowed to be polled concurrently.
-const MAX_CONCURRENT_DERIVATION_PIPELINE_FUTS: usize = 20;
+const MAX_CONCURRENT_DERIVATION_PIPELINE_FUTS: usize = 100;
 
 /// A structure holding the current unresolved futures for the derivation pipeline.
 #[derive(Debug)]
@@ -203,12 +203,20 @@ pub async fn derive<L1P: L1Provider + Sync + Send, L2P: BlockDataProvider + Sync
         return Err(DerivationPipelineError::MissingL1MessageQueueCursor)
     }
 
+    let skipped_l1_messages = decoded.data.skipped_l1_message_bitmap.clone().unwrap_or_default();
+    let mut skipped_l1_messages = skipped_l1_messages.into_iter();
     let blocks = decoded.data.into_l2_blocks();
     let mut attributes = Vec::with_capacity(blocks.len());
     for mut block in blocks {
         // query the appropriate amount of l1 messages.
         let mut txs = Vec::with_capacity(block.context.num_transactions as usize);
         for _ in 0..block.context.num_l1_messages {
+            // check if the next l1 message should be skipped.
+            if matches!(skipped_l1_messages.next(), Some(bit) if bit == 1) {
+                l1_provider.increment_cursor();
+                continue;
+            }
+
             // TODO: fetch L1 messages range.
             let l1_message = l1_provider
                 .next_l1_message()
@@ -240,7 +248,7 @@ pub async fn derive<L1P: L1Provider + Sync + Send, L2P: BlockDataProvider + Sync
             transactions: Some(txs),
             no_tx_pool: true,
             block_data_hint: block_data.unwrap_or_else(BlockDataHint::none),
-            gas_limit: None,
+            gas_limit: Some(block.context.gas_limit),
         };
         attributes.push(attribute);
     }
@@ -253,7 +261,7 @@ mod tests {
     use super::*;
     use std::sync::Arc;
 
-    use alloy_eips::eip4844::Blob;
+    use alloy_eips::{eip4844::Blob, Decodable2718};
     use alloy_primitives::{address, b256, bytes, U256};
     use core::sync::atomic::{AtomicU64, Ordering};
     use rollup_node_primitives::L1MessageEnvelope;
@@ -436,7 +444,7 @@ mod tests {
             transactions: Some(vec![bytes!("f88c8202658417d7840082a4f294530000000000000000000000000000000000000280a4bede39b500000000000000000000000000000000000000000000000000000001669aa2f583104ec4a07461e6555f927393ebdf5f183738450c3842bc3b86a1db7549d9bee21fadd0b1a06d7ba96897bd9fb8e838a327d3ca34be66da11955f10d1fb2264949071e9e8cd")]),
             no_tx_pool: true,
             block_data_hint: BlockDataHint::none(),
-            gas_limit: None,
+            gas_limit: Some(10_000_000),
         };
         assert_eq!(attribute, expected);
 
@@ -501,7 +509,7 @@ mod tests {
             transactions: Some(vec![bytes!("7ef901b7218302904094781e90f1c8fc4611c9b7497c3b47f99ef6969cbc80b901848ef1332e0000000000000000000000007f2b8c31f88b6006c382775eea88297ec1e3e9050000000000000000000000006ea73e05adc79974b931123675ea8f78ffdacdf0000000000000000000000000000000000000000000000000006a94d74f430000000000000000000000000000000000000000000000000000000000000000002100000000000000000000000000000000000000000000000000000000000000a000000000000000000000000000000000000000000000000000000000000000a4232e8748000000000000000000000000ca266224613396a0e8d4c2497dbc4f33dd6cdeff000000000000000000000000ca266224613396a0e8d4c2497dbc4f33dd6cdeff000000000000000000000000000000000000000000000000006a94d74f4300000000000000000000000000000000000000000000000000000000000000000080000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000947885bcbd5cecef1336b5300fb5186a12ddd8c478"), bytes!("7ef901b7228302904094781e90f1c8fc4611c9b7497c3b47f99ef6969cbc80b901848ef1332e0000000000000000000000007f2b8c31f88b6006c382775eea88297ec1e3e9050000000000000000000000006ea73e05adc79974b931123675ea8f78ffdacdf000000000000000000000000000000000000000000000000000470de4df820000000000000000000000000000000000000000000000000000000000000000002200000000000000000000000000000000000000000000000000000000000000a000000000000000000000000000000000000000000000000000000000000000a4232e8748000000000000000000000000982fe4a7cbd74bb3422ebe46333c3e8046c12c7f000000000000000000000000982fe4a7cbd74bb3422ebe46333c3e8046c12c7f00000000000000000000000000000000000000000000000000470de4df8200000000000000000000000000000000000000000000000000000000000000000080000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000947885bcbd5cecef1336b5300fb5186a12ddd8c478")]),
             no_tx_pool: true,
             block_data_hint: BlockDataHint::none(),
-            gas_limit: None,
+            gas_limit: Some(10_000_000),
         };
         assert_eq!(attribute, &expected);
 
@@ -514,10 +522,89 @@ mod tests {
             transactions: Some(vec![bytes!("f88c8202658417d7840082a4f294530000000000000000000000000000000000000280a4bede39b500000000000000000000000000000000000000000000000000000001669aa2f583104ec4a07461e6555f927393ebdf5f183738450c3842bc3b86a1db7549d9bee21fadd0b1a06d7ba96897bd9fb8e838a327d3ca34be66da11955f10d1fb2264949071e9e8cd")]),
             no_tx_pool: true,
             block_data_hint: BlockDataHint::none(),
-            gas_limit: None,
+            gas_limit: Some(10_000_000),
         };
         assert_eq!(attribute, &expected);
 
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn test_should_skip_l1_messages() -> eyre::Result<()> {
+        // https://sepolia.etherscan.io/tx/0xe9d7a634a2afd8adee5deab180c30d261e05fea499ccbfd5c987436fe587850e
+        let raw_calldata = read_to_bytes("./testdata/calldata_v0_with_skipped_l1_messages.bin")?;
+        let batch_data = BatchCommitData {
+            hash: b256!("1e86131f4204278feb116e3043916c6bd598b1b092b550e236edb2e4a398730a"),
+            index: 100,
+            block_number: 4045729,
+            block_timestamp: 1691454067,
+            calldata: Arc::new(raw_calldata),
+            blob_versioned_hash: None,
+            finalized_block_number: None,
+        };
+
+        // prepare the l1 messages.
+        let l1_messages = vec![
+            L1MessageEnvelope {
+                l1_block_number: 5,
+                l2_block_number: None,
+                queue_hash: None,
+                transaction: TxL1Message {
+                    queue_index: 19,
+                    gas_limit: 1000000,
+                    to: address!("bA50F5340fb9f3bD074Bd638C9be13Ecb36e603D"),
+                    value: U256::ZERO,
+                    sender: address!("61d8d3E7F7c656493d1d76aAA1a836CEdfCBc27b"),
+                    input: bytes!("8ef1332e0000000000000000000000008a54a2347da2562917304141ab67324615e9866d00000000000000000000000091e8addfe1358aca5314c644312d38237fc1101c000000000000000000000000000000000000000000000000016345785d8a0000000000000000000000000000000000000000000000000000000000000000001400000000000000000000000000000000000000000000000000000000000000a000000000000000000000000000000000000000000000000000000000000000a4232e874800000000000000000000000098110937b5d6c5fcb0ba99480e585d2364e9809c00000000000000000000000098110937b5d6c5fcb0ba99480e585d2364e9809c000000000000000000000000000000000000000000000000016345785d8a00000000000000000000000000000000000000000000000000000000000000000080000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000"),
+                },
+            },
+            L1MessageEnvelope {
+                l1_block_number: 5,
+                l2_block_number: None,
+                queue_hash: None,
+                transaction: TxL1Message {
+                    queue_index: 20,
+                    gas_limit: 400000,
+                    to: address!("bA50F5340fb9f3bD074Bd638C9be13Ecb36e603D"),
+                    value: U256::ZERO,
+                    sender: address!("61d8d3E7F7c656493d1d76aAA1a836CEdfCBc27b"),
+                    input: bytes!("8ef1332e0000000000000000000000008a54a2347da2562917304141ab67324615e9866d00000000000000000000000091e8addfe1358aca5314c644312d38237fc1101c000000000000000000000000000000000000000000000000016345785d8a0000000000000000000000000000000000000000000000000000000000000000001400000000000000000000000000000000000000000000000000000000000000a000000000000000000000000000000000000000000000000000000000000000a4232e874800000000000000000000000098110937b5d6c5fcb0ba99480e585d2364e9809c00000000000000000000000098110937b5d6c5fcb0ba99480e585d2364e9809c000000000000000000000000000000000000000000000000016345785d8a00000000000000000000000000000000000000000000000000000000000000000080000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000"),
+                },
+            },
+            L1MessageEnvelope {
+                l1_block_number: 10,
+                l2_block_number: None,
+                queue_hash: None,
+                transaction: TxL1Message {
+                    queue_index: 21,
+                    gas_limit: 400000,
+                    to: address!("bA50F5340fb9f3bD074Bd638C9be13Ecb36e603D"),
+                    value: U256::ZERO,
+                    sender: address!("61d8d3E7F7c656493d1d76aAA1a836CEdfCBc27b"),
+                    input: bytes!("8ef1332e0000000000000000000000008a54a2347da2562917304141ab67324615e9866d00000000000000000000000091e8addfe1358aca5314c644312d38237fc1101c0000000000000000000000000000000000000000000000004563918244f40000000000000000000000000000000000000000000000000000000000000000001500000000000000000000000000000000000000000000000000000000000000a000000000000000000000000000000000000000000000000000000000000000a4232e87480000000000000000000000004721cf824b6750b58d781fd1336d92a082704c7a0000000000000000000000004721cf824b6750b58d781fd1336d92a082704c7a0000000000000000000000000000000000000000000000004563918244f400000000000000000000000000000000000000000000000000000000000000000080000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000"),
+                },
+            },
+        ];
+        let l1_provider =
+            MockL1MessageProvider { messages: Arc::new(l1_messages.clone()), index: 0.into() };
+        let l2_provider = MockL2Provider;
+
+        // derive attributes and extract l1 messages.
+        let attributes: Vec<_> = derive(batch_data, l1_provider, l2_provider).await?;
+        let derived_l1_messages: Vec<_> = attributes
+            .into_iter()
+            .filter_map(|a| a.transactions)
+            .flatten()
+            .filter_map(|rlp| {
+                let buf = &mut rlp.as_ref();
+                TxL1Message::decode_2718(buf).ok()
+            })
+            .collect();
+
+        // the first L1 message should be skipped.
+        let expected_l1_messages: Vec<_> =
+            l1_messages[1..].iter().map(|msg| msg.transaction.clone()).collect();
+        assert_eq!(expected_l1_messages, derived_l1_messages);
         Ok(())
     }
 }
