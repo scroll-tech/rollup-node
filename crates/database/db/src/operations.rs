@@ -1,5 +1,6 @@
 use super::{models, DatabaseError};
 use crate::DatabaseConnectionProvider;
+
 use alloy_primitives::B256;
 use futures::{Stream, StreamExt};
 use rollup_node_primitives::{
@@ -26,6 +27,8 @@ pub trait DatabaseOperations: DatabaseConnectionProvider {
                         models::batch_commit::Column::Hash,
                         models::batch_commit::Column::BlockNumber,
                         models::batch_commit::Column::BlockTimestamp,
+                        models::batch_commit::Column::Calldata,
+                        models::batch_commit::Column::BlobHash,
                         models::batch_commit::Column::FinalizedBlockNumber,
                     ])
                     .to_owned(),
@@ -132,10 +135,23 @@ pub trait DatabaseOperations: DatabaseConnectionProvider {
     }
 
     /// Delete all [`BatchCommitData`]s with a block number greater than the provided block number.
-    async fn delete_batches_gt(&self, block_number: u64) -> Result<u64, DatabaseError> {
+    async fn delete_batches_gt_block_number(
+        &self,
+        block_number: u64,
+    ) -> Result<u64, DatabaseError> {
         tracing::trace!(target: "scroll::db", block_number, "Deleting batch inputs greater than block number.");
         Ok(models::batch_commit::Entity::delete_many()
             .filter(models::batch_commit::Column::BlockNumber.gt(block_number as i64))
+            .exec(self.get_connection())
+            .await
+            .map(|x| x.rows_affected)?)
+    }
+
+    /// Delete all [`BatchCommitData`]s with a batch index greater than the provided index.
+    async fn delete_batches_gt_batch_index(&self, batch_index: u64) -> Result<u64, DatabaseError> {
+        tracing::trace!(target: "scroll::db", batch_index, "Deleting batch inputs greater than batch index.");
+        Ok(models::batch_commit::Entity::delete_many()
+            .filter(models::batch_commit::Column::Index.gt(batch_index as i64))
             .exec(self.get_connection())
             .await
             .map(|x| x.rows_affected)?)
@@ -327,7 +343,7 @@ pub trait DatabaseOperations: DatabaseConnectionProvider {
                 .get_batch_by_index(batch_info.index - 1)
                 .await?
                 .expect("Batch info must be present due to database query arguments");
-            let l2_block = self.get_highest_block_for_batch(previous_batch.hash).await?;
+            let l2_block = self.get_highest_block_for_batch_hash(previous_batch.hash).await?;
             (l2_block, Some(batch.block_number))
         } else {
             (None, None)
@@ -337,10 +353,30 @@ pub trait DatabaseOperations: DatabaseConnectionProvider {
     }
 
     /// Delete all L2 blocks with a block number greater than the provided block number.
-    async fn delete_l2_blocks_gt(&self, block_number: u64) -> Result<u64, DatabaseError> {
+    async fn delete_l2_blocks_gt_block_number(
+        &self,
+        block_number: u64,
+    ) -> Result<u64, DatabaseError> {
         tracing::trace!(target: "scroll::db", block_number, "Deleting L2 blocks greater than provided block number.");
         Ok(models::l2_block::Entity::delete_many()
             .filter(models::l2_block::Column::BlockNumber.gt(block_number as i64))
+            .exec(self.get_connection())
+            .await
+            .map(|x| x.rows_affected)?)
+    }
+
+    /// Delete all L2 blocks with a batch index greater than the batch index.
+    async fn delete_l2_blocks_gt_batch_index(
+        &self,
+        batch_index: u64,
+    ) -> Result<u64, DatabaseError> {
+        tracing::trace!(target: "scroll::db", batch_index, "Deleting L2 blocks greater than provided batch index.");
+        Ok(models::l2_block::Entity::delete_many()
+            .filter(
+                Condition::all()
+                    .add(models::l2_block::Column::BatchIndex.is_not_null())
+                    .add(models::l2_block::Column::BatchIndex.gt(batch_index as i64)),
+            )
             .exec(self.get_connection())
             .await
             .map(|x| x.rows_affected)?)
@@ -365,6 +401,7 @@ pub trait DatabaseOperations: DatabaseConnectionProvider {
             .on_conflict(
                 OnConflict::column(models::l2_block::Column::BlockNumber)
                     .update_columns([
+                        models::l2_block::Column::BlockHash,
                         models::l2_block::Column::BatchHash,
                         models::l2_block::Column::BatchIndex,
                     ])
@@ -396,7 +433,7 @@ pub trait DatabaseOperations: DatabaseConnectionProvider {
 
     /// Returns the highest L2 block originating from the provided `batch_hash` or the highest block
     /// for the batch's index.
-    async fn get_highest_block_for_batch(
+    async fn get_highest_block_for_batch_hash(
         &self,
         batch_hash: B256,
     ) -> Result<Option<BlockInfo>, DatabaseError> {
@@ -420,6 +457,20 @@ pub trait DatabaseOperations: DatabaseConnectionProvider {
         }
     }
 
+    /// Returns the highest L2 block originating from the provided `batch_index` or the highest
+    /// block for the batch's index.
+    async fn get_highest_block_for_batch_index(
+        &self,
+        batch_index: u64,
+    ) -> Result<Option<BlockInfo>, DatabaseError> {
+        Ok(models::l2_block::Entity::find()
+            .filter(models::l2_block::Column::BatchIndex.lte(batch_index))
+            .order_by_desc(models::l2_block::Column::BlockNumber)
+            .one(self.get_connection())
+            .await?
+            .map(|model| model.block_info()))
+    }
+
     /// Unwinds the indexer by deleting all indexed data greater than the provided L1 block number.
     async fn unwind(
         &self,
@@ -427,7 +478,7 @@ pub trait DatabaseOperations: DatabaseConnectionProvider {
         l1_block_number: u64,
     ) -> Result<UnwindResult, DatabaseError> {
         // delete batch inputs and l1 messages
-        let batches_removed = self.delete_batches_gt(l1_block_number).await?;
+        let batches_removed = self.delete_batches_gt_block_number(l1_block_number).await?;
         let deleted_messages = self.delete_l1_messages_gt(l1_block_number).await?;
 
         // filter and sort the executed L1 messages
@@ -441,10 +492,10 @@ pub trait DatabaseOperations: DatabaseConnectionProvider {
             if let Some(msg) = removed_executed_l1_messages.first() {
                 let l2_reorg_block_number = msg
                     .l2_block_number
-                    .expect("we guarantee that this is Some(u64) due to the filter above") -
-                    1;
+                    .expect("we guarantee that this is Some(u64) due to the filter above")
+                    .saturating_sub(1);
                 let l2_block_info = self.get_l2_block_info_by_number(l2_reorg_block_number).await?;
-                self.delete_l2_blocks_gt(l2_reorg_block_number).await?;
+                self.delete_l2_blocks_gt_block_number(l2_reorg_block_number).await?;
                 (Some(msg.transaction.queue_index), l2_block_info)
             } else {
                 (None, None)

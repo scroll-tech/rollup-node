@@ -9,7 +9,8 @@ use std::time::Instant;
 
 /// A metered future that records the start of the polling.
 pub struct MeteredFuture<F> {
-    fut: F,
+    /// The future being metered.
+    pub fut: F,
     started_at: Instant,
 }
 

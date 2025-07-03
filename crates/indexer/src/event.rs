@@ -4,8 +4,14 @@ use rollup_node_primitives::{BatchInfo, BlockInfo, L2BlockInfoWithL1Messages};
 /// An event emitted by the indexer.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum IndexerEvent {
-    /// A `BatchCommit` event has been indexed returning the batch info.
-    BatchCommitIndexed(BatchInfo),
+    /// A `BatchCommit` event has been indexed returning the batch info and the L2 block info to
+    /// revert to due to a batch revert.
+    BatchCommitIndexed {
+        /// The batch info.
+        batch_info: BatchInfo,
+        /// The safe L2 block info.
+        safe_head: Option<BlockInfo>,
+    },
     /// A `BatchFinalization` event has been indexed returning the batch hash and new finalized L2
     /// block.
     BatchFinalizationIndexed(B256, Option<BlockInfo>),

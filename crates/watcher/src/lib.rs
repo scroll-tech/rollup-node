@@ -22,6 +22,7 @@ use rollup_node_providers::SystemContractProvider;
 use scroll_alloy_consensus::TxL1Message;
 use scroll_l1::abi::logs::{try_decode_log, CommitBatch, FinalizeBatch, QueueTransaction};
 use std::{
+    cmp::Ordering,
     fmt::{Debug, Display, Formatter},
     sync::Arc,
     time::Duration,
@@ -420,9 +421,14 @@ where
         // prepare notifications
         let mut notifications = Vec::with_capacity(commit_logs_with_tx.len());
 
-        // sort the commits and group by tx hash.
-        commit_logs_with_tx
-            .sort_by(|(_, data_a, _), (_, data_b, _)| data_a.batch_index.cmp(&data_b.batch_index));
+        // sort the commits by block number then batch index, then group by tx hash.
+        commit_logs_with_tx.sort_by(|(log_a, data_a, _), (log_b, data_b, _)| {
+            log_a
+                .block_number
+                .and_then(|a| log_b.block_number.map(|b| a.cmp(&b)))
+                .unwrap_or(Ordering::Equal)
+                .then_with(|| data_a.batch_index.cmp(&data_b.batch_index))
+        });
         let groups = commit_logs_with_tx.into_iter().chunk_by(|(_, _, hash)| *hash);
         let groups: Vec<_> =
             groups.into_iter().map(|(hash, group)| (hash, group.collect::<Vec<_>>())).collect();

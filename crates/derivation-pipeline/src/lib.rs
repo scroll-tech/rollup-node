@@ -123,6 +123,13 @@ where
         }
         None
     }
+
+    /// Flushes all the data in the pipeline.
+    pub fn flush(&mut self) {
+        self.attributes_queue.clear();
+        self.batch_queue.clear();
+        self.pipeline_futures = FuturesOrdered::new();
+    }
 }
 
 impl<P> Stream for DerivationPipeline<P>
