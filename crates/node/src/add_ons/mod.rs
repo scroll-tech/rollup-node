@@ -65,7 +65,7 @@ where
             Default::default(),
         );
         let rollup_manager_addon = RollupManagerAddOn::new(config);
-        Self { rpc_add_ons, rollup_manager_addon}
+        Self { rpc_add_ons, rollup_manager_addon }
     }
 }
 impl<N> NodeAddOns<N> for ScrollRollupNodeAddOns<N>
