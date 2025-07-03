@@ -543,6 +543,7 @@ mod tests {
             finalized_block_number: None,
         };
 
+        // prepare the l1 messages.
         let l1_messages = vec![
             L1MessageEnvelope {
                 l1_block_number: 5,
@@ -588,6 +589,7 @@ mod tests {
             MockL1MessageProvider { messages: Arc::new(l1_messages.clone()), index: 0.into() };
         let l2_provider = MockL2Provider;
 
+        // derive attributes and extract l1 messages.
         let attributes: Vec<_> = derive(batch_data, l1_provider, l2_provider).await?;
         let derived_l1_messages: Vec<_> = attributes
             .into_iter()
@@ -599,6 +601,7 @@ mod tests {
             })
             .collect();
 
+        // the first L1 message should be skipped.
         let expected_l1_messages: Vec<_> =
             l1_messages[1..].iter().map(|msg| msg.transaction.clone()).collect();
         assert_eq!(expected_l1_messages, derived_l1_messages);
