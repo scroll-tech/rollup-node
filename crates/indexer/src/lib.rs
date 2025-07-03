@@ -174,7 +174,7 @@ impl<
         block_with_peer: NewBlockWithPeer,
     ) -> Result<ChainOrchestratorEvent, IndexerError> {
         let NewBlockWithPeer { block: received_block, peer_id, signature } = block_with_peer;
-        let mut current_chain_headers = std::mem::take(&mut *chain.lock().unwrap());
+        let mut current_chain_headers = chain.lock().unwrap().clone();
         let max_block_number = current_chain_headers.last().expect("chain can not be empty").number;
         let min_block_number =
             current_chain_headers.first().expect("chain can not be empty").number;
