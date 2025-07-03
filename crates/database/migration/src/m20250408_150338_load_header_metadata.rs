@@ -125,7 +125,7 @@ async fn download(url: &str) -> eyre::Result<Vec<u8>> {
     pb.set_position(0);
 
     // init variables.
-    let mut buf = Vec::with_capacity(total_size as usize);
+    let mut buf = Vec::with_capacity(iterations as usize);
     let mut index = 0;
     let mut cursor = 0;
     let mut tasks = FuturesUnordered::new();

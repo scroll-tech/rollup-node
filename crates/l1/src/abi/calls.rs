@@ -94,6 +94,8 @@ impl CommitBatchCall {
             Self::CommitBatchWithBlobProof(b) => &b.skipped_l1_message_bitmap,
             Self::CommitBatches(_) => return None,
         };
-        Some(bitmap.to_vec())
+        let mut bitmap = bitmap.to_vec();
+        bitmap.reverse();
+        Some(bitmap)
     }
 }
