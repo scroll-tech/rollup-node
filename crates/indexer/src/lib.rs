@@ -373,11 +373,141 @@ mod test {
         let batch_commit = BatchCommitData::arbitrary(&mut u).unwrap();
         indexer.handle_l1_notification(L1Notification::BatchCommit(batch_commit.clone()));
 
-        let _ = indexer.next().await;
+        let event = indexer.next().await.unwrap().unwrap();
+
+        // Verify the event structure
+        match event {
+            IndexerEvent::BatchCommitIndexed { batch_info, safe_head } => {
+                assert_eq!(batch_info.index, batch_commit.index);
+                assert_eq!(batch_info.hash, batch_commit.hash);
+                assert_eq!(safe_head, None); // No safe head since no batch revert
+            }
+            _ => panic!("Expected BatchCommitIndexed event"),
+        }
 
         let batch_commit_result = db.get_batch_by_index(batch_commit.index).await.unwrap().unwrap();
-
         assert_eq!(batch_commit, batch_commit_result);
+    }
+
+    #[tokio::test]
+    async fn test_handle_batch_commit_with_revert() {
+        // Instantiate indexer and db
+        let (mut indexer, db) = setup_test_indexer().await;
+
+        // Generate unstructured bytes.
+        let mut bytes = [0u8; 1024];
+        rand::rng().fill(bytes.as_mut_slice());
+        let mut u = Unstructured::new(&bytes);
+
+        // Create sequential batches
+        let batch_1 = BatchCommitData {
+            index: 100,
+            calldata: Arc::new(vec![].into()),
+            ..Arbitrary::arbitrary(&mut u).unwrap()
+        };
+        let batch_2 = BatchCommitData {
+            index: 101,
+            calldata: Arc::new(vec![].into()),
+            ..Arbitrary::arbitrary(&mut u).unwrap()
+        };
+        let batch_3 = BatchCommitData {
+            index: 102,
+            calldata: Arc::new(vec![].into()),
+            ..Arbitrary::arbitrary(&mut u).unwrap()
+        };
+
+        // Index first batch
+        indexer.handle_l1_notification(L1Notification::BatchCommit(batch_1.clone()));
+        let event = indexer.next().await.unwrap().unwrap();
+        match event {
+            IndexerEvent::BatchCommitIndexed { batch_info, safe_head } => {
+                assert_eq!(batch_info.index, 100);
+                assert_eq!(safe_head, None);
+            }
+            _ => panic!("Expected BatchCommitIndexed event"),
+        }
+
+        // Index second batch
+        indexer.handle_l1_notification(L1Notification::BatchCommit(batch_2.clone()));
+        let event = indexer.next().await.unwrap().unwrap();
+        match event {
+            IndexerEvent::BatchCommitIndexed { batch_info, safe_head } => {
+                assert_eq!(batch_info.index, 101);
+                assert_eq!(safe_head, None);
+            }
+            _ => panic!("Expected BatchCommitIndexed event"),
+        }
+
+        // Index third batch
+        indexer.handle_l1_notification(L1Notification::BatchCommit(batch_3.clone()));
+        let event = indexer.next().await.unwrap().unwrap();
+        match event {
+            IndexerEvent::BatchCommitIndexed { batch_info, safe_head } => {
+                assert_eq!(batch_info.index, 102);
+                assert_eq!(safe_head, None);
+            }
+            _ => panic!("Expected BatchCommitIndexed event"),
+        }
+
+        // Add some L2 blocks for the batches
+        let batch_1_info = BatchInfo::new(batch_1.index, batch_1.hash);
+        let batch_2_info = BatchInfo::new(batch_2.index, batch_2.hash);
+
+        let block_1 = L2BlockInfoWithL1Messages {
+            block_info: BlockInfo { number: 500, hash: Arbitrary::arbitrary(&mut u).unwrap() },
+            l1_messages: vec![],
+        };
+        let block_2 = L2BlockInfoWithL1Messages {
+            block_info: BlockInfo { number: 501, hash: Arbitrary::arbitrary(&mut u).unwrap() },
+            l1_messages: vec![],
+        };
+        let block_3 = L2BlockInfoWithL1Messages {
+            block_info: BlockInfo { number: 502, hash: Arbitrary::arbitrary(&mut u).unwrap() },
+            l1_messages: vec![],
+        };
+
+        indexer.handle_block(block_1.clone(), Some(batch_1_info));
+        indexer.next().await.unwrap().unwrap();
+
+        indexer.handle_block(block_2.clone(), Some(batch_2_info));
+        indexer.next().await.unwrap().unwrap();
+
+        indexer.handle_block(block_3.clone(), Some(batch_2_info));
+        indexer.next().await.unwrap().unwrap();
+
+        // Now simulate a batch revert by submitting a new batch with index 101
+        // This should delete batch 102 and any blocks associated with it
+        let new_batch_2 = BatchCommitData {
+            index: 101,
+            calldata: Arc::new(vec![1, 2, 3].into()), // Different data
+            ..Arbitrary::arbitrary(&mut u).unwrap()
+        };
+
+        indexer.handle_l1_notification(L1Notification::BatchCommit(new_batch_2.clone()));
+        let event = indexer.next().await.unwrap().unwrap();
+
+        // Verify the event indicates a batch revert
+        match event {
+            IndexerEvent::BatchCommitIndexed { batch_info, safe_head } => {
+                assert_eq!(batch_info.index, 101);
+                assert_eq!(batch_info.hash, new_batch_2.hash);
+                // Safe head should be the highest block from batch index <= 100
+                assert_eq!(safe_head, Some(block_1.block_info));
+            }
+            _ => panic!("Expected BatchCommitIndexed event"),
+        }
+
+        // Verify batch 102 was deleted
+        let batch_102 = db.get_batch_by_index(102).await.unwrap();
+        assert!(batch_102.is_none());
+
+        // Verify batch 101 was replaced with new data
+        let updated_batch_101 = db.get_batch_by_index(101).await.unwrap().unwrap();
+        assert_eq!(updated_batch_101, new_batch_2);
+
+        // Verify batch 100 still exists
+        let batch_100 = db.get_batch_by_index(100).await.unwrap();
+        assert!(batch_100.is_some());
     }
 
     #[tokio::test]
@@ -462,14 +592,17 @@ mod test {
         // Generate a 3 random batch inputs and set their block numbers
         let mut batch_commit_block_1 = BatchCommitData::arbitrary(&mut u).unwrap();
         batch_commit_block_1.block_number = 1;
+        batch_commit_block_1.index = 1;
         let batch_commit_block_1 = batch_commit_block_1;
 
         let mut batch_commit_block_20 = BatchCommitData::arbitrary(&mut u).unwrap();
         batch_commit_block_20.block_number = 20;
+        batch_commit_block_20.index = 20;
         let batch_commit_block_20 = batch_commit_block_20;
 
         let mut batch_commit_block_30 = BatchCommitData::arbitrary(&mut u).unwrap();
         batch_commit_block_30.block_number = 30;
+        batch_commit_block_30.index = 30;
         let batch_commit_block_30 = batch_commit_block_30;
 
         // Index batch inputs
@@ -549,19 +682,22 @@ mod test {
 
         // Generate a 3 random batch inputs and set their block numbers
         let batch_commit_block_1 =
-            BatchCommitData { block_number: 5, ..Arbitrary::arbitrary(&mut u).unwrap() };
-        let batch_commit_block_20 =
-            BatchCommitData { block_number: 10, ..Arbitrary::arbitrary(&mut u).unwrap() };
+            BatchCommitData { block_number: 5, index: 5, ..Arbitrary::arbitrary(&mut u).unwrap() };
+        let batch_commit_block_10 = BatchCommitData {
+            block_number: 10,
+            index: 10,
+            ..Arbitrary::arbitrary(&mut u).unwrap()
+        };
 
         // Index batch inputs
         indexer.handle_l1_notification(L1Notification::BatchCommit(batch_commit_block_1.clone()));
-        indexer.handle_l1_notification(L1Notification::BatchCommit(batch_commit_block_20.clone()));
+        indexer.handle_l1_notification(L1Notification::BatchCommit(batch_commit_block_10.clone()));
         for _ in 0..2 {
             let _event = indexer.next().await.unwrap().unwrap();
         }
 
         let batch_1 = BatchInfo::new(batch_commit_block_1.index, batch_commit_block_1.hash);
-        let batch_20 = BatchInfo::new(batch_commit_block_20.index, batch_commit_block_20.hash);
+        let batch_10 = BatchInfo::new(batch_commit_block_10.index, batch_commit_block_10.hash);
 
         const UNITS_FOR_TESTING: u64 = 20;
         const L1_MESSAGES_NOT_EXECUTED_COUNT: u64 = 7;
@@ -601,7 +737,7 @@ mod test {
             let batch_info = if block_number < 5 {
                 Some(batch_1)
             } else if block_number < 10 {
-                Some(batch_20)
+                Some(batch_10)
             } else {
                 None
             };
@@ -624,7 +760,7 @@ mod test {
             }
         );
 
-        // Reorg at block 17 which is one of the messages that has not been executed yet. No reorg
+        // Reorg at block 7 which is one of the messages that has not been executed yet. No reorg
         // but we should ensure the L1 messages have been deleted.
         indexer.handle_l1_notification(L1Notification::Reorg(7));
         let event = indexer.next().await.unwrap().unwrap();
