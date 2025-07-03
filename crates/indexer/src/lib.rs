@@ -249,8 +249,29 @@ impl<ChainSpec: ScrollHardforks + EthChainSpec + Send + Sync + 'static> Indexer<
         database: Arc<Database>,
         batch: BatchCommitData,
     ) -> Result<IndexerEvent, IndexerError> {
-        let event = IndexerEvent::BatchCommitIndexed(BatchInfo::new(batch.index, batch.hash));
-        database.insert_batch(batch).await?;
+        let txn = database.tx().await?;
+        let prev_batch_index = batch.index - 1;
+
+        // remove any batches with an index greater than the previous batch.
+        let affected = txn.delete_batches_gt_batch_index(prev_batch_index).await?;
+
+        // handle the case of a batch revert.
+        let new_safe_head = if affected > 0 {
+            txn.delete_l2_blocks_gt_batch_index(prev_batch_index).await?;
+            txn.get_highest_block_for_batch_index(prev_batch_index).await?
+        } else {
+            None
+        };
+
+        let event = IndexerEvent::BatchCommitIndexed {
+            batch_info: BatchInfo::new(batch.index, batch.hash),
+            safe_head: new_safe_head,
+        };
+
+        // insert the batch and commit the transaction.
+        txn.insert_batch(batch).await?;
+        txn.commit().await?;
+
         Ok(event)
     }
 
@@ -285,7 +306,7 @@ impl<ChainSpec: ScrollHardforks + EthChainSpec + Send + Sync + 'static> Indexer<
         batch_hash: B256,
         l2_block_number: Arc<AtomicU64>,
     ) -> Result<Option<BlockInfo>, IndexerError> {
-        let finalized_block = database.get_highest_block_for_batch(batch_hash).await?;
+        let finalized_block = database.get_highest_block_for_batch_hash(batch_hash).await?;
 
         // only return the block if the indexer hasn't seen it.
         // in which case also update the `l2_finalized_block_number` value.
@@ -299,63 +320,6 @@ impl<ChainSpec: ScrollHardforks + EthChainSpec + Send + Sync + 'static> Indexer<
             }
         }))
     }
-}
-
-/// Unwinds the indexer by deleting all indexed data greater than the provided L1 block number.
-pub async fn unwind<ChainSpec: ScrollHardforks + EthChainSpec + Send + Sync + 'static>(
-    database: Arc<Database>,
-    chain_spec: Arc<ChainSpec>,
-    l1_block_number: u64,
-) -> Result<IndexerEvent, IndexerError> {
-    // create a database transaction so this operation is atomic
-    let txn = database.tx().await?;
-
-    // delete batch inputs and l1 messages
-    let batches_removed = txn.delete_batches_gt(l1_block_number).await?;
-    let deleted_messages = txn.delete_l1_messages_gt(l1_block_number).await?;
-
-    // filter and sort the executed L1 messages
-    let mut removed_executed_l1_messages: Vec<_> =
-        deleted_messages.into_iter().filter(|x| x.l2_block_number.is_some()).collect();
-    removed_executed_l1_messages
-        .sort_by(|a, b| a.transaction.queue_index.cmp(&b.transaction.queue_index));
-
-    // check if we need to reorg the L2 head and delete some L2 blocks
-    let (queue_index, l2_head_block_info) = if let Some(msg) = removed_executed_l1_messages.first()
-    {
-        let l2_reorg_block_number = msg
-            .l2_block_number
-            .expect("we guarantee that this is Some(u64) due to the filter on line 130") -
-            1;
-        let l2_block_info = txn
-            .get_l2_block_info_by_number(l2_reorg_block_number)
-            .await?
-            .ok_or(IndexerError::L2BlockNotFound(l2_reorg_block_number))?;
-        txn.delete_l2_blocks_gt(l2_reorg_block_number).await?;
-        (Some(msg.transaction.queue_index), Some(l2_block_info))
-    } else {
-        (None, None)
-    };
-
-    // check if we need to reorg the L2 safe block
-    let l2_safe_block_info = if batches_removed > 0 {
-        if let Some(x) = txn.get_latest_safe_l2_info().await? {
-            Some(x.0)
-        } else {
-            Some(BlockInfo::new(0, chain_spec.genesis_hash()))
-        }
-    } else {
-        None
-    };
-
-    // commit the transaction
-    txn.commit().await?;
-    Ok(IndexerEvent::UnwindIndexed {
-        l1_block_number,
-        queue_index,
-        l2_head_block_info,
-        l2_safe_block_info,
-    })
 }
 
 impl<ChainSpec: ScrollHardforks + 'static> Stream for Indexer<ChainSpec> {
