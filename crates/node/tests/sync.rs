@@ -11,8 +11,7 @@ use rollup_node::{
     },
     ScrollRollupNode,
 };
-use rollup_node_manager::{RollupManagerCommand, RollupManagerEvent};
-use tokio::sync::oneshot;
+use rollup_node_manager::RollupManagerEvent;
 
 /// We test if the syncing of the RN is correctly triggered and released when the EN reaches sync.
 #[allow(clippy::large_stack_frames)]
@@ -42,19 +41,9 @@ async fn test_should_trigger_pipeline_sync_for_execution_node() {
     unsynced.network.next_session_established().await;
     synced.network.next_session_established().await;
 
-    // Wait for the unsynced node to receive a block.
-    wait_n_events(&unsynced, |e| matches!(e, RollupManagerEvent::NewBlockReceived(_)), 1).await;
-
-    // Check the unsynced node enters sync mode.
-    let (tx, rx) = oneshot::channel();
-    unsynced
-        .inner
-        .add_ons_handle
-        .rollup_manager_handle
-        .send_command(RollupManagerCommand::Status(tx))
+    // Assert that the unsynced node triggers optimistic sync.
+    wait_n_events(&unsynced, |e| matches!(e, RollupManagerEvent::OptimisticSyncTriggered(_)), 1)
         .await;
-    let status = rx.await.unwrap();
-    assert!(status.syncing);
 
     // Verify the unsynced node syncs.
     let provider = ProviderBuilder::new().connect_http(unsynced.rpc_url());
@@ -70,19 +59,9 @@ async fn test_should_trigger_pipeline_sync_for_execution_node() {
         retries += 1;
     }
 
-    // Wait at least a single block for the driver to exit sync mode.
-    wait_n_events(&unsynced, |e| matches!(e, RollupManagerEvent::BlockImported(_)), 1).await;
-
-    // Check the unsynced node exits sync mode.
-    let (tx, rx) = oneshot::channel();
-    unsynced
-        .inner
-        .add_ons_handle
-        .rollup_manager_handle
-        .send_command(RollupManagerCommand::Status(tx))
+    // Assert that the unsynced node triggers a chain extension on the optimistic chain.
+    wait_n_events(&unsynced, |e| matches!(e, RollupManagerEvent::ChainExtensionTriggered(_)), 1)
         .await;
-    let status = rx.await.unwrap();
-    assert!(!status.syncing);
 }
 
 /// Waits for n events to be emitted.

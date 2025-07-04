@@ -315,8 +315,13 @@ mod test {
         db.insert_l1_message(l1_message_2.clone()).await.unwrap();
 
         // collect the L1Messages
-        let l1_messages =
-            db.get_l1_messages().await.unwrap().map(|res| res.unwrap()).collect::<Vec<_>>().await;
+        let l1_messages = db
+            .get_l1_messages(None)
+            .await
+            .unwrap()
+            .map(|res| res.unwrap())
+            .collect::<Vec<_>>()
+            .await;
 
         // Apply the assertions.
         assert!(l1_messages.contains(&l1_message_1));
@@ -412,9 +417,10 @@ mod test {
         rand::rng().fill(bytes.as_mut_slice());
         let mut u = Unstructured::new(&bytes);
 
-        // Initially should return None
-        let latest_safe = db.get_latest_safe_l2_info().await.unwrap();
-        assert!(latest_safe.is_none());
+        // Initially should return the genesis block and hash.
+        let (latest_safe_block, batch) = db.get_latest_safe_l2_info().await.unwrap().unwrap();
+        assert_eq!(latest_safe_block.number, 0);
+        assert_eq!(batch.index, 0);
 
         // Generate and insert a batch
         let batch_data = BatchCommitData { index: 100, ..Arbitrary::arbitrary(&mut u).unwrap() };
