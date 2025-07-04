@@ -315,8 +315,13 @@ mod test {
         db.insert_l1_message(l1_message_2.clone()).await.unwrap();
 
         // collect the L1Messages
-        let l1_messages =
-            db.get_l1_messages().await.unwrap().map(|res| res.unwrap()).collect::<Vec<_>>().await;
+        let l1_messages = db
+            .get_l1_messages(None)
+            .await
+            .unwrap()
+            .map(|res| res.unwrap())
+            .collect::<Vec<_>>()
+            .await;
 
         // Apply the assertions.
         assert!(l1_messages.contains(&l1_message_1));

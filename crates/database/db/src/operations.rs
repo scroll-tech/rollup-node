@@ -227,12 +227,30 @@ pub trait DatabaseOperations: DatabaseConnectionProvider {
             .map(|x| x.map(Into::into))?)
     }
 
-    /// Gets an iterator over all [`L1MessageEnvelope`]s in the database.
+    /// Get an iterator over all [`L1MessageEnvelope`]s in the database starting from the provided
+    /// `start` point.
     async fn get_l1_messages<'a>(
         &'a self,
+        start: Option<L1MessageStart>,
     ) -> Result<impl Stream<Item = Result<L1MessageEnvelope, DatabaseError>> + 'a, DatabaseError>
     {
+        let queue_index = match start {
+            Some(L1MessageStart::Index(i)) => i,
+            Some(L1MessageStart::Hash(ref h)) => {
+                // Lookup message by hash
+                let record = models::l1_message::Entity::find()
+                    .filter(models::l1_message::Column::Hash.eq(h.to_vec()))
+                    .one(self.get_connection())
+                    .await?
+                    .ok_or_else(|| DatabaseError::L1MessageNotFound(0))?;
+
+                record.queue_index as u64
+            }
+            None => 0,
+        };
+
         Ok(models::l1_message::Entity::find()
+            .filter(models::l1_message::Column::QueueIndex.gte(queue_index))
             .stream(self.get_connection())
             .await?
             .map(|res| Ok(res.map(Into::into)?)))
@@ -506,6 +524,18 @@ pub trait DatabaseOperations: DatabaseConnectionProvider {
         // commit the transaction
         Ok(UnwindResult { l1_block_number, queue_index, l2_head_block_info, l2_safe_block_info })
     }
+}
+
+/// This type defines the start of an L1 message stream.
+///
+/// It can either be an index, which is the queue index of the first message to return, or a hash,
+/// which is the hash of the first message to return.
+#[derive(Debug)]
+pub enum L1MessageStart {
+    /// Start from the provided queue index.
+    Index(u64),
+    /// Start from the provided queue hash.
+    Hash(B256),
 }
 
 /// The result of [`DatabaseOperations::unwind`].

@@ -13,7 +13,7 @@ mod models;
 pub use models::*;
 
 mod operations;
-pub use operations::{DatabaseOperations, UnwindResult};
+pub use operations::{DatabaseOperations, L1MessageStart, UnwindResult};
 
 mod transaction;
 pub use transaction::DatabaseTransaction;

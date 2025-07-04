@@ -1,7 +1,7 @@
 //! A library responsible for indexing data relevant to the L1.
 
 use alloy_consensus::Header;
-use alloy_eips::BlockHashOrNumber;
+use alloy_eips::{BlockHashOrNumber, Encodable2718};
 use alloy_primitives::{b256, keccak256, B256};
 use alloy_provider::Provider;
 use futures::{task::AtomicWaker, Stream, StreamExt, TryStreamExt};
@@ -16,7 +16,7 @@ use rollup_node_watcher::L1Notification;
 use scroll_alloy_consensus::TxL1Message;
 use scroll_alloy_hardforks::{ScrollHardfork, ScrollHardforks};
 use scroll_alloy_network::Scroll;
-use scroll_db::{Database, DatabaseError, DatabaseOperations, UnwindResult};
+use scroll_db::{Database, DatabaseError, DatabaseOperations, L1MessageStart, UnwindResult};
 use scroll_network::NewBlockWithPeer;
 use std::{
     collections::{HashMap, VecDeque},
@@ -46,7 +46,12 @@ const L1_MESSAGE_QUEUE_HASH_MASK: B256 =
     b256!("ffffffffffffffffffffffffffffffffffffffffffffffffffffffff00000000");
 
 /// The number of block headers we keep in memory.
-const CHAIN_BUFFER_SIZE: usize = 2000;
+const OPTIMISTIC_CHAIN_BUFFER_SIZE: usize = 2000;
+
+/// The maximum number of blocks we keep in memory for the consolidated chain (This is the full
+/// unsafe chain). Memory requirements = ~800 bytes per header * `600_000` headers = 480 MB.
+// TODO: This is just a temporary hack we will transition to a VecDeque when not in synced mode.
+const CONSOLIDATED_CHAIN_BUFFER_SIZE: usize = 300_000;
 
 /// The threshold for optimistic syncing. If the received block is more than this many blocks
 /// ahead of the current chain, we optimistically sync the chain.
@@ -183,6 +188,8 @@ impl<
             *guard
         };
 
+        // TODO: remove database lookups.
+
         // If the received block has a block number that is greater than the tip
         // of the chain by the optimistic sync threshold, we optimistically sync the chain and
         // update the in-memory buffer.
@@ -190,7 +197,7 @@ impl<
             // fetch the latest `OPTIMISTIC_CHAIN_BUFFER_SIZE` blocks from the network for the
             // optimistic chain.
             let mut optimistic_headers = vec![received_block.header.clone()];
-            while optimistic_headers.len() < CHAIN_BUFFER_SIZE &&
+            while optimistic_headers.len() < OPTIMISTIC_CHAIN_BUFFER_SIZE &&
                 optimistic_headers.last().unwrap().number != 0
             {
                 tracing::trace!(target: "scroll::watcher", number = ?(optimistic_headers.last().unwrap().number - 1), "fetching block");
@@ -205,7 +212,7 @@ impl<
                 optimistic_headers.push(header);
             }
             optimistic_headers.reverse();
-            let mut new_chain = Chain::new(CHAIN_BUFFER_SIZE);
+            let mut new_chain = Chain::new(OPTIMISTIC_CHAIN_BUFFER_SIZE);
             new_chain.extend(optimistic_headers);
             *chain.lock().unwrap() = new_chain;
             *optimistic_mode.lock().unwrap() = true;
@@ -288,7 +295,7 @@ impl<
                 // If we are in optimistic mode, we terminate the search as we don't have the
                 // necessary data in the database. This is fine because very deep
                 // re-orgs are rare and in any case will be resolved once optimistic sync is
-                // completed.If the current header block number is less than the
+                // completed. If the current header block number is less than the
                 // latest safe block number then this would suggest a reorg of a
                 // safe block which is not invalid - terminate the search.
                 } else if optimistic_mode_local ||
@@ -364,7 +371,7 @@ impl<
             // point and extend it with the new blocks.
             Some(ReorgIndex::Memory(position)) => {
                 // reorg the in-memory chain to the new chain and issue a reorg event.
-                let mut new_chain = Chain::new(CHAIN_BUFFER_SIZE);
+                let mut new_chain = Chain::new(OPTIMISTIC_CHAIN_BUFFER_SIZE);
                 new_chain.extend(current_chain_headers.iter().take(position).cloned());
                 new_chain.extend(new_chain_headers);
                 *chain.lock().unwrap() = new_chain;
@@ -380,7 +387,7 @@ impl<
                 database.delete_l2_blocks_gt(l2_block.number).await?;
 
                 // Update the in-memory chain with the new blocks.
-                let mut new_chain = Chain::new(CHAIN_BUFFER_SIZE);
+                let mut new_chain = Chain::new(OPTIMISTIC_CHAIN_BUFFER_SIZE);
                 new_chain.extend(new_chain_headers);
                 *chain.lock().unwrap() = new_chain;
 
@@ -402,17 +409,24 @@ impl<
         let l1_synced = self.l1_synced;
         let optimistic_mode = self.optimistic_mode.clone();
         let chain = self.chain.clone();
+        let l2_client = self.l2_client.clone();
         let fut = self.handle_metered(
             IndexerItem::InsertL2Block,
             Box::pin(async move {
                 // If we are in optimistic mode and the L1 is synced, we consolidate the chain and
                 // disable optimistic mode.
                 if l1_synced && *optimistic_mode.lock().unwrap() {
-                    consolidate_chain(database.clone(), chain).await?;
+                    consolidate_chain(database.clone(), block_info.clone(), chain, l2_client)
+                        .await?;
+                    *optimistic_mode.lock().unwrap() = false;
                 }
+
+                // If we are consolidating a batch, we insert the batch info into the database.
                 let head = block_info.last().expect("block info must not be empty").clone();
-                database.insert_blocks(block_info, batch_info).await?;
-                *optimistic_mode.lock().unwrap() = false;
+                if batch_info.is_some() {
+                    database.insert_blocks(block_info, batch_info).await?;
+                }
+
                 Result::<_, IndexerError>::Ok(ChainOrchestratorEvent::L2BlockCommitted(
                     head, batch_info,
                 ))
@@ -622,8 +636,9 @@ async fn init_chain_from_db<P: Provider<Scroll> + 'static>(
     l2_client: &P,
 ) -> BoundedVec<Header> {
     let blocks = {
-        let mut blocks = Vec::with_capacity(CHAIN_BUFFER_SIZE);
-        let mut blocks_stream = database.get_l2_blocks().await.unwrap().take(CHAIN_BUFFER_SIZE);
+        let mut blocks = Vec::with_capacity(OPTIMISTIC_CHAIN_BUFFER_SIZE);
+        let mut blocks_stream =
+            database.get_l2_blocks().await.unwrap().take(OPTIMISTIC_CHAIN_BUFFER_SIZE);
         while let Some(block_info) = blocks_stream.try_next().await.unwrap() {
             let header = l2_client
                 .get_block_by_hash(block_info.hash)
@@ -637,7 +652,7 @@ async fn init_chain_from_db<P: Provider<Scroll> + 'static>(
         blocks.reverse();
         blocks
     };
-    let mut chain: Chain = Chain::new(CHAIN_BUFFER_SIZE);
+    let mut chain: Chain = Chain::new(OPTIMISTIC_CHAIN_BUFFER_SIZE);
     chain.extend(blocks);
     chain
 }
@@ -726,10 +741,62 @@ impl<
     }
 }
 
-async fn consolidate_chain(
-    _database: Arc<Database>,
+/// Consolidates the chain by reconciling the in-memory chain with the L2 client and database.
+/// This is used to ensure that the in-memory chain is consistent with the L2 chain.
+async fn consolidate_chain<P: Provider<Scroll>>(
+    database: Arc<Database>,
+    _block_info: Vec<L2BlockInfoWithL1Messages>,
     _chain: Arc<Mutex<Chain>>,
+    l2_client: P,
 ) -> Result<(), IndexerError> {
+    // take the current chain.
+    let chain = std::mem::take(&mut *_chain.lock().unwrap());
+
+    // Find highest common ancestor by comparing hashes
+    let hca_index = chain.iter().rposition(|h| {
+        let h_hash = h.hash_slow();
+        _block_info.iter().any(|b| b.block_info.hash == h_hash)
+    });
+
+    // This means there is a deep reorg that has just occurred however in practice this should
+    // never happen due to purging of expired chain.
+    // TODO: consider this case more carefully.
+    if hca_index.is_none() {
+        // If we do not have a common ancestor, we return an error.
+        *_chain.lock().unwrap() = chain;
+        return Err(IndexerError::ChainInconsistency);
+    }
+
+    // Now reconcile back to the safe head.
+    let safe_head = database.get_latest_l2_block().await?.expect("safe head must exist");
+    let starting_block =
+        l2_client.get_block_by_hash(chain.first().unwrap().hash_slow()).await.unwrap().unwrap();
+    let mut consolidated_chain_blocks =
+        vec![starting_block.into_consensus().map_transactions(|tx| tx.inner.into_inner())];
+    while consolidated_chain_blocks.last().unwrap().header.parent_hash != safe_head.hash {
+        // Fetch the missing blocks from the L2 client.
+        let block =
+            l2_client.get_block_by_hash(chain.last().unwrap().parent_hash).await.unwrap().unwrap();
+        consolidated_chain_blocks
+            .push(block.into_consensus().map_transactions(|tx| tx.inner.into_inner()));
+
+        if chain.last().unwrap().number < safe_head.number {
+            // If we did not consolidate back to the safe head, we return an error.
+            *_chain.lock().unwrap() = chain;
+            // TODO: should we revert to the last known safe head.
+            return Err(IndexerError::ChainInconsistency);
+        }
+    }
+
+    consolidated_chain_blocks.reverse();
+    validate_l1_messages(&consolidated_chain_blocks, database.clone()).await?;
+
+    let mut consolidated_chain = BoundedVec::new(CONSOLIDATED_CHAIN_BUFFER_SIZE);
+    consolidated_chain.extend(consolidated_chain_blocks.iter().map(|b| b.header.clone()));
+    consolidated_chain.extend(chain.into_inner());
+
+    // let unsafe_chain =
+
     // TODO: implement the logic to consolidate the chain.
     // If we are in optimistic mode, we consolidate the chain and disable optimistic
     // mode.
@@ -752,7 +819,6 @@ async fn fetch_blocks<BC: BlockClient<Block = ScrollBlock> + Send + Sync + 'stat
         .expect("Failed to fetch block bodies")
         .into_data();
 
-    // TODO: can we assume the bodies are in the same order as the headers?
     for (header, body) in headers.into_iter().zip(bodies) {
         blocks.push(ScrollBlock::new(header, body));
     }
@@ -760,11 +826,41 @@ async fn fetch_blocks<BC: BlockClient<Block = ScrollBlock> + Send + Sync + 'stat
     blocks
 }
 
+/// Validates the L1 messages in the provided blocks against the expected L1 messages synced from
+/// L1.
 async fn validate_l1_messages(
-    _blocks: &[ScrollBlock],
-    _database: Arc<Database>,
+    blocks: &[ScrollBlock],
+    database: Arc<Database>,
 ) -> Result<(), IndexerError> {
-    // TODO: implement L1 message validation logic.
+    let l1_message_hashes = blocks
+        .iter()
+        .flat_map(|block| {
+            // Get the L1 messages from the block body.
+            block
+                .body
+                .transactions()
+                .filter(|&tx| tx.is_l1_message())
+                // The hash for L1 messages is the trie hash of the transaction.
+                .map(|tx| tx.trie_hash())
+                .collect::<Vec<_>>()
+        })
+        .collect::<Vec<_>>();
+    let mut l1_message_stream = database
+        .get_l1_messages(l1_message_hashes.first().map(|tx| L1MessageStart::Hash(*tx)))
+        .await?;
+
+    for message_hash in l1_message_hashes {
+        // Get the expected L1 message from the database.
+        let expected_hash = l1_message_stream.next().await.unwrap().unwrap().transaction.tx_hash();
+
+        // If the received and expected L1 messages do not match return an error.
+        if message_hash != expected_hash {
+            return Err(IndexerError::L1MessageMismatch {
+                expected: expected_hash,
+                actual: message_hash,
+            });
+        }
+    }
     Ok(())
 }
 
@@ -1158,8 +1254,13 @@ mod test {
         assert!(batch_commits.contains(&batch_commit_block_20));
 
         // check that the L1 message at block 30 is deleted
-        let l1_messages =
-            db.get_l1_messages().await.unwrap().map(|res| res.unwrap()).collect::<Vec<_>>().await;
+        let l1_messages = db
+            .get_l1_messages(None)
+            .await
+            .unwrap()
+            .map(|res| res.unwrap())
+            .collect::<Vec<_>>()
+            .await;
         assert_eq!(2, l1_messages.len());
         assert!(l1_messages.contains(&l1_message_block_1));
         assert!(l1_messages.contains(&l1_message_block_20));

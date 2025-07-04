@@ -474,6 +474,9 @@ async fn can_sequence_blocks_with_private_key_file() -> eyre::Result<()> {
         panic!("Failed to receive BlockSequenced event");
     }
 
+    // Skip the next event.
+    let _ = sequencer_events.next().await;
+
     // Verify signing event and signature correctness
     if let Some(RollupManagerEvent::SignerEvent(SignerEvent::SignedBlock {
         block: signed_block,
@@ -557,6 +560,9 @@ async fn can_sequence_blocks_with_hex_key_file_without_prefix() -> eyre::Result<
     } else {
         panic!("Failed to receive BlockSequenced event");
     }
+
+    // Skip the next event.
+    let _ = sequencer_events.next().await;
 
     // Verify signing event and signature correctness
     if let Some(RollupManagerEvent::SignerEvent(SignerEvent::SignedBlock {

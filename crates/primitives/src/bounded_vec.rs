@@ -61,6 +61,16 @@ impl<T> BoundedVec<T> {
     fn is_full(&self) -> bool {
         self.data.len() == self.data.capacity()
     }
+
+    /// Returns the inner `VecDeque<T>` of the bounded vec.
+    pub const fn inner(&self) -> &VecDeque<T> {
+        &self.data
+    }
+
+    /// Returns the inner `VecDeque<T>` of the bounded vec.
+    pub fn into_inner(self) -> VecDeque<T> {
+        self.data
+    }
 }
 
 impl<T> Extend<T> for BoundedVec<T> {

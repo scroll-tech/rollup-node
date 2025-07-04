@@ -32,6 +32,7 @@ scroll-network.workspace = true
 reth-chainspec.workspace = true
 reth-network-p2p = { git = "https://github.com/scroll-tech/reth.git", default-features = false }
 reth-network-peers.workspace = true
+reth-primitives-traits.workspace = true
 
 # misc
 futures.workspace = true
@@ -58,7 +59,6 @@ reth-scroll-forks.workspace = true
 
 # reth
 reth-eth-wire-types.workspace = true
-reth-primitives-traits.workspace = true
 reth-network-peers.workspace = true
 
 # misc
