@@ -58,7 +58,12 @@ where
 {
     /// Create a new instance of [`ScrollRollupNodeAddOns`].
     pub fn new(config: ScrollRollupNodeConfig) -> Self {
-        let rpc_add_ons = RpcAddOns::default();
+
+        let rpc_add_ons= RpcAddOns::new(
+            ScrollEthApiBuilder::default().with_sequencer(config.network_args.sequencer_url.clone()),
+            Default::default(),
+            Default::default(),
+        );
         let rollup_manager_addon = RollupManagerAddOn::new(config);
         Self { rpc_add_ons, rollup_manager_addon }
     }
