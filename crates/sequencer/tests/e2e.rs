@@ -430,7 +430,7 @@ async fn can_sequence_blocks_with_private_key_file() -> eyre::Result<()> {
     let chain_spec = (*SCROLL_DEV).clone();
     let rollup_manager_args = ScrollRollupNodeConfig {
         test: false, // disable test mode to enable real signing
-        network_args: NetworkArgs { enable_eth_scroll_wire_bridge: true, enable_scroll_wire: true, disable_tx_broadcast: false, disable_tx_receive: false },
+        network_args: NetworkArgs::default(),
         database_args: DatabaseArgs { path: Some(PathBuf::from("sqlite::memory:")) },
         l1_provider_args: L1ProviderArgs::default(),
         engine_driver_args: EngineDriverArgs::default(),
@@ -514,7 +514,7 @@ async fn can_sequence_blocks_with_hex_key_file_without_prefix() -> eyre::Result<
     let chain_spec = (*SCROLL_DEV).clone();
     let rollup_manager_args = ScrollRollupNodeConfig {
         test: false, // disable test mode to enable real signing
-        network_args: NetworkArgs { enable_eth_scroll_wire_bridge: true, enable_scroll_wire: true, disable_tx_broadcast: false, disable_tx_receive: false },
+        network_args: NetworkArgs::default(),
         database_args: DatabaseArgs { path: Some(PathBuf::from("sqlite::memory:")) },
         l1_provider_args: L1ProviderArgs::default(),
         engine_driver_args: EngineDriverArgs::default(),
