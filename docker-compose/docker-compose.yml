@@ -33,7 +33,7 @@ services:
       - scroll-network
 
   rollup-node:
-    image: scrolltech/rollup-node:v0.0.1-rc9
+    image: jayjayjayjay/rollup-node:v0.0.4
     container_name: rollup-node
     entrypoint: ["sh", "-c"]
     command: >
