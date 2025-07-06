@@ -5,7 +5,7 @@ use crate::{
 
 use alloy_primitives::{
     bytes::{Buf, BufMut},
-    keccak256, B256, U256,
+    keccak256, B256,
 };
 
 /// The batch header for V0.
@@ -24,7 +24,7 @@ pub struct BatchHeaderV0 {
     /// The parent batch hash.
     pub parent_batch_hash: B256,
     /// A bitmap to indicate which L1 messages are skipped in the batch.
-    pub skipped_l1_message_bitmap: Vec<U256>,
+    pub skipped_l1_message_bitmap: Vec<u8>,
 }
 
 impl BatchHeaderV0 {
@@ -38,7 +38,7 @@ impl BatchHeaderV0 {
         total_l1_message_popped: u64,
         data_hash: B256,
         parent_batch_hash: B256,
-        skipped_l1_message_bitmap: Vec<U256>,
+        skipped_l1_message_bitmap: Vec<u8>,
     ) -> Self {
         Self {
             version,
@@ -69,7 +69,9 @@ impl BatchHeaderV0 {
 
         let skipped_l1_message_bitmap: Vec<_> = buf
             .chunks(SKIPPED_L1_MESSAGE_BITMAP_ITEM_BYTES_SIZE)
-            .map(|chunk| U256::from_be_slice(chunk))
+            .flatten()
+            .rev()
+            .copied()
             .collect();
 
         // check leftover bytes are correct.
@@ -78,7 +80,7 @@ impl BatchHeaderV0 {
         {
             return Err(DecodingError::Eof)
         }
-        buf.advance(skipped_l1_message_bitmap.len() * SKIPPED_L1_MESSAGE_BITMAP_ITEM_BYTES_SIZE);
+        buf.advance(skipped_l1_message_bitmap.len());
 
         Ok(Self {
             version,
@@ -104,12 +106,7 @@ impl BatchHeaderV0 {
         bytes.put_slice(&self.data_hash.0);
         bytes.put_slice(&self.parent_batch_hash.0);
 
-        let skipped_l1_message_flat_bitmap = self
-            .skipped_l1_message_bitmap
-            .iter()
-            .flat_map(|u| u.to_be_bytes::<32>())
-            .collect::<Vec<_>>();
-        bytes.put_slice(&skipped_l1_message_flat_bitmap);
+        bytes.put_slice(&self.skipped_l1_message_bitmap);
 
         keccak256(bytes)
     }
@@ -119,7 +116,7 @@ impl BatchHeaderV0 {
 mod tests {
     use crate::decoding::{test_utils::read_to_bytes, v0::BatchHeaderV0};
 
-    use alloy_primitives::{b256, U256};
+    use alloy_primitives::b256;
     use alloy_sol_types::SolCall;
     use scroll_l1::abi::calls::commitBatchCall;
 
@@ -139,7 +136,34 @@ mod tests {
             33,
             b256!("2aa3eeb5adebb96a49736583c744b89b0b3be45056e8e178106a42ab2cd1a063"),
             b256!("c0173d7e3561501cf57913763c7c34716216092a222a99fe8b85dcb466730f56"),
-            vec![U256::ZERO],
+            vec![0; 32],
+        );
+        assert_eq!(header, expected);
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_should_decode_header_with_skipped_l1_messages() -> eyre::Result<()> {
+        // <https://sepolia.etherscan.io/tx/0xacacfe48bed1944d6586ca8f0bec3ecd10ea0a99e104517f75845b8602dcab31>
+        let raw_commit_calldata =
+            read_to_bytes("./testdata/calldata_v0_with_skipped_l1_messages.bin")?;
+        let commit_calldata = commitBatchCall::abi_decode(&raw_commit_calldata)?;
+
+        let mut raw_batch_header = &*commit_calldata.parent_batch_header.to_vec();
+        let header = BatchHeaderV0::try_from_buf(&mut raw_batch_header)?;
+
+        let expected = BatchHeaderV0::new(
+            0,
+            100,
+            3,
+            22,
+            b256!("4867e8b3c751abf5f0f8cd8e3e91f78ff15011b48b981ad742cb42dfd746844c"),
+            b256!("b4d0a673c704d567eebcd758802ce87cf103b16acbae7c52b2807928fd8dc76e"),
+            vec![
+                1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                0, 0, 0, 0,
+            ],
         );
         assert_eq!(header, expected);
 
@@ -156,7 +180,7 @@ mod tests {
             33,
             b256!("2aa3eeb5adebb96a49736583c744b89b0b3be45056e8e178106a42ab2cd1a063"),
             b256!("c0173d7e3561501cf57913763c7c34716216092a222a99fe8b85dcb466730f56"),
-            vec![U256::ZERO],
+            vec![0; 32],
         );
 
         let expected = b256!("A7F7C528E1827D3E64E406C76DE6C750D5FC3DE3DE4386E6C69958A89461D064");

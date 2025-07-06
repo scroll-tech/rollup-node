@@ -13,9 +13,11 @@ impl MigrationTrait for Migration {
                     .table(BlockData::Table)
                     .if_not_exists()
                     .col(big_unsigned(BlockData::Number).primary_key())
-                    .col(binary(BlockData::ExtraData))
-                    .col(binary_len(BlockData::StateRoot, 32))
-                    .col(binary_len(BlockData::Difficulty, 32))
+                    .col(binary_null(BlockData::ExtraData))
+                    .col(binary_len_null(BlockData::StateRoot, 32))
+                    .col(binary_len_null(BlockData::Coinbase, 20))
+                    .col(text_null(BlockData::Nonce))
+                    .col(tiny_integer_null(BlockData::Difficulty))
                     .to_owned(),
             )
             .await
@@ -32,5 +34,7 @@ enum BlockData {
     Number,
     ExtraData,
     StateRoot,
+    Coinbase,
+    Nonce,
     Difficulty,
 }

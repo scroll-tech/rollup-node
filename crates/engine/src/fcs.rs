@@ -65,13 +65,7 @@ impl ForkchoiceState {
     pub fn head_from_chain_spec<CS: EthChainSpec<Header: BlockHeader>>(
         chain_spec: CS,
     ) -> Option<Self> {
-        let genesis_hash = match chain_spec.chain().named()? {
-            NamedChain::Scroll => SCROLL_MAINNET_GENESIS_HASH,
-            NamedChain::ScrollSepolia => SCROLL_SEPOLIA_GENESIS_HASH,
-            NamedChain::Dev => chain_spec.genesis_header().hash_slow(),
-            _ => return None,
-        };
-        Some(Self::head_from_genesis(genesis_hash))
+        Some(Self::head_from_genesis(genesis_hash_from_chain_spec(chain_spec)?))
     }
 
     /// Updates the `head` block info.
@@ -126,5 +120,17 @@ impl ForkchoiceState {
     /// Returns `true` if the fork choice state is the genesis state.
     pub const fn is_genesis(&self) -> bool {
         self.head.number == 0
+    }
+}
+
+/// Returns the genesis hash for the given chain spec.
+pub fn genesis_hash_from_chain_spec<CS: EthChainSpec<Header: BlockHeader>>(
+    chain_spec: CS,
+) -> Option<B256> {
+    match chain_spec.chain().named()? {
+        NamedChain::Scroll => Some(SCROLL_MAINNET_GENESIS_HASH),
+        NamedChain::ScrollSepolia => Some(SCROLL_SEPOLIA_GENESIS_HASH),
+        NamedChain::Dev => Some(chain_spec.genesis_header().hash_slow()),
+        _ => None,
     }
 }

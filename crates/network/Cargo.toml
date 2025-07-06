@@ -21,7 +21,7 @@ reth-storage-api = { git = "https://github.com/scroll-tech/reth.git", default-fe
 
 # scroll
 reth-scroll-chainspec.workspace = true
-reth-scroll-node = { workspace = true, features = ["skip-state-root-validation"] }
+reth-scroll-node.workspace = true
 reth-scroll-primitives.workspace = true
 scroll-wire.workspace = true
 
@@ -44,4 +44,5 @@ serde = [
     "reth-scroll-primitives/serde",
     "scroll-wire/serde",
     "reth-primitives-traits/serde",
+    "reth-storage-api/serde",
 ]

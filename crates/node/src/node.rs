@@ -1,6 +1,7 @@
 //! Node specific implementations for Scroll rollup node.
 
 use crate::args::ScrollRollupNodeConfig;
+use std::time::Duration;
 
 use super::add_ons::ScrollRollupNodeAddOns;
 use reth_node_api::NodeTypes;
@@ -10,7 +11,7 @@ use reth_node_builder::{
 };
 use reth_scroll_node::{
     ScrollConsensusBuilder, ScrollExecutorBuilder, ScrollNetworkBuilder, ScrollNode,
-    ScrollPayloadBuilder, ScrollPoolBuilder,
+    ScrollPayloadBuilderBuilder, ScrollPoolBuilder,
 };
 
 /// The Scroll node implementation.
@@ -21,7 +22,11 @@ pub struct ScrollRollupNode {
 
 impl ScrollRollupNode {
     /// Create a new instance of [`ScrollRollupNode`].
-    pub const fn new(config: ScrollRollupNodeConfig) -> Self {
+    pub fn new(config: ScrollRollupNodeConfig) -> Self {
+        config
+            .validate()
+            .map_err(|e| eyre::eyre!("Configuration validation failed: {}", e))
+            .expect("Configuration validation failed");
         Self { config }
     }
 }
@@ -33,7 +38,7 @@ where
     type ComponentsBuilder = ComponentsBuilder<
         N,
         ScrollPoolBuilder,
-        BasicPayloadServiceBuilder<ScrollPayloadBuilder>,
+        BasicPayloadServiceBuilder<ScrollPayloadBuilderBuilder>,
         ScrollNetworkBuilder,
         ScrollExecutorBuilder,
         ScrollConsensusBuilder,
@@ -44,7 +49,14 @@ where
     >;
 
     fn components_builder(&self) -> Self::ComponentsBuilder {
-        ScrollNode::components()
+        ScrollNode::components().payload(BasicPayloadServiceBuilder::new(
+            ScrollPayloadBuilderBuilder {
+                payload_building_time_limit: Duration::from_millis(
+                    self.config.sequencer_args.payload_building_duration,
+                ),
+                best_transactions: (),
+            },
+        ))
     }
 
     fn add_ons(&self) -> Self::AddOns {

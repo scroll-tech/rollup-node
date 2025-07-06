@@ -16,6 +16,9 @@ pub use batch::{BatchCommitData, BatchInfo};
 mod bounded_vec;
 pub use bounded_vec::BoundedVec;
 
+mod metadata;
+pub use metadata::Metadata;
+
 #[cfg(feature = "std")]
 mod metrics;
 #[cfg(feature = "std")]

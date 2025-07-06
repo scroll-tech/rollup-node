@@ -11,6 +11,8 @@ pub struct PayloadData {
     pub blocks: Vec<L2Block>,
     /// Contains information about the current state of the L1 message queue.
     pub l1_message_queue_info: L1MessageQueueInfo,
+    /// Contains the skipped L1 message bitmap if present.
+    pub skipped_l1_message_bitmap: Option<Vec<u8>>,
 }
 
 /// Information about the state of the L1 message queue.

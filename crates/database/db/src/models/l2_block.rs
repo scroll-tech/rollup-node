@@ -17,6 +17,14 @@ impl Model {
     pub(crate) fn block_info(&self) -> BlockInfo {
         BlockInfo { number: self.block_number as u64, hash: B256::from_slice(&self.block_hash) }
     }
+
+    pub(crate) fn batch_info(&self) -> Option<BatchInfo> {
+        self.batch_hash.as_ref().map(|hash| BatchInfo {
+            index: self.batch_index.expect("batch index must be present if batch hash is present")
+                as u64,
+            hash: B256::from_slice(hash),
+        })
+    }
 }
 
 /// The relation for the batch input model.
