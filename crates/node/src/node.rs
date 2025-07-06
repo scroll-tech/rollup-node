@@ -49,12 +49,7 @@ where
     >;
 
     fn components_builder(&self) -> Self::ComponentsBuilder {
-        ScrollNode{
-            disable_tx_broadcast: self.config.network_args.disable_tx_broadcast,
-            disable_tx_receive: self.config.network_args.disable_tx_receive,
-        }
-        .components()
-        .payload(BasicPayloadServiceBuilder::new(
+        ScrollNode::components().payload(BasicPayloadServiceBuilder::new(
             ScrollPayloadBuilderBuilder {
                 payload_building_time_limit: Duration::from_millis(
                     self.config.sequencer_args.payload_building_duration,
@@ -62,6 +57,10 @@ where
                 best_transactions: (),
             },
         ))
+        .network(ScrollNetworkBuilder {
+            disable_txpool_broadcast: self.config.network_args.disable_tx_broadcast,
+            disable_txpool_receive: self.config.network_args.disable_tx_receive,
+        })
     }
 
     fn add_ons(&self) -> Self::AddOns {
