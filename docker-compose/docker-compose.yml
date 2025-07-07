@@ -12,9 +12,9 @@ services:
         EXTRA_PARAMS="--fork-block-number $${FORK_BLOCK_NUMBER}";
       fi;
       if [ "$${ENV:-}" = "sepolia" ]; then
-        anvil --fork-url http://l1reth-rpc.sepolia.scroll.tech:8545 --chain-id 11155111 --block-time 12 $EXTRA_PARAMS
+        anvil --fork-url http://l1reth-rpc.sepolia.scroll.tech:8545 --chain-id 11155111 --host 0.0.0.0 --block-time 12 $EXTRA_PARAMS
       elif [ "$${ENV:-}" = "mainnet" ]; then
-        anvil --fork-url http://l1geth-rpc.mainnet.scroll.tech:8545/l1 --chain-id 1 --block-time 12 $EXTRA_PARAMS
+        anvil --fork-url http://l1geth-rpc.mainnet.scroll.tech:8545/l1 --chain-id 1 --host 0.0.0.0 --block-time 12 $EXTRA_PARAMS
       fi
       '
     profiles:
