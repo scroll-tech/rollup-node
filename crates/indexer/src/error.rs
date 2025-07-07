@@ -24,4 +24,10 @@ pub enum IndexerError {
     /// An inconsistency was detected when trying to consolidate the chain.
     #[error("Chain inconsistency detected")]
     ChainInconsistency,
+    /// The peer did not provide the requested block header.
+    #[error("A peer did not provide the requested block header")]
+    MissingBlockHeader {
+        /// The hash of the block header that was requested.
+        hash: B256,
+    },
 }

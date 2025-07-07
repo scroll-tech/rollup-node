@@ -329,14 +329,22 @@ impl<
                 }
 
                 tracing::trace!(target: "scroll::watcher", number = ?(new_header_tail.number - 1), "fetching block");
-                let header = network_client
+                if let Some(header) = network_client
                     .get_header(BlockHashOrNumber::Hash(new_header_tail.parent_hash))
                     .await
                     .unwrap()
                     .into_data()
-                    .unwrap();
-                new_chain_headers.push(header.clone());
-                new_header_tail = header;
+                {
+                    // TODO: what do we do when peers don't have the blocks? We can't recreate the
+                    // chain so we should terminate here. We should be able to reconcile this gap in
+                    // a future block.
+                    new_chain_headers.push(header.clone());
+                    new_header_tail = header;
+                } else {
+                    return Err(IndexerError::MissingBlockHeader {
+                        hash: new_header_tail.parent_hash,
+                    });
+                }
             }
         };
 
