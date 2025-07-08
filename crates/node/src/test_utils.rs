@@ -130,11 +130,7 @@ pub async fn generate_tx(wallet: Arc<Mutex<Wallet>>) -> Bytes {
 pub fn default_test_scroll_rollup_node_config() -> ScrollRollupNodeConfig {
     ScrollRollupNodeConfig {
         test: true,
-        network_args: crate::args::NetworkArgs {
-            enable_eth_scroll_wire_bridge: true,
-            enable_scroll_wire: true,
-            ..Default::default()
-        },
+        network_args: crate::args::NetworkArgs::default(),
         database_args: DatabaseArgs { path: Some(PathBuf::from("sqlite::memory:")) },
         l1_provider_args: L1ProviderArgs::default(),
         engine_driver_args: EngineDriverArgs { en_sync_trigger: 100 },
@@ -148,11 +144,7 @@ pub fn default_test_scroll_rollup_node_config() -> ScrollRollupNodeConfig {
 pub fn default_sequencer_test_scroll_rollup_node_config() -> ScrollRollupNodeConfig {
     ScrollRollupNodeConfig {
         test: true,
-        network_args: crate::args::NetworkArgs {
-            enable_eth_scroll_wire_bridge: true,
-            enable_scroll_wire: true,
-            ..Default::default()
-        },
+        network_args: crate::args::NetworkArgs::default(),
         database_args: DatabaseArgs { path: Some(PathBuf::from("sqlite::memory:")) },
         l1_provider_args: L1ProviderArgs::default(),
         engine_driver_args: EngineDriverArgs { en_sync_trigger: 100 },
