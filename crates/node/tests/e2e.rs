@@ -35,7 +35,11 @@ async fn can_bridge_l1_messages() -> eyre::Result<()> {
     let chain_spec = (*SCROLL_DEV).clone();
     let node_args = ScrollRollupNodeConfig {
         test: true,
-        network_args: ScrollNetworkArgs::default(),
+        network_args: ScrollNetworkArgs {
+            enable_eth_scroll_wire_bridge: true,
+            enable_scroll_wire: true,
+            ..Default::default()
+        },
         database_args: DatabaseArgs { path: Some(PathBuf::from("sqlite::memory:")) },
         l1_provider_args: L1ProviderArgs::default(),
         engine_driver_args: EngineDriverArgs::default(),
@@ -96,7 +100,11 @@ async fn can_sequence_and_gossip_blocks() {
     let chain_spec = (*SCROLL_DEV).clone();
     let rollup_manager_args = ScrollRollupNodeConfig {
         test: true,
-        network_args: ScrollNetworkArgs::default(),
+        network_args: ScrollNetworkArgs {
+            enable_eth_scroll_wire_bridge: true,
+            enable_scroll_wire: true,
+            ..Default::default()
+        },
         database_args: DatabaseArgs { path: Some(PathBuf::from("sqlite::memory:")) },
         l1_provider_args: L1ProviderArgs::default(),
         engine_driver_args: EngineDriverArgs::default(),

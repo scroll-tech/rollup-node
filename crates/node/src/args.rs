@@ -484,7 +484,11 @@ mod tests {
             engine_driver_args: EngineDriverArgs::default(),
             l1_provider_args: L1ProviderArgs::default(),
             beacon_provider_args: BeaconProviderArgs::default(),
-            network_args: NetworkArgs::default(),
+            network_args: NetworkArgs {
+                enable_eth_scroll_wire_bridge: true,
+                enable_scroll_wire: true,
+                ..Default::default()
+            },
         };
 
         let result = config.validate();
@@ -507,7 +511,11 @@ mod tests {
             engine_driver_args: EngineDriverArgs::default(),
             l1_provider_args: L1ProviderArgs::default(),
             beacon_provider_args: BeaconProviderArgs::default(),
-            network_args: NetworkArgs::default(),
+            network_args: NetworkArgs {
+                enable_eth_scroll_wire_bridge: true,
+                enable_scroll_wire: true,
+                ..Default::default()
+            },
         };
 
         let result = config.validate();
@@ -530,7 +538,11 @@ mod tests {
             engine_driver_args: EngineDriverArgs::default(),
             l1_provider_args: L1ProviderArgs::default(),
             beacon_provider_args: BeaconProviderArgs::default(),
-            network_args: NetworkArgs::default(),
+            network_args: NetworkArgs {
+                enable_eth_scroll_wire_bridge: true,
+                enable_scroll_wire: true,
+                ..Default::default()
+            },
         };
 
         assert!(config.validate().is_ok());
@@ -546,7 +558,11 @@ mod tests {
             engine_driver_args: EngineDriverArgs::default(),
             l1_provider_args: L1ProviderArgs::default(),
             beacon_provider_args: BeaconProviderArgs::default(),
-            network_args: NetworkArgs::default(),
+            network_args: NetworkArgs {
+                enable_eth_scroll_wire_bridge: true,
+                enable_scroll_wire: true,
+                ..Default::default()
+            },
         };
 
         assert!(config.validate().is_ok());
@@ -562,7 +578,11 @@ mod tests {
             engine_driver_args: EngineDriverArgs::default(),
             l1_provider_args: L1ProviderArgs::default(),
             beacon_provider_args: BeaconProviderArgs::default(),
-            network_args: NetworkArgs::default(),
+            network_args: NetworkArgs {
+                enable_eth_scroll_wire_bridge: true,
+                enable_scroll_wire: true,
+                ..Default::default()
+            },
         };
 
         assert!(config.validate().is_ok());
@@ -578,7 +598,11 @@ mod tests {
             engine_driver_args: EngineDriverArgs::default(),
             l1_provider_args: L1ProviderArgs::default(),
             beacon_provider_args: BeaconProviderArgs::default(),
-            network_args: NetworkArgs::default(),
+            network_args: NetworkArgs {
+                enable_eth_scroll_wire_bridge: true,
+                enable_scroll_wire: true,
+                ..Default::default()
+            },
         };
 
         assert!(config.validate().is_ok());
