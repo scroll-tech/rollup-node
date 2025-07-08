@@ -172,17 +172,17 @@ impl<
     /// Handles a new block received from the network.
     pub async fn handle_new_block(
         chain: Arc<Mutex<Chain>>,
-        l2_client: Arc<P>,
+        _l2_client: Arc<P>,
         optimistic_mode: Arc<Mutex<bool>>,
         network_client: Arc<BC>,
         database: Arc<Database>,
         block_with_peer: NewBlockWithPeer,
     ) -> Result<ChainOrchestratorEvent, IndexerError> {
         let NewBlockWithPeer { block: received_block, peer_id, signature } = block_with_peer;
-        let mut current_chain_headers = chain.lock().unwrap().clone();
-        let max_block_number = current_chain_headers.last().expect("chain can not be empty").number;
+        let mut current_chain_headers = chain.lock().unwrap().clone().into_inner();
+        let max_block_number = current_chain_headers.back().expect("chain can not be empty").number;
         let min_block_number =
-            current_chain_headers.first().expect("chain can not be empty").number;
+            current_chain_headers.front().expect("chain can not be empty").number;
         let optimistic_mode_local: bool = {
             let guard = optimistic_mode.lock().unwrap();
             *guard
@@ -231,38 +231,16 @@ impl<
             ));
         }
 
-        // Perform preliminary checks on received block that are dependent on database state due to
-        // not being in in-memory chain.
-        if received_block.header.number <= min_block_number {
-            // If we are in optimistic mode, we return an event indicating that we have insufficient
-            // data to process the block.
-            if optimistic_mode_local {
-                return Ok(ChainOrchestratorEvent::InsufficientDataForReceivedBlock(
-                    received_block.header.hash_slow(),
-                ));
-            }
-
-            // We check the database to see if this block is already known.
-            if database
-                .get_l2_block_and_batch_info_by_hash(received_block.header.hash_slow())
-                .await?
-                .is_some()
-            {
-                tracing::debug!(target: "scroll::watcher", block_hash = ?received_block.header.hash_slow(), "block already in database");
-                return Ok(ChainOrchestratorEvent::BlockAlreadyKnown(
-                    received_block.header.hash_slow(),
-                    peer_id,
-                ));
-            }
+        // If we are in optimistic mode, we return an event indicating that we have insufficient
+        // data to process the block as we are optimistically syncing the chain.
+        if optimistic_mode_local && (received_block.header.number <= min_block_number) {
+            return Ok(ChainOrchestratorEvent::InsufficientDataForReceivedBlock(
+                received_block.header.hash_slow(),
+            ));
         };
 
         let mut new_chain_headers = vec![received_block.header.clone()];
         let mut new_header_tail = received_block.header.clone();
-
-        enum ReorgIndex {
-            Memory(usize),
-            Database(BlockInfo),
-        }
 
         // We should never have a re-org that is deeper than the current safe head.
         let (latest_safe_block, _) =
@@ -271,61 +249,98 @@ impl<
         // We search for the re-org index in the in-memory chain or the database.
         let reorg_index = {
             loop {
-                // If the current header block number is greater than the in-memory chain then we
-                // should search the in-memory chain.
-                if new_header_tail.number >= min_block_number {
-                    if let Some(pos) = current_chain_headers
-                        .iter()
-                        .rposition(|h| h.hash_slow() == new_header_tail.parent_hash)
-                    {
-                        // If the received fork is older than the current chain, we return an event
-                        // indicating that we have received an old fork.
-                        if (pos < current_chain_headers.len() - 1) &&
-                            current_chain_headers.get(pos + 1).unwrap().timestamp >=
-                                new_header_tail.timestamp
+                // If the new header tail has a block number that is less than the current header
+                // tail then we should fetch more blocks for the current header chain to aid
+                // reconciliation.
+                if new_header_tail.number <=
+                    current_chain_headers.back().expect("chain can not be empty").number
+                {
+                    for _ in 0..50 {
+                        if new_header_tail.number.saturating_sub(1) < latest_safe_block.number {
+                            tracing::info!(target: "scroll::chain", hash = %latest_safe_block.hash, number = %latest_safe_block.number, "reached safe block number - terminating fetching.");
+                            break;
+                        }
+                        tracing::trace!(target: "scroll::watcher", number = ?(new_header_tail.number - 1), "fetching block");
+                        if let Some(header) = network_client
+                            .get_header(BlockHashOrNumber::Hash(new_header_tail.parent_hash))
+                            .await
+                            .unwrap()
+                            .into_data()
                         {
-                            return Ok(ChainOrchestratorEvent::OldForkReceived {
-                                headers: new_chain_headers,
-                                peer_id,
-                                signature,
+                            new_chain_headers.push(header.clone());
+                            new_header_tail = header;
+                        } else {
+                            return Err(IndexerError::MissingBlockHeader {
+                                hash: new_header_tail.parent_hash,
                             });
                         }
-                        break Some(ReorgIndex::Memory(pos));
                     }
-                // If we are in optimistic mode, we terminate the search as we don't have the
-                // necessary data in the database. This is fine because very deep
-                // re-orgs are rare and in any case will be resolved once optimistic sync is
-                // completed. If the current header block number is less than the
-                // latest safe block number then this would suggest a reorg of a
-                // safe block which is not invalid - terminate the search.
-                } else if optimistic_mode_local ||
-                    new_header_tail.number <= latest_safe_block.number
-                {
-                    break None
+                }
 
-                // If the block is not in the in-memory chain, we search the database.
-                } else if let Some((l2_block, _batch_info)) = database
-                    .get_l2_block_and_batch_info_by_hash(new_header_tail.parent_hash)
-                    .await?
+                // If the current header block number is greater than the in-memory chain then we
+                // should search the in-memory chain (we keep the latest
+                // `OPTIMISTIC_CHAIN_BUFFER_SIZE` headers in memory).
+                if let Some(pos) = current_chain_headers
+                    .iter()
+                    .rposition(|h| h.hash_slow() == new_header_tail.parent_hash)
                 {
-                    let diverged_block = database
-                        .get_l2_block_info_by_number(l2_block.number + 1)
-                        .await?
-                        .expect("diverged block must exist");
-                    let diverged_block =
-                        l2_client.get_block_by_hash(diverged_block.hash).await.unwrap().unwrap();
-
                     // If the received fork is older than the current chain, we return an event
                     // indicating that we have received an old fork.
-                    if diverged_block.header.timestamp >= new_header_tail.timestamp {
+                    if (pos < current_chain_headers.len() - 1) &&
+                        current_chain_headers.get(pos + 1).unwrap().timestamp >=
+                            new_header_tail.timestamp
+                    {
                         return Ok(ChainOrchestratorEvent::OldForkReceived {
                             headers: new_chain_headers,
                             peer_id,
                             signature,
                         });
                     }
+                    break Some(pos);
+                }
 
-                    break Some(ReorgIndex::Database(l2_block))
+                // If we are in optimistic mode, we terminate the search as we don't have the
+                // necessary data from L1 consolidation yet. This is fine because very deep
+                // re-orgs are rare and in any case will be resolved once optimistic sync is
+                // completed. If the current header block number is less than the
+                // latest safe block number then this would suggest a reorg of a
+                // safe block which is not invalid - terminate the search.
+                if optimistic_mode_local &&
+                    (new_header_tail.number <=
+                        current_chain_headers
+                            .front()
+                            .expect("chain must not be empty")
+                            .number)
+                {
+                    if received_block.timestamp >
+                        current_chain_headers.back().expect("chain can not be empty").timestamp
+                    {
+                        tracing::debug!(target: "scroll::watcher", block_hash = ?received_block.header.hash_slow(), "received block is ahead of the current chain");
+                        while new_chain_headers.len() < OPTIMISTIC_CHAIN_BUFFER_SIZE &&
+                            new_chain_headers.last().unwrap().number != 0
+                        {
+                            tracing::trace!(target: "scroll::watcher", number = ?(new_chain_headers.last().unwrap().number - 1), "fetching block");
+                            let header = network_client
+                                .get_header(BlockHashOrNumber::Hash(
+                                    new_chain_headers.last().unwrap().parent_hash,
+                                ))
+                                .await
+                                .unwrap()
+                                .into_data()
+                                .unwrap();
+                            new_chain_headers.push(header);
+                        }
+                        break None;
+                    }
+                    return Ok(ChainOrchestratorEvent::InsufficientDataForReceivedBlock(
+                        received_block.header.hash_slow(),
+                    ));
+                }
+
+                // If the current header block number is less than the latest safe block number then
+                // we should error.
+                if new_header_tail.number <= latest_safe_block.number {
+                    return Err(IndexerError::L2SafeBlockReorgDetected);
                 }
 
                 tracing::trace!(target: "scroll::watcher", number = ?(new_header_tail.number - 1), "fetching block");
@@ -366,10 +381,12 @@ impl<
         match reorg_index {
             // If this is a simple chain extension, we can just extend the in-memory chain and emit
             // a ChainExtended event.
-            Some(ReorgIndex::Memory(index)) if index == current_chain_headers.len() - 1 => {
+            Some(index) if index == current_chain_headers.len() - 1 => {
                 // Update the chain with the new blocks.
                 current_chain_headers.extend(new_blocks.iter().map(|b| b.header.clone()));
-                *chain.lock().unwrap() = current_chain_headers;
+                let mut new_chain = Chain::new(OPTIMISTIC_CHAIN_BUFFER_SIZE);
+                new_chain.extend(current_chain_headers);
+                *chain.lock().unwrap() = new_chain;
 
                 Ok(ChainOrchestratorEvent::ChainExtended(ChainImport::new(
                     new_blocks, peer_id, signature,
@@ -377,7 +394,7 @@ impl<
             }
             // If we are re-organizing the in-memory chain, we need to split the chain at the reorg
             // point and extend it with the new blocks.
-            Some(ReorgIndex::Memory(position)) => {
+            Some(position) => {
                 // reorg the in-memory chain to the new chain and issue a reorg event.
                 let mut new_chain = Chain::new(OPTIMISTIC_CHAIN_BUFFER_SIZE);
                 new_chain.extend(current_chain_headers.iter().take(position).cloned());
@@ -388,22 +405,16 @@ impl<
                     new_blocks, peer_id, signature,
                 )))
             }
-            // If we have a deep reorg that impacts the database, we need to delete the blocks from
-            // the database, update the in-memory chain and emit a ChainReorged event.
-            Some(ReorgIndex::Database(l2_block)) => {
-                // remove old chain data from the database.
-                database.delete_l2_blocks_gt(l2_block.number).await?;
-
-                // Update the in-memory chain with the new blocks.
+            None => {
                 let mut new_chain = Chain::new(OPTIMISTIC_CHAIN_BUFFER_SIZE);
                 new_chain.extend(new_chain_headers);
                 *chain.lock().unwrap() = new_chain;
+                *optimistic_mode.lock().unwrap() = true;
 
-                Ok(ChainOrchestratorEvent::ChainReorged(ChainImport::new(
-                    new_blocks, peer_id, signature,
-                )))
+                Ok(ChainOrchestratorEvent::OptimisticSync(
+                    new_blocks.last().cloned().expect("new_blocks should not be empty"),
+                ))
             }
-            None => Err(IndexerError::L2SafeBlockReorgDetected),
         }
     }
 
@@ -767,7 +778,8 @@ async fn consolidate_chain<P: Provider<Scroll>>(
     });
 
     // This means there is a deep reorg that has just occurred however in practice this should
-    // never happen due to purging of expired chain.
+    // never happen due to purging of expired chain. This should be reconciled upon the next
+    // block import.
     // TODO: consider this case more carefully.
     if hca_index.is_none() {
         // If we do not have a common ancestor, we return an error.
