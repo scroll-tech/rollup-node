@@ -1,4 +1,4 @@
-FROM rust:1.86.0 AS chef
+FROM rust:1.88.0 AS chef
 
 RUN apt-get update -y && apt-get upgrade -y
 

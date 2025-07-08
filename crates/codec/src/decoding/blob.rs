@@ -20,7 +20,7 @@ impl<'a> Iterator for BlobSliceIter<'a> {
     type Item = &'a u8;
 
     fn next(&mut self) -> Option<Self::Item> {
-        if self.count % 32 == 0 {
+        if self.count.is_multiple_of(32) {
             let _ = self.iterator.next();
             self.count += 1;
         }

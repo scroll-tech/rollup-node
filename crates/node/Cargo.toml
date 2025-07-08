@@ -41,16 +41,14 @@ reth-chainspec.workspace = true
 reth-cli-util = { git = "https://github.com/scroll-tech/reth.git" }
 reth-eth-wire-types.workspace = true
 reth-evm = { git = "https://github.com/scroll-tech/reth.git" }
-reth-node-builder = { workspace = true, features = ["skip-state-root-validation"] }
+reth-node-builder.workspace = true
 reth-node-api = { git = "https://github.com/scroll-tech/reth.git", default-features = false }
 reth-node-core.workspace = true
 reth-node-types = { git = "https://github.com/scroll-tech/reth.git", default-features = false }
 reth-network.workspace = true
 reth-network-api.workspace = true
-reth-network-peers.workspace = true
 reth-revm = { git = "https://github.com/scroll-tech/reth.git", default-features = false }
 reth-rpc-api = { git = "https://github.com/scroll-tech/reth.git", default-features = false }
-reth-rpc-builder.workspace = true
 reth-rpc-eth-api = { git = "https://github.com/scroll-tech/reth.git", default-features = false }
 reth-rpc-eth-types = { git = "https://github.com/scroll-tech/reth.git", default-features = false }
 reth-tasks.workspace = true
@@ -58,7 +56,6 @@ reth-transaction-pool = { git = "https://github.com/scroll-tech/reth.git", defau
 reth-trie-db = { git = "https://github.com/scroll-tech/reth.git", default-features = false }
 
 # rollup node
-rollup-node-indexer.workspace = true
 rollup-node-manager.workspace = true
 rollup-node-primitives.workspace = true
 rollup-node-providers.workspace = true
@@ -105,7 +102,6 @@ reth-tracing.workspace = true
 rollup-node = { workspace = true, features = ["test-utils"] }
 scroll-alloy-rpc-types-engine.workspace = true
 serde_json = { version = "1.0.94", default-features = false, features = ["alloc"] }
-tempfile = "3.0"
 
 [features]
 test-utils = [
