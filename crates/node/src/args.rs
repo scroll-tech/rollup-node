@@ -325,6 +325,16 @@ pub struct NetworkArgs {
     pub sequencer_url: Option<String>,
 }
 
+impl Default for NetworkArgs {
+    fn default() -> Self {
+        Self {
+            enable_eth_scroll_wire_bridge: true,
+            enable_scroll_wire: true,
+            sequencer_url: None,
+        }
+    }
+}
+
 /// The arguments for the L1 provider.
 #[derive(Debug, Default, Clone, clap::Args)]
 pub struct L1ProviderArgs {
