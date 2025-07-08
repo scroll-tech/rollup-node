@@ -2,9 +2,9 @@ version: '3'
 
 services:
   l1-devnet:
-    image: scrolltech/l1-devnet:v0.0.4
+    image: ghcr.io/foundry-rs/foundry:v1.2.3
     container_name: l1-devnet
-    entrypoint: ["bash", "/docker-compose/launch_l1.bash"]
+    entrypoint: ["bash", "/launch_l1.bash"]
     profiles:
       - shadow-fork
     env_file:
@@ -17,13 +17,19 @@ services:
       - "8544:8546"  # WebSocket
     volumes:
       - ./l1devnet:/l1devnet
+      - ./launch_l1.bash:/launch_l1.bash
+    healthcheck:
+      test: ["CMD", "cast", "bn", "-r", "http://localhost:8545"]
+      interval: 3s
+      timeout: 2s
+      retries: 20
     networks:
       - scroll-network
 
   rollup-node:
     image: scrolltech/rollup-node:v0.0.1-rc19
     container_name: rollup-node
-    entrypoint: ["bash", "/docker-compose/launch_rollup_node.bash"]
+    entrypoint: ["bash", "/launch_rollup_node.bash"]
     env_file:
       - .env.shadow-fork
     environment:
@@ -36,8 +42,12 @@ services:
       - "6060:6060"  # Metrics
     volumes:
       - ./l2reth:/l2reth
+      - ./launch_rollup_node.bash:/launch_rollup_node.bash
     networks:
       - scroll-network
+    depends_on:
+      l1-devnet:
+        condition: service_healthy
 
   prometheus:
     image: prom/prometheus:latest
