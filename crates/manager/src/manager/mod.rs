@@ -237,7 +237,16 @@ where
     fn handle_indexer_event(&mut self, event: IndexerEvent) {
         trace!(target: "scroll::node::manager", ?event, "Received indexer event");
         match event {
-            IndexerEvent::BatchCommitIndexed(batch_info) => {
+            IndexerEvent::BatchCommitIndexed { batch_info, safe_head } => {
+                // if we detected a batch revert event, we reset the pipeline and the engine driver.
+                if let Some(new_safe_head) = safe_head {
+                    if let Some(pipeline) = self.derivation_pipeline.as_mut() {
+                        pipeline.flush()
+                    }
+                    self.engine.clear_l1_payload_attributes();
+                    self.engine.set_head_block_info(new_safe_head);
+                    self.engine.set_safe_block_info(new_safe_head);
+                }
                 // push the batch info into the derivation pipeline.
                 if let Some(pipeline) = &mut self.derivation_pipeline {
                     pipeline.handle_batch_commit(batch_info);

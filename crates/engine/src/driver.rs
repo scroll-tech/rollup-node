@@ -108,6 +108,19 @@ where
         self.block_building_duration = block_building_duration;
     }
 
+    /// Clear the l1 attributes queue.
+    pub fn clear_l1_payload_attributes(&mut self) {
+        // clear the L1 attributes queue.
+        self.l1_payload_attributes.clear();
+
+        // drop the engine future if it is a L1 consolidation.
+        if let Some(MeteredFuture { fut: EngineFuture::L1Consolidation(_), .. }) =
+            self.engine_future
+        {
+            self.engine_future.take();
+        }
+    }
+
     /// Handles a block import request by adding it to the queue and waking up the driver.
     pub fn handle_block_import(&mut self, block_with_peer: NewBlockWithPeer) {
         tracing::trace!(target: "scroll::engine", ?block_with_peer, "new block import request received");
