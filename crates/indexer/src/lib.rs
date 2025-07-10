@@ -1085,7 +1085,7 @@ mod test {
 
         // Verify the event structure
         match event {
-            IndexerEvent::BatchCommitIndexed { batch_info, safe_head } => {
+            ChainOrchestratorEvent::BatchCommitIndexed { batch_info, safe_head } => {
                 assert_eq!(batch_info.index, batch_commit.index);
                 assert_eq!(batch_info.hash, batch_commit.hash);
                 assert_eq!(safe_head, None); // No safe head since no batch revert
@@ -1128,7 +1128,7 @@ mod test {
         indexer.handle_l1_notification(L1Notification::BatchCommit(batch_1.clone()));
         let event = indexer.next().await.unwrap().unwrap();
         match event {
-            IndexerEvent::BatchCommitIndexed { batch_info, safe_head } => {
+            ChainOrchestratorEvent::BatchCommitIndexed { batch_info, safe_head } => {
                 assert_eq!(batch_info.index, 100);
                 assert_eq!(safe_head, None);
             }
@@ -1139,7 +1139,7 @@ mod test {
         indexer.handle_l1_notification(L1Notification::BatchCommit(batch_2.clone()));
         let event = indexer.next().await.unwrap().unwrap();
         match event {
-            IndexerEvent::BatchCommitIndexed { batch_info, safe_head } => {
+            ChainOrchestratorEvent::BatchCommitIndexed { batch_info, safe_head } => {
                 assert_eq!(batch_info.index, 101);
                 assert_eq!(safe_head, None);
             }
@@ -1150,7 +1150,7 @@ mod test {
         indexer.handle_l1_notification(L1Notification::BatchCommit(batch_3.clone()));
         let event = indexer.next().await.unwrap().unwrap();
         match event {
-            IndexerEvent::BatchCommitIndexed { batch_info, safe_head } => {
+            ChainOrchestratorEvent::BatchCommitIndexed { batch_info, safe_head } => {
                 assert_eq!(batch_info.index, 102);
                 assert_eq!(safe_head, None);
             }
@@ -1174,13 +1174,13 @@ mod test {
             l1_messages: vec![],
         };
 
-        indexer.handle_block(block_1.clone(), Some(batch_1_info));
+        indexer.consolidate_l2_blocks(vec![block_1.clone()], Some(batch_1_info));
         indexer.next().await.unwrap().unwrap();
 
-        indexer.handle_block(block_2.clone(), Some(batch_2_info));
+        indexer.consolidate_l2_blocks(vec![block_2.clone()], Some(batch_2_info));
         indexer.next().await.unwrap().unwrap();
 
-        indexer.handle_block(block_3.clone(), Some(batch_2_info));
+        indexer.consolidate_l2_blocks(vec![block_3.clone()], Some(batch_2_info));
         indexer.next().await.unwrap().unwrap();
 
         // Now simulate a batch revert by submitting a new batch with index 101
@@ -1196,7 +1196,7 @@ mod test {
 
         // Verify the event indicates a batch revert
         match event {
-            IndexerEvent::BatchCommitIndexed { batch_info, safe_head } => {
+            ChainOrchestratorEvent::BatchCommitIndexed { batch_info, safe_head } => {
                 assert_eq!(batch_info.index, 101);
                 assert_eq!(batch_info.hash, new_batch_2.hash);
                 // Safe head should be the highest block from batch index <= 100

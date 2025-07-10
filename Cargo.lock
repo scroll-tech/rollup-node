@@ -10156,8 +10156,8 @@ dependencies = [
 name = "rollup-node-indexer"
 version = "0.0.1"
 dependencies = [
- "alloy-consensus 1.0.9",
- "alloy-eips 1.0.9",
+ "alloy-consensus 1.0.20",
+ "alloy-eips 1.0.20",
  "alloy-primitives",
  "alloy-provider",
  "alloy-rpc-client",
