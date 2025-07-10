@@ -27,8 +27,14 @@ pub enum ChainOrchestratorEvent {
     ChainExtended(ChainImport),
     /// The chain has reorged, returning the new chain and the peer that provided them.
     ChainReorged(ChainImport),
-    /// A batch has been committed returning the batch info.
-    BatchCommitted(BatchInfo),
+    /// A `BatchCommit` event has been indexed returning the batch info and the L2 block info to
+    /// revert to due to a batch revert.
+    BatchCommitIndexed {
+        /// The batch info.
+        batch_info: BatchInfo,
+        /// The safe L2 block info.
+        safe_head: Option<BlockInfo>,
+    },
     /// A batch has been finalized returning the batch hash and new an optional finalized
     /// L2 block.
     BatchFinalized(B256, Option<BlockInfo>),

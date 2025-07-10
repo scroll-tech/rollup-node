@@ -172,9 +172,14 @@ mod test {
             block_number += 1;
         }
 
+        // Fetch the highest block for the batch hash and verify number.
+        let highest_block_info =
+            db.get_highest_block_for_batch_hash(batch_info.hash).await.unwrap().unwrap();
+        assert_eq!(highest_block_info.number, block_number - 1);
+
         // Fetch the highest block for the batch and verify number.
         let highest_block_info =
-            db.get_highest_block_for_batch(batch_info.hash).await.unwrap().unwrap();
+            db.get_highest_block_for_batch_index(batch_info.index).await.unwrap().unwrap();
         assert_eq!(highest_block_info.number, block_number - 1);
     }
 
@@ -211,9 +216,14 @@ mod test {
             block_number += 1;
         }
 
-        // Fetch the highest block for the batch and verify number.
+        // Fetch the highest block for the batch hash and verify number.
         let highest_block_info =
-            db.get_highest_block_for_batch(second_batch_info.hash).await.unwrap().unwrap();
+            db.get_highest_block_for_batch_hash(second_batch_info.hash).await.unwrap().unwrap();
+        assert_eq!(highest_block_info.number, block_number - 1);
+
+        // Fetch the highest block for the batch index and verify number.
+        let highest_block_info =
+            db.get_highest_block_for_batch_index(second_batch_info.index).await.unwrap().unwrap();
         assert_eq!(highest_block_info.number, block_number - 1);
     }
 
@@ -486,7 +496,7 @@ mod test {
     }
 
     #[tokio::test]
-    async fn test_delete_l2_blocks_gt() {
+    async fn test_delete_l2_blocks_gt_block_number() {
         // Set up the test database.
         let db = setup_test_db().await;
 
@@ -505,7 +515,7 @@ mod test {
         }
 
         // Delete blocks with number > 405
-        let deleted_count = db.delete_l2_blocks_gt(405).await.unwrap();
+        let deleted_count = db.delete_l2_blocks_gt_block_number(405).await.unwrap();
         assert_eq!(deleted_count, 4); // Blocks 406, 407, 408, 409
 
         // Verify remaining blocks still exist
@@ -518,6 +528,68 @@ mod test {
         for i in 406..410 {
             let block = db.get_l2_block_info_by_number(i).await.unwrap();
             assert!(block.is_none());
+        }
+    }
+
+    #[tokio::test]
+    async fn test_delete_l2_blocks_gt_batch_index() {
+        // Set up the test database.
+        let db = setup_test_db().await;
+
+        // Generate unstructured bytes.
+        let mut bytes = [0u8; 1024];
+        rand::rng().fill(bytes.as_mut_slice());
+        let mut u = Unstructured::new(&bytes);
+
+        // Insert multiple batches
+        for i in 100..110 {
+            let batch_data = BatchCommitData {
+                index: i,
+                calldata: Arc::new(vec![].into()),
+                ..Arbitrary::arbitrary(&mut u).unwrap()
+            };
+            db.insert_batch(batch_data).await.unwrap();
+        }
+
+        // Insert L2 blocks with different batch indices
+        for i in 100..110 {
+            let batch_data = db.get_batch_by_index(i).await.unwrap().unwrap();
+            let batch_info: BatchInfo = batch_data.into();
+
+            let block_info = BlockInfo { number: 500 + i, hash: B256::arbitrary(&mut u).unwrap() };
+            let l2_block = L2BlockInfoWithL1Messages { block_info, l1_messages: vec![] };
+
+            db.insert_block(l2_block, Some(batch_info)).await.unwrap();
+        }
+
+        // Insert some blocks without batch index (should not be deleted)
+        for i in 0..3 {
+            let block_info = BlockInfo { number: 600 + i, hash: B256::arbitrary(&mut u).unwrap() };
+            let l2_block = L2BlockInfoWithL1Messages { block_info, l1_messages: vec![] };
+
+            db.insert_block(l2_block, None).await.unwrap();
+        }
+
+        // Delete L2 blocks with batch index > 105
+        let deleted_count = db.delete_l2_blocks_gt_batch_index(105).await.unwrap();
+        assert_eq!(deleted_count, 4); // Blocks with batch indices 106, 107, 108, 109
+
+        // Verify remaining blocks with batch index <= 105 still exist
+        for i in 100..=105 {
+            let block = db.get_l2_block_info_by_number(500 + i).await.unwrap();
+            assert!(block.is_some());
+        }
+
+        // Verify deleted blocks with batch index > 105 no longer exist
+        for i in 106..110 {
+            let block = db.get_l2_block_info_by_number(500 + i).await.unwrap();
+            assert!(block.is_none());
+        }
+
+        // Verify blocks without batch index are still there (not affected by batch index filter)
+        for i in 0..3 {
+            let block = db.get_l2_block_info_by_number(600 + i).await.unwrap();
+            assert!(block.is_some());
         }
     }
 
