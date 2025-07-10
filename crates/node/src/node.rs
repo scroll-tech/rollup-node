@@ -57,6 +57,10 @@ where
                 best_transactions: (),
             },
         ))
+        .network(ScrollNetworkBuilder {
+            disable_txpool_broadcast: self.config.network_args.disable_tx_broadcast,
+            disable_txpool_receive: self.config.network_args.disable_tx_receive,
+        })
     }
 
     fn add_ons(&self) -> Self::AddOns {

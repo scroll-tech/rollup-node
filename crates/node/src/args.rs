@@ -311,7 +311,7 @@ pub struct EngineDriverArgs {
 }
 
 /// The network arguments.
-#[derive(Debug, Default, Clone, clap::Args)]
+#[derive(Debug, Clone, clap::Args)]
 pub struct NetworkArgs {
     /// A bool to represent if new blocks should be bridged from the eth wire protocol to the
     /// scroll wire protocol.
@@ -320,6 +320,23 @@ pub struct NetworkArgs {
     /// A bool that represents if the scroll wire protocol should be enabled.
     #[arg(long = "network.scroll-wire", default_value_t = true)]
     pub enable_scroll_wire: bool,
+    /// A bool that represents if the transaction broadcast should be disabled.
+    #[arg(long = "network.disable-tx-broadcast", default_value_t = false)]
+    pub disable_tx_broadcast: bool,
+    /// A bool that represents if the transaction receiving should be disabled.
+    #[arg(long = "network.disable-tx-receive", default_value_t = false)]
+    pub disable_tx_receive: bool,
+}
+
+impl Default for NetworkArgs {
+    fn default() -> Self {
+        Self {
+            enable_eth_scroll_wire_bridge: true,
+            enable_scroll_wire: true,
+            disable_tx_broadcast: false,
+            disable_tx_receive: false,
+        }
+    }
 }
 
 /// The arguments for the L1 provider.
