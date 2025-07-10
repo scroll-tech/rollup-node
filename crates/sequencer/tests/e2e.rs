@@ -40,7 +40,7 @@ async fn can_build_blocks() {
     reth_tracing::init_test_tracing();
 
     const BLOCK_BUILDING_DURATION: Duration = Duration::from_millis(0);
-    const BLOCK_GAP_TRIGGER: u64 = 100;
+    // const BLOCK_GAP_TRIGGER: u64 = 100;
 
     // setup a test node
     let (mut nodes, _tasks, wallet) = setup(1, false).await.unwrap();
@@ -64,7 +64,6 @@ async fn can_build_blocks() {
         None::<ScrollRootProvider>,
         fcs,
         false,
-        BLOCK_GAP_TRIGGER,
         BLOCK_BUILDING_DURATION,
     );
 
@@ -158,7 +157,6 @@ async fn can_build_blocks_with_delayed_l1_messages() {
 
     let chain_spec = SCROLL_DEV.clone();
     const BLOCK_BUILDING_DURATION: Duration = tokio::time::Duration::from_millis(0);
-    const BLOCK_GAP_TRIGGER: u64 = 100;
     const L1_MESSAGE_DELAY: u64 = 2;
 
     // setup a test node
@@ -184,7 +182,6 @@ async fn can_build_blocks_with_delayed_l1_messages() {
         None::<ScrollRootProvider>,
         fcs,
         false,
-        BLOCK_GAP_TRIGGER,
         BLOCK_BUILDING_DURATION,
     );
 
@@ -284,7 +281,7 @@ async fn can_build_blocks_with_finalized_l1_messages() {
 
     let chain_spec = SCROLL_DEV.clone();
     const BLOCK_BUILDING_DURATION: Duration = tokio::time::Duration::from_millis(0);
-    const BLOCK_GAP_TRIGGER: u64 = 100;
+    // const BLOCK_GAP_TRIGGER: u64 = 100;
 
     // setup a test node
     let (mut nodes, _tasks, wallet) =
@@ -309,7 +306,6 @@ async fn can_build_blocks_with_finalized_l1_messages() {
         None::<ScrollRootProvider>,
         fcs,
         false,
-        BLOCK_GAP_TRIGGER,
         BLOCK_BUILDING_DURATION,
     );
 
@@ -478,6 +474,9 @@ async fn can_sequence_blocks_with_private_key_file() -> eyre::Result<()> {
         panic!("Failed to receive BlockSequenced event");
     }
 
+    // Skip the next event.
+    let _ = sequencer_events.next().await;
+
     // Verify signing event and signature correctness
     if let Some(RollupManagerEvent::SignerEvent(SignerEvent::SignedBlock {
         block: signed_block,
@@ -562,6 +561,9 @@ async fn can_sequence_blocks_with_hex_key_file_without_prefix() -> eyre::Result<
         panic!("Failed to receive BlockSequenced event");
     }
 
+    // Skip the next event.
+    let _ = sequencer_events.next().await;
+
     // Verify signing event and signature correctness
     if let Some(RollupManagerEvent::SignerEvent(SignerEvent::SignedBlock {
         block: signed_block,
@@ -585,7 +587,7 @@ async fn can_build_blocks_and_exit_at_gas_limit() {
     let chain_spec = SCROLL_DEV.clone();
     const MIN_TRANSACTION_GAS_COST: u64 = 21_000;
     const BLOCK_BUILDING_DURATION: Duration = Duration::from_millis(250);
-    const BLOCK_GAP_TRIGGER: u64 = 100;
+    // const BLOCK_GAP_TRIGGER: u64 = 100;
     const TRANSACTIONS_COUNT: usize = 2000;
 
     // setup a test node. use a high value for the payload building duration to be sure we don't
@@ -635,7 +637,6 @@ async fn can_build_blocks_and_exit_at_gas_limit() {
         None::<ScrollRootProvider>,
         fcs,
         false,
-        BLOCK_GAP_TRIGGER,
         BLOCK_BUILDING_DURATION,
     );
 
@@ -671,7 +672,7 @@ async fn can_build_blocks_and_exit_at_time_limit() {
     let chain_spec = SCROLL_DEV.clone();
     const MIN_TRANSACTION_GAS_COST: u64 = 21_000;
     const BLOCK_BUILDING_DURATION: Duration = Duration::from_secs(1);
-    const BLOCK_GAP_TRIGGER: u64 = 100;
+    // const BLOCK_GAP_TRIGGER: u64 = 100;
     const TRANSACTIONS_COUNT: usize = 2000;
 
     // setup a test node. use a low payload building duration in order to exit before we reach the
@@ -721,7 +722,6 @@ async fn can_build_blocks_and_exit_at_time_limit() {
         None::<ScrollRootProvider>,
         fcs,
         false,
-        BLOCK_GAP_TRIGGER,
         BLOCK_BUILDING_DURATION,
     );
 

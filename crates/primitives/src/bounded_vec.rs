@@ -39,6 +39,11 @@ impl<T> BoundedVec<T> {
         self.data.back()
     }
 
+    /// Returns the first element in the vector, if any.
+    pub fn first(&self) -> Option<&T> {
+        self.data.front()
+    }
+
     /// Clears the structure by removing all the elements.
     pub fn clear(&mut self) {
         self.data.clear()
@@ -55,6 +60,16 @@ impl<T> BoundedVec<T> {
     #[inline]
     fn is_full(&self) -> bool {
         self.data.len() == self.data.capacity()
+    }
+
+    /// Returns the inner `VecDeque<T>` of the bounded vec.
+    pub const fn inner(&self) -> &VecDeque<T> {
+        &self.data
+    }
+
+    /// Returns the inner `VecDeque<T>` of the bounded vec.
+    pub fn into_inner(self) -> VecDeque<T> {
+        self.data
     }
 }
 
