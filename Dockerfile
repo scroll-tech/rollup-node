@@ -1,9 +1,7 @@
 FROM rust:1.88.0 AS chef
 
-RUN apt-get update -y && apt-get upgrade -y
-
 # Install basic packages
-RUN apt-get update && apt-get -y upgrade && apt-get install -y libclang-dev pkg-config curl
+RUN apt-get update && apt-get -y upgrade && apt-get install -y libclang-dev pkg-config
 RUN cargo install cargo-chef --locked --version  0.1.71
 
 FROM chef AS planner
@@ -22,7 +20,7 @@ RUN --mount=target=. \
 
 FROM debian:bookworm-slim
 
-RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates && \
+RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates curl && \
     rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
