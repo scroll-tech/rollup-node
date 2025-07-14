@@ -2,7 +2,6 @@
 set -e
 
 wait_for_l1_devnet() {
-
     while ! curl -s http://l1-devnet:8545 > /dev/null; do
       echo "l1-devnet not ready, retrying in 2s..."
       sleep 2
