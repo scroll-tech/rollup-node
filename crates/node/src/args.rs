@@ -194,7 +194,7 @@ impl ScrollRollupNodeConfig {
             chain_spec.clone(),
             Some(l2_provider),
             fcs,
-            !self.test && !chain_spec.is_dev_chain(),
+            self.engine_driver_args.sync_at_startup && !self.test && !chain_spec.is_dev_chain(),
             self.engine_driver_args.en_sync_trigger,
             Duration::from_millis(self.sequencer_args.payload_building_duration),
         );
@@ -308,6 +308,9 @@ pub struct EngineDriverArgs {
     /// at which the engine driver triggers optimistic sync.
     #[arg(long = "engine.en-sync-trigger", default_value_t = constants::BLOCK_GAP_TRIGGER)]
     pub en_sync_trigger: u64,
+    /// Whether the engine driver should try to sync at start up.
+    #[arg(long = "engine.sync-at-startup", num_args=0..=1, default_value_t = true)]
+    pub sync_at_startup: bool,
 }
 
 /// The network arguments.
