@@ -2,6 +2,7 @@
 set -e
 
 wait_for_l1_devnet() {
+
     while ! curl -s http://l1-devnet:8545 > /dev/null; do
       echo "l1-devnet not ready, retrying in 2s..."
       sleep 2
@@ -35,4 +36,3 @@ elif [ "${ENV:-}" = "mainnet" ]; then
     --log.stdout.format log-fmt -vvv $URL_PARAMS --beacon.url http://l1reth-cl.mainnet.scroll.tech:5052 --network.scroll-wire --network.bridge \
     --trusted-peers "enode://c6ac91f43df3d63916ac1ae411cdd5ba249d55d48a7bec7f8cd5bb351a31aba437e5a69e8a1de74d73fdfeba8af1cfe9caf9846ecd3abf60d1ffdf4925b55b23@54.186.123.248:30303,enode://fdcc807b5d1353f3a1e98b90208ce6ef1b7d446136e51eaa8ad657b55518a2f8b37655e42375d61622e6ea18f3faf9d070c9bbdf012cf5484bcbad33b7a15fb1@44.227.91.206:30303,enode://6beb5a3efbb39be73d17630b6da48e94c0ce7ec665172111463cb470197b20c12faa1fa6f835b81c28571277d1017e65c4e426cc92a46141cf69118ecf28ac03@44.237.194.52:30303,enode://7cf893d444eb8e129dca0f6485b3df579911606e7c728be4fa55fcc5f155a37c3ce07d217ccec5447798bde465ac2bdba2cb8763d107e9f3257e787579e9f27e@52.35.203.107:30303,enode://c7b2d94e95da343db6e667a01cef90376a592f2d277fbcbf6e9c9186734ed8003d01389571bd10cdbab7a6e5adfa6f0c7b55644d0db24e0b9deb4ec80f842075@54.70.236.187:30303"
 fi 
-

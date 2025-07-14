@@ -3,7 +3,7 @@ FROM rust:1.88.0 AS chef
 RUN apt-get update -y && apt-get upgrade -y
 
 # Install basic packages
-RUN apt-get update && apt-get -y upgrade && apt-get install -y libclang-dev pkg-config
+RUN apt-get update && apt-get -y upgrade && apt-get install -y libclang-dev pkg-config curl
 RUN cargo install cargo-chef --locked --version  0.1.71
 
 FROM chef AS planner
