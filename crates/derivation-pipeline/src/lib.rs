@@ -169,10 +169,20 @@ where
                 }
                 Err((batch_info, err)) => {
                     tracing::error!(target: "scroll::node::derivation_pipeline", batch_info = ?*batch_info, ?err, "failed to derive payload attributes for batch");
-                    // retry polling the same batch.
-                    this.batch_queue.push_front(batch_info);
-                    let fut = this.handle_next_batch().expect("Pushed batch info into queue");
-                    this.pipeline_futures.push_front(fut);
+                    match err {
+                        DerivationPipelineError::Database(_) |
+                        DerivationPipelineError::UnknownBatch(_) => {
+                            // Clear pipeline
+                            this.batch_queue.clear();
+                        }
+                        _ => {
+                            // retry polling the same batch.
+                            this.batch_queue.push_front(batch_info);
+                            let fut =
+                                this.handle_next_batch().expect("Pushed batch info into queue");
+                            this.pipeline_futures.push_front(fut);
+                        }
+                    }
                 }
             }
         }
