@@ -1,6 +1,13 @@
 #!/usr/bin/env bash
 set -e
 
+wait_for_l1_devnet() {
+    while ! curl -s http://l1-devnet:8545 > /dev/null; do
+      echo "l1-devnet not ready, retrying in 2s..."
+      sleep 2
+    done
+}
+
 if [ "${ENV:-}" = "dev" ]; then
   exec rollup-node node --chain dev --datadir=/l2reth  --metrics=0.0.0.0:6060 --disable-discovery \
     --http --http.addr=0.0.0.0 --http.port=8545 --http.corsdomain "*" --http.api admin,debug,eth,net,trace,txpool,web3,rpc,reth,ots,flashbots,miner,mev \
@@ -11,6 +18,7 @@ if [ "${ENV:-}" = "dev" ]; then
     --rpc.max-connections=5000
 elif [ "${ENV:-}" = "sepolia" ]; then
   if [ "${SHADOW_FORK}" = "true" ]; then
+    wait_for_l1_devnet
     URL_PARAMS="--l1.url http://l1-devnet:8545"
   else
     URL_PARAMS="--l1.url http://l1reth-rpc.sepolia.scroll.tech:8545"
@@ -22,6 +30,7 @@ elif [ "${ENV:-}" = "sepolia" ]; then
     --trusted-peers "enode://29cee709c400533ae038a875b9ca975c8abef9eade956dcf3585e940acd5c0ae916968f514bd37d1278775aad1b7db30f7032a70202a87fd7365bd8de3c9f5fc@44.242.39.33:30303,enode://ceb1636bac5cbb262e5ad5b2cd22014bdb35ffe7f58b3506970d337a63099481814a338dbcd15f2d28757151e3ecd40ba38b41350b793cd0d910ff0436654f8c@35.85.84.250:30303,enode://dd1ac5433c5c2b04ca3166f4cb726f8ff6d2da83dbc16d9b68b1ea83b7079b371eb16ef41c00441b6e85e32e33087f3b7753ea9e8b1e3f26d3e4df9208625e7f@54.148.111.168:30303"
 elif [ "${ENV:-}" = "mainnet" ]; then
   if [ "${SHADOW_FORK}" = "true" ]; then
+    wait_for_l1_devnet
     URL_PARAMS="--l1.url http://l1-devnet:8545"
   else
     URL_PARAMS="--l1.url http://l1geth-rpc.mainnet.scroll.tech:8545/l1"

@@ -15,16 +15,11 @@ services:
     volumes:
       - ./l1devnet:/l1devnet
       - ./launch_l1.bash:/launch_l1.bash
-    healthcheck:
-      test: ["CMD", "cast", "bn", "-r", "http://localhost:8545"]
-      interval: 3s
-      timeout: 2s
-      retries: 20
     networks:
       - scroll-network
 
   rollup-node:
-    image: scrolltech/rollup-node:v0.0.1-rc19
+    image: scrolltech/rollup-node:v0.0.1-rc20
     container_name: rollup-node
     entrypoint: ["bash", "/launch_rollup_node.bash"]
     env_file:
@@ -40,9 +35,6 @@ services:
       - ./launch_rollup_node.bash:/launch_rollup_node.bash
     networks:
       - scroll-network
-    depends_on:
-      l1-devnet:
-        condition: service_healthy
 
   prometheus:
     image: prom/prometheus:latest
