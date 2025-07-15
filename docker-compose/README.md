@@ -68,6 +68,11 @@ To stop all services:
 docker compose down
 ```
 
+To reset your current local network, simply remove all persistent volumes:
+```sh
+rm -rf volumes
+```
+
 ---
 
 ## Troubleshooting

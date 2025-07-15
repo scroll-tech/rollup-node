@@ -13,13 +13,14 @@ services:
       - "8543:8545"  # JSON-RPC
       - "8544:8546"  # WebSocket
     volumes:
-      - ./l1devnet:/l1devnet
-      - ./launch_l1.bash:/launch_l1.bash
+      - ./launch_l1.bash:/launch_l1.bash:ro
+      - ./volumes/l1devnet:/l1devnet
     networks:
       - scroll-network
 
   rollup-node:
     image: scrolltech/rollup-node:v0.0.1-rc20
+    platform: linux/amd64
     container_name: rollup-node
     entrypoint: ["bash", "/launch_rollup_node.bash"]
     env_file:
@@ -31,8 +32,8 @@ services:
       - "8546:8546"  # WebSocket
       - "6060:6060"  # Metrics
     volumes:
-      - ./l2reth:/l2reth
-      - ./launch_rollup_node.bash:/launch_rollup_node.bash
+      - ./launch_rollup_node.bash:/launch_rollup_node.bash:ro
+      - ./volumes/l2reth:/l2reth
     networks:
       - scroll-network
 
@@ -43,7 +44,7 @@ services:
       - "19090:9090"  # Prometheus Web UI
     volumes:
       - ./resource/prometheus.yml:/etc/prometheus/prometheus.yml:ro
-      - ./prometheus_data:/prometheus
+      - ./volumes/prometheus:/prometheus
     command:
       - '--config.file=/etc/prometheus/prometheus.yml'
       - '--storage.tsdb.path=/prometheus'
@@ -59,7 +60,7 @@ services:
       - rollup-node
 
   grafana:
-    image: grafana/grafana:latest
+    image: grafana/grafana:12.0.2
     container_name: grafana
     ports:
       - "13000:3000"  # Grafana Web UI
@@ -67,7 +68,7 @@ services:
       - ./resource/grafana-datasource.yml:/config/datasources/datasource.yml:ro
       - ./resource/grafana-dashboard-providers.yml:/config/dashboards/dashboard-providers.yml:ro
       - ./resource/dashboards:/dashboards:ro
-      - ./grafana_data:/var/lib/grafana
+      - ./volumes/grafana:/var/lib/grafana
     environment:
       - GF_AUTH_ANONYMOUS_ENABLED=true
       - GF_AUTH_ANONYMOUS_ORG_ROLE=Admin
