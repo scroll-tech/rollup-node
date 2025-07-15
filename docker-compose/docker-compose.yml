@@ -8,10 +8,7 @@ services:
     profiles:
       - shadow-fork
     env_file:
-      - .env.shadow-fork
-    environment:
-      - ENV=${ENV}
-      - FORK_BLOCK_NUMBER=${FORK_BLOCK_NUMBER}
+      - .env
     ports:
       - "8543:8545"  # JSON-RPC
       - "8544:8546"  # WebSocket
@@ -26,10 +23,8 @@ services:
     container_name: rollup-node
     entrypoint: ["bash", "/launch_rollup_node.bash"]
     env_file:
-      - .env.shadow-fork
+      - .env
     environment:
-      - ENV=${ENV:-dev}
-      - SHADOW_FORK=${SHADOW_FORK:-false}
       - RUST_LOG=sqlx=off,info
     ports:
       - "8545:8545"  # JSON-RPC
@@ -42,7 +37,7 @@ services:
       - scroll-network
 
   prometheus:
-    image: prom/prometheus:latest
+    image: prom/prometheus:v3.3.1
     container_name: prometheus
     ports:
       - "19090:9090"  # Prometheus Web UI
