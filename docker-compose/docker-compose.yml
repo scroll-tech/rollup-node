@@ -36,6 +36,26 @@ services:
       - ./volumes/l2reth:/l2reth
     networks:
       - scroll-network
+    restart: unless-stopped
+
+  l2geth:
+    image: scrolltech/l2geth:scroll-v5.8.64
+    platform: linux/amd64
+    container_name: l2geth
+    entrypoint: ["bash", "/launch_l2geth.bash"]
+    env_file:
+      - .env
+    ports:
+      - "8547:8545"  # JSON-RPC
+      - "8548:8546"  # WebSocket
+      - "6061:6060"  # Metrics
+    volumes:
+      - ./resource/genesis-dev.json:/genesis-dev.json:ro
+      - ./launch_l2geth.bash:/launch_l2geth.bash:ro
+      - ./volumes/l2geth:/l2geth
+    networks:
+      - scroll-network
+    restart: unless-stopped
 
   prometheus:
     image: prom/prometheus:v3.3.1
@@ -58,6 +78,7 @@ services:
       - scroll-network
     depends_on:
       - rollup-node
+    restart: unless-stopped
 
   grafana:
     image: grafana/grafana:12.0.2
@@ -79,6 +100,7 @@ services:
       - scroll-network
     depends_on:
       - prometheus
+    restart: unless-stopped
 
 networks:
   scroll-network:
