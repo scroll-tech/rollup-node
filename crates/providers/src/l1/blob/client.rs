@@ -62,7 +62,7 @@ impl ConsensusClientProvider {
     /// The blob sidecars engine api method prefix.
     const SIDECARS_METHOD_PREFIX: &'static str = "eth/v1/beacon/blob_sidecars";
 
-    /// Creates a new [`OnlineBeaconClient`] from the provided base url.
+    /// Creates a new [`ConsensusClientProvider`] from the provided base url.
     pub async fn new_http(base: reqwest::Url) -> Self {
         // If base ends with a slash, remove it
         let mut base = base.to_string();

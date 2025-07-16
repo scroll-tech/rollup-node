@@ -48,7 +48,7 @@ impl<L1MP, BP> FullL1Provider<L1MP, BP>
 where
     BP: BlobProvider,
 {
-    /// Returns a new [`FullL1Provider`] from the provided [`L1BlobProvider`], blob capacity and
+    /// Returns a new [`FullL1Provider`] from the provided [`BlobProvider`], blob capacity and
     /// [`L1MessageProvider`].
     pub async fn new(l1_blob_provider: BP, l1_message_provider: L1MP) -> Self {
         Self { l1_blob_provider, l1_message_provider }

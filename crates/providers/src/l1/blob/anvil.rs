@@ -13,7 +13,7 @@ pub struct AnvilBlobProvider {
 }
 
 impl AnvilBlobProvider {
-    /// Creates a new [`OnlineBeaconClient`] from the provided base url.
+    /// Creates a new [`AnvilBlobProvider`] from the provided url.
     pub fn new_http(url: reqwest::Url) -> Self {
         Self { inner: RpcClient::new_http(url) }
     }
