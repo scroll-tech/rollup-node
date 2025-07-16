@@ -284,8 +284,14 @@ impl ScrollRollupNodeConfig {
             .fetch_client()
             .await
             .expect("failed to fetch block client");
-        let chain_orchestrator =
-            ChainOrchestrator::new(db.clone(), chain_spec.clone(), block_client, l2_provider).await;
+        let chain_orchestrator = ChainOrchestrator::new(
+            db.clone(),
+            chain_spec.clone(),
+            block_client,
+            l2_provider,
+            self.engine_driver_args.en_sync_trigger,
+        )
+        .await;
 
         // Spawn the rollup node manager
         let (rnm, handle) = RollupNodeManager::new(
@@ -315,12 +321,18 @@ pub struct DatabaseArgs {
 }
 
 /// The engine driver args.
-#[derive(Debug, Default, Clone, clap::Args)]
+#[derive(Debug, Clone, clap::Args)]
 pub struct EngineDriverArgs {
     /// The amount of block difference between the EN and the latest block received from P2P
     /// at which the engine driver triggers optimistic sync.
     #[arg(long = "engine.en-sync-trigger", default_value_t = constants::BLOCK_GAP_TRIGGER)]
     pub en_sync_trigger: u64,
+}
+
+impl Default for EngineDriverArgs {
+    fn default() -> Self {
+        Self { en_sync_trigger: constants::BLOCK_GAP_TRIGGER }
+    }
 }
 
 /// The network arguments.

@@ -1,4 +1,4 @@
-use super::{ChainOrchestratorEvent, IndexerError};
+use super::{ChainOrchestratorError, ChainOrchestratorEvent};
 use std::{
     fmt,
     future::Future,
@@ -6,9 +6,9 @@ use std::{
     task::{Context, Poll},
 };
 
-/// A future that resolves to a `Result<IndexerEvent, IndexerError>`.
+/// A future that resolves to a `Result<IndexerEvent, ChainOrchestratorError>`.
 pub(super) type PendingIndexerFuture =
-    Pin<Box<dyn Future<Output = Result<ChainOrchestratorEvent, IndexerError>> + Send>>;
+    Pin<Box<dyn Future<Output = Result<ChainOrchestratorEvent, ChainOrchestratorError>> + Send>>;
 
 /// A type that represents a future that is being executed by the indexer.
 pub(super) enum IndexerFuture {
@@ -26,7 +26,7 @@ impl IndexerFuture {
     pub(super) fn poll(
         &mut self,
         cx: &mut Context<'_>,
-    ) -> Poll<Result<ChainOrchestratorEvent, IndexerError>> {
+    ) -> Poll<Result<ChainOrchestratorEvent, ChainOrchestratorError>> {
         match self {
             Self::HandleReorg(fut) |
             Self::HandleFinalized(fut) |

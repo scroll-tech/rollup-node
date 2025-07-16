@@ -11,7 +11,7 @@ use reth_network_api::FullNetwork;
 use reth_scroll_node::ScrollNetworkPrimitives;
 use reth_tasks::shutdown::GracefulShutdown;
 use reth_tokio_util::{EventSender, EventStream};
-use rollup_node_indexer::{ChainOrchestrator, ChainOrchestratorEvent};
+use rollup_node_indexer::{ChainOrchestrator, ChainOrchestratorError, ChainOrchestratorEvent};
 use rollup_node_primitives::BlockInfo;
 use rollup_node_sequencer::Sequencer;
 use rollup_node_signer::{SignerEvent, SignerHandle};
@@ -38,7 +38,7 @@ use tokio_stream::wrappers::ReceiverStream;
 use tracing::{error, trace, warn};
 
 use rollup_node_providers::{L1MessageProvider, L1Provider};
-use scroll_db::Database;
+use scroll_db::{Database, DatabaseError};
 use scroll_derivation_pipeline::DerivationPipeline;
 
 mod command;
@@ -319,6 +319,16 @@ where
                 // Issue the new block info to the engine driver for processing.
                 self.engine.handle_optimistic_sync(block_info)
             }
+            ChainOrchestratorEvent::L2ChainCommitted(block_infos, batch_into, consolidated) => {
+                trace!(target: "scroll::node::manager", ?block_infos, ?batch_into, ?consolidated, "Received L2 chain committed event");
+                if let Some(event_sender) = self.event_sender.as_ref() {
+                    event_sender.notify(RollupManagerEvent::L2ChainCommitted(
+                        block_infos,
+                        batch_into,
+                        consolidated,
+                    ));
+                }
+            }
             event => {
                 trace!(target: "scroll::node::manager", ?event, "Received chain orchestrator event");
                 if let Some(event_sender) = self.event_sender.as_ref() {
@@ -383,6 +393,17 @@ where
     fn handle_l1_notification(&mut self, notification: L1Notification) {
         if let L1Notification::Consensus(ref update) = notification {
             self.consensus.update_config(update);
+        }
+        if notification == L1Notification::Synced {
+            if let Some(event_sender) = self.event_sender.as_ref() {
+                event_sender.notify(RollupManagerEvent::L1Synced);
+            }
+        }
+        if let L1Notification::NewBlock(block) = notification {
+            self.sequencer
+                .as_mut()
+                .expect("Sequencer must be initialized")
+                .handle_new_l1_block(block);
         }
         self.chain.handle_l1_notification(notification)
     }
@@ -481,7 +502,36 @@ where
             match result {
                 Ok(event) => this.handle_indexer_event(event),
                 Err(err) => {
-                    error!(target: "scroll::node::manager", ?err, "Error occurred at indexer level")
+                    match &err {
+                        ChainOrchestratorError::L1MessageMismatch { expected, actual } => {
+                            if let Some(event_sender) = this.event_sender.as_ref() {
+                                event_sender.notify(
+                                    RollupManagerEvent::L1MessageConsolidationError {
+                                        expected: *expected,
+                                        actual: *actual,
+                                    },
+                                );
+                            }
+                        }
+                        ChainOrchestratorError::DatabaseError(
+                            DatabaseError::L1MessageNotFound(start),
+                        ) => {
+                            if let Some(event_sender) = this.event_sender.as_ref() {
+                                event_sender.notify(
+                                    RollupManagerEvent::L1MessageMissingInDatabase {
+                                        start: start.clone(),
+                                    },
+                                );
+                            }
+                        }
+                        _ => {}
+                    }
+
+                    error!(
+                        target: "scroll::node::manager",
+                        ?err,
+                        "Error occurred at indexer level"
+                    );
                 }
             }
         }

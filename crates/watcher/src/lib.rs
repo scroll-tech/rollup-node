@@ -82,6 +82,8 @@ pub struct L1Watcher<EP> {
     config: Arc<NodeConfig>,
     /// The metrics for the watcher.
     metrics: WatcherMetrics,
+    /// Whether the watcher is synced to the L1 head.
+    is_synced: bool,
 }
 
 /// The L1 notification type yielded by the [`L1Watcher`].
@@ -115,6 +117,8 @@ pub enum L1Notification {
     NewBlock(u64),
     /// A block has been finalized on the L1.
     Finalized(u64),
+    /// A notification that the L1 watcher is synced to the L1 head.
+    Synced,
 }
 
 impl Display for L1Notification {
@@ -136,6 +140,7 @@ impl Display for L1Notification {
             Self::Consensus(u) => write!(f, "{u:?}"),
             Self::NewBlock(n) => write!(f, "NewBlock({n})"),
             Self::Finalized(n) => write!(f, "Finalized({n})"),
+            Self::Synced => write!(f, "Synced"),
         }
     }
 }
@@ -181,6 +186,7 @@ where
             sender: tx,
             config,
             metrics: WatcherMetrics::default(),
+            is_synced: false,
         };
 
         // notify at spawn.
@@ -212,8 +218,17 @@ where
             }
 
             // sleep if we are synced.
-            if self.is_synced() {
+            if self.is_synced {
                 tokio::time::sleep(SLOW_SYNC_INTERVAL).await;
+            } else if self.current_block_number == self.l1_state.head {
+                // if we have synced to the head of the L1, notify the channel and set the
+                // `is_synced`` flag.
+                if let Err(L1WatcherError::SendError(_)) = self.notify(L1Notification::Synced).await
+                {
+                    tracing::warn!(target: "scroll::watcher", "L1 watcher channel closed, stopping the watcher");
+                    break;
+                }
+                self.is_synced = true;
             }
         }
     }
@@ -569,11 +584,6 @@ where
         Ok(prefix)
     }
 
-    /// Returns true if the [`L1Watcher`] is synced to the head of the L1.
-    const fn is_synced(&self) -> bool {
-        self.current_block_number == self.l1_state.head
-    }
-
     /// Send all notifications on the channel.
     async fn notify_all(&self, notifications: Vec<L1Notification>) {
         for notification in notifications {
@@ -688,6 +698,7 @@ mod tests {
                 sender: tx,
                 config: Arc::new(NodeConfig::mainnet()),
                 metrics: WatcherMetrics::default(),
+                is_synced: false,
             },
             rx,
         )

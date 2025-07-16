@@ -12,6 +12,7 @@ use sea_orm::{
     ActiveModelTrait, ColumnTrait, Condition, EntityTrait, QueryFilter, QueryOrder, QuerySelect,
     Set,
 };
+use std::fmt;
 
 /// The [`DatabaseOperations`] trait provides methods for interacting with the database.
 #[async_trait::async_trait]
@@ -258,7 +259,7 @@ pub trait DatabaseOperations: DatabaseConnectionProvider {
                     .filter(models::l1_message::Column::Hash.eq(h.to_vec()))
                     .one(self.get_connection())
                     .await?
-                    .ok_or_else(|| DatabaseError::L1MessageNotFound(0))?;
+                    .ok_or_else(|| DatabaseError::L1MessageNotFound(L1MessageStart::Hash(*h)))?;
 
                 record.queue_index as u64
             }
@@ -338,16 +339,6 @@ pub trait DatabaseOperations: DatabaseConnectionProvider {
                     )
                 })
             })?)
-    }
-
-    /// Get the latest L2 [`BlockInfo`] from the database.
-    async fn get_latest_l2_block(&self) -> Result<Option<BlockInfo>, DatabaseError> {
-        tracing::trace!(target: "scroll::db", "Fetching latest L2 block from database.");
-        Ok(models::l2_block::Entity::find()
-            .order_by_desc(models::l2_block::Column::BlockNumber)
-            .one(self.get_connection())
-            .await
-            .map(|x| x.map(|x| x.block_info()))?)
     }
 
     /// Get an iterator over all L2 blocks in the database starting from the most recent one.
@@ -448,27 +439,31 @@ pub trait DatabaseOperations: DatabaseConnectionProvider {
         block_info: L2BlockInfoWithL1Messages,
         batch_info: Option<BatchInfo>,
     ) -> Result<(), DatabaseError> {
-        tracing::trace!(
-            target: "scroll::db",
-            batch_hash = ?batch_info.as_ref().map(|b| b.hash),
-            batch_index = batch_info.as_ref().map(|b| b.index),
-            block_number = block_info.block_info.number,
-            block_hash = ?block_info.block_info.hash,
-            "Inserting block into database."
-        );
-        let l2_block: models::l2_block::ActiveModel = (block_info.block_info, batch_info).into();
-        models::l2_block::Entity::insert(l2_block)
-            .on_conflict(
-                OnConflict::column(models::l2_block::Column::BlockNumber)
-                    .update_columns([
-                        models::l2_block::Column::BlockHash,
-                        models::l2_block::Column::BatchHash,
-                        models::l2_block::Column::BatchIndex,
-                    ])
-                    .to_owned(),
-            )
-            .exec(self.get_connection())
-            .await?;
+        // We only insert safe blocks into the database, we do not persist unsafe blocks.
+        if batch_info.is_some() {
+            tracing::trace!(
+                target: "scroll::db",
+                batch_hash = ?batch_info.as_ref().map(|b| b.hash),
+                batch_index = batch_info.as_ref().map(|b| b.index),
+                block_number = block_info.block_info.number,
+                block_hash = ?block_info.block_info.hash,
+                "Inserting block into database."
+            );
+            let l2_block: models::l2_block::ActiveModel =
+                (block_info.block_info, batch_info).into();
+            models::l2_block::Entity::insert(l2_block)
+                .on_conflict(
+                    OnConflict::column(models::l2_block::Column::BlockNumber)
+                        .update_columns([
+                            models::l2_block::Column::BlockHash,
+                            models::l2_block::Column::BatchHash,
+                            models::l2_block::Column::BatchIndex,
+                        ])
+                        .to_owned(),
+                )
+                .exec(self.get_connection())
+                .await?;
+        }
 
         tracing::trace!(
             target: "scroll::db",
@@ -581,12 +576,21 @@ pub trait DatabaseOperations: DatabaseConnectionProvider {
 ///
 /// It can either be an index, which is the queue index of the first message to return, or a hash,
 /// which is the hash of the first message to return.
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum L1MessageStart {
     /// Start from the provided queue index.
     Index(u64),
     /// Start from the provided queue hash.
     Hash(B256),
+}
+
+impl fmt::Display for L1MessageStart {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Index(index) => write!(f, "Index({index})"),
+            Self::Hash(hash) => write!(f, "Hash({hash:#x})"),
+        }
+    }
 }
 
 /// The result of [`DatabaseOperations::unwind`].

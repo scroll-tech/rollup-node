@@ -470,32 +470,6 @@ mod test {
     }
 
     #[tokio::test]
-    async fn test_get_latest_l2_block() {
-        // Set up the test database.
-        let db = setup_test_db().await;
-
-        // Generate unstructured bytes.
-        let mut bytes = [0u8; 1024];
-        rand::rng().fill(bytes.as_mut_slice());
-        let mut u = Unstructured::new(&bytes);
-
-        // Insert multiple blocks with increasing block numbers
-        let mut latest_block = BlockInfo { number: 0, hash: B256::ZERO };
-        for i in 300..305 {
-            let block_info = BlockInfo { number: i, hash: B256::arbitrary(&mut u).unwrap() };
-            latest_block = block_info;
-
-            db.insert_block(L2BlockInfoWithL1Messages { block_info, l1_messages: vec![] }, None)
-                .await
-                .unwrap();
-        }
-
-        // Should return the block with highest number
-        let retrieved_latest = db.get_latest_l2_block().await.unwrap();
-        assert_eq!(retrieved_latest, Some(latest_block));
-    }
-
-    #[tokio::test]
     async fn test_delete_l2_blocks_gt_block_number() {
         // Set up the test database.
         let db = setup_test_db().await;
@@ -505,13 +479,17 @@ mod test {
         rand::rng().fill(bytes.as_mut_slice());
         let mut u = Unstructured::new(&bytes);
 
-        // Insert multiple L2 blocks
+        // Insert multiple L2 blocks with batch info
+        let batch_info = BatchInfo { index: 0, hash: B256::default() };
         for i in 400..410 {
             let block_info = BlockInfo { number: i, hash: B256::arbitrary(&mut u).unwrap() };
 
-            db.insert_block(L2BlockInfoWithL1Messages { block_info, l1_messages: vec![] }, None)
-                .await
-                .unwrap();
+            db.insert_block(
+                L2BlockInfoWithL1Messages { block_info, l1_messages: vec![] },
+                Some(batch_info),
+            )
+            .await
+            .unwrap();
         }
 
         // Delete blocks with number > 405

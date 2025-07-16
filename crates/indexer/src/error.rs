@@ -1,9 +1,9 @@
 use alloy_primitives::B256;
-use scroll_db::DatabaseError;
+use scroll_db::{DatabaseError, L1MessageStart};
 
 /// A type that represents an error that occurred during indexing.
 #[derive(Debug, thiserror::Error)]
-pub enum IndexerError {
+pub enum ChainOrchestratorError {
     /// An error occurred while interacting with the database.
     #[error("indexing failed due to database error: {0}")]
     DatabaseError(#[from] DatabaseError),
@@ -21,6 +21,9 @@ pub enum IndexerError {
         /// The actual L1 messages hash.
         actual: B256,
     },
+    /// An L1 message was not found in the database.
+    #[error("L1 message not found at {0}")]
+    L1MessageNotFound(L1MessageStart),
     /// An inconsistency was detected when trying to consolidate the chain.
     #[error("Chain inconsistency detected")]
     ChainInconsistency,
