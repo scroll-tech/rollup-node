@@ -31,7 +31,7 @@ pub fn decode_v7(blob: &[u8]) -> Result<Batch, DecodingError> {
 
     // check version.
     let version = from_be_bytes_slice_and_advance_buf!(u8, buf);
-    debug_assert!(version == 7, "incorrect blob version");
+    debug_assert!((version == 7) | (version == 8), "incorrect blob version");
 
     let blob_payload_size = from_be_bytes_slice_and_advance_buf!(u32, 3, buf) as usize;
 
@@ -241,6 +241,48 @@ mod tests {
                 base_fee: U256::from(40842015),
                 gas_limit: 10000000,
                 num_transactions: 14,
+                num_l1_messages: 0,
+            },
+        };
+
+        assert_eq!(last_block, &expected_block);
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_should_decode_v8_compressed() -> eyre::Result<()> {
+        let blob = read_to_bytes("./testdata/blob_v8_compressed.bin")?;
+        let data = decode_v7(&blob)?.data;
+        let blocks = data.l2_blocks();
+
+        assert_eq!(blocks.len(), 58);
+
+        let last_block = blocks.last().expect("should have 58 blocks");
+        let expected_block = L2Block {
+            transactions: vec![
+                bytes!(
+        "02f8758308275083143d60843b9aca0084b2d05e00834c4b40943a905745e381ad6d7c4db8212d0c30d4bbe37725808474a7cbcdc001a0470e60befbfdba0b3fd7590404a48132c95842f0c3b1d84f8ac3c506c628f635a021144d1b9f5da723bd27fbb2627d3b50954cfcad5f72bed964f2cc8f32c46654"
+                ),
+                bytes!(
+        "02f8958308275083143d61843b9aca0084b2d05e00832dc6c0943a905745e381ad6d7c4db8212d0c30d4bbe3772580a4d09e4bbf0000000000000000000000000000000000000000000000000000000000000007c080a0a4bd8a066265dce20a7a1e96c95789c880ff02b708ba3c7ff08dae0d7bf8de1fa05c5b5d1c2697f4ba7fd87cf20f4c930aa5cf35199badf27f943639de81bb5fd8"
+                ),
+                bytes!(
+        "02f8958308275083143d62843b9aca0084b2d05e00832dc6c0943a905745e381ad6d7c4db8212d0c30d4bbe3772580a44625b410000000000000000000000000000000000000000000000000000000000000000cc001a0e6ac53b914e54ccb2eef57e496f8eac1f5b52dbb99251d0afa7a85c14255de89a05abab3d12b042d18f3b1188e3bfdd009283093369b7988df29103d71526e2d0d"
+                ),
+                bytes!(
+        "02f8958308275083143d63843b9aca0084b2d05e00832dc6c0943a905745e381ad6d7c4db8212d0c30d4bbe3772580a4d09e4bbf0000000000000000000000000000000000000000000000000000000000000003c001a0bd35feb72aa8938ec5a3aa5f8098f8691c9cdd630ff6a528f318c5b30da0fb8ca07cbb21086720fe2b7af34340768b3d720cc5373c6d31856be573f8fe12f065fe"
+                ),
+                bytes!(
+        "02f8758308275083143d64843b9aca0084b2d05e00834c4b40943a905745e381ad6d7c4db8212d0c30d4bbe37725808474a7cbcdc001a0cd0acc35b4469b9dafabc9d73cd4bc879fa7a3d93b6732b32c2f6483c546e5fca07c4dec06bcda6d9098b6901f3c4b4f6bb3e3a38ba9b88b922c415c4fd5fa77cc"
+                ),
+            ],
+            context: BlockContext {
+                number: 16586209,
+                timestamp: 1752226578,
+                base_fee: U256::from(2400297),
+                gas_limit: 20000000,
+                num_transactions: 5,
                 num_l1_messages: 0,
             },
         };
