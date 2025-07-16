@@ -86,7 +86,7 @@ pub struct RollupNodeManager<
     /// The engine driver used to communicate with the engine.
     engine: EngineDriver<EC, CS, P>,
     /// The derivation pipeline, used to derive payload attributes from batches.
-    derivation_pipeline: Option<DerivationPipeline<L1P>>,
+    derivation_pipeline: DerivationPipeline<L1P>,
     /// A receiver for [`L1Notification`]s from the [`rollup_node_watcher::L1Watcher`].
     l1_notification_rx: Option<ReceiverStream<Arc<L1Notification>>>,
     /// An indexer used to index data for the rollup node.
@@ -153,7 +153,7 @@ where
     pub fn new(
         network: ScrollNetworkManager<N>,
         engine: EngineDriver<EC, CS, P>,
-        l1_provider: Option<L1P>,
+        l1_provider: L1P,
         database: Arc<Database>,
         l1_notification_rx: Option<Receiver<Arc<L1Notification>>>,
         consensus: Box<dyn Consensus>,
@@ -165,8 +165,7 @@ where
     ) -> (Self, RollupManagerHandle) {
         let (handle_tx, handle_rx) = mpsc::channel(EVENT_CHANNEL_SIZE);
         let indexer = Indexer::new(database.clone(), chain_spec.clone());
-        let derivation_pipeline =
-            l1_provider.map(|provider| DerivationPipeline::new(provider, database));
+        let derivation_pipeline = DerivationPipeline::new(l1_provider, database);
         let rnm = Self {
             handle_rx,
             chain_spec,
@@ -240,17 +239,13 @@ where
             IndexerEvent::BatchCommitIndexed { batch_info, safe_head } => {
                 // if we detected a batch revert event, we reset the pipeline and the engine driver.
                 if let Some(new_safe_head) = safe_head {
-                    if let Some(pipeline) = self.derivation_pipeline.as_mut() {
-                        pipeline.flush()
-                    }
+                    self.derivation_pipeline.flush();
                     self.engine.clear_l1_payload_attributes();
                     self.engine.set_head_block_info(new_safe_head);
                     self.engine.set_safe_block_info(new_safe_head);
                 }
                 // push the batch info into the derivation pipeline.
-                if let Some(pipeline) = &mut self.derivation_pipeline {
-                    pipeline.handle_batch_commit(batch_info);
-                }
+                self.derivation_pipeline.handle_batch_commit(batch_info);
             }
             IndexerEvent::BatchFinalizationIndexed(_, Some(finalized_block)) => {
                 // update the fcs on new finalized block.
@@ -517,9 +512,7 @@ where
         );
 
         // Poll Derivation Pipeline and push attribute in queue if any.
-        while let Some(Poll::Ready(Some(attributes))) =
-            this.derivation_pipeline.as_mut().map(|f| f.poll_next_unpin(cx))
-        {
+        while let Poll::Ready(Some(attributes)) = this.derivation_pipeline.poll_next_unpin(cx) {
             this.engine.handle_l1_consolidation(attributes)
         }
 

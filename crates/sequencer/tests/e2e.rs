@@ -15,7 +15,7 @@ use rollup_node::{
 };
 use rollup_node_manager::RollupManagerEvent;
 use rollup_node_primitives::{sig_encode_hash, BlockInfo, L1MessageEnvelope};
-use rollup_node_providers::{DatabaseL1MessageProvider, ScrollRootProvider};
+use rollup_node_providers::{BlobSource, DatabaseL1MessageProvider, ScrollRootProvider};
 use rollup_node_sequencer::{L1MessageInclusionMode, Sequencer};
 use rollup_node_signer::SignerEvent;
 use scroll_alloy_consensus::TxL1Message;
@@ -442,7 +442,10 @@ async fn can_sequence_blocks_with_private_key_file() -> eyre::Result<()> {
             payload_building_duration: 1000,
             ..SequencerArgs::default()
         },
-        beacon_provider_args: BeaconProviderArgs::default(),
+        beacon_provider_args: BeaconProviderArgs {
+            blob_source: BlobSource::Mock,
+            ..Default::default()
+        },
         signer_args: SignerArgs {
             key_file: Some(temp_file.path().to_path_buf()),
             aws_kms_key_id: None,
@@ -526,7 +529,10 @@ async fn can_sequence_blocks_with_hex_key_file_without_prefix() -> eyre::Result<
             payload_building_duration: 1000,
             ..SequencerArgs::default()
         },
-        beacon_provider_args: BeaconProviderArgs::default(),
+        beacon_provider_args: BeaconProviderArgs {
+            blob_source: BlobSource::Mock,
+            ..Default::default()
+        },
         signer_args: SignerArgs {
             key_file: Some(temp_file.path().to_path_buf()),
             aws_kms_key_id: None,

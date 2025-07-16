@@ -12,7 +12,7 @@ pub use database::DatabaseL1MessageProvider;
 /// provider using the queue index or hash and then call
 /// [`L1MessageProvider::next_l1_message_with_block_number`] to iterate the queue.
 #[async_trait::async_trait]
-pub trait L1MessageProvider {
+pub trait L1MessageProvider: Send + Sync {
     /// The error type for the provider.
     type Error: Into<L1ProviderError> + Send;
 
