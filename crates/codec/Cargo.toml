@@ -18,7 +18,7 @@ scroll-l1.workspace = true
 derive_more = { version = "2.0", default-features = false }
 eyre = { workspace = true, optional = true }
 thiserror = { version = "2.0", default-features = false }
-zstd = "0.13"
+zstd = "=0.13.3"
 
 [dev-dependencies]
 eyre.workspace = true
