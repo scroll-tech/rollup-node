@@ -14,6 +14,7 @@ use rollup_node::{
 };
 use rollup_node_manager::{RollupManagerEvent, RollupManagerHandle};
 use rollup_node_primitives::BatchCommitData;
+use rollup_node_providers::BlobSource;
 use rollup_node_sequencer::L1MessageInclusionMode;
 use rollup_node_watcher::L1Notification;
 use scroll_alloy_consensus::TxL1Message;
@@ -49,7 +50,10 @@ async fn can_bridge_l1_messages() -> eyre::Result<()> {
             l1_message_inclusion_mode: L1MessageInclusionMode::BlockDepth(0),
             ..SequencerArgs::default()
         },
-        beacon_provider_args: BeaconProviderArgs::default(),
+        beacon_provider_args: BeaconProviderArgs {
+            blob_source: BlobSource::Mock,
+            ..Default::default()
+        },
         signer_args: Default::default(),
     };
     let (mut nodes, _tasks, _wallet) = setup_engine(node_args, 1, chain_spec, false).await?;
@@ -114,7 +118,10 @@ async fn can_sequence_and_gossip_blocks() {
             payload_building_duration: 1000,
             ..SequencerArgs::default()
         },
-        beacon_provider_args: BeaconProviderArgs::default(),
+        beacon_provider_args: BeaconProviderArgs {
+            blob_source: BlobSource::Mock,
+            ..Default::default()
+        },
         signer_args: Default::default(),
     };
 

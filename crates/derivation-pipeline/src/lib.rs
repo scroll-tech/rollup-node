@@ -273,7 +273,7 @@ mod tests {
     use core::sync::atomic::{AtomicU64, Ordering};
     use rollup_node_primitives::L1MessageEnvelope;
     use rollup_node_providers::{
-        DatabaseL1MessageProvider, L1BlobProvider, L1MessageProvider, L1ProviderError,
+        BlobProvider, DatabaseL1MessageProvider, L1MessageProvider, L1ProviderError,
     };
     use scroll_alloy_consensus::TxL1Message;
     use scroll_alloy_rpc_types_engine::BlockDataHint;
@@ -293,7 +293,7 @@ mod tests {
     }
 
     #[async_trait::async_trait]
-    impl L1BlobProvider for MockL1MessageProvider {
+    impl BlobProvider for MockL1MessageProvider {
         async fn blob(
             &self,
             _block_timestamp: u64,
@@ -329,7 +329,7 @@ mod tests {
     }
 
     #[async_trait::async_trait]
-    impl<P: L1MessageProvider + Sync> L1BlobProvider for MockL1Provider<P> {
+    impl<P: L1MessageProvider + Sync + Send> BlobProvider for MockL1Provider<P> {
         async fn blob(
             &self,
             _block_timestamp: u64,
