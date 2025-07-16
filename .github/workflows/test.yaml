@@ -70,7 +70,7 @@ jobs:
         env:
           ALCHEMY_KEY: ${{ secrets.ALCHEMY_KEY }}
         run: |
-          cargo run --bin rollup-node --features serde --release -- \
+          cargo run --bin rollup-node --release -- \
             node --chain scroll-sepolia --datadir=./l2reth --disable-discovery \
             --http --http.addr=0.0.0.0 --http.port=8545 --http.api eth \
             --trusted-peers enode://29cee709c400533ae038a875b9ca975c8abef9eade956dcf3585e940acd5c0ae916968f514bd37d1278775aad1b7db30f7032a70202a87fd7365bd8de3c9f5fc@44.242.39.33:30303 \
