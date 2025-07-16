@@ -265,7 +265,6 @@ impl ScrollRollupNodeConfig {
             .then_some(network.eth_wire_block_listener().await?);
 
         // Instantiate the signer
-        // Instantiate the signer
         let signer = if self.test {
             // Use a random private key signer for testing
             Some(rollup_node_signer::Signer::spawn(PrivateKeySigner::random()))
@@ -396,7 +395,7 @@ pub struct SignerArgs {
     #[arg(
         long = "signer.key-file",
         value_name = "FILE_PATH",
-        help = "Path to the hex-encoded private key file for the signer (optional 0x prefix). Mutually exclusive with AWS KMS key ID"
+        help = "Path to the hex-encoded private key file for the signer (optional 0x prefix). Mutually exclusive with --signer.aws-kms-key-id"
     )]
     pub key_file: Option<PathBuf>,
 
@@ -404,7 +403,7 @@ pub struct SignerArgs {
     #[arg(
         long = "signer.aws-kms-key-id",
         value_name = "KEY_ID",
-        help = "AWS KMS Key ID for signing transactions. Mutually exclusive with key file"
+        help = "AWS KMS Key ID for signing transactions. Mutually exclusive with --signer.key-file"
     )]
     pub aws_kms_key_id: Option<String>,
 }
