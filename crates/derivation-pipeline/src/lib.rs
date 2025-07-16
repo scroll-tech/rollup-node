@@ -329,7 +329,7 @@ mod tests {
     }
 
     #[async_trait::async_trait]
-    impl<P: L1MessageProvider + Sync + Send> BlobProvider for MockL1Provider<P> {
+    impl<P: L1MessageProvider> BlobProvider for MockL1Provider<P> {
         async fn blob(
             &self,
             _block_timestamp: u64,
@@ -340,7 +340,7 @@ mod tests {
     }
 
     #[async_trait::async_trait]
-    impl<P: L1MessageProvider + Send + Sync> L1MessageProvider for MockL1Provider<P> {
+    impl<P: L1MessageProvider> L1MessageProvider for MockL1Provider<P> {
         type Error = P::Error;
 
         async fn get_l1_message_with_block_number(

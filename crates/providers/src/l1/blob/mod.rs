@@ -43,7 +43,7 @@ pub enum BlobSource {
 }
 
 impl BlobSource {
-    /// Returns a Beacon provider for the provided URL from the blob source.
+    /// Returns an [`Arc<dyn BlobProvider>`] for the provided URL.
     pub async fn provider(&self, url: Option<reqwest::Url>) -> eyre::Result<Arc<dyn BlobProvider>> {
         Ok(match self {
             Self::ConsensusClient => Arc::new(

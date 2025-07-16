@@ -35,7 +35,7 @@ pub enum L1ProviderError {
     Other(&'static str),
 }
 
-/// An implementation of the [`L1Provider`] trait which caches blobs.
+/// An implementation of the [`L1Provider`] trait.
 #[derive(Debug, Clone)]
 pub struct FullL1Provider<L1MP, BP> {
     /// The blob provider.
@@ -69,9 +69,7 @@ impl<L1MP: Sync + Send, BP: BlobProvider> BlobProvider for FullL1Provider<L1MP, 
 }
 
 #[async_trait::async_trait]
-impl<L1MP: L1MessageProvider + Send + Sync, BP: Sync + Send> L1MessageProvider
-    for FullL1Provider<L1MP, BP>
-{
+impl<L1MP: L1MessageProvider, BP: Sync + Send> L1MessageProvider for FullL1Provider<L1MP, BP> {
     type Error = <L1MP>::Error;
 
     async fn get_l1_message_with_block_number(
