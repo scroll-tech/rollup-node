@@ -11,7 +11,9 @@ use reth_network_api::FullNetwork;
 use reth_scroll_node::ScrollNetworkPrimitives;
 use reth_tasks::shutdown::GracefulShutdown;
 use reth_tokio_util::{EventSender, EventStream};
-use rollup_node_indexer::{ChainOrchestrator, ChainOrchestratorError, ChainOrchestratorEvent};
+use rollup_node_chain_orchestrator::{
+    ChainOrchestrator, ChainOrchestratorError, ChainOrchestratorEvent,
+};
 use rollup_node_primitives::BlockInfo;
 use rollup_node_sequencer::Sequencer;
 use rollup_node_signer::{SignerEvent, SignerHandle};

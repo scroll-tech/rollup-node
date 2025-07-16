@@ -1,6 +1,6 @@
 use alloy_primitives::B256;
 use reth_scroll_primitives::ScrollBlock;
-use rollup_node_indexer::ChainOrchestratorEvent;
+use rollup_node_chain_orchestrator::ChainOrchestratorEvent;
 use rollup_node_primitives::{BatchInfo, ChainImport, L2BlockInfoWithL1Messages};
 use rollup_node_signer::SignerEvent;
 use scroll_db::L1MessageStart;

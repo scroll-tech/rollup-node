@@ -10128,7 +10128,7 @@ dependencies = [
  "reth-transaction-pool",
  "reth-trie-db",
  "rollup-node",
- "rollup-node-indexer",
+ "rollup-node-chain-orchestrator",
  "rollup-node-manager",
  "rollup-node-primitives",
  "rollup-node-providers",
@@ -10153,7 +10153,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "rollup-node-indexer"
+name = "rollup-node-chain-orchestrator"
 version = "0.0.1"
 dependencies = [
  "alloy-consensus 1.0.20",
@@ -10211,7 +10211,7 @@ dependencies = [
  "reth-scroll-primitives",
  "reth-tasks",
  "reth-tokio-util",
- "rollup-node-indexer",
+ "rollup-node-chain-orchestrator",
  "rollup-node-primitives",
  "rollup-node-providers",
  "rollup-node-sequencer",

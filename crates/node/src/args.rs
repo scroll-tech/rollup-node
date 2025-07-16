@@ -17,7 +17,7 @@ use reth_node_builder::rpc::RethRpcServerHandles;
 use reth_node_core::primitives::BlockHeader;
 use reth_scroll_chainspec::SCROLL_FEE_VAULT_ADDRESS;
 use reth_scroll_node::ScrollNetworkPrimitives;
-use rollup_node_indexer::ChainOrchestrator;
+use rollup_node_chain_orchestrator::ChainOrchestrator;
 use rollup_node_manager::{
     Consensus, NoopConsensus, RollupManagerHandle, RollupNodeManager, SystemContractConsensus,
 };

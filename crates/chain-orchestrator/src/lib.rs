@@ -52,7 +52,8 @@ const CHAIN_BUFFER_SIZE: usize = 2000;
 
 type Chain = BoundedVec<Header>;
 
-/// The indexer is responsible for indexing data relevant to the L1.
+/// The [`ChainOrchestrator`] is responsible for orchestrating the progression of the L2 chain
+/// based on data consolidated from L1 and the data received over the p2p network.
 #[derive(Debug)]
 pub struct ChainOrchestrator<ChainSpec, BC, P> {
     /// The `BlockClient` that is used to fetch blocks from peers over p2p.

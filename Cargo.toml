@@ -12,7 +12,7 @@ members = [
     "crates/database/migration",
     "crates/derivation-pipeline",
     "crates/engine",
-    "crates/indexer",
+    "crates/chain-orchestrator",
     "crates/l1",
     "crates/manager",
     "crates/network",
@@ -167,7 +167,7 @@ reth-scroll-primitives = { git = "https://github.com/scroll-tech/reth.git", defa
 
 # rollup node
 rollup-node = { path = "crates/node" }
-rollup-node-indexer = { path = "crates/indexer" }
+rollup-node-chain-orchestrator = { path = "crates/chain-orchestrator" }
 rollup-node-manager = { path = "crates/manager" }
 rollup-node-primitives = { path = "crates/primitives" }
 rollup-node-providers = { path = "crates/providers" }

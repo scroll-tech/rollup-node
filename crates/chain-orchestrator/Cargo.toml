@@ -1,5 +1,5 @@
 [package]
-name = "rollup-node-indexer"
+name = "rollup-node-chain-orchestrator"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
