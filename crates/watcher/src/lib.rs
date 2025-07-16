@@ -331,7 +331,7 @@ where
         } else if tail.is_some_and(|h| h.hash == latest.parent_hash) {
             // latest block extends the tip.
             tracing::trace!(target: "scroll::watcher", number = ?latest.number, hash = ?latest.hash, "block extends chain");
-            self.unfinalized_blocks.push(latest.clone());
+            self.unfinalized_blocks.push_back(latest.clone());
         } else {
             // chain reorged or need to backfill.
             tracing::trace!(target: "scroll::watcher", number = ?latest.number, hash = ?latest.hash, "gap or reorg");

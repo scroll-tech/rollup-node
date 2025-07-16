@@ -172,7 +172,7 @@ impl<
     /// Handles a new block received from the network.
     pub async fn handle_new_block(
         chain: Arc<Mutex<Chain>>,
-        _l2_client: Arc<P>,
+        l2_client: Arc<P>,
         optimistic_mode: Arc<Mutex<bool>>,
         optimistic_sync_threshold: u64,
         network_client: Arc<BC>,
@@ -187,29 +187,26 @@ impl<
 
         // If the received block has a block number that is greater than the tip
         // of the chain by the optimistic sync threshold, we optimistically sync the chain and
-        // update the in-memory buffer.
+        // update the in-memory buffer to represent the optimistic chain.
         if (received_block.header.number - max_block_number) >= optimistic_sync_threshold {
-            // fetch the latest `OPTIMISTIC_CHAIN_BUFFER_SIZE` blocks from the network for the
+            // fetch the latest `CHAIN_BUFFER_SIZE` headers from the network for the
             // optimistic chain.
-            let mut optimistic_headers = vec![received_block.header.clone()];
+            let mut optimistic_headers = Chain::new(CHAIN_BUFFER_SIZE);
+            optimistic_headers.push_front(received_block.header.clone());
             while optimistic_headers.len() < CHAIN_BUFFER_SIZE &&
-                optimistic_headers.last().unwrap().number != 0
+                optimistic_headers.first().unwrap().number != 0
             {
-                tracing::trace!(target: "scroll::chain_orchestrator", number = ?(optimistic_headers.last().unwrap().number - 1), "fetching block");
+                tracing::trace!(target: "scroll::chain_orchestrator", number = ?(optimistic_headers.first().unwrap().number - 1), "fetching block");
+                let parent_hash = optimistic_headers.first().unwrap().parent_hash;
                 let header = network_client
-                    .get_header(BlockHashOrNumber::Hash(
-                        optimistic_headers.last().unwrap().parent_hash,
-                    ))
-                    .await
-                    .unwrap()
+                    .get_header(BlockHashOrNumber::Hash(parent_hash))
+                    .await?
                     .into_data()
-                    .unwrap();
-                optimistic_headers.push(header);
+                    .ok_or(ChainOrchestratorError::MissingBlockHeader { hash: parent_hash })?;
+                optimistic_headers.push_front(header);
             }
-            optimistic_headers.reverse();
-            let mut new_chain = Chain::new(CHAIN_BUFFER_SIZE);
-            new_chain.extend(optimistic_headers);
-            *chain.lock().await = new_chain;
+
+            *chain.lock().await = optimistic_headers;
             *optimistic_mode.lock().await = true;
             return Ok(ChainOrchestratorEvent::OptimisticSync(received_block));
         }
@@ -226,146 +223,117 @@ impl<
             ));
         }
 
-        // If we are in optimistic mode, we return an event indicating that we have insufficient
-        // data to process the block as we are optimistically syncing the chain.
+        // If we are in optimistic mode and the received block has a number that is less than the
+        // oldest block we have in the in-memory chain we return an event signalling we have
+        // insufficient data to process the received block. This is an edge case.
         if *optimistic_mode.lock().await && (received_block.header.number <= min_block_number) {
             return Ok(ChainOrchestratorEvent::InsufficientDataForReceivedBlock(
                 received_block.header.hash_slow(),
             ));
         };
 
-        let mut new_chain_headers = vec![received_block.header.clone()];
-        let mut new_header_tail = received_block.header.clone();
+        // We fetch headers for the received chain until we can reconcile it with the chain we
+        // currently have in-memory.
+        let mut received_chain_headers = vec![received_block.header.clone()];
+        let mut received_header_tail = received_block.header.clone();
 
         // We should never have a re-org that is deeper than the current safe head.
         let (latest_safe_block, _) =
             database.get_latest_safe_l2_info().await?.expect("safe block must exist");
 
         // We search for the re-org index in the in-memory chain.
-        let reorg_index = {
-            loop {
-                // If the new header tail has a block number that is less than the current header
-                // tail then we should fetch more blocks for the current header chain to aid
-                // reconciliation.
-                if new_header_tail.number <=
-                    current_chain_headers.back().expect("chain can not be empty").number
-                {
-                    for _ in 0..50 {
-                        if new_header_tail.number.saturating_sub(1) < latest_safe_block.number {
-                            tracing::info!(target: "scroll::chain_orchestrator", hash = %latest_safe_block.hash, number = %latest_safe_block.number, "reached safe block number - terminating fetching.");
-                            break;
-                        }
-                        tracing::trace!(target: "scroll::chain_orchestrator", number = ?(new_header_tail.number - 1), "fetching block");
-                        if let Some(header) = network_client
-                            .get_header(BlockHashOrNumber::Hash(new_header_tail.parent_hash))
-                            .await
-                            .unwrap()
-                            .into_data()
-                        {
-                            new_chain_headers.push(header.clone());
-                            new_header_tail = header;
-                        } else {
-                            return Err(ChainOrchestratorError::MissingBlockHeader {
-                                hash: new_header_tail.parent_hash,
-                            });
-                        }
-                    }
-                }
+        const BATCH_FETCH_SIZE: usize = 50;
+        let reorg_index = loop {
+            // If we are in optimistic mode and the received chain can not be reconciled with the
+            // in-memory chain we break. We will reconcile after optimistic sync has completed.
+            if *optimistic_mode.lock().await &&
+                received_chain_headers.last().unwrap().number <
+                    current_chain_headers.front().unwrap().number
+            {
+                return Ok(ChainOrchestratorEvent::InsufficientDataForReceivedBlock(
+                    received_block.hash_slow(),
+                ))
+            }
 
-                // If the current header block number is greater than the in-memory chain then we
-                // should search the in-memory chain (we keep the latest
-                // `OPTIMISTIC_CHAIN_BUFFER_SIZE` headers in memory).
-                if let Some(pos) = current_chain_headers
-                    .iter()
-                    .rposition(|h| h.hash_slow() == new_header_tail.parent_hash)
-                {
-                    // If the received fork is older than the current chain, we return an event
-                    // indicating that we have received an old fork.
-                    if (pos < current_chain_headers.len() - 1) &&
-                        current_chain_headers.get(pos + 1).unwrap().timestamp >=
-                            new_header_tail.timestamp
+            // If the received header tail has a block number that is less than the current header
+            // tail then we should fetch more headers for the current chain to aid
+            // reconciliation.
+            if received_header_tail.number <
+                current_chain_headers.front().expect("chain can not be empty").number
+            {
+                for _ in 0..BATCH_FETCH_SIZE {
+                    if current_chain_headers.front().unwrap().number.saturating_sub(1) <=
+                        latest_safe_block.number
                     {
-                        return Ok(ChainOrchestratorEvent::OldForkReceived {
-                            headers: new_chain_headers,
-                            peer_id,
-                            signature,
+                        tracing::info!(target: "scroll::chain_orchestrator", hash = %latest_safe_block.hash, number = %latest_safe_block.number, "reached safe block number for current chain - terminating fetching.");
+                        break;
+                    }
+                    tracing::trace!(target: "scroll::chain_orchestrator", number = ?(current_chain_headers.front().unwrap().number - 1), "fetching block for current chain");
+                    if let Some(block) = l2_client
+                        .get_block_by_hash(current_chain_headers.front().unwrap().parent_hash)
+                        .await?
+                    {
+                        let header = block.into_consensus_header();
+                        current_chain_headers.push_front(header.clone());
+                        received_header_tail = header;
+                    } else {
+                        return Err(ChainOrchestratorError::MissingBlockHeader {
+                            hash: current_chain_headers.front().unwrap().parent_hash,
                         });
                     }
-                    break Some(pos);
                 }
+            }
 
-                // If we are in optimistic mode, we terminate the search as we don't have the
-                // necessary data from L1 consolidation yet. This is fine because very deep
-                // re-orgs are rare and in any case will be resolved once optimistic sync is
-                // completed. If the current header block number is less than the
-                // latest safe block number then this would suggest a reorg of a
-                // safe block which is not invalid - terminate the search.
-                if *optimistic_mode.lock().await &&
-                    (new_header_tail.number <=
-                        current_chain_headers
-                            .front()
-                            .expect("chain must not be empty")
-                            .number)
+            // If the current header block number is greater than the in-memory chain then we
+            // should search the in-memory chain.
+            if let Some(pos) = current_chain_headers
+                .iter()
+                .rposition(|h| h.hash_slow() == received_header_tail.parent_hash)
+            {
+                // If the received fork is older than the current chain, we return an event
+                // indicating that we have received an old fork.
+                if (pos < current_chain_headers.len() - 1) &&
+                    current_chain_headers.get(pos + 1).unwrap().timestamp >=
+                        received_header_tail.timestamp
                 {
-                    if received_block.timestamp >
-                        current_chain_headers.back().expect("chain can not be empty").timestamp
-                    {
-                        tracing::debug!(target: "scroll::chain_orchestrator", block_hash = ?received_block.header.hash_slow(), "received block is ahead of the current chain");
-                        while new_chain_headers.len() < CHAIN_BUFFER_SIZE &&
-                            new_chain_headers.last().unwrap().number != 0
-                        {
-                            tracing::trace!(target: "scroll::chain_orchestrator", number = ?(new_chain_headers.last().unwrap().number - 1), "fetching block");
-                            let header = network_client
-                                .get_header(BlockHashOrNumber::Hash(
-                                    new_chain_headers.last().unwrap().parent_hash,
-                                ))
-                                .await
-                                .unwrap()
-                                .into_data()
-                                .unwrap();
-                            new_chain_headers.push(header);
-                        }
-                        break None;
-                    }
-                    return Ok(ChainOrchestratorEvent::InsufficientDataForReceivedBlock(
-                        received_block.header.hash_slow(),
-                    ));
-                }
-
-                // If the current header block number is less than the latest safe block number then
-                // we should error.
-                if new_header_tail.number <= latest_safe_block.number {
-                    return Err(ChainOrchestratorError::L2SafeBlockReorgDetected);
-                }
-
-                tracing::trace!(target: "scroll::chain_orchestrator", number = ?(new_header_tail.number - 1), "fetching block");
-                if let Some(header) = network_client
-                    .get_header(BlockHashOrNumber::Hash(new_header_tail.parent_hash))
-                    .await
-                    .unwrap()
-                    .into_data()
-                {
-                    // TODO: what do we do when peers don't have the blocks? We can't recreate the
-                    // chain so we should terminate here. We should be able to reconcile this gap in
-                    // a future block.
-                    new_chain_headers.push(header.clone());
-                    new_header_tail = header;
-                } else {
-                    return Err(ChainOrchestratorError::MissingBlockHeader {
-                        hash: new_header_tail.parent_hash,
+                    return Ok(ChainOrchestratorEvent::OldForkReceived {
+                        headers: received_chain_headers,
+                        peer_id,
+                        signature,
                     });
                 }
+                break Some(pos);
+            }
+
+            // If the current header block number is less than the latest safe block number then
+            // we should error.
+            if received_header_tail.number <= latest_safe_block.number {
+                return Err(ChainOrchestratorError::L2SafeBlockReorgDetected);
+            }
+
+            tracing::trace!(target: "scroll::chain_orchestrator", number = ?(received_header_tail.number - 1), "fetching block");
+            if let Some(header) = network_client
+                .get_header(BlockHashOrNumber::Hash(received_header_tail.parent_hash))
+                .await?
+                .into_data()
+            {
+                received_chain_headers.push(header.clone());
+                received_header_tail = header;
+            } else {
+                return Err(ChainOrchestratorError::MissingBlockHeader {
+                    hash: received_header_tail.parent_hash,
+                });
             }
         };
 
         // Reverse the new chain headers to have them in the correct order.
-        new_chain_headers.reverse();
+        received_chain_headers.reverse();
 
         // Fetch the blocks associated with the new chain headers.
-        let new_blocks = if new_chain_headers.len() == 1 {
+        let new_blocks = if received_chain_headers.len() == 1 {
             vec![received_block]
         } else {
-            fetch_blocks_from_network(new_chain_headers.clone(), network_client.clone()).await
+            fetch_blocks_from_network(received_chain_headers.clone(), network_client.clone()).await
         };
 
         // If we are not in optimistic mode, we validate the L1 messages in the new blocks.
@@ -393,7 +361,7 @@ impl<
                 // reorg the in-memory chain to the new chain and issue a reorg event.
                 let mut new_chain = Chain::new(CHAIN_BUFFER_SIZE);
                 new_chain.extend(current_chain_headers.iter().take(position).cloned());
-                new_chain.extend(new_chain_headers);
+                new_chain.extend(received_chain_headers);
                 *chain.lock().await = new_chain;
 
                 Ok(ChainOrchestratorEvent::ChainReorged(ChainImport::new(
@@ -402,7 +370,7 @@ impl<
             }
             None => {
                 let mut new_chain = Chain::new(CHAIN_BUFFER_SIZE);
-                new_chain.extend(new_chain_headers);
+                new_chain.extend(received_chain_headers);
                 *chain.lock().await = new_chain;
                 *optimistic_mode.lock().await = true;
 
@@ -732,7 +700,7 @@ impl<
 
 /// Consolidates the chain by reconciling the in-memory chain with the L2 client and database.
 /// This is used to ensure that the in-memory chain is consistent with the L2 chain.
-async fn consolidate_chain<P: Provider<Scroll>>(
+async fn consolidate_chain<P: Provider<Scroll> + 'static>(
     database: Arc<Database>,
     validated_chain: Vec<L2BlockInfoWithL1Messages>,
     _chain: Arc<Mutex<Chain>>,
@@ -776,8 +744,8 @@ async fn consolidate_chain<P: Provider<Scroll>>(
     if let Some(in_mem_safe_hash) = in_mem_safe_hash {
         if in_mem_safe_hash != safe_head.hash {
             // If we did not consolidate back to the safe head, we return an error.
-            *_chain.lock().await = chain;
-            // TODO: should we revert to the last known safe head.
+            *_chain.lock().await = init_chain_from_db(&database, &l2_client).await;
+
             return Err(ChainOrchestratorError::ChainInconsistency);
         }
     };
@@ -805,8 +773,7 @@ async fn consolidate_chain<P: Provider<Scroll>>(
         // If the safe head of the fetched chain does not match the safe head stored in database we
         // should return an error.
         if blocks_to_consolidate.front().unwrap().header.hash_slow() != safe_head.hash {
-            *_chain.lock().await = chain;
-            // TODO: should we revert to the last known safe head.
+            *_chain.lock().await = init_chain_from_db(&database, &l2_client).await;
             return Err(ChainOrchestratorError::ChainInconsistency);
         }
     }

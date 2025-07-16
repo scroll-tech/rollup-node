@@ -1,4 +1,6 @@
+use alloy_json_rpc::RpcError;
 use alloy_primitives::B256;
+use alloy_transport::TransportErrorKind;
 use scroll_db::{DatabaseError, L1MessageStart};
 
 /// A type that represents an error that occurred during indexing.
@@ -33,4 +35,10 @@ pub enum ChainOrchestratorError {
         /// The hash of the block header that was requested.
         hash: B256,
     },
+    /// An error occurred while making a network request.
+    #[error("Network request error: {0}")]
+    NetworkRequestError(#[from] reth_network_p2p::error::RequestError),
+    /// AN error occurred while making a JSON-RPC request to the Execution Node (EN).
+    #[error("An error occurred while making a JSON-RPC request to the EN: {0}")]
+    RpcError(#[from] RpcError<TransportErrorKind>),
 }

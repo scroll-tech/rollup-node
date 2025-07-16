@@ -21,12 +21,22 @@ impl<T> BoundedVec<T> {
 
     /// Pushes a value at the back of the buffer. If the buffer is full, pops the data at the front
     /// of the buffer first.
-    pub fn push(&mut self, elem: T) {
+    pub fn push_back(&mut self, elem: T) {
         if self.is_full() {
             self.data.pop_front();
         }
 
         self.data.push_back(elem)
+    }
+
+    /// Pushes a value at the front of the buffer. If the buffer is full, pops the data at the back
+    /// of the buffer first.
+    pub fn push_front(&mut self, elem: T) {
+        if self.is_full() {
+            self.data.pop_back();
+        }
+
+        self.data.push_front(elem)
     }
 
     /// Pops the last element from the structure and returns it if any.
@@ -87,7 +97,7 @@ impl<T> Extend<T> for BoundedVec<T> {
         };
 
         for elem in iter {
-            self.push(elem)
+            self.push_back(elem)
         }
     }
 }

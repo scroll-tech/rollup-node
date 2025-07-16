@@ -13,8 +13,10 @@ workspace = true
 # alloy
 alloy-consensus = { workspace = true }
 alloy-eips = { workspace = true }
+alloy-json-rpc.workspace = true
 alloy-primitives.workspace = true
 alloy-provider.workspace = true
+alloy-transport.workspace = true
 
 # rollup-node
 scroll-db.workspace = true
