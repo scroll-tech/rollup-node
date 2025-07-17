@@ -323,17 +323,17 @@ pub struct NetworkArgs {
     #[arg(long = "network.scroll-wire", default_value_t = true)]
     pub enable_scroll_wire: bool,
     /// The URL for the Sequencer RPC. (can be both HTTP and WS)
-    #[arg(long = "network.sequencer-url", id = "network_sequencer_url", value_name = "NETWORK_SEQUENCER_URL")]
+    #[arg(
+        long = "network.sequencer-url",
+        id = "network_sequencer_url",
+        value_name = "NETWORK_SEQUENCER_URL"
+    )]
     pub sequencer_url: Option<String>,
 }
 
 impl Default for NetworkArgs {
     fn default() -> Self {
-        Self {
-            enable_eth_scroll_wire_bridge: true,
-            enable_scroll_wire: true,
-            sequencer_url: None,
-        }
+        Self { enable_eth_scroll_wire_bridge: true, enable_scroll_wire: true, sequencer_url: None }
     }
 }
 
