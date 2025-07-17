@@ -12,7 +12,7 @@ mod metrics;
 pub use metrics::DerivationPipelineMetrics;
 
 use crate::data_source::CodecDataSource;
-use std::{boxed::Box, collections::VecDeque, sync::Arc, time::Instant, vec::Vec};
+use std::{boxed::Box, collections::VecDeque, fmt::Formatter, sync::Arc, time::Instant, vec::Vec};
 
 use alloy_primitives::{Address, B256};
 use alloy_rpc_types_engine::PayloadAttributes;
@@ -22,8 +22,10 @@ use core::{
     pin::Pin,
     task::{Context, Poll, Waker},
 };
-use futures::{ready, stream::FuturesOrdered, Stream, StreamExt};
-use rollup_node_primitives::{BatchCommitData, BatchInfo, ScrollPayloadAttributesWithBatchInfo};
+use futures::{FutureExt, Stream};
+use rollup_node_primitives::{
+    BatchCommitData, BatchInfo, ScrollPayloadAttributesWithBatchInfo, WithBlockNumber,
+};
 use rollup_node_providers::{BlockDataProvider, L1Provider};
 use scroll_alloy_rpc_types_engine::{BlockDataHint, ScrollPayloadAttributes};
 use scroll_codec::Codec;
@@ -41,26 +43,39 @@ type DerivationPipelineFuture = Pin<
     >,
 >;
 
-/// Limit the amount of pipeline futures allowed to be polled concurrently.
-const MAX_CONCURRENT_DERIVATION_PIPELINE_FUTS: usize = 100;
-
 /// A structure holding the current unresolved futures for the derivation pipeline.
-#[derive(Debug)]
 pub struct DerivationPipeline<P> {
     /// The current derivation pipeline futures polled.
-    pipeline_futures: FuturesOrdered<DerivationPipelineFuture>,
+    pipeline_future: Option<WithBlockNumber<DerivationPipelineFuture>>,
     /// A reference to the database.
     database: Arc<Database>,
     /// A L1 provider.
     l1_provider: P,
     /// The queue of batches to handle.
-    batch_queue: VecDeque<Arc<BatchInfo>>,
+    batch_queue: VecDeque<WithBlockNumber<Arc<BatchInfo>>>,
     /// The queue of polled attributes.
-    attributes_queue: VecDeque<ScrollPayloadAttributesWithBatchInfo>,
+    attributes_queue: VecDeque<WithBlockNumber<ScrollPayloadAttributesWithBatchInfo>>,
     /// The waker for the pipeline.
     waker: Option<Waker>,
     /// The metrics of the pipeline.
     metrics: DerivationPipelineMetrics,
+}
+
+impl<P: Debug> Debug for DerivationPipeline<P> {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("DerivationPipeline")
+            .field(
+                "pipeline_future",
+                &self.pipeline_future.as_ref().map(|_| "Some( ... )").unwrap_or("None"),
+            )
+            .field("database", &self.database)
+            .field("l1_provider", &self.l1_provider)
+            .field("batch_queue", &self.batch_queue)
+            .field("attributes_queue", &self.attributes_queue)
+            .field("waker", &self.waker)
+            .field("metrics", &self.metrics)
+            .finish()
+    }
 }
 
 impl<P> DerivationPipeline<P>
@@ -73,7 +88,7 @@ where
             database,
             l1_provider,
             batch_queue: Default::default(),
-            pipeline_futures: Default::default(),
+            pipeline_future: None,
             attributes_queue: Default::default(),
             waker: None,
             metrics: DerivationPipelineMetrics::default(),
@@ -82,9 +97,9 @@ where
 
     /// Handles a new batch commit index by pushing it in its internal queue.
     /// Wakes the waker in order to trigger a call to poll.
-    pub fn handle_batch_commit(&mut self, batch_info: BatchInfo) {
+    pub fn handle_batch_commit(&mut self, batch_info: BatchInfo, l1_block_number: u64) {
         let block_info = Arc::new(batch_info);
-        self.batch_queue.push_back(block_info);
+        self.batch_queue.push_back(WithBlockNumber::new(l1_block_number, block_info));
         if let Some(waker) = self.waker.take() {
             waker.wake()
         }
@@ -92,21 +107,24 @@ where
 
     /// Handles the next batch index in the batch index queue, pushing the future in the pipeline
     /// futures.
-    fn handle_next_batch(&mut self) -> Option<DerivationPipelineFuture> {
+    fn handle_next_batch(&mut self) -> Option<WithBlockNumber<DerivationPipelineFuture>> {
         let database = self.database.clone();
         let metrics = self.metrics.clone();
         let provider = self.l1_provider.clone();
 
         if let Some(info) = self.batch_queue.pop_front() {
+            let block_number = info.number;
             let fut = Box::pin(async move {
                 let derive_start = Instant::now();
 
                 // get the batch commit data.
+                let index = info.inner.index;
+                let info = info.inner;
                 let batch = database
-                    .get_batch_by_index(info.index)
+                    .get_batch_by_index(index)
                     .await
                     .map_err(|err| (info.clone(), err.into()))?
-                    .ok_or((info.clone(), DerivationPipelineError::UnknownBatch(info.index)))?;
+                    .ok_or((info.clone(), DerivationPipelineError::UnknownBatch(index)))?;
 
                 // derive the attributes and attach the corresponding batch info.
                 let attrs =
@@ -119,16 +137,28 @@ where
 
                 Ok(attrs.into_iter().map(|attr| (attr, *info).into()).collect())
             });
-            return Some(fut);
+            return Some(WithBlockNumber::new(block_number, fut));
         }
         None
+    }
+
+    /// Clear attributes, batches and futures for which the associated block number >
+    /// `l1_block_number`.
+    pub fn handle_reorg(&mut self, l1_block_number: u64) {
+        self.attributes_queue.retain(|attribute| attribute.number > l1_block_number);
+        self.batch_queue.retain(|attribute| attribute.number > l1_block_number);
+        if let Some(fut) = &mut self.pipeline_future {
+            if fut.number > l1_block_number {
+                self.pipeline_future = None;
+            }
+        }
     }
 
     /// Flushes all the data in the pipeline.
     pub fn flush(&mut self) {
         self.attributes_queue.clear();
         self.batch_queue.clear();
-        self.pipeline_futures = FuturesOrdered::new();
+        self.pipeline_future = None;
     }
 }
 
@@ -143,36 +173,37 @@ where
 
         // return attributes from the queue if any.
         if let Some(attribute) = this.attributes_queue.pop_front() {
-            return Poll::Ready(Some(attribute))
+            return Poll::Ready(Some(attribute.inner))
         }
 
-        // if futures are empty and the batch queue is empty, store the waker
-        // and return.
-        if this.pipeline_futures.is_empty() && this.batch_queue.is_empty() {
+        // if future is None and the batch queue is empty, store the waker and return.
+        if this.pipeline_future.is_none() && this.batch_queue.is_empty() {
             this.waker = Some(cx.waker().clone());
             return Poll::Pending
         }
 
-        // if the futures can still grow, handle the next batch.
-        if this.pipeline_futures.len() < MAX_CONCURRENT_DERIVATION_PIPELINE_FUTS {
-            if let Some(fut) = this.handle_next_batch() {
-                this.pipeline_futures.push_back(fut)
-            }
+        // if the future is None, handle the next batch.
+        if this.pipeline_future.is_none() {
+            this.pipeline_future = this.handle_next_batch()
         }
 
         // poll the futures and handle result.
-        if let Some(res) = ready!(this.pipeline_futures.poll_next_unpin(cx)) {
+        if let Some(Poll::Ready(res)) = this.pipeline_future.as_mut().map(|fut| fut.poll_unpin(cx))
+        {
             match res {
-                Ok(attributes) => {
+                WithBlockNumber { inner: Ok(attributes), number } => {
+                    let attributes =
+                        attributes.into_iter().map(|attr| WithBlockNumber::new(number, attr));
                     this.attributes_queue.extend(attributes);
+                    this.pipeline_future = None;
                     cx.waker().wake_by_ref();
                 }
-                Err((batch_info, err)) => {
+                WithBlockNumber { inner: Err((batch_info, err)), number } => {
                     tracing::error!(target: "scroll::node::derivation_pipeline", batch_info = ?*batch_info, ?err, "failed to derive payload attributes for batch");
                     // retry polling the same batch.
-                    this.batch_queue.push_front(batch_info);
+                    this.batch_queue.push_front(WithBlockNumber::new(number, batch_info));
                     let fut = this.handle_next_batch().expect("Pushed batch info into queue");
-                    this.pipeline_futures.push_front(fut);
+                    this.pipeline_future = Some(fut)
                 }
             }
         }
@@ -180,7 +211,6 @@ where
     }
 }
 
-/// TODO(bench): add criterion bench.
 /// Returns a vector of [`ScrollPayloadAttributes`] from the [`BatchCommitData`] and a
 /// [`L1Provider`].
 pub async fn derive<L1P: L1Provider + Sync + Send, L2P: BlockDataProvider + Sync + Send>(
@@ -271,6 +301,7 @@ mod tests {
     use alloy_eips::{eip4844::Blob, Decodable2718};
     use alloy_primitives::{address, b256, bytes, U256};
     use core::sync::atomic::{AtomicU64, Ordering};
+    use futures::StreamExt;
     use rollup_node_primitives::L1MessageEnvelope;
     use rollup_node_providers::{
         DatabaseL1MessageProvider, L1BlobProvider, L1MessageProvider, L1ProviderError,
@@ -428,7 +459,7 @@ mod tests {
         let mut pipeline = DerivationPipeline::new(mock_l1_provider, db);
 
         // as long as we don't call `handle_commit_batch`, pipeline should not return attributes.
-        pipeline.handle_batch_commit(BatchInfo { index: 12, hash: Default::default() });
+        pipeline.handle_batch_commit(BatchInfo { index: 12, hash: Default::default() }, 0);
 
         // we should find some attributes now
         assert!(pipeline.next().await.is_some());
