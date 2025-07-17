@@ -8,7 +8,7 @@ mod attributes;
 pub use attributes::ScrollPayloadAttributesWithBatchInfo;
 
 mod block;
-pub use block::{BlockInfo, L2BlockInfoWithL1Messages, DEFAULT_BLOCK_DIFFICULTY};
+pub use block::{BlockInfo, L2BlockInfoWithL1Messages, WithBlockNumber, DEFAULT_BLOCK_DIFFICULTY};
 
 mod batch;
 pub use batch::{BatchCommitData, BatchInfo};

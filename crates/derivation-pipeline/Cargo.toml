@@ -35,10 +35,12 @@ tracing.workspace = true
 
 [dev-dependencies]
 async-trait.workspace = true
+alloy-primitives = { workspace = true, features = ["getrandom"] }
+criterion = { version = "0.6", features = ["async", "async_tokio"] }
 eyre.workspace = true
 scroll-db = { workspace = true, features = ["test-utils"] }
 scroll-codec = { workspace = true, features = ["test-utils"] }
-tokio = { workspace = true, features = ["macros"] }
+tokio = { workspace = true, features = ["macros", "rt-multi-thread"] }
 
 [features]
 default = ["std"]
@@ -52,3 +54,7 @@ std = [
     "scroll-alloy-rpc-types-engine/std",
     "futures/std",
 ]
+
+[[bench]]
+name = "pipeline"
+harness = false

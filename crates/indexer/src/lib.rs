@@ -266,6 +266,7 @@ impl<ChainSpec: ScrollHardforks + EthChainSpec + Send + Sync + 'static> Indexer<
         let event = IndexerEvent::BatchCommitIndexed {
             batch_info: BatchInfo::new(batch.index, batch.hash),
             safe_head: new_safe_head,
+            l1_block_number: batch.block_number,
         };
 
         // insert the batch and commit the transaction.
@@ -377,7 +378,7 @@ mod test {
 
         // Verify the event structure
         match event {
-            IndexerEvent::BatchCommitIndexed { batch_info, safe_head } => {
+            IndexerEvent::BatchCommitIndexed { batch_info, safe_head, .. } => {
                 assert_eq!(batch_info.index, batch_commit.index);
                 assert_eq!(batch_info.hash, batch_commit.hash);
                 assert_eq!(safe_head, None); // No safe head since no batch revert
@@ -420,7 +421,7 @@ mod test {
         indexer.handle_l1_notification(L1Notification::BatchCommit(batch_1.clone()));
         let event = indexer.next().await.unwrap().unwrap();
         match event {
-            IndexerEvent::BatchCommitIndexed { batch_info, safe_head } => {
+            IndexerEvent::BatchCommitIndexed { batch_info, safe_head, .. } => {
                 assert_eq!(batch_info.index, 100);
                 assert_eq!(safe_head, None);
             }
@@ -431,7 +432,7 @@ mod test {
         indexer.handle_l1_notification(L1Notification::BatchCommit(batch_2.clone()));
         let event = indexer.next().await.unwrap().unwrap();
         match event {
-            IndexerEvent::BatchCommitIndexed { batch_info, safe_head } => {
+            IndexerEvent::BatchCommitIndexed { batch_info, safe_head, .. } => {
                 assert_eq!(batch_info.index, 101);
                 assert_eq!(safe_head, None);
             }
@@ -442,7 +443,7 @@ mod test {
         indexer.handle_l1_notification(L1Notification::BatchCommit(batch_3.clone()));
         let event = indexer.next().await.unwrap().unwrap();
         match event {
-            IndexerEvent::BatchCommitIndexed { batch_info, safe_head } => {
+            IndexerEvent::BatchCommitIndexed { batch_info, safe_head, .. } => {
                 assert_eq!(batch_info.index, 102);
                 assert_eq!(safe_head, None);
             }
@@ -488,7 +489,7 @@ mod test {
 
         // Verify the event indicates a batch revert
         match event {
-            IndexerEvent::BatchCommitIndexed { batch_info, safe_head } => {
+            IndexerEvent::BatchCommitIndexed { batch_info, safe_head, .. } => {
                 assert_eq!(batch_info.index, 101);
                 assert_eq!(batch_info.hash, new_batch_2.hash);
                 // Safe head should be the highest block from batch index <= 100
