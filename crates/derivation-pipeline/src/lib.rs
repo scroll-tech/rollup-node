@@ -142,7 +142,7 @@ where
         None
     }
 
-    /// Clear attributes, batches and futures for which the associated block number >
+    /// Clear attributes, batches and future for which the associated block number >
     /// `l1_block_number`.
     pub fn handle_reorg(&mut self, l1_block_number: u64) {
         self.attributes_queue.retain(|attribute| attribute.number > l1_block_number);
