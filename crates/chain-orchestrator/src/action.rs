@@ -6,12 +6,12 @@ use std::{
     task::{Context, Poll},
 };
 
-/// A future that resolves to a `Result<IndexerEvent, ChainOrchestratorError>`.
+/// A future that resolves to a `Result<ChainOrchestratorEvent, ChainOrchestratorError>`.
 pub(super) type PendingIndexerFuture =
     Pin<Box<dyn Future<Output = Result<ChainOrchestratorEvent, ChainOrchestratorError>> + Send>>;
 
-/// A type that represents a future that is being executed by the indexer.
-pub(super) enum IndexerFuture {
+/// A type that represents a future that is being executed by the chain orchestrator.
+pub(super) enum ChainOrchestratorFuture {
     HandleReorg(PendingIndexerFuture),
     HandleFinalized(PendingIndexerFuture),
     HandleBatchCommit(PendingIndexerFuture),
@@ -21,7 +21,7 @@ pub(super) enum IndexerFuture {
     HandleL2Block(PendingIndexerFuture),
 }
 
-impl IndexerFuture {
+impl ChainOrchestratorFuture {
     /// Polls the future to completion.
     pub(super) fn poll(
         &mut self,
@@ -39,9 +39,9 @@ impl IndexerFuture {
     }
 }
 
-// We implement the Debug trait for IndexerFuture to provide a human-readable representation of the
-// enum variants.
-impl fmt::Debug for IndexerFuture {
+// We implement the Debug trait for ChainOrchestratorFuture to provide a human-readable
+// representation of the enum variants.
+impl fmt::Debug for ChainOrchestratorFuture {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::HandleReorg(_) => write!(f, "HandleReorg"),

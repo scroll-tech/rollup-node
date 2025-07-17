@@ -1,4 +1,5 @@
-//! A library responsible for indexing data relevant to the L1.
+//! A library responsible for orchestrating the L2 chain based on data received from L1 and over the
+//! L2 p2p network.
 
 use alloy_consensus::Header;
 use alloy_eips::{BlockHashOrNumber, Encodable2718};
@@ -32,7 +33,7 @@ use strum::IntoEnumIterator;
 use tokio::sync::Mutex;
 
 mod action;
-use action::{IndexerFuture, PendingIndexerFuture};
+use action::{ChainOrchestratorFuture, PendingIndexerFuture};
 
 mod event;
 pub use event::ChainOrchestratorEvent;
@@ -65,7 +66,7 @@ pub struct ChainOrchestrator<ChainSpec, BC, P> {
     /// A reference to the database used to persist the indexed data.
     database: Arc<Database>,
     /// A queue of pending futures.
-    pending_futures: VecDeque<IndexerFuture>,
+    pending_futures: VecDeque<ChainOrchestratorFuture>,
     /// The block number of the L1 finalized block.
     l1_finalized_block_number: Arc<AtomicU64>,
     /// The block number of the L2 finalized block.
@@ -122,7 +123,7 @@ impl<
         }
     }
 
-    /// Wraps a pending indexer future, metering the completion of it.
+    /// Wraps a pending chain orchestrator future, metering the completion of it.
     pub fn handle_metered(
         &mut self,
         item: IndexerItem,
@@ -166,12 +167,12 @@ impl<
                 .await
             }),
         );
-        self.pending_futures.push_back(IndexerFuture::HandleL2Block(fut));
+        self.pending_futures.push_back(ChainOrchestratorFuture::HandleL2Block(fut));
         self.waker.wake();
     }
 
     /// Handles a new block received from the network.
-    pub async fn handle_new_block(
+    async fn handle_new_block(
         chain: Arc<Mutex<Chain>>,
         l2_client: Arc<P>,
         optimistic_mode: Arc<Mutex<bool>>,
@@ -285,8 +286,7 @@ impl<
                 }
             }
 
-            // If the current header block number is greater than the in-memory chain then we
-            // should search the in-memory chain.
+            // We search the in-memory chain to see if we can reconcile the block import.
             if let Some(pos) = current_chain_headers
                 .iter()
                 .rposition(|h| h.hash_slow() == received_header_tail.parent_hash)
@@ -303,7 +303,7 @@ impl<
                         signature,
                     });
                 }
-                break Some(pos);
+                break pos;
             }
 
             // If the current header block number is less than the latest safe block number then
@@ -345,7 +345,7 @@ impl<
         match reorg_index {
             // If this is a simple chain extension, we can just extend the in-memory chain and emit
             // a ChainExtended event.
-            Some(index) if index == current_chain_headers.len() - 1 => {
+            position if position == current_chain_headers.len() - 1 => {
                 // Update the chain with the new blocks.
                 current_chain_headers.extend(new_blocks.iter().map(|b| b.header.clone()));
                 let mut new_chain = Chain::new(CHAIN_BUFFER_SIZE);
@@ -358,7 +358,7 @@ impl<
             }
             // If we are re-organizing the in-memory chain, we need to split the chain at the reorg
             // point and extend it with the new blocks.
-            Some(position) => {
+            position => {
                 // reorg the in-memory chain to the new chain and issue a reorg event.
                 let mut new_chain = Chain::new(CHAIN_BUFFER_SIZE);
                 new_chain.extend(current_chain_headers.iter().take(position).cloned());
@@ -368,16 +368,6 @@ impl<
                 Ok(ChainOrchestratorEvent::ChainReorged(ChainImport::new(
                     new_blocks, peer_id, signature,
                 )))
-            }
-            None => {
-                let mut new_chain = Chain::new(CHAIN_BUFFER_SIZE);
-                new_chain.extend(received_chain_headers);
-                *chain.lock().await = new_chain;
-                *optimistic_mode.lock().await = true;
-
-                Ok(ChainOrchestratorEvent::OptimisticSync(
-                    new_blocks.last().cloned().expect("new_blocks should not be empty"),
-                ))
             }
         }
     }
@@ -423,24 +413,26 @@ impl<
                 }),
             );
 
-        self.pending_futures.push_back(IndexerFuture::HandleDerivedBlock(fut));
+        self.pending_futures.push_back(ChainOrchestratorFuture::HandleDerivedBlock(fut));
         self.waker.wake();
     }
 
     /// Handles an event from the L1.
     pub fn handle_l1_notification(&mut self, event: L1Notification) {
         let fut = match event {
-            L1Notification::Reorg(block_number) => IndexerFuture::HandleReorg(self.handle_metered(
-                IndexerItem::L1Reorg,
-                Box::pin(Self::handle_l1_reorg(
-                    self.database.clone(),
-                    self.chain_spec.clone(),
-                    block_number,
-                )),
-            )),
+            L1Notification::Reorg(block_number) => {
+                ChainOrchestratorFuture::HandleReorg(self.handle_metered(
+                    IndexerItem::L1Reorg,
+                    Box::pin(Self::handle_l1_reorg(
+                        self.database.clone(),
+                        self.chain_spec.clone(),
+                        block_number,
+                    )),
+                ))
+            }
             L1Notification::NewBlock(_) | L1Notification::Consensus(_) => return,
             L1Notification::Finalized(block_number) => {
-                IndexerFuture::HandleFinalized(self.handle_metered(
+                ChainOrchestratorFuture::HandleFinalized(self.handle_metered(
                     IndexerItem::L1Finalization,
                     Box::pin(Self::handle_finalized(
                         self.database.clone(),
@@ -451,13 +443,13 @@ impl<
                 ))
             }
             L1Notification::BatchCommit(batch) => {
-                IndexerFuture::HandleBatchCommit(self.handle_metered(
+                ChainOrchestratorFuture::HandleBatchCommit(self.handle_metered(
                     IndexerItem::BatchCommit,
                     Box::pin(Self::handle_batch_commit(self.database.clone(), batch)),
                 ))
             }
             L1Notification::L1Message { message, block_number, block_timestamp } => {
-                IndexerFuture::HandleL1Message(self.handle_metered(
+                ChainOrchestratorFuture::HandleL1Message(self.handle_metered(
                     IndexerItem::L1Message,
                     Box::pin(Self::handle_l1_message(
                         self.database.clone(),
@@ -469,7 +461,7 @@ impl<
                 ))
             }
             L1Notification::BatchFinalization { hash, block_number, .. } => {
-                IndexerFuture::HandleBatchFinalization(self.handle_metered(
+                ChainOrchestratorFuture::HandleBatchFinalization(self.handle_metered(
                     IndexerItem::BatchFinalization,
                     Box::pin(Self::handle_batch_finalization(
                         self.database.clone(),
