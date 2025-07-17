@@ -136,7 +136,7 @@ pub fn default_test_scroll_rollup_node_config() -> ScrollRollupNodeConfig {
         },
         database_args: DatabaseArgs { path: Some(PathBuf::from("sqlite::memory:")) },
         l1_provider_args: L1ProviderArgs::default(),
-        engine_driver_args: EngineDriverArgs { en_sync_trigger: 100 },
+        engine_driver_args: EngineDriverArgs { en_sync_trigger: 100, sync_at_startup: true },
         sequencer_args: SequencerArgs { payload_building_duration: 1000, ..Default::default() },
         beacon_provider_args: BeaconProviderArgs::default(),
         signer_args: Default::default(),
@@ -153,7 +153,7 @@ pub fn default_sequencer_test_scroll_rollup_node_config() -> ScrollRollupNodeCon
         },
         database_args: DatabaseArgs { path: Some(PathBuf::from("sqlite::memory:")) },
         l1_provider_args: L1ProviderArgs::default(),
-        engine_driver_args: EngineDriverArgs { en_sync_trigger: 100 },
+        engine_driver_args: EngineDriverArgs { en_sync_trigger: 100, sync_at_startup: true },
         sequencer_args: SequencerArgs {
             sequencer_enabled: true,
             block_time: 50,
