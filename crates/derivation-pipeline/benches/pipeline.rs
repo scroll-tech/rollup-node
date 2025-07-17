@@ -123,7 +123,7 @@ fn benchmark_pipeline_derivation(c: &mut Criterion) {
 
                     // commit 1000 batches.
                     for _ in 0..1000 {
-                        pipeline.handle_batch_commit(batch_info.clone(), 0);
+                        pipeline.handle_batch_commit(batch_info, 0);
                     }
 
                     tx.send(pipeline).unwrap();
