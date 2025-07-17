@@ -194,7 +194,7 @@ impl ScrollRollupNodeConfig {
             chain_spec.clone(),
             Some(l2_provider),
             fcs,
-            !self.test && !chain_spec.is_dev_chain(),
+            self.engine_driver_args.sync_at_startup && !self.test && !chain_spec.is_dev_chain(),
             self.engine_driver_args.en_sync_trigger,
             Duration::from_millis(self.sequencer_args.payload_building_duration),
         );
@@ -265,7 +265,6 @@ impl ScrollRollupNodeConfig {
             .then_some(network.eth_wire_block_listener().await?);
 
         // Instantiate the signer
-        // Instantiate the signer
         let signer = if self.test {
             // Use a random private key signer for testing
             Some(rollup_node_signer::Signer::spawn(PrivateKeySigner::random()))
@@ -308,6 +307,9 @@ pub struct EngineDriverArgs {
     /// at which the engine driver triggers optimistic sync.
     #[arg(long = "engine.en-sync-trigger", default_value_t = constants::BLOCK_GAP_TRIGGER)]
     pub en_sync_trigger: u64,
+    /// Whether the engine driver should try to sync at start up.
+    #[arg(long = "engine.sync-at-startup", num_args=0..=1, default_value_t = true)]
+    pub sync_at_startup: bool,
 }
 
 /// The network arguments.
@@ -406,7 +408,7 @@ pub struct SignerArgs {
     #[arg(
         long = "signer.key-file",
         value_name = "FILE_PATH",
-        help = "Path to the hex-encoded private key file for the signer (optional 0x prefix). Mutually exclusive with AWS KMS key ID"
+        help = "Path to the hex-encoded private key file for the signer (optional 0x prefix). Mutually exclusive with --signer.aws-kms-key-id"
     )]
     pub key_file: Option<PathBuf>,
 
@@ -414,7 +416,7 @@ pub struct SignerArgs {
     #[arg(
         long = "signer.aws-kms-key-id",
         value_name = "KEY_ID",
-        help = "AWS KMS Key ID for signing transactions. Mutually exclusive with key file"
+        help = "AWS KMS Key ID for signing transactions. Mutually exclusive with --signer.key-file"
     )]
     pub aws_kms_key_id: Option<String>,
 }
