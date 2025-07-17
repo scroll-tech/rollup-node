@@ -35,6 +35,7 @@ tracing.workspace = true
 
 [dev-dependencies]
 async-trait.workspace = true
+alloy-primitives = { workspace = true, features = ["getrandom"] }
 criterion = { version = "0.6", features = ["async", "async_tokio"] }
 eyre.workspace = true
 scroll-db = { workspace = true, features = ["test-utils"] }

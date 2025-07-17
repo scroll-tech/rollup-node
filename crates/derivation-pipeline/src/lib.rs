@@ -145,13 +145,13 @@ where
     /// Clear attributes, batches and future for which the associated block number >
     /// `l1_block_number`.
     pub fn handle_reorg(&mut self, l1_block_number: u64) {
-        self.attributes_queue.retain(|attribute| attribute.number > l1_block_number);
-        self.batch_queue.retain(|attribute| attribute.number > l1_block_number);
+        self.batch_queue.retain(|batch| batch.number <= l1_block_number);
         if let Some(fut) = &mut self.pipeline_future {
             if fut.number > l1_block_number {
                 self.pipeline_future = None;
             }
         }
+        self.attributes_queue.retain(|attr| attr.number <= l1_block_number);
     }
 
     /// Flushes all the data in the pipeline.
@@ -643,6 +643,78 @@ mod tests {
         let expected_l1_messages: Vec<_> =
             l1_messages[1..].iter().map(|msg| msg.transaction.clone()).collect();
         assert_eq!(expected_l1_messages, derived_l1_messages);
+        Ok(())
+    }
+
+    async fn new_test_pipeline(
+    ) -> DerivationPipeline<MockL1Provider<DatabaseL1MessageProvider<Arc<Database>>>> {
+        let initial_block = 200;
+
+        let batches = (initial_block - 100..initial_block)
+            .map(|i| WithBlockNumber::new(i, Arc::new(BatchInfo::new(i, B256::random()))));
+        let attributes = (initial_block..initial_block + 100)
+            .zip(batches.clone())
+            .map(|(i, batch)| {
+                WithBlockNumber::new(
+                    i,
+                    ScrollPayloadAttributesWithBatchInfo {
+                        batch_info: *batch.inner,
+                        ..Default::default()
+                    },
+                )
+            })
+            .collect();
+
+        let db = Arc::new(setup_test_db().await);
+        let l1_messages_provider = DatabaseL1MessageProvider::new(db.clone(), 0);
+        let mock_l1_provider = MockL1Provider { l1_messages_provider };
+
+        DerivationPipeline {
+            pipeline_future: Some(WithBlockNumber::new(
+                initial_block,
+                Box::pin(async { Ok(vec![]) }),
+            )),
+            database: db,
+            l1_provider: mock_l1_provider,
+            batch_queue: batches.collect(),
+            attributes_queue: attributes,
+            waker: None,
+            metrics: Default::default(),
+        }
+    }
+
+    #[tokio::test]
+    async fn test_should_handle_reorgs() -> eyre::Result<()> {
+        // set up pipeline.
+        let mut pipeline = new_test_pipeline().await;
+
+        // reorg at block 0.
+        pipeline.handle_reorg(0);
+        // should completely clear the pipeline.
+        assert!(pipeline.batch_queue.is_empty());
+        assert!(pipeline.pipeline_future.is_none());
+        assert!(pipeline.attributes_queue.is_empty());
+
+        // set up pipeline.
+        let mut pipeline = new_test_pipeline().await;
+
+        // reorg at block 200.
+        pipeline.handle_reorg(200);
+        // should clear all but one attribute and retain all batches and the pending future.
+        assert_eq!(pipeline.batch_queue.len(), 100);
+        assert!(pipeline.pipeline_future.is_some());
+        assert_eq!(pipeline.attributes_queue.len(), 1);
+
+        // set up pipeline.
+        let mut pipeline = new_test_pipeline().await;
+
+        // reorg at block 300.
+        pipeline.handle_reorg(300);
+        // should retain all batches, attributes and the pending future.
+        assert_eq!(pipeline.batch_queue.len(), 100);
+        assert!(pipeline.pipeline_future.is_some());
+        assert_eq!(pipeline.attributes_queue.len(), 100);
+
         Ok(())
     }
 }
