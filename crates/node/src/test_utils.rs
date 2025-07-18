@@ -1,8 +1,8 @@
 //! This crate contains utilities for running end-to-end tests for the scroll reth node.
 
 use super::{
-    BeaconProviderArgs, DatabaseArgs, EngineDriverArgs, L1ProviderArgs, ScrollRollupNode,
-    ScrollRollupNodeConfig, SequencerArgs,
+    BeaconProviderArgs, ChainOrchestratorArgs, DatabaseArgs, EngineDriverArgs, L1ProviderArgs,
+    ScrollRollupNode, ScrollRollupNodeConfig, SequencerArgs,
 };
 use alloy_primitives::Bytes;
 use reth_chainspec::EthChainSpec;
@@ -136,7 +136,8 @@ pub fn default_test_scroll_rollup_node_config() -> ScrollRollupNodeConfig {
         },
         database_args: DatabaseArgs { path: Some(PathBuf::from("sqlite::memory:")) },
         l1_provider_args: L1ProviderArgs::default(),
-        engine_driver_args: EngineDriverArgs { en_sync_trigger: 100 },
+        engine_driver_args: EngineDriverArgs { sync_at_startup: true },
+        chain_orchestrator_args: ChainOrchestratorArgs { optimistic_sync_trigger: 100 },
         sequencer_args: SequencerArgs { payload_building_duration: 1000, ..Default::default() },
         beacon_provider_args: BeaconProviderArgs::default(),
         signer_args: Default::default(),
@@ -153,7 +154,8 @@ pub fn default_sequencer_test_scroll_rollup_node_config() -> ScrollRollupNodeCon
         },
         database_args: DatabaseArgs { path: Some(PathBuf::from("sqlite::memory:")) },
         l1_provider_args: L1ProviderArgs::default(),
-        engine_driver_args: EngineDriverArgs { en_sync_trigger: 100 },
+        engine_driver_args: EngineDriverArgs { sync_at_startup: true },
+        chain_orchestrator_args: ChainOrchestratorArgs { optimistic_sync_trigger: 100 },
         sequencer_args: SequencerArgs {
             sequencer_enabled: true,
             block_time: 50,

@@ -10,8 +10,8 @@ use rollup_node::{
         default_sequencer_test_scroll_rollup_node_config, default_test_scroll_rollup_node_config,
         setup_engine,
     },
-    BeaconProviderArgs, DatabaseArgs, EngineDriverArgs, L1ProviderArgs, NetworkArgs,
-    ScrollRollupNode, ScrollRollupNodeConfig, SequencerArgs,
+    BeaconProviderArgs, ChainOrchestratorArgs, DatabaseArgs, EngineDriverArgs, L1ProviderArgs,
+    NetworkArgs, ScrollRollupNode, ScrollRollupNodeConfig, SequencerArgs,
 };
 use rollup_node_manager::RollupManagerEvent;
 use rollup_node_sequencer::L1MessageInclusionMode;
@@ -38,9 +38,13 @@ async fn test_should_trigger_pipeline_sync_for_execution_node() {
     let mut unsynced = nodes.pop().unwrap();
 
     // Wait for the chain to be advanced by the sequencer.
-    let en_sync_trigger = node_config.engine_driver_args.en_sync_trigger + 1;
-    wait_n_events(&synced, |e| matches!(e, RollupManagerEvent::BlockSequenced(_)), en_sync_trigger)
-        .await;
+    let optimistic_sync_trigger = node_config.chain_orchestrator_args.optimistic_sync_trigger + 1;
+    wait_n_events(
+        &synced,
+        |e| matches!(e, RollupManagerEvent::BlockSequenced(_)),
+        optimistic_sync_trigger,
+    )
+    .await;
 
     // Connect the nodes together.
     synced.network.add_peer(unsynced.network.record()).await;
@@ -57,7 +61,7 @@ async fn test_should_trigger_pipeline_sync_for_execution_node() {
     let mut num = provider.get_block_number().await.unwrap();
 
     loop {
-        if retries > 10 || num > en_sync_trigger {
+        if retries > 10 || num > optimistic_sync_trigger {
             break
         }
         num = provider.get_block_number().await.unwrap();
@@ -81,6 +85,7 @@ async fn test_should_consolidate_after_optimistic_sync() {
         database_args: DatabaseArgs { path: Some(PathBuf::from("sqlite::memory:")) },
         l1_provider_args: L1ProviderArgs::default(),
         engine_driver_args: EngineDriverArgs::default(),
+        chain_orchestrator_args: ChainOrchestratorArgs::default(),
         sequencer_args: SequencerArgs {
             sequencer_enabled: true,
             block_time: 0,
@@ -229,6 +234,7 @@ async fn test_consolidation() {
         database_args: DatabaseArgs { path: Some(PathBuf::from("sqlite::memory:")) },
         l1_provider_args: L1ProviderArgs::default(),
         engine_driver_args: EngineDriverArgs::default(),
+        chain_orchestrator_args: ChainOrchestratorArgs::default(),
         sequencer_args: SequencerArgs {
             sequencer_enabled: true,
             block_time: 0,

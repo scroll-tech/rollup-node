@@ -48,6 +48,9 @@ pub struct ScrollRollupNodeConfig {
     /// Database args
     #[command(flatten)]
     pub database_args: DatabaseArgs,
+    /// Chain orchestrator args.
+    #[command(flatten)]
+    pub chain_orchestrator_args: ChainOrchestratorArgs,
     /// Engine driver args.
     #[command(flatten)]
     pub engine_driver_args: EngineDriverArgs,
@@ -204,7 +207,7 @@ impl ScrollRollupNodeConfig {
             chain_spec.clone(),
             Some(l2_provider.clone()),
             fcs,
-            !self.test && !chain_spec.is_dev_chain(),
+            self.engine_driver_args.sync_at_startup && !self.test && !chain_spec.is_dev_chain(),
             Duration::from_millis(self.sequencer_args.payload_building_duration),
         );
 
@@ -289,7 +292,7 @@ impl ScrollRollupNodeConfig {
             chain_spec.clone(),
             block_client,
             l2_provider,
-            self.engine_driver_args.en_sync_trigger,
+            self.chain_orchestrator_args.optimistic_sync_trigger,
         )
         .await;
 
@@ -323,15 +326,29 @@ pub struct DatabaseArgs {
 /// The engine driver args.
 #[derive(Debug, Clone, clap::Args)]
 pub struct EngineDriverArgs {
-    /// The amount of block difference between the EN and the latest block received from P2P
-    /// at which the engine driver triggers optimistic sync.
-    #[arg(long = "engine.en-sync-trigger", default_value_t = constants::BLOCK_GAP_TRIGGER)]
-    pub en_sync_trigger: u64,
+    /// Whether the engine driver should try to sync at start up.
+    #[arg(long = "engine.sync-at-startup", num_args=0..=1, default_value_t = true)]
+    pub sync_at_startup: bool,
 }
 
 impl Default for EngineDriverArgs {
     fn default() -> Self {
-        Self { en_sync_trigger: constants::BLOCK_GAP_TRIGGER }
+        Self { sync_at_startup: true }
+    }
+}
+
+/// The chain orchestrator arguments.
+#[derive(Debug, Clone, clap::Args)]
+pub struct ChainOrchestratorArgs {
+    /// The amount of block difference between the EN and the latest block received from P2P
+    /// at which the engine driver triggers optimistic sync.
+    #[arg(long = "engine.en-sync-trigger", default_value_t = constants::BLOCK_GAP_TRIGGER)]
+    pub optimistic_sync_trigger: u64,
+}
+
+impl Default for ChainOrchestratorArgs {
+    fn default() -> Self {
+        Self { optimistic_sync_trigger: constants::BLOCK_GAP_TRIGGER }
     }
 }
 
@@ -504,6 +521,7 @@ mod tests {
             signer_args: SignerArgs { key_file: None, aws_kms_key_id: None },
             database_args: DatabaseArgs::default(),
             engine_driver_args: EngineDriverArgs::default(),
+            chain_orchestrator_args: ChainOrchestratorArgs::default(),
             l1_provider_args: L1ProviderArgs::default(),
             beacon_provider_args: BeaconProviderArgs::default(),
             network_args: NetworkArgs::default(),
@@ -527,6 +545,7 @@ mod tests {
             },
             database_args: DatabaseArgs::default(),
             engine_driver_args: EngineDriverArgs::default(),
+            chain_orchestrator_args: ChainOrchestratorArgs::default(),
             l1_provider_args: L1ProviderArgs::default(),
             beacon_provider_args: BeaconProviderArgs::default(),
             network_args: NetworkArgs::default(),
@@ -549,6 +568,7 @@ mod tests {
                 aws_kms_key_id: None,
             },
             database_args: DatabaseArgs::default(),
+            chain_orchestrator_args: ChainOrchestratorArgs::default(),
             engine_driver_args: EngineDriverArgs::default(),
             l1_provider_args: L1ProviderArgs::default(),
             beacon_provider_args: BeaconProviderArgs::default(),
@@ -566,6 +586,7 @@ mod tests {
             signer_args: SignerArgs { key_file: None, aws_kms_key_id: Some("key-id".to_string()) },
             database_args: DatabaseArgs::default(),
             engine_driver_args: EngineDriverArgs::default(),
+            chain_orchestrator_args: ChainOrchestratorArgs::default(),
             l1_provider_args: L1ProviderArgs::default(),
             beacon_provider_args: BeaconProviderArgs::default(),
             network_args: NetworkArgs::default(),
@@ -582,6 +603,7 @@ mod tests {
             signer_args: SignerArgs { key_file: None, aws_kms_key_id: None },
             database_args: DatabaseArgs::default(),
             engine_driver_args: EngineDriverArgs::default(),
+            chain_orchestrator_args: ChainOrchestratorArgs::default(),
             l1_provider_args: L1ProviderArgs::default(),
             beacon_provider_args: BeaconProviderArgs::default(),
             network_args: NetworkArgs::default(),
@@ -598,6 +620,7 @@ mod tests {
             signer_args: SignerArgs { key_file: None, aws_kms_key_id: None },
             database_args: DatabaseArgs::default(),
             engine_driver_args: EngineDriverArgs::default(),
+            chain_orchestrator_args: ChainOrchestratorArgs::default(),
             l1_provider_args: L1ProviderArgs::default(),
             beacon_provider_args: BeaconProviderArgs::default(),
             network_args: NetworkArgs::default(),

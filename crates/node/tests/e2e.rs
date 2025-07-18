@@ -9,7 +9,7 @@ use reth_scroll_chainspec::SCROLL_DEV;
 use reth_scroll_node::ScrollNetworkPrimitives;
 use rollup_node::{
     test_utils::{default_test_scroll_rollup_node_config, generate_tx, setup_engine},
-    BeaconProviderArgs, DatabaseArgs, EngineDriverArgs, L1ProviderArgs,
+    BeaconProviderArgs, ChainOrchestratorArgs, DatabaseArgs, EngineDriverArgs, L1ProviderArgs,
     NetworkArgs as ScrollNetworkArgs, ScrollRollupNodeConfig, SequencerArgs,
 };
 use rollup_node_manager::{RollupManagerEvent, RollupManagerHandle};
@@ -42,6 +42,7 @@ async fn can_bridge_l1_messages() -> eyre::Result<()> {
         database_args: DatabaseArgs { path: Some(PathBuf::from("sqlite::memory:")) },
         l1_provider_args: L1ProviderArgs::default(),
         engine_driver_args: EngineDriverArgs::default(),
+        chain_orchestrator_args: ChainOrchestratorArgs::default(),
         sequencer_args: SequencerArgs {
             sequencer_enabled: true,
             block_time: 0,
@@ -119,6 +120,7 @@ async fn can_sequence_and_gossip_blocks() {
         database_args: DatabaseArgs { path: Some(PathBuf::from("sqlite::memory:")) },
         l1_provider_args: L1ProviderArgs::default(),
         engine_driver_args: EngineDriverArgs::default(),
+        chain_orchestrator_args: ChainOrchestratorArgs::default(),
         sequencer_args: SequencerArgs {
             sequencer_enabled: true,
             block_time: 0,
