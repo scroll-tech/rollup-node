@@ -91,15 +91,19 @@ async fn test_should_detect_reorg() -> eyre::Result<()> {
             continue
         }
 
+        // skip the `L1Notification::Synced` notifications
+        let mut notification = l1_watcher.recv().await.unwrap();
+        if matches!(notification.as_ref(), L1Notification::Synced) {
+            notification = l1_watcher.recv().await.unwrap();
+        }
+
         // check latest for reorg or new block.
         if latest_number > latest.header.number {
             // reorg
-            let notification = l1_watcher.recv().await.unwrap();
             assert!(matches!(notification.as_ref(), L1Notification::Reorg(_)));
             let notification = l1_watcher.recv().await.unwrap();
             assert_eq!(notification.as_ref(), &L1Notification::NewBlock(latest.header.number));
         } else {
-            let notification = l1_watcher.recv().await.unwrap();
             assert_eq!(notification.as_ref(), &L1Notification::NewBlock(latest.header.number));
         }
 
@@ -178,7 +182,12 @@ async fn test_should_fetch_gap_in_unfinalized_blocks() -> eyre::Result<()> {
             continue
         }
 
-        let notification = l1_watcher.recv().await.unwrap();
+        // skip the `L1Notification::Synced` notifications
+        let mut notification = l1_watcher.recv().await.unwrap();
+        if matches!(notification.as_ref(), L1Notification::Synced) {
+            notification = l1_watcher.recv().await.unwrap();
+        }
+
         assert_eq!(notification.as_ref(), &L1Notification::NewBlock(latest.header.number));
 
         // update finalized and latest.
