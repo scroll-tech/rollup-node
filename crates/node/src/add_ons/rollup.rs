@@ -11,8 +11,9 @@ use reth_scroll_node::ScrollNetworkPrimitives;
 use rollup_node_manager::RollupManagerHandle;
 use rollup_node_watcher::L1Notification;
 use scroll_alloy_hardforks::ScrollHardforks;
+use scroll_wire::ScrollWireEvent;
 use std::sync::Arc;
-use tokio::sync::mpsc::Sender;
+use tokio::sync::mpsc::{Sender, UnboundedReceiver};
 
 /// Implementing the trait allows the type to return whether it is configured for dev chain.
 #[auto_impl::auto_impl(Arc)]
@@ -45,6 +46,7 @@ impl RollupManagerAddOn {
         self,
         ctx: AddOnsContext<'_, N>,
         rpc: RpcHandle<N, EthApi>,
+        scroll_wire_event: UnboundedReceiver<ScrollWireEvent>,
     ) -> eyre::Result<(RollupManagerHandle, Option<Sender<Arc<L1Notification>>>)>
     where
         <<N as FullNodeTypes>::Types as NodeTypes>::ChainSpec: ScrollHardforks + IsDevChain,
@@ -54,6 +56,7 @@ impl RollupManagerAddOn {
             .config
             .build(
                 ctx.node.network().clone(),
+                scroll_wire_event,
                 rpc.rpc_server_handles,
                 ctx.config.chain.clone(),
                 ctx.config.datadir().db(),

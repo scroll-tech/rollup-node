@@ -24,6 +24,7 @@ use reth_scroll_node::{
 use reth_scroll_primitives::ScrollPrimitives;
 use reth_scroll_rpc::{eth::ScrollEthApiBuilder, ScrollEthApi, ScrollEthApiError};
 use scroll_alloy_evm::ScrollTransactionIntoTxEnv;
+use scroll_wire::ScrollWireEvent;
 
 mod handle;
 pub use handle::ScrollAddOnsHandle;
@@ -31,6 +32,7 @@ pub use handle::ScrollAddOnsHandle;
 mod rollup;
 pub use rollup::IsDevChain;
 use rollup::RollupManagerAddOn;
+use tokio::sync::mpsc::UnboundedReceiver;
 
 /// Add-ons for the Scroll follower node.
 #[derive(Debug)]
@@ -50,6 +52,9 @@ where
 
     /// Rollup manager addon responsible for managing the components of the rollup node.
     pub rollup_manager_addon: RollupManagerAddOn,
+
+    /// Scroll wire event is the receiver of the scroll wire event.
+    pub scroll_wire_event: UnboundedReceiver<ScrollWireEvent>,
 }
 impl<N> ScrollRollupNodeAddOns<N>
 where
@@ -57,10 +62,13 @@ where
     ScrollEthApiBuilder: EthApiBuilder<N>,
 {
     /// Create a new instance of [`ScrollRollupNodeAddOns`].
-    pub fn new(config: ScrollRollupNodeConfig) -> Self {
+    pub fn new(
+        config: ScrollRollupNodeConfig,
+        scroll_wire_event: UnboundedReceiver<ScrollWireEvent>,
+    ) -> Self {
         let rpc_add_ons = RpcAddOns::default();
         let rollup_manager_addon = RollupManagerAddOn::new(config);
-        Self { rpc_add_ons, rollup_manager_addon }
+        Self { rpc_add_ons, rollup_manager_addon, scroll_wire_event }
     }
 }
 impl<N> NodeAddOns<N> for ScrollRollupNodeAddOns<N>
@@ -84,11 +92,12 @@ where
         self,
         ctx: reth_node_api::AddOnsContext<'_, N>,
     ) -> eyre::Result<Self::Handle> {
-        let Self { rpc_add_ons, rollup_manager_addon: rollup_node_manager_addon } = self;
+        let Self { rpc_add_ons, rollup_manager_addon: rollup_node_manager_addon, .. } = self;
         let rpc_handle: RpcHandle<N, ScrollEthApi<N>> =
             rpc_add_ons.launch_add_ons_with(ctx.clone(), |_| Ok(())).await?;
-        let (rollup_manager_handle, l1_watcher_tx) =
-            rollup_node_manager_addon.launch(ctx.clone(), rpc_handle.clone()).await?;
+        let (rollup_manager_handle, l1_watcher_tx) = rollup_node_manager_addon
+            .launch(ctx.clone(), rpc_handle.clone(), self.scroll_wire_event)
+            .await?;
         Ok(ScrollAddOnsHandle {
             rollup_manager_handle,
             rpc_handle,
