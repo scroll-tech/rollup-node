@@ -2,10 +2,7 @@ version: '3.8'
 
 services:
   rollup-node-sequencer:
-    image: rollup-node:latest
-    build:
-      context: ..
-      dockerfile: Dockerfile
+    image: scrolltech/rollup-node:v0.0.1-rc21
     container_name: rollup-node-sequencer
     ports:
       - "8545:8545"
@@ -60,10 +57,7 @@ services:
     ]
 
   rollup-node-follower:
-    image: rollup-node:latest
-    build:
-      context: ..
-      dockerfile: Dockerfile
+    image: scrolltech/rollup-node:v0.0.1-rc21
     container_name: rollup-node-follower
     ports:
       - "8547:8545"
