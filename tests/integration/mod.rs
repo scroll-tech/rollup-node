@@ -1,2 +1,2 @@
 pub mod block_production;
-pub mod multi_node;
+pub mod block_propagation;

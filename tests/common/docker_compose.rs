@@ -224,19 +224,6 @@ impl DockerComposeEnv {
                 println!("📋 {} direct logs (stderr):\n{}", service_name, stderr);
             }
         }
-
-        // Check if rollup-node binary exists and is executable
-        let binary_check =
-            Command::new("docker").args(&["exec", service_name, "which", "rollup-node"]).output();
-
-        if let Ok(output) = binary_check {
-            let path = String::from_utf8_lossy(&output.stdout);
-            if !path.trim().is_empty() {
-                println!("🔍 rollup-node binary location: {}", path.trim());
-            } else {
-                println!("⚠️ rollup-node binary not found in PATH");
-            }
-        }
     }
 
     /// Show logs for all containers

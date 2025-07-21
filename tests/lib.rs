@@ -7,7 +7,7 @@ mod integration;
 #[cfg(test)]
 mod block_production;
 #[cfg(test)]
-mod multi_node;
+mod block_propagation;
 
 #[cfg(test)]
 pub use common::*;
