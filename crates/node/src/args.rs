@@ -342,7 +342,7 @@ impl Default for EngineDriverArgs {
 pub struct ChainOrchestratorArgs {
     /// The amount of block difference between the EN and the latest block received from P2P
     /// at which the engine driver triggers optimistic sync.
-    #[arg(long = "engine.en-sync-trigger", default_value_t = constants::BLOCK_GAP_TRIGGER)]
+    #[arg(long = "chain.optimistic-sync-trigger", default_value_t = constants::BLOCK_GAP_TRIGGER)]
     pub optimistic_sync_trigger: u64,
 }
 
