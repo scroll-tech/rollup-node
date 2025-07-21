@@ -27,6 +27,8 @@ members = [
 
 resolver = "2"
 
+exclude = ["tests"]
+
 [workspace.lints]
 rust.missing_debug_implementations = "warn"
 rust.missing_docs = "warn"

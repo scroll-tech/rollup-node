@@ -1,0 +1,129 @@
+version: '3.8'
+
+services:
+  rollup-node-sequencer:
+    image: rollup-node:latest
+    build:
+      context: ..
+      dockerfile: Dockerfile
+    container_name: rollup-node-sequencer
+    ports:
+      - "8545:8545"
+      - "8546:8546"
+      - "6060:6060"
+    networks:
+      - test-scroll-network
+    volumes:
+      - l2reth-sequencer:/l2reth
+    environment:
+      - RUST_LOG=debug
+      - ROLE=sequencer
+      - ENV=dev
+    entrypoint: ["/bin/bash", "-c"]
+    command: [
+      "set -e;
+       echo '=== Starting sequencer with built-in binary ===';
+       echo 'Binary info:';
+       rollup-node --version;
+
+       apt-get update -qq && apt-get install -y -qq openssl;
+
+       mkdir -p /l2reth/db /l2reth/logs /l2reth/static_files;
+       openssl rand -hex 32 > /l2reth/jwt.hex;
+       chmod -R 777 /l2reth;
+       
+       echo 'Initializing database...';
+       rollup-node init --chain dev --datadir=/l2reth -vvv || echo 'Init failed, continuing...';
+       
+       echo 'Starting sequencer...';
+       exec rollup-node node 
+         --chain dev 
+         --datadir=/l2reth 
+         --metrics=0.0.0.0:6060 
+         --http --http.addr=0.0.0.0 --http.port=8545 
+         --http.corsdomain '*' 
+         --http.api admin,debug,eth,net,trace,txpool,web3,rpc,reth,ots,flashbots,miner,mev 
+         --ws --ws.addr=0.0.0.0 --ws.port=8546 
+         --ws.api admin,debug,eth,net,trace,txpool,web3,rpc,reth,ots,flashbots,miner,mev 
+         --log.stdout.format log-fmt 
+         -vvv 
+         --sequencer.enabled 
+         --sequencer.block-time 12000 
+         --sequencer.payload-building-duration 230 
+         --txpool.pending-max-count=1000000 
+         --builder.gaslimit=10000000000 
+         --rpc.max-connections=5000 
+         --signer.key-file /l2reth/jwt.hex 
+         --disable-discovery 
+         --network.bridge 
+         --network.scroll-wire"
+    ]
+
+  rollup-node-follower:
+    image: rollup-node:latest
+    build:
+      context: ..
+      dockerfile: Dockerfile
+    container_name: rollup-node-follower
+    ports:
+      - "8547:8545"
+      - "8548:8546"
+      - "6061:6060"
+    networks:
+      - test-scroll-network
+    volumes:
+      - l2reth-follower:/l2reth
+    environment:
+      - RUST_LOG=debug
+      - ROLE=follower
+      - ENV=dev
+    depends_on:
+      - rollup-node-sequencer
+    entrypoint: ["/bin/bash", "-c"]
+    command: [
+      "set -e;
+       echo '=== Starting follower with built-in binary ===';
+       echo 'Binary info:';
+       rollup-node --version;
+
+       apt-get update -qq && apt-get install -y -qq openssl;
+
+       mkdir -p /l2reth/db /l2reth/logs /l2reth/static_files;
+       openssl rand -hex 32 > /l2reth/jwt.hex;
+       chmod -R 777 /l2reth;
+
+       echo 'Waiting for sequencer...';
+       sleep 30;
+       
+       echo 'Initializing database...';
+       rollup-node init --chain dev --datadir=/l2reth -vvv || echo 'Init failed, continuing...';
+       
+       echo 'Starting follower...';
+       exec rollup-node node 
+         --chain dev 
+         --datadir=/l2reth 
+         --metrics=0.0.0.0:6060 
+         --http --http.addr=0.0.0.0 --http.port=8545 
+         --http.corsdomain '*' 
+         --http.api admin,debug,eth,net,trace,txpool,web3,rpc,reth,ots,flashbots,miner,mev 
+         --ws --ws.addr=0.0.0.0 --ws.port=8546 
+         --ws.api admin,debug,eth,net,trace,txpool,web3,rpc,reth,ots,flashbots,miner,mev 
+         --log.stdout.format log-fmt 
+         -vvv 
+         --sequencer.enabled=false 
+         --txpool.pending-max-count=1000000 
+         --builder.gaslimit=10000000000 
+         --rpc.max-connections=5000 
+         --signer.key-file /l2reth/jwt.hex 
+         --disable-discovery 
+         --network.bridge 
+         --network.scroll-wire"
+    ]
+
+networks:
+  test-scroll-network:
+    driver: bridge
+
+volumes:
+  l2reth-sequencer:
+  l2reth-follower:
