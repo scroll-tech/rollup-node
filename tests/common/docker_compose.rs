@@ -225,16 +225,6 @@ impl DockerComposeEnv {
             }
         }
 
-        // Check container internal processes
-        let ps_output = Command::new("docker").args(&["exec", service_name, "ps", "aux"]).output();
-
-        if let Ok(ps) = ps_output {
-            let processes = String::from_utf8_lossy(&ps.stdout);
-            println!("🔍 Processes in {}:\n{}", service_name, processes);
-        } else {
-            println!("⚠️ Could not get process list from {}", service_name);
-        }
-
         // Check if rollup-node binary exists and is executable
         let binary_check =
             Command::new("docker").args(&["exec", service_name, "which", "rollup-node"]).output();
@@ -311,24 +301,6 @@ impl DockerComposeEnv {
 
     /// Force cleanup containers and networks manually
     fn force_cleanup(&self) {
-        let containers = ["rollup-node-sequencer", "rollup-node-follower"];
-
-        for container in &containers {
-            // Get container IDs that match the name pattern
-            if let Ok(output) = Command::new("docker")
-                .args(&["ps", "-aq", "--filter", &format!("name={}", container)])
-                .output()
-            {
-                let container_ids = String::from_utf8_lossy(&output.stdout);
-                for id in container_ids.lines() {
-                    if !id.trim().is_empty() {
-                        // Force remove each container
-                        let _ = Command::new("docker").args(&["rm", "-f", id.trim()]).output();
-                    }
-                }
-            }
-        }
-
         // Clean up project-specific network
         let network_name = format!("{}_test-scroll-network", self.project_name);
         let _ = Command::new("docker").args(&["network", "rm", &network_name]).output();

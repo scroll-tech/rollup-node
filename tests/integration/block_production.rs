@@ -8,8 +8,8 @@ async fn test_basic_block_production() {
     let _env = DockerComposeEnv::new("basic-block-production");
 
     // Wait a bit longer for services to fully initialize
-    println!("⏳ Waiting 15 seconds for services to fully initialize...");
-    tokio::time::sleep(Duration::from_secs(15)).await;
+    println!("⏳ Waiting 5 seconds for services to fully initialize...");
+    tokio::time::sleep(Duration::from_secs(5)).await;
 
     // Create test clients with enhanced error handling
     let clients =
