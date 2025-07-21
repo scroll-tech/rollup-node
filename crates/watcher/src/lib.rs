@@ -156,6 +156,8 @@ where
         start_block: Option<u64>,
         config: Arc<NodeConfig>,
     ) -> mpsc::Receiver<Arc<L1Notification>> {
+        tracing::trace!(target: "scroll::watcher", ?start_block, ?config, "spawning L1 watcher");
+
         let (tx, rx) = mpsc::channel(LOGS_QUERY_BLOCK_RANGE as usize);
 
         let fetch_block_number = async |tag: BlockNumberOrTag| {

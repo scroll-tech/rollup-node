@@ -251,23 +251,23 @@ where
 #[instrument(skip_all, level = "trace",
         fields(
              fcs = ?fcs,
-             payload_attributes = ?payload_attributes
+             payload_attributes = ?payload_attributes_with_batch_info
         )
     )]
 async fn handle_payload_attributes<EC, P>(
     client: Arc<EC>,
     provider: P,
     fcs: ForkchoiceState,
-    payload_attributes: ScrollPayloadAttributesWithBatchInfo,
+    payload_attributes_with_batch_info: ScrollPayloadAttributesWithBatchInfo,
 ) -> Result<ConsolidationOutcome, EngineDriverError>
 where
     EC: ScrollEngineApi + Unpin + Send + Sync + 'static,
     P: Provider<Scroll> + Unpin + Send + Sync + 'static,
 {
-    tracing::trace!(target: "scroll::engine::future", ?fcs, ?payload_attributes, "handling payload attributes");
+    tracing::trace!(target: "scroll::engine::future", ?fcs, ?payload_attributes_with_batch_info, "handling payload attributes");
 
     let ScrollPayloadAttributesWithBatchInfo { mut payload_attributes, batch_info } =
-        payload_attributes;
+        payload_attributes_with_batch_info.clone();
 
     let maybe_execution_payload = provider
         .get_block((fcs.safe_block_info().number + 1).into())
@@ -307,7 +307,9 @@ where
         // retrieve the execution payload
         let execution_payload = get_payload(
             client.clone(),
-            fc_updated.payload_id.expect("payload attributes has been set"),
+            fc_updated
+                .payload_id
+                .ok_or(EngineDriverError::MissingPayloadId(payload_attributes_with_batch_info))?,
         )
         .await?;
         // issue the execution payload to the EL

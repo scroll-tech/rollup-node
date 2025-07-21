@@ -2,7 +2,7 @@ use super::{future::EngineFuture, ForkchoiceState};
 use crate::{
     future::{BuildNewPayloadFuture, EngineDriverFutureResult},
     metrics::EngineDriverMetrics,
-    EngineDriverEvent,
+    EngineDriverError, EngineDriverEvent,
 };
 
 use alloy_provider::Provider;
@@ -223,7 +223,10 @@ where
                         return Some(EngineDriverEvent::L1BlockConsolidated(consolidation_outcome))
                     }
                     Err(err) => {
-                        tracing::error!(target: "scroll::engine", ?err, "failed to consolidate block derived from L1")
+                        tracing::error!(target: "scroll::engine", ?err, "failed to consolidate block derived from L1");
+                        if let EngineDriverError::MissingPayloadId(attributes) = err {
+                            self.l1_payload_attributes.push_front(attributes);
+                        }
                     }
                 }
             }
