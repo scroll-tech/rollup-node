@@ -44,7 +44,7 @@ scroll-network.workspace = true
 scroll-wire.workspace = true
 
 # rollup node
-rollup-node-indexer.workspace = true
+rollup-node-chain-orchestrator.workspace = true
 rollup-node-primitives.workspace = true
 rollup-node-providers.workspace = true
 rollup-node-sequencer.workspace = true

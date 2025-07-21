@@ -20,4 +20,4 @@ pub(crate) const DEFAULT_PAYLOAD_BUILDING_DURATION: u64 = 800;
 pub(crate) const DEFAULT_MAX_L1_MESSAGES_PER_BLOCK: u64 = 4;
 
 /// The gap in blocks between the P2P and EN which triggers sync.
-pub(crate) const BLOCK_GAP_TRIGGER: u64 = 500_000;
+pub(crate) const BLOCK_GAP_TRIGGER: u64 = 100_000;

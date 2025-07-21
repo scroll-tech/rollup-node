@@ -9,7 +9,7 @@ use reth_scroll_chainspec::SCROLL_DEV;
 use reth_scroll_node::ScrollNetworkPrimitives;
 use rollup_node::{
     test_utils::{default_test_scroll_rollup_node_config, generate_tx, setup_engine},
-    BeaconProviderArgs, DatabaseArgs, EngineDriverArgs, L1ProviderArgs,
+    BeaconProviderArgs, ChainOrchestratorArgs, DatabaseArgs, EngineDriverArgs, L1ProviderArgs,
     NetworkArgs as ScrollNetworkArgs, ScrollRollupNodeConfig, SequencerArgs,
 };
 use rollup_node_manager::{RollupManagerEvent, RollupManagerHandle};
@@ -42,6 +42,7 @@ async fn can_bridge_l1_messages() -> eyre::Result<()> {
         database_args: DatabaseArgs { path: Some(PathBuf::from("sqlite::memory:")) },
         l1_provider_args: L1ProviderArgs::default(),
         engine_driver_args: EngineDriverArgs::default(),
+        chain_orchestrator_args: ChainOrchestratorArgs::default(),
         sequencer_args: SequencerArgs {
             sequencer_enabled: true,
             block_time: 0,
@@ -92,6 +93,19 @@ async fn can_bridge_l1_messages() -> eyre::Result<()> {
 }
 
 #[tokio::test]
+async fn follower_can_reorg() -> eyre::Result<()> {
+    reth_tracing::init_test_tracing();
+
+    // create 2 nodes
+    let chain_spec = (*SCROLL_DEV).clone();
+    let (mut _nodes, _tasks, _) =
+        setup_engine(default_test_scroll_rollup_node_config(), 2, chain_spec.clone(), false)
+            .await?;
+
+    Ok(())
+}
+
+#[tokio::test]
 async fn can_sequence_and_gossip_blocks() {
     reth_tracing::init_test_tracing();
 
@@ -106,6 +120,7 @@ async fn can_sequence_and_gossip_blocks() {
         database_args: DatabaseArgs { path: Some(PathBuf::from("sqlite::memory:")) },
         l1_provider_args: L1ProviderArgs::default(),
         engine_driver_args: EngineDriverArgs::default(),
+        chain_orchestrator_args: ChainOrchestratorArgs::default(),
         sequencer_args: SequencerArgs {
             sequencer_enabled: true,
             block_time: 0,
@@ -149,6 +164,12 @@ async fn can_sequence_and_gossip_blocks() {
         panic!("Failed to receive block from rollup node");
     }
 
+    // assert that a chain extension is triggered on the follower node
+    if let Some(RollupManagerEvent::ChainExtensionTriggered(_)) = follower_events.next().await {
+    } else {
+        panic!("Failed to receive chain extension event from rollup node");
+    }
+
     // assert that the block was successfully imported by the follower node
     if let Some(RollupManagerEvent::BlockImported(block)) = follower_events.next().await {
         assert_eq!(block.body.transactions.len(), 1);
@@ -189,8 +210,13 @@ async fn can_bridge_blocks() {
         .with_pow()
         .build_with_noop_provider(chain_spec.clone());
     let scroll_wire_config = ScrollWireConfig::new(true);
-    let mut scroll_network =
-        scroll_network::ScrollNetworkManager::new(network_config, scroll_wire_config).await;
+    let mut scroll_network = scroll_network::ScrollNetworkManager::new(
+        chain_spec.clone(),
+        network_config,
+        scroll_wire_config,
+        None,
+    )
+    .await;
     let scroll_network_handle = scroll_network.handle();
 
     // Connect the scroll-wire node to the scroll NetworkManager.
