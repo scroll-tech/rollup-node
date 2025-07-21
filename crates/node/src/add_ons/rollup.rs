@@ -33,7 +33,7 @@ impl IsDevChain for ScrollChainSpec {
 #[derive(Debug)]
 pub struct RollupManagerAddOn {
     config: ScrollRollupNodeConfig,
-    pub scroll_wire_event: UnboundedReceiver<ScrollWireEvent>,
+    scroll_wire_event: UnboundedReceiver<ScrollWireEvent>,
 }
 
 impl RollupManagerAddOn {
