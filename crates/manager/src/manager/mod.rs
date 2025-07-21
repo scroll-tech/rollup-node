@@ -402,10 +402,9 @@ where
             }
         }
         if let L1Notification::NewBlock(block) = notification {
-            self.sequencer
-                .as_mut()
-                .expect("Sequencer must be initialized")
-                .handle_new_l1_block(block);
+            if let Some(s) = self.sequencer.as_mut() {
+                s.handle_new_l1_block(block)
+            }
         }
         self.chain.handle_l1_notification(notification)
     }
