@@ -52,9 +52,6 @@ where
 
     /// Rollup manager addon responsible for managing the components of the rollup node.
     pub rollup_manager_addon: RollupManagerAddOn,
-
-    /// Scroll wire event is the receiver of the scroll wire event.
-    pub scroll_wire_event: UnboundedReceiver<ScrollWireEvent>,
 }
 impl<N> ScrollRollupNodeAddOns<N>
 where
@@ -67,8 +64,8 @@ where
         scroll_wire_event: UnboundedReceiver<ScrollWireEvent>,
     ) -> Self {
         let rpc_add_ons = RpcAddOns::default();
-        let rollup_manager_addon = RollupManagerAddOn::new(config);
-        Self { rpc_add_ons, rollup_manager_addon, scroll_wire_event }
+        let rollup_manager_addon = RollupManagerAddOn::new(config, scroll_wire_event);
+        Self { rpc_add_ons, rollup_manager_addon }
     }
 }
 impl<N> NodeAddOns<N> for ScrollRollupNodeAddOns<N>
@@ -92,12 +89,11 @@ where
         self,
         ctx: reth_node_api::AddOnsContext<'_, N>,
     ) -> eyre::Result<Self::Handle> {
-        let Self { rpc_add_ons, rollup_manager_addon: rollup_node_manager_addon, .. } = self;
+        let Self { rpc_add_ons, rollup_manager_addon: rollup_node_manager_addon } = self;
         let rpc_handle: RpcHandle<N, ScrollEthApi<N>> =
             rpc_add_ons.launch_add_ons_with(ctx.clone(), |_| Ok(())).await?;
-        let (rollup_manager_handle, l1_watcher_tx) = rollup_node_manager_addon
-            .launch(ctx.clone(), rpc_handle.clone(), self.scroll_wire_event)
-            .await?;
+        let (rollup_manager_handle, l1_watcher_tx) =
+            rollup_node_manager_addon.launch(ctx.clone(), rpc_handle.clone()).await?;
         Ok(ScrollAddOnsHandle {
             rollup_manager_handle,
             rpc_handle,

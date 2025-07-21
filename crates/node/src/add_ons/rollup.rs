@@ -33,12 +33,16 @@ impl IsDevChain for ScrollChainSpec {
 #[derive(Debug)]
 pub struct RollupManagerAddOn {
     config: ScrollRollupNodeConfig,
+    pub scroll_wire_event: UnboundedReceiver<ScrollWireEvent>,
 }
 
 impl RollupManagerAddOn {
     /// Create a new rollup node manager addon.
-    pub const fn new(config: ScrollRollupNodeConfig) -> Self {
-        Self { config }
+    pub const fn new(
+        config: ScrollRollupNodeConfig,
+        scroll_wire_event: UnboundedReceiver<ScrollWireEvent>,
+    ) -> Self {
+        Self { config, scroll_wire_event }
     }
 
     /// Launch the rollup node manager addon.
@@ -46,7 +50,6 @@ impl RollupManagerAddOn {
         self,
         ctx: AddOnsContext<'_, N>,
         rpc: RpcHandle<N, EthApi>,
-        scroll_wire_event: UnboundedReceiver<ScrollWireEvent>,
     ) -> eyre::Result<(RollupManagerHandle, Option<Sender<Arc<L1Notification>>>)>
     where
         <<N as FullNodeTypes>::Types as NodeTypes>::ChainSpec: ScrollHardforks + IsDevChain,
@@ -56,7 +59,7 @@ impl RollupManagerAddOn {
             .config
             .build(
                 ctx.node.network().clone(),
-                scroll_wire_event,
+                self.scroll_wire_event,
                 rpc.rpc_server_handles,
                 ctx.config.chain.clone(),
                 ctx.config.datadir().db(),
