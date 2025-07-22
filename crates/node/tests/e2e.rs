@@ -18,7 +18,7 @@ use rollup_node_sequencer::L1MessageInclusionMode;
 use rollup_node_watcher::L1Notification;
 use scroll_alloy_consensus::TxL1Message;
 use scroll_network::{NewBlockWithPeer, SCROLL_MAINNET};
-use scroll_wire::ScrollWireConfig;
+use scroll_wire::{ScrollWireConfig, ScrollWireProtocolHandler};
 use std::{
     path::PathBuf,
     sync::Arc,
@@ -277,10 +277,12 @@ async fn graceful_shutdown_consolidates_most_recent_batch_on_startup() -> eyre::
             .expect("valid url that will not be used as test batches use calldata"),
     );
 
+    let (_, events) = ScrollWireProtocolHandler::new(ScrollWireConfig::new(true));
     let (mut rnm, handle, l1_notification_tx) = config
         .clone()
         .build(
             node.inner.network.clone(),
+            events,
             node.inner.add_ons_handle.rpc_handle.rpc_server_handles.clone(),
             chain_spec.clone(),
             path.clone(),
@@ -384,10 +386,12 @@ async fn graceful_shutdown_consolidates_most_recent_batch_on_startup() -> eyre::
     drop(rnm_events);
 
     // Start the RNM again.
+    let (_, events) = ScrollWireProtocolHandler::new(ScrollWireConfig::new(true));
     let (mut rnm, handle, l1_notification_tx) = config
         .clone()
         .build(
             node.inner.network.clone(),
+            events,
             node.inner.add_ons_handle.rpc_handle.rpc_server_handles.clone(),
             chain_spec,
             path.clone(),
