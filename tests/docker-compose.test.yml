@@ -2,7 +2,7 @@ version: '3.8'
 
 services:
   rollup-node-sequencer:
-    image: scrolltech/rollup-node:v0.0.1-rc22
+    image: scrolltech/rollup-node:v0.0.1-rc23
     container_name: rollup-node-sequencer
     entrypoint: ["bash", "/launch_rollup_node_sequencer.bash"]
     environment:
@@ -19,13 +19,7 @@ services:
       - test-scroll-network
 
   rollup-node-follower:
-    image: scrolltech/rollup-node:v0.0.1-rc22
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8545"]
-      interval: 5s
-      timeout: 2s
-      retries: 20
-      start_period: 5s
+    image: scrolltech/rollup-node:v0.0.1-rc23
     container_name: rollup-node-follower
     entrypoint: ["bash", "/launch_rollup_node_follower.bash"]
     environment:
