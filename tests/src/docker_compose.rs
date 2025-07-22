@@ -1,5 +1,8 @@
-use std::{process::Command, thread, time::Duration};
-use uuid::Uuid;
+use std::{
+    process::Command,
+    thread,
+    time::{Duration, SystemTime, UNIX_EPOCH},
+};
 
 pub struct DockerComposeEnv {
     project_name: String,
@@ -9,9 +12,10 @@ pub struct DockerComposeEnv {
 
 impl DockerComposeEnv {
     pub fn new(test_name: &str) -> Self {
-        let uuid = Uuid::new_v4();
-        let uuid_str = uuid.to_string();
-        let project_name = format!("test-{}-{}", test_name, &uuid_str[..8]);
+        let start = SystemTime::now();
+        let since_the_epoch = start.duration_since(UNIX_EPOCH).expect("Time went backwards");
+        let unique_id = since_the_epoch.as_nanos();
+        let project_name = format!("test-{test_name}-{unique_id}");
         let compose_file = "docker-compose.test.yml".to_string();
 
         println!("🚀 Starting test environment: {project_name}");

@@ -1622,7 +1622,7 @@ dependencies = [
  "percent-encoding",
  "pin-project-lite",
  "tracing",
- "uuid 1.17.0",
+ "uuid",
 ]
 
 [[package]]
@@ -5523,7 +5523,7 @@ dependencies = [
  "smallvec",
  "tagptr",
  "thiserror 1.0.69",
- "uuid 1.17.0",
+ "uuid",
 ]
 
 [[package]]
@@ -10004,7 +10004,7 @@ dependencies = [
  "rkyv_derive",
  "seahash",
  "tinyvec",
- "uuid 1.17.0",
+ "uuid",
 ]
 
 [[package]]
@@ -11018,7 +11018,7 @@ dependencies = [
  "time",
  "tracing",
  "url",
- "uuid 1.17.0",
+ "uuid",
 ]
 
 [[package]]
@@ -11083,7 +11083,7 @@ dependencies = [
  "sea-query-derive",
  "serde_json",
  "time",
- "uuid 1.17.0",
+ "uuid",
 ]
 
 [[package]]
@@ -11099,7 +11099,7 @@ dependencies = [
  "serde_json",
  "sqlx",
  "time",
- "uuid 1.17.0",
+ "uuid",
 ]
 
 [[package]]
@@ -11656,7 +11656,7 @@ dependencies = [
  "tokio-stream",
  "tracing",
  "url",
- "uuid 1.17.0",
+ "uuid",
 ]
 
 [[package]]
@@ -11740,7 +11740,7 @@ dependencies = [
  "thiserror 2.0.12",
  "time",
  "tracing",
- "uuid 1.17.0",
+ "uuid",
  "whoami",
 ]
 
@@ -11783,7 +11783,7 @@ dependencies = [
  "thiserror 2.0.12",
  "time",
  "tracing",
- "uuid 1.17.0",
+ "uuid",
  "whoami",
 ]
 
@@ -11811,7 +11811,7 @@ dependencies = [
  "time",
  "tracing",
  "url",
- "uuid 1.17.0",
+ "uuid",
 ]
 
 [[package]]
@@ -12027,7 +12027,6 @@ dependencies = [
  "alloy-rpc-types-eth",
  "eyre",
  "tokio",
- "uuid 0.8.2",
 ]
 
 [[package]]
@@ -12347,7 +12346,7 @@ dependencies = [
  "tower-layer",
  "tower-service",
  "tracing",
- "uuid 1.17.0",
+ "uuid",
 ]
 
 [[package]]
@@ -12726,15 +12725,6 @@ name = "utf8parse"
 version = "0.2.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "06abde3611657adf66d383f00b093d7faecc7fa57071cce2578660c9f1010821"
-
-[[package]]
-name = "uuid"
-version = "0.8.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "bc5cf98d8186244414c848017f0e2676b3fcb46807f6668a97dfe67359a3c4b7"
-dependencies = [
- "getrandom 0.2.16",
-]
 
 [[package]]
 name = "uuid"
