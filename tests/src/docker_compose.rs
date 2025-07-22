@@ -1,6 +1,7 @@
+use alloy_provider::{Provider, ProviderBuilder};
+use eyre::Result;
 use std::{
     process::Command,
-    thread,
     time::{Duration, SystemTime, UNIX_EPOCH},
 };
 
@@ -82,103 +83,35 @@ impl DockerComposeEnv {
             panic!("Failed to spin up docker-compose");
         }
 
-        let env = Self {
+        Self {
             project_name: project_name.to_string(),
             compose_file: compose_file.to_string(),
             cleanup_on_drop: true,
-        };
-
-        // Wait for services to be ready (with improved logic)
-        env.wait_for_services();
-
-        env
-    }
-
-    pub fn wait_for_services(&self) {
-        println!("⏳ Waiting for services to be ready...");
-
-        // First check if containers are running (without health checks)
-        self.wait_for_container_running("rollup-node-sequencer");
-        self.wait_for_container_running("rollup-node-follower");
-
-        println!("✅ All services are running!");
-    }
-
-    /// Wait for container to be in running state
-    fn wait_for_container_running(&self, container_name: &str) {
-        for attempt in 1..=30 {
-            // Check if container is running
-            let output = Command::new("docker")
-                .args(["inspect", "--format={{.State.Running}}", container_name])
-                .output();
-
-            if let Ok(output) = output {
-                let is_running = String::from_utf8_lossy(&output.stdout).trim().to_string();
-                if is_running == "true" {
-                    println!("✅ {container_name} is running");
-
-                    // Additional check: try to connect to the port
-                    if self.check_port_accessibility(container_name) {
-                        return;
-                    }
-                } else if is_running == "false" {
-                    // Container stopped, get exit code and logs
-                    let exit_code_output = Command::new("docker")
-                        .args(["inspect", "--format={{.State.ExitCode}}", container_name])
-                        .output();
-
-                    if let Ok(exit_output) = exit_code_output {
-                        let exit_code_str = String::from_utf8_lossy(&exit_output.stdout);
-                        let exit_code = exit_code_str.trim();
-                        eprintln!("❌ {container_name} exited with code: {exit_code}");
-                    }
-
-                    self.show_container_logs(container_name);
-                    panic!("❌ {container_name} failed to start (container exited)");
-                }
-            }
-
-            if attempt % 5 == 0 {
-                println!("⏳ Waiting for {container_name}... (attempt {attempt}/30)");
-                // Show recent logs every 5 attempts
-                self.show_recent_logs(container_name);
-            }
-
-            thread::sleep(Duration::from_secs(2));
-        }
-
-        // Final attempt to get logs
-        self.show_container_logs(container_name);
-        panic!("❌ {container_name} failed to start within 60 seconds");
-    }
-
-    /// Show recent logs (last 20 lines) for quick debugging
-    fn show_recent_logs(&self, container_name: &str) {
-        let output = Command::new("docker").args(["logs", "--tail", "20", container_name]).output();
-
-        if let Ok(logs) = output {
-            let stdout = String::from_utf8_lossy(&logs.stdout);
-            let stderr = String::from_utf8_lossy(&logs.stderr);
-            if !stdout.trim().is_empty() || !stderr.trim().is_empty() {
-                println!("📋 Recent logs for {container_name}:");
-                if !stdout.trim().is_empty() {
-                    println!("STDOUT:\n{stdout}");
-                }
-                if !stderr.trim().is_empty() {
-                    println!("STDERR:\n{stderr}");
-                }
-            }
         }
     }
 
-    /// Check if the container port is accessible
-    fn check_port_accessibility(&self, container_name: &str) -> bool {
-        let port = if container_name.contains("sequencer") { "8545" } else { "8547" };
-
-        // Try to connect to the port (simple check)
-        let output = Command::new("nc").args(["-z", "localhost", port]).output();
-
-        output.map(|o| o.status.success()).unwrap_or(false)
+    // Wait for L2 node to be ready
+    pub async fn wait_for_l2_node_ready(provider_url: &str, max_retries: u32) -> Result<()> {
+        for i in 0..max_retries {
+            match ProviderBuilder::new().connect(provider_url).await {
+                Ok(provider) => match provider.get_chain_id().await {
+                    Ok(chain_id) => {
+                        println!("✅ L2 node ready - Chain ID: {chain_id}");
+                        return Ok(());
+                    }
+                    Err(e) => {
+                        let attempt = i + 1;
+                        println!("⏳ L2 node not ready yet (attempt {attempt}/{max_retries}): {e}");
+                    }
+                },
+                Err(e) => {
+                    let attempt = i + 1;
+                    println!("⏳ Waiting for L2 node (attempt {attempt}/{max_retries}): {e}");
+                }
+            }
+            tokio::time::sleep(Duration::from_secs(2)).await;
+        }
+        eyre::bail!("L2 node failed to become ready after {max_retries} attempts")
     }
 
     /// Public method to display container logs for external debugging

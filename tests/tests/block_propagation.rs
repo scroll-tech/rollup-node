@@ -1,8 +1,5 @@
 //! Tests for basic block propagation.
 
-mod common;
-use common::retry_operation;
-
 use alloy_network::Ethereum;
 use alloy_provider::{Provider, ProviderBuilder};
 use alloy_rpc_types_eth::{Block, BlockNumberOrTag};
@@ -13,26 +10,18 @@ use tests::docker_compose::DockerComposeEnv;
 #[tokio::test]
 async fn test_block_propagation() -> Result<()> {
     println!("=== STARTING test_block_propagation ===");
-    let _env = DockerComposeEnv::new("basic-block-propagation");
+    let env = DockerComposeEnv::new("basic-block-propagation");
 
-    // Wait for services to initialize.
     println!("⏳ Waiting for services to fully initialize...");
-    _env.wait_for_services();
+    DockerComposeEnv::wait_for_l2_node_ready(&env.get_sequencer_rpc_url(), 5).await?;
+    DockerComposeEnv::wait_for_l2_node_ready(&env.get_follower_rpc_url(), 5).await?;
 
-    // Create providers for both sequencer and follower.
-    let sequencer_url = _env.get_sequencer_rpc_url();
-    let follower_url = _env.get_follower_rpc_url();
+    let sequencer = ProviderBuilder::new().connect(&env.get_sequencer_rpc_url()).await?;
+    println!("✅ Sequencer provider created");
 
-    let sequencer =
-        retry_operation(|| async { ProviderBuilder::new().connect(&sequencer_url).await }, 3)
-            .await
-            .expect("Failed to create sequencer provider");
-    let follower =
-        retry_operation(|| async { ProviderBuilder::new().connect(&follower_url).await }, 3)
-            .await
-            .expect("Failed to create follower provider");
+    let follower = ProviderBuilder::new().connect(&env.get_follower_rpc_url()).await?;
+    println!("✅ Follower provider created");
 
-    // Verify connectivity and matching chain IDs.
     let s_chain_id = sequencer.get_chain_id().await?;
     let f_chain_id = follower.get_chain_id().await?;
     println!(
@@ -40,21 +29,16 @@ async fn test_block_propagation() -> Result<()> {
     );
     assert_eq!(s_chain_id, f_chain_id, "Chain IDs must match");
 
-    // 1. Wait for the sequencer to produce 5 new blocks.
-    let target_block =
-        wait_for_sequencer_blocks(&sequencer, 5).await.expect("Sequencer should produce blocks");
+    let target_block = wait_for_sequencer_blocks(&sequencer, 5).await?;
+    println!("Sequencer produced {target_block} blocks, now waiting for follower sync...");
 
-    // 2. Wait for the follower to sync up to the target block height.
-    wait_for_follower_sync(&follower, target_block)
-        .await
-        .expect("Follower should sync to sequencer");
+    wait_for_follower_sync(&follower, target_block).await?;
+    println!("Follower synced to block {target_block}");
 
-    // 3. Verify that the blocks on the follower match the blocks on the sequencer.
     for block_num in 1..=target_block {
-        verify_blocks_match(&sequencer, &follower, block_num)
-            .await
-            .unwrap_or_else(|e| panic!("Block {block_num} mismatch: {e}"));
+        verify_blocks_match(&sequencer, &follower, block_num).await?;
     }
+    println!("✅ Block hashes match for all blocks up to {target_block}");
 
     println!("✅ Basic block propagation test completed successfully!");
     Ok(())

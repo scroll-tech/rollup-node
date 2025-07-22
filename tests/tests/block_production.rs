@@ -1,8 +1,5 @@
 //! Tests for basic block production.
 
-mod common;
-use common::retry_operation;
-
 use alloy_network::Ethereum;
 use alloy_provider::{Provider, ProviderBuilder};
 use eyre::Result;
@@ -12,48 +9,19 @@ use tests::docker_compose::DockerComposeEnv;
 #[tokio::test]
 async fn test_block_production() -> Result<()> {
     println!("=== STARTING test_block_production ===");
-    let _env = DockerComposeEnv::new("block-production");
+    let env = DockerComposeEnv::new("block-production");
 
-    // Wait for services to initialize.
     println!("⏳ Waiting for services to fully initialize...");
-    _env.wait_for_services();
+    DockerComposeEnv::wait_for_l2_node_ready(&env.get_sequencer_rpc_url(), 5).await?;
+    DockerComposeEnv::wait_for_l2_node_ready(&env.get_follower_rpc_url(), 5).await?;
 
-    // Create a provider for the sequencer.
-    let sequencer_url = _env.get_sequencer_rpc_url();
-    let sequencer =
-        match retry_operation(|| async { ProviderBuilder::new().connect(&sequencer_url).await }, 3)
-            .await
-        {
-            Ok(provider) => {
-                println!("✅ Sequencer provider created");
-                provider
-            }
-            Err(e) => {
-                _env.show_container_logs("rollup-node-sequencer");
-                panic!("Failed to create sequencer provider: {e}");
-            }
-        };
+    let sequencer = ProviderBuilder::new().connect(&env.get_sequencer_rpc_url()).await?;
+    println!("✅ Sequencer provider created");
 
-    // Verify sequencer connectivity.
-    match sequencer.get_chain_id().await {
-        Ok(id) => println!("✅ Sequencer connected - Chain ID: {id}"),
-        Err(e) => {
-            _env.show_container_logs("rollup-node-sequencer");
-            panic!("Failed to get chain ID from sequencer: {e}");
-        }
-    }
-
-    // Wait for new blocks to be produced.
-    let initial_block = retry_operation(|| async { sequencer.get_block_number().await }, 3).await?;
+    let initial_block = sequencer.get_block_number().await?;
     println!("Initial block number: {initial_block}");
 
-    let final_block = match wait_for_l2_blocks(&sequencer, 5, 60).await {
-        Ok(num) => num,
-        Err(e) => {
-            _env.show_container_logs("rollup-node-sequencer");
-            panic!("Failed while waiting for L2 blocks: {e}");
-        }
-    };
+    let final_block = wait_for_l2_blocks(&sequencer, 5, 60).await?;
     println!("Final block number: {final_block}");
 
     assert!(
