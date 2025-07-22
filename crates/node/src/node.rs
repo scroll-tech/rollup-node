@@ -66,6 +66,7 @@ where
                     self.config.sequencer_args.payload_building_duration,
                 ),
                 best_transactions: (),
+                ..Default::default()
             }))
             .network(
                 ScrollNetworkBuilder::new()
