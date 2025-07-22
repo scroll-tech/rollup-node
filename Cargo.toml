@@ -133,37 +133,37 @@ alloy-signer-local = { version = "1.0.13", default-features = false }
 alloy-transport = { version = "1.0.13", default-features = false }
 
 # scroll-alloy
-scroll-alloy-consensus = { git = "https://github.com/scroll-tech/reth.git", branch = "fix-extra-protocol-scroll-wire-initialization", default-features = false }
-scroll-alloy-hardforks = { git = "https://github.com/scroll-tech/reth.git", branch = "fix-extra-protocol-scroll-wire-initialization", default-features = false }
-scroll-alloy-network = { git = "https://github.com/scroll-tech/reth.git", branch = "fix-extra-protocol-scroll-wire-initialization", default-features = false }
-scroll-alloy-provider = { git = "https://github.com/scroll-tech/reth.git", branch = "fix-extra-protocol-scroll-wire-initialization", default-features = false }
-scroll-alloy-rpc-types-engine = { git = "https://github.com/scroll-tech/reth.git", branch = "fix-extra-protocol-scroll-wire-initialization", default-features = false }
+scroll-alloy-consensus = { git = "https://github.com/scroll-tech/reth.git", default-features = false }
+scroll-alloy-hardforks = { git = "https://github.com/scroll-tech/reth.git", default-features = false }
+scroll-alloy-network = { git = "https://github.com/scroll-tech/reth.git", default-features = false }
+scroll-alloy-provider = { git = "https://github.com/scroll-tech/reth.git", default-features = false }
+scroll-alloy-rpc-types-engine = { git = "https://github.com/scroll-tech/reth.git", default-features = false }
 
 # reth
-reth-chainspec = { git = "https://github.com/scroll-tech/reth.git", branch = "fix-extra-protocol-scroll-wire-initialization", default-features = false }
-reth-e2e-test-utils = { git = "https://github.com/scroll-tech/reth.git", branch = "fix-extra-protocol-scroll-wire-initialization" }
-reth-eth-wire-types = { git = "https://github.com/scroll-tech/reth.git", branch = "fix-extra-protocol-scroll-wire-initialization", default-features = false }
-reth-network = { git = "https://github.com/scroll-tech/reth.git", branch = "fix-extra-protocol-scroll-wire-initialization", default-features = false }
-reth-network-api = { git = "https://github.com/scroll-tech/reth.git", branch = "fix-extra-protocol-scroll-wire-initialization", default-features = false }
-reth-network-peers = { git = "https://github.com/scroll-tech/reth.git", branch = "fix-extra-protocol-scroll-wire-initialization", default-features = false }
-reth-node-builder = { git = "https://github.com/scroll-tech/reth.git", branch = "fix-extra-protocol-scroll-wire-initialization", default-features = false }
-reth-node-core = { git = "https://github.com/scroll-tech/reth.git", branch = "fix-extra-protocol-scroll-wire-initialization", default-features = false }
-reth-payload-primitives = { git = "https://github.com/scroll-tech/reth.git", branch = "fix-extra-protocol-scroll-wire-initialization", default-features = false }
-reth-primitives = { git = "https://github.com/scroll-tech/reth.git", branch = "fix-extra-protocol-scroll-wire-initialization", default-features = false }
-reth-primitives-traits = { git = "https://github.com/scroll-tech/reth.git", branch = "fix-extra-protocol-scroll-wire-initialization", default-features = false }
-reth-provider = { git = "https://github.com/scroll-tech/reth.git", branch = "fix-extra-protocol-scroll-wire-initialization", default-features = false }
-reth-rpc-builder = { git = "https://github.com/scroll-tech/reth.git", branch = "fix-extra-protocol-scroll-wire-initialization", default-features = false }
-reth-rpc-server-types = { git = "https://github.com/scroll-tech/reth.git", branch = "fix-extra-protocol-scroll-wire-initialization", default-features = false }
-reth-tasks = { git = "https://github.com/scroll-tech/reth.git", branch = "fix-extra-protocol-scroll-wire-initialization", default-features = false }
-reth-tokio-util = { git = "https://github.com/scroll-tech/reth.git", branch = "fix-extra-protocol-scroll-wire-initialization", default-features = false }
-reth-tracing = { git = "https://github.com/scroll-tech/reth.git", branch = "fix-extra-protocol-scroll-wire-initialization", default-features = false }
+reth-chainspec = { git = "https://github.com/scroll-tech/reth.git", default-features = false }
+reth-e2e-test-utils = { git = "https://github.com/scroll-tech/reth.git" }
+reth-eth-wire-types = { git = "https://github.com/scroll-tech/reth.git", default-features = false }
+reth-network = { git = "https://github.com/scroll-tech/reth.git", default-features = false }
+reth-network-api = { git = "https://github.com/scroll-tech/reth.git", default-features = false }
+reth-network-peers = { git = "https://github.com/scroll-tech/reth.git", default-features = false }
+reth-node-builder = { git = "https://github.com/scroll-tech/reth.git", default-features = false }
+reth-node-core = { git = "https://github.com/scroll-tech/reth.git", default-features = false }
+reth-payload-primitives = { git = "https://github.com/scroll-tech/reth.git", default-features = false }
+reth-primitives = { git = "https://github.com/scroll-tech/reth.git", default-features = false }
+reth-primitives-traits = { git = "https://github.com/scroll-tech/reth.git", default-features = false }
+reth-provider = { git = "https://github.com/scroll-tech/reth.git", default-features = false }
+reth-rpc-builder = { git = "https://github.com/scroll-tech/reth.git", default-features = false }
+reth-rpc-server-types = { git = "https://github.com/scroll-tech/reth.git", default-features = false }
+reth-tasks = { git = "https://github.com/scroll-tech/reth.git", default-features = false }
+reth-tokio-util = { git = "https://github.com/scroll-tech/reth.git", default-features = false }
+reth-tracing = { git = "https://github.com/scroll-tech/reth.git", default-features = false }
 
 # reth-scroll
-reth-scroll-chainspec = { git = "https://github.com/scroll-tech/reth.git", branch = "fix-extra-protocol-scroll-wire-initialization", default-features = false }
-reth-scroll-engine-primitives = { git = "https://github.com/scroll-tech/reth.git", branch = "fix-extra-protocol-scroll-wire-initialization", default-features = false }
-reth-scroll-forks = { git = "https://github.com/scroll-tech/reth.git", branch = "fix-extra-protocol-scroll-wire-initialization", default-features = false }
-reth-scroll-node = { git = "https://github.com/scroll-tech/reth.git", branch = "fix-extra-protocol-scroll-wire-initialization", default-features = false }
-reth-scroll-primitives = { git = "https://github.com/scroll-tech/reth.git", branch = "fix-extra-protocol-scroll-wire-initialization", default-features = false }
+reth-scroll-chainspec = { git = "https://github.com/scroll-tech/reth.git", default-features = false }
+reth-scroll-engine-primitives = { git = "https://github.com/scroll-tech/reth.git", default-features = false }
+reth-scroll-forks = { git = "https://github.com/scroll-tech/reth.git", default-features = false }
+reth-scroll-node = { git = "https://github.com/scroll-tech/reth.git", default-features = false }
+reth-scroll-primitives = { git = "https://github.com/scroll-tech/reth.git", default-features = false }
 
 # rollup node
 rollup-node = { path = "crates/node" }
