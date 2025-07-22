@@ -14,6 +14,7 @@ alloy-provider = { workspace = true }
 alloy-rpc-types-eth = { workspace = true }
 tokio = { workspace = true, features = ["full"] }
 eyre = { workspace = true }
+getrandom = { workspace = true }
 
 [[test]]
 name = "block_production"
