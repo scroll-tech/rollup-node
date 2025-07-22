@@ -15,8 +15,8 @@ async fn test_block_production() -> Result<()> {
     let _env = DockerComposeEnv::new("block-production");
 
     // Wait for services to initialize.
-    println!("⏳ Waiting 10 seconds for services to fully initialize...");
-    tokio::time::sleep(Duration::from_secs(10)).await;
+    println!("⏳ Waiting for services to fully initialize...");
+    _env.wait_for_services();
 
     // Create a provider for the sequencer.
     let sequencer_url = _env.get_sequencer_rpc_url();

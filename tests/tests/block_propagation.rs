@@ -1,4 +1,4 @@
-//! Tests for basic node synchronization.
+//! Tests for basic block propagation.
 
 mod common;
 use common::retry_operation;
@@ -13,11 +13,11 @@ use tests::docker_compose::DockerComposeEnv;
 #[tokio::test]
 async fn test_block_propagation() -> Result<()> {
     println!("=== STARTING test_block_propagation ===");
-    let _env = DockerComposeEnv::new("basic-node-sync");
+    let _env = DockerComposeEnv::new("basic-block-propagation");
 
     // Wait for services to initialize.
-    println!("⏳ Waiting 10 seconds for services to fully initialize...");
-    tokio::time::sleep(Duration::from_secs(10)).await;
+    println!("⏳ Waiting for services to fully initialize...");
+    _env.wait_for_services();
 
     // Create providers for both sequencer and follower.
     let sequencer_url = _env.get_sequencer_rpc_url();
@@ -56,7 +56,7 @@ async fn test_block_propagation() -> Result<()> {
             .unwrap_or_else(|e| panic!("Block {block_num} mismatch: {e}"));
     }
 
-    println!("✅ Basic node sync test completed successfully!");
+    println!("✅ Basic block propagation test completed successfully!");
     Ok(())
 }
 

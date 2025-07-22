@@ -94,7 +94,7 @@ impl DockerComposeEnv {
         env
     }
 
-    fn wait_for_services(&self) {
+    pub fn wait_for_services(&self) {
         println!("⏳ Waiting for services to be ready...");
 
         // First check if containers are running (without health checks)
