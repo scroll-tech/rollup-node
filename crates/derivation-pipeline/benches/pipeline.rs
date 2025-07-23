@@ -4,58 +4,19 @@
 
 use std::sync::Arc;
 
-use alloy_eips::eip4844::Blob;
-use alloy_primitives::{address, b256, bytes, B256, U256};
+use alloy_primitives::{address, b256, bytes, U256};
 use criterion::{criterion_group, criterion_main, Criterion};
 use futures::StreamExt;
 use rollup_node_primitives::{BatchCommitData, BatchInfo, L1MessageEnvelope};
-use rollup_node_providers::{
-    DatabaseL1MessageProvider, L1BlobProvider, L1MessageProvider, L1ProviderError,
-};
+use rollup_node_providers::{test_utils::NoBlobProvider, DatabaseL1MessageProvider};
 use scroll_alloy_consensus::TxL1Message;
 use scroll_codec::decoding::test_utils::read_to_bytes;
 use scroll_db::{test_utils::setup_test_db, Database, DatabaseOperations};
 use scroll_derivation_pipeline::DerivationPipeline;
 use tokio::runtime::{Handle, Runtime};
 
-#[derive(Clone)]
-struct MockL1Provider<P: L1MessageProvider> {
-    l1_messages_provider: P,
-}
-
-#[async_trait::async_trait]
-impl<P: L1MessageProvider + Sync> L1BlobProvider for MockL1Provider<P> {
-    async fn blob(
-        &self,
-        _block_timestamp: u64,
-        _hash: B256,
-    ) -> Result<Option<Arc<Blob>>, L1ProviderError> {
-        Ok(None)
-    }
-}
-
-#[async_trait::async_trait]
-impl<P: L1MessageProvider + Send + Sync> L1MessageProvider for MockL1Provider<P> {
-    type Error = P::Error;
-
-    async fn get_l1_message_with_block_number(
-        &self,
-    ) -> Result<Option<L1MessageEnvelope>, Self::Error> {
-        self.l1_messages_provider.get_l1_message_with_block_number().await
-    }
-    fn set_queue_index_cursor(&self, index: u64) {
-        self.l1_messages_provider.set_queue_index_cursor(index);
-    }
-    async fn set_hash_cursor(&self, hash: B256) {
-        self.l1_messages_provider.set_hash_cursor(hash).await
-    }
-    fn increment_cursor(&self) {
-        self.l1_messages_provider.increment_cursor()
-    }
-}
-
 async fn setup_pipeline(
-) -> DerivationPipeline<MockL1Provider<DatabaseL1MessageProvider<Arc<Database>>>> {
+) -> DerivationPipeline<NoBlobProvider<DatabaseL1MessageProvider<Arc<Database>>>> {
     // load batch data in the db.
     let db = Arc::new(setup_test_db().await);
     let raw_calldata = read_to_bytes("./testdata/calldata_v0.bin").unwrap();
@@ -105,7 +66,7 @@ async fn setup_pipeline(
 
     // construct the pipeline.
     let l1_messages_provider = DatabaseL1MessageProvider::new(db.clone(), 0);
-    let mock_l1_provider = MockL1Provider { l1_messages_provider };
+    let mock_l1_provider = NoBlobProvider { l1_messages_provider };
     DerivationPipeline::new(mock_l1_provider, db)
 }
 

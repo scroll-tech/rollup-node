@@ -304,7 +304,8 @@ mod tests {
     use futures::StreamExt;
     use rollup_node_primitives::L1MessageEnvelope;
     use rollup_node_providers::{
-        DatabaseL1MessageProvider, L1BlobProvider, L1MessageProvider, L1ProviderError,
+        test_utils::NoBlobProvider, DatabaseL1MessageProvider, L1BlobProvider, L1MessageProvider,
+        L1ProviderError,
     };
     use scroll_alloy_consensus::TxL1Message;
     use scroll_alloy_rpc_types_engine::BlockDataHint;
@@ -351,42 +352,6 @@ mod tests {
 
         fn increment_cursor(&self) {
             self.index.fetch_add(1, Ordering::Relaxed);
-        }
-    }
-
-    #[derive(Clone)]
-    struct MockL1Provider<P: L1MessageProvider> {
-        l1_messages_provider: P,
-    }
-
-    #[async_trait::async_trait]
-    impl<P: L1MessageProvider + Sync> L1BlobProvider for MockL1Provider<P> {
-        async fn blob(
-            &self,
-            _block_timestamp: u64,
-            _hash: B256,
-        ) -> Result<Option<Arc<Blob>>, L1ProviderError> {
-            Ok(None)
-        }
-    }
-
-    #[async_trait::async_trait]
-    impl<P: L1MessageProvider + Send + Sync> L1MessageProvider for MockL1Provider<P> {
-        type Error = P::Error;
-
-        async fn get_l1_message_with_block_number(
-            &self,
-        ) -> Result<Option<L1MessageEnvelope>, Self::Error> {
-            self.l1_messages_provider.get_l1_message_with_block_number().await
-        }
-        fn set_queue_index_cursor(&self, index: u64) {
-            self.l1_messages_provider.set_queue_index_cursor(index);
-        }
-        async fn set_hash_cursor(&self, hash: B256) {
-            self.l1_messages_provider.set_hash_cursor(hash).await
-        }
-        fn increment_cursor(&self) {
-            self.l1_messages_provider.increment_cursor()
         }
     }
 
@@ -455,7 +420,7 @@ mod tests {
 
         // construct the pipeline.
         let l1_messages_provider = DatabaseL1MessageProvider::new(db.clone(), 0);
-        let mock_l1_provider = MockL1Provider { l1_messages_provider };
+        let mock_l1_provider = NoBlobProvider { l1_messages_provider };
         let mut pipeline = DerivationPipeline::new(mock_l1_provider, db);
 
         // as long as we don't call `handle_commit_batch`, pipeline should not return attributes.
@@ -647,7 +612,7 @@ mod tests {
     }
 
     async fn new_test_pipeline(
-    ) -> DerivationPipeline<MockL1Provider<DatabaseL1MessageProvider<Arc<Database>>>> {
+    ) -> DerivationPipeline<NoBlobProvider<DatabaseL1MessageProvider<Arc<Database>>>> {
         let initial_block = 200;
 
         let batches = (initial_block - 100..initial_block)
@@ -667,7 +632,7 @@ mod tests {
 
         let db = Arc::new(setup_test_db().await);
         let l1_messages_provider = DatabaseL1MessageProvider::new(db.clone(), 0);
-        let mock_l1_provider = MockL1Provider { l1_messages_provider };
+        let mock_l1_provider = NoBlobProvider { l1_messages_provider };
 
         DerivationPipeline {
             pipeline_future: Some(WithBlockNumber::new(
