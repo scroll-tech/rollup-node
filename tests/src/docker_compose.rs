@@ -8,41 +8,23 @@ use std::{
 pub struct DockerComposeEnv {
     project_name: String,
     compose_file: String,
-    cleanup_on_drop: bool,
 }
 
 impl DockerComposeEnv {
     pub fn new(test_name: &str) -> Self {
         let start = SystemTime::now();
         let since_the_epoch = start.duration_since(UNIX_EPOCH).expect("Time went backwards");
-        let timestamp = since_the_epoch.as_nanos();
+        let timestamp = since_the_epoch.as_secs();
         let project_name = format!("test-{test_name}-{timestamp}");
         let compose_file = "docker-compose.test.yml".to_string();
 
         println!("🚀 Starting test environment: {project_name}");
 
         // Pre-cleanup existing containers to avoid conflicts
-        Self::cleanup_existing_containers();
+        Self::cleanup(&compose_file, &project_name);
 
         // Start the environment
         Self::start_environment(&compose_file, &project_name)
-    }
-
-    /// Clean up any existing containers with the same names to avoid conflicts
-    fn cleanup_existing_containers() {
-        println!("🧹 Pre-cleaning existing containers...");
-
-        let containers = ["rollup-node-sequencer", "rollup-node-follower"];
-        for container in &containers {
-            // Stop container if running
-            let _ = Command::new("docker").args(["stop", container]).output();
-
-            // Remove container forcefully
-            let _ = Command::new("docker").args(["rm", "-f", container]).output();
-        }
-
-        // Clean up orphaned networks
-        let _ = Command::new("docker").args(["network", "prune", "-f"]).output();
     }
 
     fn start_environment(compose_file: &str, project_name: &str) -> Self {
@@ -84,11 +66,7 @@ impl DockerComposeEnv {
             panic!("Failed to spin up docker-compose");
         }
 
-        Self {
-            project_name: project_name.to_string(),
-            compose_file: compose_file.to_string(),
-            cleanup_on_drop: true,
-        }
+        Self { project_name: project_name.to_string(), compose_file: compose_file.to_string() }
     }
 
     // Wait for L2 node to be ready
@@ -145,51 +123,31 @@ impl DockerComposeEnv {
         "http://localhost:8547".to_string()
     }
 
-    /// Perform cleanup of docker-compose environment
-    fn perform_cleanup(&self) {
-        println!("🧹 Tearing down test environment: {0}", self.project_name);
+    /// Cleanup the environment
+    fn cleanup(compose_file: &str, project_name: &str) {
+        println!("🧹 Cleaning up environment: {project_name}");
 
-        // First try graceful docker-compose down
-        let status = Command::new("docker")
+        let _result = Command::new("docker")
             .args([
                 "compose",
                 "-f",
-                &self.compose_file,
+                compose_file,
                 "-p",
-                &self.project_name,
+                project_name,
                 "down",
                 "--volumes",
                 "--remove-orphans",
                 "--timeout",
-                "5",
+                "30",
             ])
-            .status();
+            .output();
 
-        match status {
-            Ok(exit_status) if exit_status.success() => {
-                println!("✅ Test environment cleaned up successfully");
-            }
-            _ => {
-                eprintln!("⚠️ docker-compose down failed, forcing cleanup...");
-                self.force_cleanup();
-            }
-        }
-    }
-
-    /// Force cleanup containers and networks manually
-    fn force_cleanup(&self) {
-        // Clean up project-specific network
-        let network_name = format!("{}_test-scroll-network", self.project_name);
-        let _ = Command::new("docker").args(["network", "rm", &network_name]).output();
-
-        println!("✅ Force cleanup completed");
+        println!("✅ Cleanup completed");
     }
 }
 
 impl Drop for DockerComposeEnv {
     fn drop(&mut self) {
-        if self.cleanup_on_drop {
-            self.perform_cleanup();
-        }
+        Self::cleanup(&self.compose_file, &self.project_name);
     }
 }
