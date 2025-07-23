@@ -3,7 +3,6 @@
 use alloy_eips::BlockNumberOrTag;
 use alloy_primitives::{b256, Address, Bytes, Signature, U256};
 use futures::{task::noop_waker_ref, FutureExt, StreamExt};
-use reth_e2e_test_utils::NodeHelperType;
 use reth_network::{NetworkConfigBuilder, PeersInfo};
 use reth_rpc_api::EthApiServer;
 use reth_scroll_chainspec::SCROLL_DEV;
@@ -15,7 +14,7 @@ use rollup_node::{
         generate_tx, setup_engine,
     },
     BeaconProviderArgs, DatabaseArgs, EngineDriverArgs, L1ProviderArgs,
-    NetworkArgs as ScrollNetworkArgs, ScrollRollupNode, ScrollRollupNodeConfig, SequencerArgs,
+    NetworkArgs as ScrollNetworkArgs, ScrollRollupNodeConfig, SequencerArgs,
 };
 use rollup_node_manager::{RollupManagerEvent, RollupManagerHandle};
 use rollup_node_primitives::BatchCommitData;
@@ -162,6 +161,7 @@ async fn can_sequence_and_gossip_blocks() {
     }
 }
 
+#[allow(clippy::large_stack_frames)]
 #[tokio::test]
 async fn can_sequence_and_gossip_transactions() {
     reth_tracing::init_test_tracing();
