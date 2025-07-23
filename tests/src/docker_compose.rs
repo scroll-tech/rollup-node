@@ -15,8 +15,8 @@ impl DockerComposeEnv {
     pub fn new(test_name: &str) -> Self {
         let start = SystemTime::now();
         let since_the_epoch = start.duration_since(UNIX_EPOCH).expect("Time went backwards");
-        let unique_id = since_the_epoch.as_nanos();
-        let project_name = format!("test-{test_name}-{unique_id}");
+        let timestamp = since_the_epoch.as_nanos();
+        let project_name = format!("test-{test_name}-{timestamp}");
         let compose_file = "docker-compose.test.yml".to_string();
 
         println!("🚀 Starting test environment: {project_name}");
