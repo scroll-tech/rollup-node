@@ -7,8 +7,8 @@ use std::time::Duration;
 use tests::DockerComposeEnv;
 
 #[tokio::test]
-async fn test_block_production() -> Result<()> {
-    println!("=== STARTING test_block_production ===");
+async fn test_docker_block_production() -> Result<()> {
+    println!("=== STARTING test_docker_block_production ===");
     let env = DockerComposeEnv::new("block-production");
 
     println!("⏳ Waiting for services to fully initialize...");

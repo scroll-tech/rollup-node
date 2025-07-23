@@ -8,8 +8,8 @@ use std::time::Duration;
 use tests::DockerComposeEnv;
 
 #[tokio::test]
-async fn test_block_propagation() -> Result<()> {
-    println!("=== STARTING test_block_propagation ===");
+async fn test_docker_block_propagation() -> Result<()> {
+    println!("=== STARTING test_docker_block_propagation ===");
     let env = DockerComposeEnv::new("basic-block-propagation");
 
     println!("⏳ Waiting for services to fully initialize...");

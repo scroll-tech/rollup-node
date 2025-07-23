@@ -51,7 +51,7 @@ jobs:
         with:
           tool: nextest@0.9.98
       - name: Run integration tests
-        run: cargo nextest run --all-features --workspace --locked --no-tests=pass -E 'kind(test) and not test(block_production) and not test(block_propagation)'
+        run: cargo nextest run --all-features --workspace --locked --no-tests=pass -E 'kind(test) and not test(name ~= "docker")'
 
   integration-docker-compose:
     runs-on: ubuntu-latest
@@ -73,7 +73,7 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
       - name: Run Docker Compose integration tests
-        run: cargo nextest run --all-features --workspace --locked --no-tests=pass -E 'test(block_production) or test(block_propagation)' --test-threads=1
+        run: cargo nextest run --all-features --workspace --locked --no-tests=pass -E 'test(name ~= "docker")' --test-threads=1
 
   sync:
     runs-on: ubuntu-latest
