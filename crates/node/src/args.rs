@@ -11,7 +11,7 @@ use alloy_signer_local::PrivateKeySigner;
 use alloy_transport::layers::RetryBackoffLayer;
 use aws_sdk_kms::config::BehaviorVersion;
 use reth_chainspec::EthChainSpec;
-use reth_network::{protocol::IntoRlpxSubProtocol, NetworkProtocols};
+use reth_network::NetworkProtocols;
 use reth_network_api::FullNetwork;
 use reth_node_builder::rpc::RethRpcServerHandles;
 use reth_node_core::primitives::BlockHeader;
@@ -34,9 +34,9 @@ use scroll_db::{Database, DatabaseConnectionProvider, DatabaseOperations};
 use scroll_engine::{genesis_hash_from_chain_spec, EngineDriver, ForkchoiceState};
 use scroll_migration::traits::ScrollMigrator;
 use scroll_network::ScrollNetworkManager;
-use scroll_wire::{ScrollWireConfig, ScrollWireProtocolHandler};
+use scroll_wire::ScrollWireEvent;
 use std::{fs, path::PathBuf, sync::Arc, time::Duration};
-use tokio::sync::mpsc::Sender;
+use tokio::sync::mpsc::{Sender, UnboundedReceiver};
 
 /// A struct that represents the arguments for the rollup node.
 #[derive(Debug, Clone, clap::Args)]
@@ -96,6 +96,7 @@ impl ScrollRollupNodeConfig {
     >(
         self,
         network: N,
+        events: UnboundedReceiver<ScrollWireEvent>,
         rpc_server_handles: RethRpcServerHandles,
         chain_spec: CS,
         db_path: PathBuf,
@@ -112,9 +113,6 @@ impl ScrollRollupNodeConfig {
         Option<Sender<Arc<L1Notification>>>,
     )> {
         // Instantiate the network manager
-        let (scroll_wire_handler, events) =
-            ScrollWireProtocolHandler::new(ScrollWireConfig::new(true));
-        network.add_rlpx_sub_protocol(scroll_wire_handler.into_rlpx_sub_protocol());
         let scroll_network_manager = ScrollNetworkManager::from_parts(network.clone(), events);
 
         // Get the rollup node config.
