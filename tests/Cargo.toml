@@ -15,11 +15,3 @@ alloy-rpc-types-eth = { workspace = true }
 tokio = { workspace = true, features = ["rt", "time"] }
 eyre = { workspace = true }
 getrandom = { workspace = true }
-
-[[test]]
-name = "block_production"
-path = "tests/block_production.rs"
-
-[[test]]
-name = "block_propagation"
-path = "tests/block_propagation.rs"
