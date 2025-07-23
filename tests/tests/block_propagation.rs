@@ -5,7 +5,7 @@ use alloy_provider::{Provider, ProviderBuilder};
 use alloy_rpc_types_eth::{Block, BlockNumberOrTag};
 use eyre::Result;
 use std::time::Duration;
-use tests::docker_compose::DockerComposeEnv;
+use tests::DockerComposeEnv;
 
 #[tokio::test]
 async fn test_block_propagation() -> Result<()> {

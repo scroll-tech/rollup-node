@@ -4,7 +4,7 @@ use alloy_network::Ethereum;
 use alloy_provider::{Provider, ProviderBuilder};
 use eyre::Result;
 use std::time::Duration;
-use tests::docker_compose::DockerComposeEnv;
+use tests::DockerComposeEnv;
 
 #[tokio::test]
 async fn test_block_production() -> Result<()> {

@@ -119,8 +119,8 @@ impl DockerComposeEnv {
     fn show_all_container_logs(compose_file: &str, project_name: &str) {
         println!("🔍 Getting all container logs...");
 
-        let logs_output = Command::new("docker-compose")
-            .args(["-f", compose_file, "-p", project_name, "logs"])
+        let logs_output = Command::new("docker")
+            .args(["compose", "-f", compose_file, "-p", project_name, "logs"])
             .output();
 
         if let Ok(logs) = logs_output {
