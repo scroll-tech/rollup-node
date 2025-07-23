@@ -29,7 +29,7 @@ async fn test_block_propagation() -> Result<()> {
     );
     assert_eq!(s_chain_id, f_chain_id, "Chain IDs must match");
 
-    let target_block = wait_for_sequencer_blocks(&sequencer, 5).await?;
+    let target_block = wait_for_sequencer_blocks(&sequencer, 20).await?;
     println!("Sequencer produced {target_block} blocks, now waiting for follower sync...");
 
     wait_for_follower_sync(&follower, target_block).await?;
@@ -38,9 +38,8 @@ async fn test_block_propagation() -> Result<()> {
     for block_num in 1..=target_block {
         verify_blocks_match(&sequencer, &follower, block_num).await?;
     }
-    println!("✅ Block hashes match for all blocks up to {target_block}");
+    println!("✅ Block hashes match for all blocks up to {target_block}, Basic block propagation test completed successfully!");
 
-    println!("✅ Basic block propagation test completed successfully!");
     Ok(())
 }
 
@@ -53,8 +52,8 @@ async fn wait_for_sequencer_blocks(
     let target_block = start_block + num_blocks;
     println!("⏳ Waiting for sequencer to produce {num_blocks} blocks (target: {target_block})...",);
 
-    for _ in 0..60 {
-        // 60 second timeout
+    for _ in 0..10 {
+        // 10 second timeout
         let current_block = sequencer.get_block_number().await?;
         if current_block >= target_block {
             println!("✅ Sequencer reached block {current_block}");
@@ -72,8 +71,8 @@ async fn wait_for_follower_sync(
 ) -> Result<()> {
     println!("⏳ Waiting for follower to sync to block {target_block}...");
 
-    for _ in 0..60 {
-        // 60 second timeout
+    for _ in 0..10 {
+        // 10 second timeout
         let follower_block = follower.get_block_number().await?;
         if follower_block >= target_block {
             println!("✅ Follower synced to block {follower_block}");
@@ -90,7 +89,6 @@ async fn verify_blocks_match(
     follower: &impl Provider<Ethereum>,
     block_number: u64,
 ) -> Result<()> {
-    // CORRECTED: get_block_by_number now only takes one argument.
     let seq_block_opt: Option<Block> =
         sequencer.get_block_by_number(BlockNumberOrTag::Number(block_number)).await?;
     let fol_block_opt: Option<Block> =

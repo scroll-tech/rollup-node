@@ -21,7 +21,7 @@ async fn test_block_production() -> Result<()> {
     let initial_block = sequencer.get_block_number().await?;
     println!("Initial block number: {initial_block}");
 
-    let final_block = wait_for_l2_blocks(&sequencer, 5, 60).await?;
+    let final_block = wait_for_sequencer_blocks(&sequencer, 20).await?;
     println!("Final block number: {final_block}");
 
     assert!(
@@ -33,26 +33,23 @@ async fn test_block_production() -> Result<()> {
     Ok(())
 }
 
-/// Waits for the sequencer to produce a specific number of new blocks within a timeout.
-async fn wait_for_l2_blocks(
+/// Waits for the sequencer to produce a specific number of new blocks.
+async fn wait_for_sequencer_blocks(
     sequencer: &impl Provider<Ethereum>,
     num_blocks: u64,
-    timeout_secs: u64,
 ) -> Result<u64> {
     let start_block = sequencer.get_block_number().await?;
     let target_block = start_block + num_blocks;
     println!("⏳ Waiting for sequencer to produce {num_blocks} blocks (target: {target_block})...",);
 
-    for i in 0..timeout_secs {
+    for _ in 0..10 {
+        // 10 second timeout
         let current_block = sequencer.get_block_number().await?;
         if current_block >= target_block {
             println!("✅ Sequencer reached block {current_block}");
             return Ok(current_block);
         }
-        if i.is_multiple_of(5) {
-            println!("⏳ Sequencer at block {current_block}/{target_block}");
-        }
         tokio::time::sleep(Duration::from_secs(1)).await;
     }
-    eyre::bail!("Timeout waiting for L2 blocks")
+    eyre::bail!("Timeout waiting for sequencer to produce blocks")
 }
