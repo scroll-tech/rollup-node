@@ -98,6 +98,7 @@ reth-provider.workspace = true
 reth-rpc-server-types.workspace = true
 reth-scroll-node = { workspace = true, features = ["test-utils"] }
 reth-tasks.workspace = true
+reth-tokio-util.workspace = true
 reth-tracing.workspace = true
 rollup-node = { workspace = true, features = ["test-utils"] }
 scroll-alloy-rpc-types-engine.workspace = true

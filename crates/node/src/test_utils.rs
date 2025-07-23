@@ -157,7 +157,7 @@ pub fn default_sequencer_test_scroll_rollup_node_config() -> ScrollRollupNodeCon
         sequencer_args: SequencerArgs {
             sequencer_enabled: true,
             block_time: 50,
-            payload_building_duration: 0,
+            payload_building_duration: 40,
             max_l1_messages_per_block: 0,
             fee_recipient: Default::default(),
             l1_message_inclusion_mode: L1MessageInclusionMode::BlockDepth(0),
