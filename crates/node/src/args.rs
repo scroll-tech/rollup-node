@@ -13,7 +13,7 @@ use alloy_signer_local::PrivateKeySigner;
 use alloy_transport::layers::RetryBackoffLayer;
 use aws_sdk_kms::config::BehaviorVersion;
 use reth_chainspec::EthChainSpec;
-use reth_network::{protocol::IntoRlpxSubProtocol, NetworkProtocols};
+use reth_network::NetworkProtocols;
 use reth_network_api::FullNetwork;
 use reth_node_builder::rpc::RethRpcServerHandles;
 use reth_node_core::primitives::BlockHeader;
@@ -36,8 +36,8 @@ use scroll_db::{Database, DatabaseConnectionProvider, DatabaseOperations};
 use scroll_engine::{genesis_hash_from_chain_spec, EngineDriver, ForkchoiceState};
 use scroll_migration::traits::ScrollMigrator;
 use scroll_network::ScrollNetworkManager;
-use scroll_wire::{ScrollWireConfig, ScrollWireProtocolHandler};
-use tokio::sync::mpsc::Sender;
+use scroll_wire::ScrollWireEvent;
+use tokio::sync::mpsc::{Sender, UnboundedReceiver};
 
 /// A struct that represents the arguments for the rollup node.
 #[derive(Debug, Clone, clap::Args)]
@@ -97,6 +97,7 @@ impl ScrollRollupNodeConfig {
     >(
         self,
         network: N,
+        events: UnboundedReceiver<ScrollWireEvent>,
         rpc_server_handles: RethRpcServerHandles,
         chain_spec: CS,
         db_path: PathBuf,
@@ -113,9 +114,6 @@ impl ScrollRollupNodeConfig {
         Option<Sender<Arc<L1Notification>>>,
     )> {
         // Instantiate the network manager
-        let (scroll_wire_handler, events) =
-            ScrollWireProtocolHandler::new(ScrollWireConfig::new(true));
-        network.add_rlpx_sub_protocol(scroll_wire_handler.into_rlpx_sub_protocol());
         let scroll_network_manager = ScrollNetworkManager::from_parts(network.clone(), events);
 
         // Get the rollup node config.
@@ -195,7 +193,7 @@ impl ScrollRollupNodeConfig {
             chain_spec.clone(),
             Some(l2_provider),
             fcs,
-            !self.test && !chain_spec.is_dev_chain(),
+            self.engine_driver_args.sync_at_startup && !self.test && !chain_spec.is_dev_chain(),
             self.engine_driver_args.en_sync_trigger,
             Duration::from_millis(self.sequencer_args.payload_building_duration),
         );
@@ -303,6 +301,9 @@ pub struct EngineDriverArgs {
     /// at which the engine driver triggers optimistic sync.
     #[arg(long = "engine.en-sync-trigger", default_value_t = constants::BLOCK_GAP_TRIGGER)]
     pub en_sync_trigger: u64,
+    /// Whether the engine driver should try to sync at start up.
+    #[arg(long = "engine.sync-at-startup", num_args=0..=1, default_value_t = true)]
+    pub sync_at_startup: bool,
 }
 
 /// The network arguments.

@@ -11,8 +11,9 @@ use reth_scroll_node::ScrollNetworkPrimitives;
 use rollup_node_manager::RollupManagerHandle;
 use rollup_node_watcher::L1Notification;
 use scroll_alloy_hardforks::ScrollHardforks;
+use scroll_wire::ScrollWireEvent;
 use std::sync::Arc;
-use tokio::sync::mpsc::Sender;
+use tokio::sync::mpsc::{Sender, UnboundedReceiver};
 
 /// Implementing the trait allows the type to return whether it is configured for dev chain.
 #[auto_impl::auto_impl(Arc)]
@@ -32,12 +33,16 @@ impl IsDevChain for ScrollChainSpec {
 #[derive(Debug)]
 pub struct RollupManagerAddOn {
     config: ScrollRollupNodeConfig,
+    scroll_wire_event: UnboundedReceiver<ScrollWireEvent>,
 }
 
 impl RollupManagerAddOn {
     /// Create a new rollup node manager addon.
-    pub const fn new(config: ScrollRollupNodeConfig) -> Self {
-        Self { config }
+    pub const fn new(
+        config: ScrollRollupNodeConfig,
+        scroll_wire_event: UnboundedReceiver<ScrollWireEvent>,
+    ) -> Self {
+        Self { config, scroll_wire_event }
     }
 
     /// Launch the rollup node manager addon.
@@ -54,6 +59,7 @@ impl RollupManagerAddOn {
             .config
             .build(
                 ctx.node.network().clone(),
+                self.scroll_wire_event,
                 rpc.rpc_server_handles,
                 ctx.config.chain.clone(),
                 ctx.config.datadir().db(),
