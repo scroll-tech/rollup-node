@@ -9,6 +9,6 @@ exec rollup-node node --chain dev --datadir=/l2reth --metrics=0.0.0.0:6060 --net
   --sequencer.enabled \
   --sequencer.block-time 250 \
   --sequencer.payload-building-duration 230 \
-  --txpool.pending-max-count=1000000 \
-  --builder.gaslimit=10000000000 \
+  --txpool.pending-max-count=1000 \
+  --builder.gaslimit=20000000 \
   --rpc.max-connections=5000
