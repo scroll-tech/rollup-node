@@ -1,8 +1,8 @@
 //! Tests for basic block production.
 
-use alloy_network::Ethereum;
-use alloy_provider::{Provider, ProviderBuilder};
+use alloy_provider::Provider;
 use eyre::Result;
+use scroll_alloy_network::Scroll;
 use std::time::Duration;
 use tests::DockerComposeEnv;
 
@@ -12,10 +12,10 @@ async fn test_docker_block_production() -> Result<()> {
     let env = DockerComposeEnv::new("block-production");
 
     println!("⏳ Waiting for services to fully initialize...");
-    DockerComposeEnv::wait_for_l2_node_ready(&env.get_sequencer_rpc_url(), 5).await?;
-    DockerComposeEnv::wait_for_l2_node_ready(&env.get_follower_rpc_url(), 5).await?;
+    env.wait_for_sequencer_ready().await?;
+    env.wait_for_follower_ready().await?;
 
-    let sequencer = ProviderBuilder::new().connect(&env.get_sequencer_rpc_url()).await?;
+    let sequencer = env.get_sequencer_provider().await?;
     println!("✅ Sequencer provider created");
 
     let initial_block = sequencer.get_block_number().await?;
@@ -35,7 +35,7 @@ async fn test_docker_block_production() -> Result<()> {
 
 /// Waits for the sequencer to produce a specific number of new blocks.
 async fn wait_for_sequencer_blocks(
-    sequencer: &impl Provider<Ethereum>,
+    sequencer: &impl Provider<Scroll>,
     num_blocks: u64,
 ) -> Result<u64> {
     let start_block = sequencer.get_block_number().await?;

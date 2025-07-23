@@ -1,9 +1,9 @@
 //! Tests for basic block propagation.
 
-use alloy_network::Ethereum;
-use alloy_provider::{Provider, ProviderBuilder};
-use alloy_rpc_types_eth::{Block, BlockNumberOrTag};
+use alloy_provider::Provider;
+use alloy_rpc_types_eth::BlockNumberOrTag;
 use eyre::Result;
+use scroll_alloy_network::Scroll;
 use std::time::Duration;
 use tests::DockerComposeEnv;
 
@@ -13,13 +13,13 @@ async fn test_docker_block_propagation() -> Result<()> {
     let env = DockerComposeEnv::new("basic-block-propagation");
 
     println!("⏳ Waiting for services to fully initialize...");
-    DockerComposeEnv::wait_for_l2_node_ready(&env.get_sequencer_rpc_url(), 5).await?;
-    DockerComposeEnv::wait_for_l2_node_ready(&env.get_follower_rpc_url(), 5).await?;
+    env.wait_for_sequencer_ready().await?;
+    env.wait_for_follower_ready().await?;
 
-    let sequencer = ProviderBuilder::new().connect(&env.get_sequencer_rpc_url()).await?;
+    let sequencer = env.get_sequencer_provider().await?;
     println!("✅ Sequencer provider created");
 
-    let follower = ProviderBuilder::new().connect(&env.get_follower_rpc_url()).await?;
+    let follower = env.get_follower_provider().await?;
     println!("✅ Follower provider created");
 
     let s_chain_id = sequencer.get_chain_id().await?;
@@ -45,7 +45,7 @@ async fn test_docker_block_propagation() -> Result<()> {
 
 /// Waits for the sequencer to produce a specific number of new blocks.
 async fn wait_for_sequencer_blocks(
-    sequencer: &impl Provider<Ethereum>,
+    sequencer: &impl Provider<Scroll>,
     num_blocks: u64,
 ) -> Result<u64> {
     let start_block = sequencer.get_block_number().await?;
@@ -65,10 +65,7 @@ async fn wait_for_sequencer_blocks(
 }
 
 /// Waits for the follower to sync up to the target block.
-async fn wait_for_follower_sync(
-    follower: &impl Provider<Ethereum>,
-    target_block: u64,
-) -> Result<()> {
+async fn wait_for_follower_sync(follower: &impl Provider<Scroll>, target_block: u64) -> Result<()> {
     println!("⏳ Waiting for follower to sync to block {target_block}...");
 
     for _ in 0..10 {
@@ -85,13 +82,13 @@ async fn wait_for_follower_sync(
 
 /// Verifies that block hashes match between two nodes for a given block number.
 async fn verify_blocks_match(
-    sequencer: &impl Provider<Ethereum>,
-    follower: &impl Provider<Ethereum>,
+    sequencer: &impl Provider<Scroll>,
+    follower: &impl Provider<Scroll>,
     block_number: u64,
 ) -> Result<()> {
-    let seq_block_opt: Option<Block> =
+    let seq_block_opt =
         sequencer.get_block_by_number(BlockNumberOrTag::Number(block_number)).await?;
-    let fol_block_opt: Option<Block> =
+    let fol_block_opt =
         follower.get_block_by_number(BlockNumberOrTag::Number(block_number)).await?;
 
     let seq_block =

@@ -12,6 +12,8 @@ pub struct DockerComposeEnv {
 }
 
 impl DockerComposeEnv {
+    // ===== CONSTRUCTOR AND LIFECYCLE =====
+
     pub fn new(test_name: &str) -> Self {
         let start = SystemTime::now();
         let since_the_epoch = start.duration_since(UNIX_EPOCH).expect("Time went backwards");
@@ -70,7 +72,53 @@ impl DockerComposeEnv {
         Self { project_name: project_name.to_string(), compose_file: compose_file.to_string() }
     }
 
-    // Wait for L2 node to be ready
+    /// Cleanup the environment
+    fn cleanup(compose_file: &str, project_name: &str) {
+        println!("🧹 Cleaning up environment: {project_name}");
+
+        let _result = Command::new("docker")
+            .args([
+                "compose",
+                "-f",
+                compose_file,
+                "-p",
+                project_name,
+                "down",
+                "--volumes",
+                "--remove-orphans",
+                "--timeout",
+                "30",
+            ])
+            .output();
+
+        println!("✅ Cleanup completed");
+    }
+
+    // ===== INTERNAL CONFIGURATION =====
+
+    /// Get Sequencer RPC URL
+    fn get_sequencer_rpc_url(&self) -> String {
+        "http://localhost:8545".to_string()
+    }
+
+    /// Get Follower RPC URL
+    fn get_follower_rpc_url(&self) -> String {
+        "http://localhost:8547".to_string()
+    }
+
+    // ===== READINESS CHECKS =====
+
+    /// Wait for sequencer to be ready
+    pub async fn wait_for_sequencer_ready(&self) -> Result<()> {
+        Self::wait_for_l2_node_ready(&self.get_sequencer_rpc_url(), 5).await
+    }
+
+    /// Wait for follower to be ready
+    pub async fn wait_for_follower_ready(&self) -> Result<()> {
+        Self::wait_for_l2_node_ready(&self.get_follower_rpc_url(), 5).await
+    }
+
+    /// Wait for L2 node to be ready
     pub async fn wait_for_l2_node_ready(provider_url: &str, max_retries: u32) -> Result<()> {
         for i in 0..max_retries {
             match ProviderBuilder::<_, _, Scroll>::default()
@@ -98,6 +146,28 @@ impl DockerComposeEnv {
         eyre::bail!("L2 node failed to become ready after {max_retries} attempts")
     }
 
+    // ===== PROVIDER FACTORIES =====
+
+    /// Get a configured sequencer provider
+    pub async fn get_sequencer_provider(&self) -> Result<impl Provider<Scroll>> {
+        ProviderBuilder::<_, _, Scroll>::default()
+            .with_recommended_fillers()
+            .connect(&self.get_sequencer_rpc_url())
+            .await
+            .map_err(|e| eyre::eyre!("Failed to connect to sequencer: {}", e))
+    }
+
+    /// Get a configured follower provider
+    pub async fn get_follower_provider(&self) -> Result<impl Provider<Scroll>> {
+        ProviderBuilder::<_, _, Scroll>::default()
+            .with_recommended_fillers()
+            .connect(&self.get_follower_rpc_url())
+            .await
+            .map_err(|e| eyre::eyre!("Failed to connect to follower: {}", e))
+    }
+
+    // ===== UTILITIES =====
+
     /// Show logs for all containers
     fn show_all_container_logs(compose_file: &str, project_name: &str) {
         println!("🔍 Getting all container logs...");
@@ -116,38 +186,6 @@ impl DockerComposeEnv {
                 eprintln!("❌ All container logs (stderr):\n{stderr}");
             }
         }
-    }
-
-    /// Get Sequencer RPC URL
-    pub fn get_sequencer_rpc_url(&self) -> String {
-        "http://localhost:8545".to_string()
-    }
-
-    /// Get Follower RPC URL
-    pub fn get_follower_rpc_url(&self) -> String {
-        "http://localhost:8547".to_string()
-    }
-
-    /// Cleanup the environment
-    fn cleanup(compose_file: &str, project_name: &str) {
-        println!("🧹 Cleaning up environment: {project_name}");
-
-        let _result = Command::new("docker")
-            .args([
-                "compose",
-                "-f",
-                compose_file,
-                "-p",
-                project_name,
-                "down",
-                "--volumes",
-                "--remove-orphans",
-                "--timeout",
-                "30",
-            ])
-            .output();
-
-        println!("✅ Cleanup completed");
     }
 }
 
