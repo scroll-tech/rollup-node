@@ -4,7 +4,7 @@ mod anvil;
 pub use anvil::AnvilBlobProvider;
 
 mod client;
-pub use client::ConsensusClientProvider;
+pub use client::BeaconClientProvider;
 
 mod mock;
 pub use mock::MockBeaconProvider;
@@ -47,7 +47,7 @@ impl BlobSource {
     pub async fn provider(&self, url: Option<reqwest::Url>) -> eyre::Result<Arc<dyn BlobProvider>> {
         Ok(match self {
             Self::ConsensusClient => Arc::new(
-                ConsensusClientProvider::new_http(
+                BeaconClientProvider::new_http(
                     url.ok_or_eyre("missing url for consensus client provider")?,
                 )
                 .await,

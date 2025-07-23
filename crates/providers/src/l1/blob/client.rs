@@ -37,9 +37,9 @@ struct ReducedConfigData {
     seconds_per_slot: u64,
 }
 
-/// An implementation of blob provider using a consensus client.
+/// An implementation of blob provider using a beacon client.
 #[derive(Debug, Clone)]
-pub struct ConsensusClientProvider {
+pub struct BeaconClientProvider {
     /// The base URL of the beacon API.
     pub base: String,
     /// The inner reqwest client.
@@ -52,7 +52,7 @@ pub struct ConsensusClientProvider {
     pub slot_interval: u64,
 }
 
-impl ConsensusClientProvider {
+impl BeaconClientProvider {
     /// The config spec engine api method.
     const SPEC_METHOD: &'static str = "eth/v1/config/spec";
 
@@ -62,7 +62,7 @@ impl ConsensusClientProvider {
     /// The blob sidecars engine api method prefix.
     const SIDECARS_METHOD_PREFIX: &'static str = "eth/v1/beacon/blob_sidecars";
 
-    /// Creates a new [`ConsensusClientProvider`] from the provided base url.
+    /// Creates a new [`BeaconClientProvider`] from the provided base url.
     pub async fn new_http(base: reqwest::Url) -> Self {
         // If base ends with a slash, remove it
         let mut base = base.to_string();
@@ -135,7 +135,7 @@ impl ConsensusClientProvider {
 }
 
 #[async_trait::async_trait]
-impl BlobProvider for ConsensusClientProvider {
+impl BlobProvider for BeaconClientProvider {
     async fn blob(
         &self,
         block_timestamp: u64,
