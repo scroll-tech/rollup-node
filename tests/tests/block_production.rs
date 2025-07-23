@@ -40,7 +40,7 @@ async fn wait_for_sequencer_blocks(
 ) -> Result<u64> {
     let start_block = sequencer.get_block_number().await?;
     let target_block = start_block + num_blocks;
-    println!("⏳ Waiting for sequencer to produce {num_blocks} blocks (target: {target_block})...",);
+    println!("⏳ Waiting for sequencer to produce {num_blocks} blocks (target: {target_block})...");
 
     for _ in 0..10 {
         // 10 second timeout
