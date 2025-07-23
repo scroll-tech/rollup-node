@@ -48,8 +48,9 @@ impl DockerComposeEnv {
     fn start_environment(compose_file: &str, project_name: &str) -> Self {
         println!("📦 Starting docker-compose services...");
 
-        let mut child = Command::new("docker-compose")
+        let mut child = Command::new("docker")
             .args([
+                "compose",
                 "-f",
                 compose_file,
                 "-p",
@@ -114,51 +115,6 @@ impl DockerComposeEnv {
         eyre::bail!("L2 node failed to become ready after {max_retries} attempts")
     }
 
-    /// Public method to display container logs for external debugging
-    pub fn show_container_logs(&self, service_name: &str) {
-        println!("🔍 Getting logs for {service_name}...");
-
-        // Try docker-compose logs first with more lines
-        let logs_output = Command::new("docker-compose")
-            .args([
-                "-f",
-                &self.compose_file,
-                "-p",
-                &self.project_name,
-                "logs",
-                "--tail",
-                "100",
-                service_name,
-            ])
-            .output();
-
-        if let Ok(logs) = logs_output {
-            let stdout = String::from_utf8_lossy(&logs.stdout);
-            let stderr = String::from_utf8_lossy(&logs.stderr);
-            if !stdout.trim().is_empty() {
-                println!("📋 {service_name} compose logs (stdout):\n{stdout}");
-            }
-            if !stderr.trim().is_empty() {
-                println!("📋 {service_name} compose logs (stderr):\n{stderr}");
-            }
-        }
-
-        // Also try direct docker logs as fallback
-        let direct_logs =
-            Command::new("docker").args(["logs", "--tail", "100", service_name]).output();
-
-        if let Ok(logs) = direct_logs {
-            let stdout = String::from_utf8_lossy(&logs.stdout);
-            let stderr = String::from_utf8_lossy(&logs.stderr);
-            if !stdout.trim().is_empty() {
-                println!("📋 {service_name} direct logs (stdout):\n{stdout}");
-            }
-            if !stderr.trim().is_empty() {
-                println!("📋 {service_name} direct logs (stderr):\n{stderr}");
-            }
-        }
-    }
-
     /// Show logs for all containers
     fn show_all_container_logs(compose_file: &str, project_name: &str) {
         println!("🔍 Getting all container logs...");
@@ -194,8 +150,9 @@ impl DockerComposeEnv {
         println!("🧹 Tearing down test environment: {0}", self.project_name);
 
         // First try graceful docker-compose down
-        let status = Command::new("docker-compose")
+        let status = Command::new("docker")
             .args([
+                "compose",
                 "-f",
                 &self.compose_file,
                 "-p",
