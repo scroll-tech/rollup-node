@@ -8,6 +8,7 @@ use reth_network::{NetworkConfigBuilder, PeersInfo};
 use reth_rpc_api::EthApiServer;
 use reth_scroll_chainspec::SCROLL_DEV;
 use reth_scroll_node::ScrollNetworkPrimitives;
+use reth_tokio_util::EventStream;
 use rollup_node::{
     test_utils::{
         default_sequencer_test_scroll_rollup_node_config, default_test_scroll_rollup_node_config,
@@ -213,7 +214,7 @@ async fn can_sequence_and_gossip_transactions() {
     }
 
     // assert that the follower node has received the block from the peer
-    wait_n_events(&follower_node[0], |e| matches!(e, RollupManagerEvent::BlockImported(_)), 1)
+    wait_n_events(&mut follower_events, |e| matches!(e, RollupManagerEvent::BlockImported(_)), 1)
         .await;
 
     // inject a transaction into the pool of the follower node
@@ -227,7 +228,7 @@ async fn can_sequence_and_gossip_transactions() {
 
     // wait for the sequencer to build a block with transactions
     wait_n_events(
-        &sequencer_node[0],
+        &mut sequencer_events,
         |e| {
             if let RollupManagerEvent::BlockSequenced(block) = e {
                 assert_eq!(block.header.number, 2);
@@ -729,11 +730,10 @@ async fn loop_until_event(
 
 /// Waits for n events to be emitted.
 async fn wait_n_events(
-    node: &NodeHelperType<ScrollRollupNode>,
+    events: &mut EventStream<RollupManagerEvent>,
     matches: impl Fn(RollupManagerEvent) -> bool,
     mut n: u64,
 ) {
-    let mut events = node.inner.rollup_manager_handle.get_event_listener().await.unwrap();
     while let Some(event) = events.next().await {
         if matches(event) {
             n -= 1;
