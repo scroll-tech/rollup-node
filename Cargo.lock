@@ -12027,6 +12027,7 @@ dependencies = [
  "alloy-rpc-types-eth",
  "eyre",
  "getrandom 0.2.16",
+ "scroll-alloy-network",
  "tokio",
 ]
 

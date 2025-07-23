@@ -1,5 +1,6 @@
 use alloy_provider::{Provider, ProviderBuilder};
 use eyre::Result;
+use scroll_alloy_network::Scroll;
 use std::{
     process::Command,
     time::{Duration, SystemTime, UNIX_EPOCH},
@@ -72,7 +73,11 @@ impl DockerComposeEnv {
     // Wait for L2 node to be ready
     pub async fn wait_for_l2_node_ready(provider_url: &str, max_retries: u32) -> Result<()> {
         for i in 0..max_retries {
-            match ProviderBuilder::new().connect(provider_url).await {
+            match ProviderBuilder::<_, _, Scroll>::default()
+                .with_recommended_fillers()
+                .connect(provider_url)
+                .await
+            {
                 Ok(provider) => match provider.get_chain_id().await {
                     Ok(chain_id) => {
                         println!("✅ L2 node ready - Chain ID: {chain_id}");
