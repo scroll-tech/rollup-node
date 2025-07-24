@@ -1,5 +1,7 @@
 //! The [`ScrollRollupNodeAddOns`] implementation for the Scroll rollup node.
 
+use crate::constants;
+
 use super::args::ScrollRollupNodeConfig;
 use reth_evm::{ConfigureEvm, EvmFactory, EvmFactoryFor};
 use reth_network::NetworkProtocols;
@@ -63,7 +65,16 @@ where
         config: ScrollRollupNodeConfig,
         scroll_wire_event: UnboundedReceiver<ScrollWireEvent>,
     ) -> Self {
-        let rpc_add_ons = RpcAddOns::default();
+        let rpc_add_ons = RpcAddOns::new(
+            ScrollEthApiBuilder::default()
+                .with_min_suggested_priority_fee(
+                    config.gas_price_oracle_args.default_suggested_priority_fee,
+                )
+                .with_payload_size_limit(constants::DEFAULT_PAYLOAD_SIZE_LIMIT),
+            Default::default(),
+            Default::default(),
+            Default::default(),
+        );
         let rollup_manager_addon = RollupManagerAddOn::new(config, scroll_wire_event);
         Self { rpc_add_ons, rollup_manager_addon }
     }

@@ -9,7 +9,7 @@ use reth_scroll_chainspec::SCROLL_DEV;
 use reth_scroll_node::ScrollNetworkPrimitives;
 use rollup_node::{
     test_utils::{default_test_scroll_rollup_node_config, generate_tx, setup_engine},
-    BeaconProviderArgs, DatabaseArgs, EngineDriverArgs, L1ProviderArgs,
+    BeaconProviderArgs, DatabaseArgs, EngineDriverArgs, GasPriceOracleArgs, L1ProviderArgs,
     NetworkArgs as ScrollNetworkArgs, ScrollRollupNodeConfig, SequencerArgs,
 };
 use rollup_node_manager::{RollupManagerEvent, RollupManagerHandle};
@@ -51,6 +51,7 @@ async fn can_bridge_l1_messages() -> eyre::Result<()> {
         },
         beacon_provider_args: BeaconProviderArgs::default(),
         signer_args: Default::default(),
+        gas_price_oracle_args: GasPriceOracleArgs::default(),
     };
     let (mut nodes, _tasks, _wallet) = setup_engine(node_args, 1, chain_spec, false).await?;
     let node = nodes.pop().unwrap();
@@ -116,6 +117,7 @@ async fn can_sequence_and_gossip_blocks() {
         },
         beacon_provider_args: BeaconProviderArgs::default(),
         signer_args: Default::default(),
+        gas_price_oracle_args: GasPriceOracleArgs::default(),
     };
 
     let (nodes, _tasks, wallet) =

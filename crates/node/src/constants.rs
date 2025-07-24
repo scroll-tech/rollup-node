@@ -16,8 +16,14 @@ pub(crate) const DEFAULT_BLOCK_TIME: u64 = 1000;
 /// The default payload building duration in milliseconds for the sequencer.
 pub(crate) const DEFAULT_PAYLOAD_BUILDING_DURATION: u64 = 800;
 
+/// The default payload building duration in milliseconds for the sequencer.
+pub(crate) const DEFAULT_PAYLOAD_SIZE_LIMIT: u64 = 122_880;
+
 /// The default max L1 messages per block for the sequencer.
 pub(crate) const DEFAULT_MAX_L1_MESSAGES_PER_BLOCK: u64 = 4;
 
 /// The gap in blocks between the P2P and EN which triggers sync.
 pub(crate) const BLOCK_GAP_TRIGGER: u64 = 500_000;
+
+/// The default suggested priority fee for the gas price oracle.
+pub(crate) const DEFAULT_SUGGUEST_PRIORITY_FEE: u64 = 100;
