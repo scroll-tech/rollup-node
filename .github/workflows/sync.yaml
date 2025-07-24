@@ -1,0 +1,32 @@
+name: sync
+
+on:
+  push:
+    branches: [main]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    env:
+      RUST_BACKTRACE: 1
+    steps:
+      - uses: actions/checkout@v4
+      - uses: rui314/setup-mold@v1
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          cache-on-failure: true
+      - name: Run consolidation test
+        env:
+          ALCHEMY_KEY: ${{ secrets.ALCHEMY_KEY }}
+          RUST_LOG: "sqlx=off,info,scroll::engine=debug"
+        run: |
+          cargo test --release -p rollup-node test_should_consolidate_to_block_15k
