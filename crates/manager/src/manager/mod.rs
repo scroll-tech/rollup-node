@@ -19,7 +19,7 @@ use rollup_node_watcher::L1Notification;
 use scroll_alloy_hardforks::ScrollHardforks;
 use scroll_alloy_network::Scroll;
 use scroll_alloy_provider::ScrollEngineApi;
-use scroll_engine::{EngineDriver, EngineDriverEvent};
+use scroll_engine::{EngineDriver, EngineDriverEvent, ForkchoiceState};
 use scroll_network::{
     BlockImportOutcome, NetworkManagerEvent, NewBlockWithPeer, ScrollNetworkManager,
 };
@@ -110,6 +110,8 @@ pub struct RollupNodeManager<
 pub struct RollupManagerStatus {
     /// Whether the rollup manager is syncing.
     pub syncing: bool,
+    /// The current FCS for the manager.
+    pub forkchoice_state: ForkchoiceState,
 }
 
 impl<
@@ -378,8 +380,11 @@ where
     }
 
     /// Returns the current status of the [`RollupNodeManager`].
-    const fn status(&self) -> RollupManagerStatus {
-        RollupManagerStatus { syncing: self.engine.is_syncing() }
+    fn status(&self) -> RollupManagerStatus {
+        RollupManagerStatus {
+            syncing: self.engine.is_syncing(),
+            forkchoice_state: self.engine.forkchoice_state(),
+        }
     }
 
     /// Drives the [`RollupNodeManager`] future until a [`GracefulShutdown`] signal is received.

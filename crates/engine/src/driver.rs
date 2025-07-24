@@ -256,6 +256,11 @@ where
         self.syncing
     }
 
+    /// Returns the forkchoice state.
+    pub fn forkchoice_state(&self) -> ForkchoiceState {
+        self.fcs.clone()
+    }
+
     /// Returns the alloy forkchoice state.
     pub fn alloy_forkchoice_state(&self) -> alloy_rpc_types_engine::ForkchoiceState {
         if self.is_syncing() {
