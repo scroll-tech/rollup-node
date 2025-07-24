@@ -188,6 +188,7 @@ scroll-migration = { path = "crates/database/migration" }
 arbitrary = { version = "1.4", default-features = false }
 async-trait = "0.1"
 auto_impl = "1.2"
+clap = { version = "4", features = ["derive", "env"] }
 derive_more = { version = "2.0", default-features = false }
 eyre = "0.6"
 futures = { version = "0.3", default-features = false }

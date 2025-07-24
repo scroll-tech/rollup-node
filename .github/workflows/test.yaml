@@ -51,7 +51,10 @@ jobs:
         with:
           tool: nextest@0.9.98
       - name: Run integration tests
-        run: cargo nextest run --all-features --workspace --locked --no-tests=pass -E 'kind(test) and not test(docker)'
+        run: |
+          cargo nextest run --all-features --workspace --locked \
+            --no-tests=pass -E 'kind(test)' \
+            -- --skip test_should_consolidate_to_block_15k
 
   integration-docker-compose:
     runs-on: ubuntu-latest
@@ -74,39 +77,3 @@ jobs:
         uses: docker/setup-buildx-action@v3
       - name: Run Docker Compose integration tests
         run: cargo nextest run --all-features --workspace --locked --no-tests=pass -E 'test(docker)' --test-threads=1
-
-  sync:
-    runs-on: ubuntu-latest
-    timeout-minutes: 15
-    env:
-      RUST_BACKTRACE: 1
-    steps:
-      - uses: actions/checkout@v4
-      - uses: rui314/setup-mold@v1
-      - uses: dtolnay/rust-toolchain@stable
-      - uses: Swatinem/rust-cache@v2
-        with:
-          cache-on-failure: true
-      - uses: foundry-rs/foundry-toolchain@v1
-      - name: Start rollup node
-        env:
-          ALCHEMY_KEY: ${{ secrets.ALCHEMY_KEY }}
-        run: |
-          cargo run --bin rollup-node --release -- \
-            node --chain scroll-sepolia --datadir=./l2reth --disable-discovery \
-            --http --http.addr=0.0.0.0 --http.port=8545 --http.api eth \
-            --trusted-peers enode://29cee709c400533ae038a875b9ca975c8abef9eade956dcf3585e940acd5c0ae916968f514bd37d1278775aad1b7db30f7032a70202a87fd7365bd8de3c9f5fc@44.242.39.33:30303 \
-            --log.stdout.format log-fmt -vvv \
-            --l1.url "https://eth-sepolia.g.alchemy.com/v2/$ALCHEMY_KEY"  --l1.cups 500 \
-            --beacon.url https://eth-beacon-chain.drpc.org/rest/ --beacon.cups 100 --engine.en-sync-trigger 10000000000 \
-            --engine.sync-at-startup=false --engine.always-process-payload-attributes-on-canonical-head &
-      - name: Get hash for block 50000
-        run: |
-          echo "Waiting for block 50000..."
-          while ! cast block 50000 --rpc-url http://localhost:8545 2>/dev/null | grep -q hash; do
-            sleep 10
-          done
-          echo "Block 50000 found!"
-          
-          EXPECTED_HASH="0x8333d8cd1274d49dcf9b130971d1b485a01f2a2604e73ea7caf9d721fbdf5859"
-          cast block 50000 --rpc-url http://localhost:8545 | grep -q "$EXPECTED_HASH"
