@@ -2,7 +2,7 @@ use super::{future::EngineFuture, ForkchoiceState};
 use crate::{
     future::{BuildNewPayloadFuture, EngineDriverFutureResult},
     metrics::EngineDriverMetrics,
-    EngineDriverEvent,
+    EngineDriverError, EngineDriverEvent,
 };
 
 use alloy_provider::Provider;
@@ -237,7 +237,10 @@ where
                         return Some(EngineDriverEvent::NewPayload(block))
                     }
                     Err(err) => {
-                        tracing::error!(target: "scroll::engine", ?err, "failed to build new payload")
+                        tracing::error!(target: "scroll::engine", ?err, "failed to build new payload");
+                        if let EngineDriverError::MissingPayloadId(attributes) = err {
+                            self.l1_payload_attributes.push_front(attributes);
+                        }
                     }
                 }
             }

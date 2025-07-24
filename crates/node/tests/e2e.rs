@@ -14,11 +14,12 @@ use rollup_node::{
 };
 use rollup_node_manager::{RollupManagerCommand, RollupManagerEvent, RollupManagerHandle};
 use rollup_node_primitives::BatchCommitData;
+use rollup_node_providers::BlobSource;
 use rollup_node_sequencer::L1MessageInclusionMode;
 use rollup_node_watcher::L1Notification;
 use scroll_alloy_consensus::TxL1Message;
 use scroll_network::{NewBlockWithPeer, SCROLL_MAINNET};
-use scroll_wire::ScrollWireConfig;
+use scroll_wire::{ScrollWireConfig, ScrollWireProtocolHandler};
 use std::{path::PathBuf, sync::Arc};
 use tokio::sync::{oneshot, Mutex};
 use tracing::trace;
@@ -27,7 +28,7 @@ use tracing::trace;
 async fn can_bridge_l1_messages() -> eyre::Result<()> {
     reth_tracing::init_test_tracing();
 
-    // Create the chain spec for scroll mainnet with Euclid v2 activated and a test genesis.
+    // Create the chain spec for scroll mainnet with Feynman activated and a test genesis.
     let chain_spec = (*SCROLL_DEV).clone();
     let node_args = ScrollRollupNodeConfig {
         test: true,
@@ -45,7 +46,10 @@ async fn can_bridge_l1_messages() -> eyre::Result<()> {
             l1_message_inclusion_mode: L1MessageInclusionMode::BlockDepth(0),
             ..SequencerArgs::default()
         },
-        beacon_provider_args: BeaconProviderArgs::default(),
+        beacon_provider_args: BeaconProviderArgs {
+            blob_source: BlobSource::Mock,
+            ..Default::default()
+        },
         signer_args: Default::default(),
     };
     let (mut nodes, _tasks, _wallet) = setup_engine(node_args, 1, chain_spec, false).await?;
@@ -110,7 +114,10 @@ async fn can_sequence_and_gossip_blocks() {
             payload_building_duration: 1000,
             ..SequencerArgs::default()
         },
-        beacon_provider_args: BeaconProviderArgs::default(),
+        beacon_provider_args: BeaconProviderArgs {
+            blob_source: BlobSource::Mock,
+            ..Default::default()
+        },
         signer_args: Default::default(),
     };
 
@@ -167,7 +174,7 @@ async fn can_sequence_and_gossip_blocks() {
 async fn can_bridge_blocks() {
     reth_tracing::init_test_tracing();
 
-    // Create the chain spec for scroll dev with Euclid v2 activated and a test genesis.
+    // Create the chain spec for scroll dev with Feynman activated and a test genesis.
     let chain_spec = (*SCROLL_DEV).clone();
 
     // Setup the bridge node and a standard node.
@@ -273,10 +280,12 @@ async fn graceful_shutdown_consolidates_most_recent_batch_on_startup() -> eyre::
             .expect("valid url that will not be used as test batches use calldata"),
     );
 
+    let (_, events) = ScrollWireProtocolHandler::new(ScrollWireConfig::new(true));
     let (rnm, handle, l1_notification_tx) = config
         .clone()
         .build(
             node.inner.network.clone(),
+            events,
             node.inner.add_ons_handle.rpc_handle.rpc_server_handles.clone(),
             chain_spec.clone(),
             path.clone(),
@@ -378,10 +387,12 @@ async fn graceful_shutdown_consolidates_most_recent_batch_on_startup() -> eyre::
     drop(rnm_events);
 
     // Start the RNM again.
+    let (_, events) = ScrollWireProtocolHandler::new(ScrollWireConfig::new(true));
     let (rnm, handle, l1_notification_tx) = config
         .clone()
         .build(
             node.inner.network.clone(),
+            events,
             node.inner.add_ons_handle.rpc_handle.rpc_server_handles.clone(),
             chain_spec,
             path.clone(),
@@ -467,10 +478,12 @@ async fn can_handle_batch_revert() -> eyre::Result<()> {
             .expect("valid url that will not be used as test batches use calldata"),
     );
 
+    let (_, events) = ScrollWireProtocolHandler::new(ScrollWireConfig::new(true));
     let (rnm, handle, l1_watcher_tx) = config
         .clone()
         .build(
             node.inner.network.clone(),
+            events,
             node.inner.add_ons_handle.rpc_handle.rpc_server_handles.clone(),
             chain_spec.clone(),
             path.clone(),

@@ -1,6 +1,3 @@
-/// The size of the blob cache for the provider.
-pub(crate) const PROVIDER_BLOB_CACHE_SIZE: usize = 100;
-
 /// The max retries for the L1 provider.
 pub(crate) const PROVIDER_MAX_RETRIES: u32 = 10;
 
