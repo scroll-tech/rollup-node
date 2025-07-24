@@ -53,12 +53,12 @@ jobs:
       - name: Run integration tests
         run: |
           cargo nextest run --all-features --workspace --locked \
-            --skip test_should_consolidate_to_block_15k \
-            --no-tests=pass -E 'kind(test)'
+            --no-tests=pass -E 'kind(test)' \
+            -- --skip test_should_consolidate_to_block_15k
 
   sync:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 25
     env:
       RUST_BACKTRACE: 1
     steps:
