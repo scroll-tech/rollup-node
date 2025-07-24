@@ -10,11 +10,7 @@ use tests::DockerComposeEnv;
 #[tokio::test]
 async fn test_docker_block_propagation() -> Result<()> {
     println!("=== STARTING test_docker_block_propagation ===");
-    let env = DockerComposeEnv::new("basic-block-propagation");
-
-    println!("⏳ Waiting for services to fully initialize...");
-    env.wait_for_sequencer_ready().await?;
-    env.wait_for_follower_ready().await?;
+    let env = DockerComposeEnv::new("basic-block-propagation").await?;
 
     let sequencer = env.get_sequencer_provider().await?;
     println!("✅ Sequencer provider created");

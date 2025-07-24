@@ -14,7 +14,8 @@ pub struct DockerComposeEnv {
 impl DockerComposeEnv {
     // ===== CONSTRUCTOR AND LIFECYCLE =====
 
-    pub fn new(test_name: &str) -> Self {
+    /// Create a new DockerComposeEnv and wait for all services to be ready
+    pub async fn new(test_name: &str) -> Result<Self> {
         let start = SystemTime::now();
         let since_the_epoch = start.duration_since(UNIX_EPOCH).expect("Time went backwards");
         let timestamp = since_the_epoch.as_secs();
@@ -27,10 +28,18 @@ impl DockerComposeEnv {
         Self::cleanup(&compose_file, &project_name);
 
         // Start the environment
-        Self::start_environment(&compose_file, &project_name)
+        let env = Self::start_environment(&compose_file, &project_name)?;
+
+        // Wait for all services to be ready
+        println!("⏳ Waiting for services to be ready...");
+        env.wait_for_sequencer_ready().await?;
+        env.wait_for_follower_ready().await?;
+
+        println!("✅ All services are ready!");
+        Ok(env)
     }
 
-    fn start_environment(compose_file: &str, project_name: &str) -> Self {
+    fn start_environment(compose_file: &str, project_name: &str) -> Result<Self> {
         println!("📦 Starting docker-compose services...");
 
         let mut child = Command::new("docker")
@@ -63,13 +72,13 @@ impl DockerComposeEnv {
         if !output.status.success() {
             eprintln!("Docker-compose stderr: {}", String::from_utf8_lossy(&output.stderr));
 
-            // Show logs for debugging before panicking
+            // Show logs for debugging before returning error
             Self::show_all_container_logs(compose_file, project_name);
 
-            panic!("Failed to spin up docker-compose");
+            return Err(eyre::eyre!("Failed to spin up docker-compose"));
         }
 
-        Self { project_name: project_name.to_string(), compose_file: compose_file.to_string() }
+        Ok(Self { project_name: project_name.to_string(), compose_file: compose_file.to_string() })
     }
 
     /// Cleanup the environment
@@ -109,17 +118,17 @@ impl DockerComposeEnv {
     // ===== READINESS CHECKS =====
 
     /// Wait for sequencer to be ready
-    pub async fn wait_for_sequencer_ready(&self) -> Result<()> {
+    async fn wait_for_sequencer_ready(&self) -> Result<()> {
         Self::wait_for_l2_node_ready(&self.get_sequencer_rpc_url(), 5).await
     }
 
     /// Wait for follower to be ready
-    pub async fn wait_for_follower_ready(&self) -> Result<()> {
+    async fn wait_for_follower_ready(&self) -> Result<()> {
         Self::wait_for_l2_node_ready(&self.get_follower_rpc_url(), 5).await
     }
 
     /// Wait for L2 node to be ready
-    pub async fn wait_for_l2_node_ready(provider_url: &str, max_retries: u32) -> Result<()> {
+    async fn wait_for_l2_node_ready(provider_url: &str, max_retries: u32) -> Result<()> {
         for i in 0..max_retries {
             match ProviderBuilder::<_, _, Scroll>::default()
                 .with_recommended_fillers()
