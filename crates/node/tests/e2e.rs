@@ -103,6 +103,8 @@ async fn can_sequence_and_gossip_blocks() {
         network_args: ScrollNetworkArgs {
             enable_eth_scroll_wire_bridge: true,
             enable_scroll_wire: true,
+            disable_tx_broadcast: false,
+            sequencer_url: None,
         },
         database_args: DatabaseArgs { path: Some(PathBuf::from("sqlite::memory:")) },
         l1_provider_args: L1ProviderArgs::default(),
