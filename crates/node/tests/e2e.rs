@@ -163,7 +163,68 @@ async fn can_sequence_and_gossip_blocks() {
     }
 }
 
+#[tokio::test]
+async fn can_sequence_and_gossip_transactions() {
+    reth_tracing::init_test_tracing();
 
+    // create 2 nodes
+    let node_config = default_test_scroll_rollup_node_config();
+    let sequencer_node_config = default_sequencer_test_scroll_rollup_node_config();
+
+    // Create the chain spec for scroll mainnet with Euclid v2 activated and a test genesis.
+    let chain_spec = (*SCROLL_DEV).clone();
+    let (mut sequencer_node, _tasks, _) =
+        setup_engine(sequencer_node_config.clone(), 1, chain_spec.clone(), false).await.unwrap();
+
+    let (mut follower_node, _tasks, wallet) =
+        setup_engine(node_config.clone(), 1, chain_spec, false).await.unwrap();
+
+    let wallet = Arc::new(Mutex::new(wallet));
+
+    // Connect the nodes together.
+    sequencer_node[0].network.add_peer(follower_node[0].network.record()).await;
+    follower_node[0].network.next_session_established().await;
+    sequencer_node[0].network.next_session_established().await;
+
+    // generate rollup node manager event streams for each node
+    let sequencer_rnm_handle = sequencer_node[0].inner.add_ons_handle.rollup_manager_handle.clone();
+    let mut sequencer_events = sequencer_rnm_handle.get_event_listener().await.unwrap();
+    let mut follower_events =
+        follower_node[0].inner.add_ons_handle.rollup_manager_handle.get_event_listener().await.unwrap();
+
+    // inject a transaction into the pool of the follower node
+    let tx = generate_tx(wallet).await;
+    follower_node[0].rpc.inject_tx(tx).await.unwrap();
+
+    // sleep for 30s waiting for the transaction to be propagated to the sequencer node
+    tokio::time::sleep(tokio::time::Duration::from_secs(30)).await;
+
+    sequencer_rnm_handle.build_block().await;
+
+    // wait for the sequencer to build a block
+    if let Some(RollupManagerEvent::BlockSequenced(block)) = sequencer_events.next().await {
+        assert_eq!(block.body.transactions.len(), 1);
+    } else {
+        panic!("Failed to receive block from rollup node");
+    }
+    
+
+    // assert that the follower node has received the block from the peer
+    if let Some(RollupManagerEvent::NewBlockReceived(block_with_peer)) =
+        follower_events.next().await
+    {
+        assert_eq!(block_with_peer.block.body.transactions.len(), 1);
+    } else {
+        panic!("Failed to receive block from rollup node");
+    }
+
+    // assert that the block was successfully imported by the follower node
+    if let Some(RollupManagerEvent::BlockImported(block)) = follower_events.next().await {
+        assert_eq!(block.body.transactions.len(), 1);
+    } else {
+        panic!("Failed to receive block from rollup node");
+    }
+}
 
 #[tokio::test]
 async fn can_forward_tx_to_sequencer() {
@@ -214,28 +275,6 @@ async fn can_forward_tx_to_sequencer() {
     sequencer_rnm_handle.build_block().await;
 
     // wait for the sequencer to build a block with the transaction
-    if let Some(RollupManagerEvent::BlockSequenced(block)) = sequencer_events.next().await {
-        assert_eq!(block.body.transactions.len(), 1);
-    } else {
-        panic!("Failed to receive block from rollup node");
-    }
-    
-
-    // assert that the follower node has received the block from the peer
-    if let Some(RollupManagerEvent::NewBlockReceived(block_with_peer)) =
-        follower_events.next().await
-    {
-        assert_eq!(block_with_peer.block.body.transactions.len(), 1);
-    } else {
-        panic!("Failed to receive block from rollup node");
-    }
-
-    // assert that the block was successfully imported by the follower node
-    if let Some(RollupManagerEvent::BlockImported(block)) = follower_events.next().await {
-        assert_eq!(block.body.transactions.len(), 1);
-    } else {
-        panic!("Failed to receive block from rollup node");
-    }
 }
 
 
