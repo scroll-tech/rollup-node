@@ -31,9 +31,9 @@ pub trait BlobProvider: Sync + Send {
 /// The blob source for the beacon provider.
 #[derive(Debug, clap::ValueEnum, Default, Clone)]
 pub enum BlobSource {
-    /// Consensus client blob source.
+    /// Beacon client blob source.
     #[default]
-    ConsensusClient,
+    Beacon,
     /// Mocked source.
     Mock,
     /// AWS S3 blob source.
@@ -46,7 +46,7 @@ impl BlobSource {
     /// Returns an [`Arc<dyn BlobProvider>`] for the provided URL.
     pub async fn provider(&self, url: Option<reqwest::Url>) -> eyre::Result<Arc<dyn BlobProvider>> {
         Ok(match self {
-            Self::ConsensusClient => Arc::new(
+            Self::Beacon => Arc::new(
                 BeaconClientProvider::new_http(
                     url.ok_or_eyre("missing url for consensus client provider")?,
                 )

@@ -16,6 +16,7 @@ use rollup_node::{
     ScrollRollupNode, ScrollRollupNodeConfig, SequencerArgs,
 };
 use rollup_node_manager::{RollupManagerCommand, RollupManagerEvent};
+use rollup_node_providers::BlobSource;
 use tokio::sync::oneshot;
 
 #[tokio::test]
@@ -47,6 +48,7 @@ async fn test_should_consolidate_to_block_15k() -> eyre::Result<()> {
             compute_units_per_second: 100,
             max_retries: 10,
             initial_backoff: 100,
+            blob_source: BlobSource::Beacon,
         },
         signer_args: Default::default(),
     };
