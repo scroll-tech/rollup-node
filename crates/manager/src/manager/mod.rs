@@ -236,7 +236,7 @@ where
     fn handle_indexer_event(&mut self, event: IndexerEvent) {
         trace!(target: "scroll::node::manager", ?event, "Received indexer event");
         match event {
-            IndexerEvent::BatchCommitIndexed { batch_info, safe_head } => {
+            IndexerEvent::BatchCommitIndexed { batch_info, safe_head, l1_block_number } => {
                 // if we detected a batch revert event, we reset the pipeline and the engine driver.
                 if let Some(new_safe_head) = safe_head {
                     self.derivation_pipeline.flush();
@@ -245,7 +245,7 @@ where
                     self.engine.set_safe_block_info(new_safe_head);
                 }
                 // push the batch info into the derivation pipeline.
-                self.derivation_pipeline.handle_batch_commit(batch_info);
+                self.derivation_pipeline.handle_batch_commit(batch_info, l1_block_number);
             }
             IndexerEvent::BatchFinalizationIndexed(_, Some(finalized_block)) => {
                 // update the fcs on new finalized block.
@@ -279,7 +279,8 @@ where
                     sequencer.handle_reorg(queue_index, l1_block_number);
                 }
 
-                // TODO: should clear the derivation pipeline.
+                // Handle the reorg in the derivation pipeline.
+                self.derivation_pipeline.handle_reorg(l1_block_number);
             }
             IndexerEvent::L1MessageIndexed(index) => {
                 if let Some(event_sender) = self.event_sender.as_ref() {

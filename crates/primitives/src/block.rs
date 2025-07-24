@@ -1,6 +1,11 @@
 use alloy_eips::{BlockNumHash, Decodable2718};
 use alloy_primitives::{B256, U256};
 use alloy_rpc_types_engine::ExecutionPayload;
+use core::{
+    future::Future,
+    pin::Pin,
+    task::{ready, Context, Poll},
+};
 use reth_primitives_traits::transaction::signed::SignedTransaction;
 use reth_scroll_primitives::{ScrollBlock, ScrollTransactionSigned};
 use scroll_alloy_consensus::L1_MESSAGE_TRANSACTION_TYPE;
@@ -55,6 +60,32 @@ impl arbitrary::Arbitrary<'_> for BlockInfo {
         let number = u.int_in_range(0..=u32::MAX)?;
         let hash = B256::arbitrary(u)?;
         Ok(Self { number: number as u64, hash })
+    }
+}
+
+/// A wrapper around a type to which a block number is attached.
+#[derive(Debug, Default, Copy, Clone, PartialEq, Eq)]
+pub struct WithBlockNumber<T> {
+    /// The block number.
+    pub number: u64,
+    /// The wrapped type.
+    pub inner: T,
+}
+
+impl<T> WithBlockNumber<T> {
+    /// Returns a new instance of a [`WithBlockNumber`] wrapper.
+    pub const fn new(number: u64, inner: T) -> Self {
+        Self { number, inner }
+    }
+}
+
+impl<T: Future + Unpin> Future for WithBlockNumber<T> {
+    type Output = WithBlockNumber<<T as Future>::Output>;
+
+    fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
+        let block_number = self.number;
+        let inner = ready!(Pin::new(&mut self.get_mut().inner).poll(cx));
+        Poll::Ready(WithBlockNumber::new(block_number, inner))
     }
 }
 

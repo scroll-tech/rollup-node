@@ -15,5 +15,8 @@ pub use l1::{
     FullL1Provider, L1Provider, L1ProviderError,
 };
 
+#[cfg(any(test, feature = "test-utils"))]
+pub mod test_utils;
+
 /// An alias for a [`RootProvider`] using the [`Scroll`] network.
 pub type ScrollRootProvider = RootProvider<Scroll>;
