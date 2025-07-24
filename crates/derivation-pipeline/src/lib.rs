@@ -171,8 +171,10 @@ where
                     tracing::error!(target: "scroll::node::derivation_pipeline", batch_info = ?*batch_info, ?err, "failed to derive payload attributes for batch");
                     // retry polling the same batch.
                     this.batch_queue.push_front(batch_info);
-                    let fut = this.handle_next_batch().expect("Pushed batch info into queue");
+                    let fut = this.handle_next_batch().expect("batch_queue not empty");
                     this.pipeline_futures.push_front(fut);
+                    // notify the waker that work can be done.
+                    cx.waker().wake_by_ref();
                 }
             }
         }
@@ -373,6 +375,127 @@ mod tests {
         }
     }
 
+    const L1_MESSAGE_INDEX_33: L1MessageEnvelope = L1MessageEnvelope {
+        l1_block_number: 717,
+        l2_block_number: None,
+        queue_hash: None,
+        transaction: TxL1Message {
+            queue_index: 33,
+            gas_limit: 168000,
+            to: address!("781e90f1c8Fc4611c9b7497C3B47F99Ef6969CbC"),
+            value: U256::ZERO,
+            sender: address!("7885BcBd5CeCEf1336b5300fb5186A12DDD8c478"),
+            input: bytes!("8ef1332e0000000000000000000000007f2b8c31f88b6006c382775eea88297ec1e3e9050000000000000000000000006ea73e05adc79974b931123675ea8f78ffdacdf0000000000000000000000000000000000000000000000000006a94d74f430000000000000000000000000000000000000000000000000000000000000000002100000000000000000000000000000000000000000000000000000000000000a000000000000000000000000000000000000000000000000000000000000000a4232e8748000000000000000000000000ca266224613396a0e8d4c2497dbc4f33dd6cdeff000000000000000000000000ca266224613396a0e8d4c2497dbc4f33dd6cdeff000000000000000000000000000000000000000000000000006a94d74f4300000000000000000000000000000000000000000000000000000000000000000080000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000"),
+        },
+    };
+
+    const L1_MESSAGE_INDEX_34: L1MessageEnvelope = L1MessageEnvelope {
+        l1_block_number: 717,
+        l2_block_number: None,
+        queue_hash: None,
+        transaction: TxL1Message {
+            queue_index: 34,
+            gas_limit: 168000,
+            to: address!("781e90f1c8fc4611c9b7497c3b47f99ef6969cbc"),
+            value: U256::ZERO,
+            sender: address!("7885BcBd5CeCEf1336b5300fb5186A12DDD8c478"),
+            input: bytes!("8ef1332e0000000000000000000000007f2b8c31f88b6006c382775eea88297ec1e3e9050000000000000000000000006ea73e05adc79974b931123675ea8f78ffdacdf000000000000000000000000000000000000000000000000000470de4df820000000000000000000000000000000000000000000000000000000000000000002200000000000000000000000000000000000000000000000000000000000000a000000000000000000000000000000000000000000000000000000000000000a4232e8748000000000000000000000000982fe4a7cbd74bb3422ebe46333c3e8046c12c7f000000000000000000000000982fe4a7cbd74bb3422ebe46333c3e8046c12c7f00000000000000000000000000000000000000000000000000470de4df8200000000000000000000000000000000000000000000000000000000000000000080000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000"),
+        },
+    };
+
+    #[tokio::test]
+    async fn test_should_clear_pipeline() -> eyre::Result<()> {
+        // construct the pipeline.
+        let db = Arc::new(setup_test_db().await);
+        let l1_messages_provider = DatabaseL1MessageProvider::new(db.clone(), 0);
+        let mock_l1_provider = MockL1Provider { l1_messages_provider };
+        let fut: DerivationPipelineFuture = Box::pin(async { Ok(vec![]) });
+
+        let mut pipeline = DerivationPipeline {
+            pipeline_futures: FuturesOrdered::from_iter([fut]),
+            database: db,
+            l1_provider: mock_l1_provider,
+            batch_queue: [Arc::new(BatchInfo { index: 0, hash: Default::default() })].into(),
+            attributes_queue: [ScrollPayloadAttributesWithBatchInfo {
+                payload_attributes: Default::default(),
+                batch_info: Default::default(),
+            }]
+            .into(),
+            waker: None,
+            metrics: Default::default(),
+        };
+
+        // flush and verify all relevant fields are emptied.
+        pipeline.flush();
+        assert!(pipeline.pipeline_futures.is_empty());
+        assert!(pipeline.attributes_queue.is_empty());
+        assert!(pipeline.batch_queue.is_empty());
+
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn test_should_retry_on_derivation_error() -> eyre::Result<()> {
+        // https://etherscan.io/tx/0x8f4f0fcab656aa81589db5b53255094606c4624bfd99702b56b2debaf6211f48
+        // load batch data in the db.
+        let db = Arc::new(setup_test_db().await);
+        let raw_calldata = read_to_bytes("./testdata/calldata_v0.bin")?;
+        let batch_data = BatchCommitData {
+            hash: b256!("7f26edf8e3decbc1620b4d2ba5f010a6bdd10d6bb16430c4f458134e36ab3961"),
+            index: 12,
+            block_number: 18319648,
+            block_timestamp: 1696935971,
+            calldata: Arc::new(raw_calldata),
+            blob_versioned_hash: None,
+            finalized_block_number: None,
+        };
+        db.insert_batch(batch_data).await?;
+        // load message in db, leaving a l1 message missing.
+        db.insert_l1_message(L1_MESSAGE_INDEX_33).await?;
+
+        // construct the pipeline.
+        let l1_messages_provider = DatabaseL1MessageProvider::new(db.clone(), 0);
+        let mock_l1_provider = MockL1Provider { l1_messages_provider };
+        let mut pipeline = DerivationPipeline::new(mock_l1_provider, db.clone());
+
+        // as long as we don't call `handle_commit_batch`, pipeline should not return attributes.
+        pipeline.handle_batch_commit(BatchInfo { index: 12, hash: Default::default() });
+
+        // in a separate task, add the second l1 message.
+        tokio::task::spawn(async move {
+            tokio::time::sleep(tokio::time::Duration::from_millis(10)).await;
+            db.insert_l1_message(L1_MESSAGE_INDEX_34).await.unwrap();
+        });
+
+        // pipeline should initially fail and recover once the task previously spawned loads the L1
+        // message in db.
+        assert!(pipeline.next().await.is_some());
+
+        // check the correctness of the last attribute.
+        let mut attribute = ScrollPayloadAttributes::default();
+        while let Some(ScrollPayloadAttributesWithBatchInfo { payload_attributes: a, .. }) =
+            pipeline.next().await
+        {
+            if a.payload_attributes.timestamp == 1696935657 {
+                attribute = a;
+                break;
+            }
+        }
+        let expected = ScrollPayloadAttributes {
+            payload_attributes: PayloadAttributes {
+                timestamp: 1696935657,
+                ..Default::default()
+            },
+            transactions: Some(vec![bytes!("f88c8202658417d7840082a4f294530000000000000000000000000000000000000280a4bede39b500000000000000000000000000000000000000000000000000000001669aa2f583104ec4a07461e6555f927393ebdf5f183738450c3842bc3b86a1db7549d9bee21fadd0b1a06d7ba96897bd9fb8e838a327d3ca34be66da11955f10d1fb2264949071e9e8cd")]),
+            no_tx_pool: true,
+            block_data_hint: BlockDataHint::none(),
+            gas_limit: Some(10_000_000),
+        };
+        assert_eq!(attribute, expected);
+
+        Ok(())
+    }
+
     #[tokio::test]
     async fn test_should_stream_payload_attributes() -> eyre::Result<()> {
         // https://etherscan.io/tx/0x8f4f0fcab656aa81589db5b53255094606c4624bfd99702b56b2debaf6211f48
@@ -390,34 +513,7 @@ mod tests {
         };
         db.insert_batch(batch_data).await?;
         // load messages in db.
-        let l1_messages = vec![
-            L1MessageEnvelope {
-                l1_block_number: 717,
-                l2_block_number: None,
-                queue_hash: None,
-                transaction: TxL1Message {
-                    queue_index: 33,
-                    gas_limit: 168000,
-                    to: address!("781e90f1c8Fc4611c9b7497C3B47F99Ef6969CbC"),
-                    value: U256::ZERO,
-                    sender: address!("7885BcBd5CeCEf1336b5300fb5186A12DDD8c478"),
-                    input: bytes!("8ef1332e0000000000000000000000007f2b8c31f88b6006c382775eea88297ec1e3e9050000000000000000000000006ea73e05adc79974b931123675ea8f78ffdacdf0000000000000000000000000000000000000000000000000006a94d74f430000000000000000000000000000000000000000000000000000000000000000002100000000000000000000000000000000000000000000000000000000000000a000000000000000000000000000000000000000000000000000000000000000a4232e8748000000000000000000000000ca266224613396a0e8d4c2497dbc4f33dd6cdeff000000000000000000000000ca266224613396a0e8d4c2497dbc4f33dd6cdeff000000000000000000000000000000000000000000000000006a94d74f4300000000000000000000000000000000000000000000000000000000000000000080000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000"),
-                },
-            },
-            L1MessageEnvelope {
-                l1_block_number: 717,
-                l2_block_number: None,
-                queue_hash: None,
-                transaction: TxL1Message {
-                    queue_index: 34,
-                    gas_limit: 168000,
-                    to: address!("781e90f1c8fc4611c9b7497c3b47f99ef6969cbc"),
-                    value: U256::ZERO,
-                    sender: address!("7885BcBd5CeCEf1336b5300fb5186A12DDD8c478"),
-                    input: bytes!("8ef1332e0000000000000000000000007f2b8c31f88b6006c382775eea88297ec1e3e9050000000000000000000000006ea73e05adc79974b931123675ea8f78ffdacdf000000000000000000000000000000000000000000000000000470de4df820000000000000000000000000000000000000000000000000000000000000000002200000000000000000000000000000000000000000000000000000000000000a000000000000000000000000000000000000000000000000000000000000000a4232e8748000000000000000000000000982fe4a7cbd74bb3422ebe46333c3e8046c12c7f000000000000000000000000982fe4a7cbd74bb3422ebe46333c3e8046c12c7f00000000000000000000000000000000000000000000000000470de4df8200000000000000000000000000000000000000000000000000000000000000000080000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000"),
-                },
-            },
-        ];
+        let l1_messages = vec![L1_MESSAGE_INDEX_33, L1_MESSAGE_INDEX_34];
         for message in l1_messages {
             db.insert_l1_message(message).await?;
         }
@@ -472,34 +568,7 @@ mod tests {
             finalized_block_number: None,
         };
 
-        let l1_messages = vec![
-            L1MessageEnvelope {
-                l1_block_number: 5,
-                l2_block_number: None,
-                queue_hash: None,
-                transaction: TxL1Message {
-                    queue_index: 33,
-                    gas_limit: 168000,
-                    to: address!("781e90f1c8Fc4611c9b7497C3B47F99Ef6969CbC"),
-                    value: U256::ZERO,
-                    sender: address!("7885BcBd5CeCEf1336b5300fb5186A12DDD8c478"),
-                    input: bytes!("8ef1332e0000000000000000000000007f2b8c31f88b6006c382775eea88297ec1e3e9050000000000000000000000006ea73e05adc79974b931123675ea8f78ffdacdf0000000000000000000000000000000000000000000000000006a94d74f430000000000000000000000000000000000000000000000000000000000000000002100000000000000000000000000000000000000000000000000000000000000a000000000000000000000000000000000000000000000000000000000000000a4232e8748000000000000000000000000ca266224613396a0e8d4c2497dbc4f33dd6cdeff000000000000000000000000ca266224613396a0e8d4c2497dbc4f33dd6cdeff000000000000000000000000000000000000000000000000006a94d74f4300000000000000000000000000000000000000000000000000000000000000000080000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000"),
-                },
-            },
-            L1MessageEnvelope {
-                l1_block_number: 10,
-                l2_block_number: None,
-                queue_hash: None,
-                transaction: TxL1Message {
-                    queue_index: 34,
-                    gas_limit: 168000,
-                    to: address!("781e90f1c8fc4611c9b7497c3b47f99ef6969cbc"),
-                    value: U256::ZERO,
-                    sender: address!("7885BcBd5CeCEf1336b5300fb5186A12DDD8c478"),
-                    input: bytes!("8ef1332e0000000000000000000000007f2b8c31f88b6006c382775eea88297ec1e3e9050000000000000000000000006ea73e05adc79974b931123675ea8f78ffdacdf000000000000000000000000000000000000000000000000000470de4df820000000000000000000000000000000000000000000000000000000000000000002200000000000000000000000000000000000000000000000000000000000000a000000000000000000000000000000000000000000000000000000000000000a4232e8748000000000000000000000000982fe4a7cbd74bb3422ebe46333c3e8046c12c7f000000000000000000000000982fe4a7cbd74bb3422ebe46333c3e8046c12c7f00000000000000000000000000000000000000000000000000470de4df8200000000000000000000000000000000000000000000000000000000000000000080000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000"),
-                },
-            },
-        ];
+        let l1_messages = vec![L1_MESSAGE_INDEX_33, L1_MESSAGE_INDEX_34];
         let l1_provider =
             MockL1MessageProvider { messages: Arc::new(l1_messages), index: 0.into() };
         let l2_provider = MockL2Provider;
