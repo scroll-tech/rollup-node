@@ -304,7 +304,7 @@ mod tests {
     use futures::StreamExt;
     use rollup_node_primitives::L1MessageEnvelope;
     use rollup_node_providers::{
-        test_utils::NoBlobProvider, DatabaseL1MessageProvider, L1BlobProvider, L1MessageProvider,
+        test_utils::NoBlobProvider, BlobProvider, DatabaseL1MessageProvider, L1MessageProvider,
         L1ProviderError,
     };
     use scroll_alloy_consensus::TxL1Message;
@@ -325,7 +325,7 @@ mod tests {
     }
 
     #[async_trait::async_trait]
-    impl L1BlobProvider for MockL1MessageProvider {
+    impl BlobProvider for MockL1MessageProvider {
         async fn blob(
             &self,
             _block_timestamp: u64,

@@ -1,35 +1,11 @@
-use crate::{
-    beacon::{APIResponse, ReducedConfigData, ReducedGenesisData},
-    BeaconProvider, L1BlobProvider, L1MessageProvider, L1ProviderError,
-};
+//! Test utils for providers.
+
+use crate::{BlobProvider, L1MessageProvider, L1ProviderError};
 use std::sync::Arc;
 
 use alloy_eips::eip4844::Blob;
 use alloy_primitives::B256;
-use alloy_rpc_types_beacon::sidecar::BlobData;
 use rollup_node_primitives::L1MessageEnvelope;
-
-/// Mocks all calls to the beacon chain.
-#[derive(Debug, Default)]
-#[non_exhaustive]
-pub struct MockBeaconProvider;
-
-#[async_trait::async_trait]
-impl BeaconProvider for MockBeaconProvider {
-    type Error = reqwest::Error;
-
-    async fn config_spec(&self) -> Result<APIResponse<ReducedConfigData>, Self::Error> {
-        Ok(APIResponse { data: ReducedConfigData::default() })
-    }
-
-    async fn beacon_genesis(&self) -> Result<APIResponse<ReducedGenesisData>, Self::Error> {
-        Ok(APIResponse { data: ReducedGenesisData::default() })
-    }
-
-    async fn blobs(&self, _slot: u64) -> Result<Vec<BlobData>, Self::Error> {
-        Ok(vec![])
-    }
-}
 
 /// Implementation of the [`crate::L1Provider`] that never returns blobs.
 #[derive(Clone, Debug)]
@@ -39,7 +15,7 @@ pub struct NoBlobProvider<P: L1MessageProvider> {
 }
 
 #[async_trait::async_trait]
-impl<P: L1MessageProvider + Sync> L1BlobProvider for NoBlobProvider<P> {
+impl<P: L1MessageProvider + Sync> BlobProvider for NoBlobProvider<P> {
     async fn blob(
         &self,
         _block_timestamp: u64,
