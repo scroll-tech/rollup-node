@@ -31,7 +31,7 @@ use tracing::trace;
 async fn can_bridge_l1_messages() -> eyre::Result<()> {
     reth_tracing::init_test_tracing();
 
-    // Create the chain spec for scroll mainnet with Euclid v2 activated and a test genesis.
+    // Create the chain spec for scroll mainnet with Feynman activated and a test genesis.
     let chain_spec = (*SCROLL_DEV).clone();
     let node_args = ScrollRollupNodeConfig {
         test: true,
@@ -171,7 +171,7 @@ async fn can_sequence_and_gossip_blocks() {
 async fn can_bridge_blocks() {
     reth_tracing::init_test_tracing();
 
-    // Create the chain spec for scroll dev with Euclid v2 activated and a test genesis.
+    // Create the chain spec for scroll dev with Feynman activated and a test genesis.
     let chain_spec = (*SCROLL_DEV).clone();
 
     // Setup the bridge node and a standard node.
