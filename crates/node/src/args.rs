@@ -1,7 +1,9 @@
 use crate::{
     add_ons::IsDevChain,
-    constants::{self, PROVIDER_BLOB_CACHE_SIZE},
+    constants::{self},
 };
+use std::{fs, path::PathBuf, sync::Arc, time::Duration};
+
 use alloy_primitives::{hex, Address};
 use alloy_provider::{Provider, ProviderBuilder};
 use alloy_rpc_client::RpcClient;
@@ -11,7 +13,7 @@ use alloy_signer_local::PrivateKeySigner;
 use alloy_transport::layers::RetryBackoffLayer;
 use aws_sdk_kms::config::BehaviorVersion;
 use reth_chainspec::EthChainSpec;
-use reth_network::{protocol::IntoRlpxSubProtocol, NetworkProtocols};
+use reth_network::NetworkProtocols;
 use reth_network_api::FullNetwork;
 use reth_node_builder::rpc::RethRpcServerHandles;
 use reth_node_core::primitives::BlockHeader;
@@ -22,7 +24,7 @@ use rollup_node_manager::{
 };
 use rollup_node_primitives::{BlockInfo, NodeConfig};
 use rollup_node_providers::{
-    beacon_provider, DatabaseL1MessageProvider, L1MessageProvider, L1Provider, OnlineL1Provider,
+    BlobSource, DatabaseL1MessageProvider, FullL1Provider, L1MessageProvider, L1Provider,
     SystemContractProvider,
 };
 use rollup_node_sequencer::{L1MessageInclusionMode, Sequencer};
@@ -34,9 +36,8 @@ use scroll_db::{Database, DatabaseConnectionProvider, DatabaseOperations};
 use scroll_engine::{genesis_hash_from_chain_spec, EngineDriver, ForkchoiceState};
 use scroll_migration::traits::ScrollMigrator;
 use scroll_network::ScrollNetworkManager;
-use scroll_wire::{ScrollWireConfig, ScrollWireProtocolHandler};
-use std::{fs, path::PathBuf, sync::Arc, time::Duration};
-use tokio::sync::mpsc::Sender;
+use scroll_wire::ScrollWireEvent;
+use tokio::sync::mpsc::{Sender, UnboundedReceiver};
 
 /// A struct that represents the arguments for the rollup node.
 #[derive(Debug, Clone, clap::Args)]
@@ -96,6 +97,7 @@ impl ScrollRollupNodeConfig {
     >(
         self,
         network: N,
+        events: UnboundedReceiver<ScrollWireEvent>,
         rpc_server_handles: RethRpcServerHandles,
         chain_spec: CS,
         db_path: PathBuf,
@@ -112,9 +114,6 @@ impl ScrollRollupNodeConfig {
         Option<Sender<Arc<L1Notification>>>,
     )> {
         // Instantiate the network manager
-        let (scroll_wire_handler, events) =
-            ScrollWireProtocolHandler::new(ScrollWireConfig::new(true));
-        network.add_rlpx_sub_protocol(scroll_wire_handler.into_rlpx_sub_protocol());
         let scroll_network_manager = ScrollNetworkManager::from_parts(network.clone(), events);
 
         // Get the rollup node config.
@@ -230,18 +229,13 @@ impl ScrollRollupNodeConfig {
 
         // Construct the l1 provider.
         let l1_messages_provider = DatabaseL1MessageProvider::new(db.clone(), 0);
-        let l1_provider = if let Some(url) = self.beacon_provider_args.url {
-            let beacon_provider = beacon_provider(url.to_string());
-            let l1_provider = OnlineL1Provider::new(
-                beacon_provider,
-                PROVIDER_BLOB_CACHE_SIZE,
-                l1_messages_provider.clone(),
-            )
-            .await;
-            Some(l1_provider)
-        } else {
-            None
-        };
+        let blob_provider = self
+            .beacon_provider_args
+            .blob_source
+            .provider(self.beacon_provider_args.url)
+            .await
+            .expect("failed to construct L1 blob provider");
+        let l1_provider = FullL1Provider::new(blob_provider, l1_messages_provider.clone()).await;
 
         // Construct the Sequencer.
         let (sequencer, block_time) = if self.sequencer_args.sequencer_enabled {
@@ -360,6 +354,13 @@ pub struct BeaconProviderArgs {
     /// The URL for the Beacon chain.
     #[arg(long = "beacon.url", id = "beacon_url", value_name = "BEACON_URL")]
     pub url: Option<reqwest::Url>,
+    /// The blob source for the provider.
+    #[arg(
+        long = "beacon.blob-source",
+        id = "beacon_blob_source",
+        value_name = "BEACON_BLOB_SOURCE"
+    )]
+    pub blob_source: BlobSource,
     /// The compute units per second for the provider.
     #[arg(long = "beacon.cups", id = "beacon_compute_units_per_second", value_name = "BEACON_COMPUTE_UNITS_PER_SECOND", default_value_t = constants::PROVIDER_COMPUTE_UNITS_PER_SECOND)]
     pub compute_units_per_second: u64,
