@@ -22,7 +22,7 @@ async fn test_should_trigger_pipeline_sync_for_execution_node() {
     let node_config = default_test_scroll_rollup_node_config();
     let sequencer_node_config = default_sequencer_test_scroll_rollup_node_config();
 
-    // Create the chain spec for scroll mainnet with Euclid v2 activated and a test genesis.
+    // Create the chain spec for scroll mainnet with Feynman activated and a test genesis.
     let chain_spec = (*SCROLL_DEV).clone();
     let (mut nodes, _tasks, _) =
         setup_engine(sequencer_node_config.clone(), 1, chain_spec.clone(), false).await.unwrap();
