@@ -27,7 +27,7 @@ use tracing::{span, Level};
 
 /// Creates the initial setup with `num_nodes` started and interconnected.
 pub async fn setup_engine(
-    scroll_node_config: ScrollRollupNodeConfig,
+    mut scroll_node_config: ScrollRollupNodeConfig,
     num_nodes: usize,
     chain_spec: Arc<<ScrollRollupNode as NodeTypes>::ChainSpec>,
     is_dev: bool,
@@ -61,6 +61,10 @@ where
     let mut nodes: Vec<NodeTestContext<_, _>> = Vec::with_capacity(num_nodes);
 
     for idx in 0..num_nodes {
+        // disable sequencer nodes after the first one
+        if idx != 0 {
+            scroll_node_config.sequencer_args.sequencer_enabled = false;
+        }
         let node_config = NodeConfig::new(chain_spec.clone())
             .with_network(network_config.clone())
             .with_unused_ports()

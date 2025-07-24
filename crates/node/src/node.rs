@@ -7,7 +7,7 @@ use super::add_ons::ScrollRollupNodeAddOns;
 use reth_network::protocol::IntoRlpxSubProtocol;
 use reth_node_api::NodeTypes;
 use reth_node_builder::{
-    components::{BasicPayloadServiceBuilder, ComponentsBuilder},
+    components::{BasicPayloadServiceBuilder, ComponentsBuilder, PoolBuilderConfigOverrides},
     FullNodeTypes, Node, NodeAdapter, NodeComponentsBuilder,
 };
 use reth_scroll_node::{
@@ -71,6 +71,10 @@ where
                 ScrollNetworkBuilder::new()
                     .with_sub_protocol(scroll_wire_handler.into_rlpx_sub_protocol()),
             )
+            .pool(ScrollPoolBuilder::default().with_pool_config_overrides(PoolBuilderConfigOverrides{
+                propagate_local_transactions: !self.config.network_args.disable_tx_broadcast,
+                ..Default::default()
+            }))
     }
 
     fn add_ons(&self) -> Self::AddOns {
