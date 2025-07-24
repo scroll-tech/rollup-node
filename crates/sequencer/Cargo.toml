@@ -47,7 +47,7 @@ scroll-alloy-consensus.workspace = true
 # reth
 reth-e2e-test-utils.workspace = true
 reth-node-core.workspace = true
-reth-tracing = { git = "https://github.com/scroll-tech/reth.git", rev = "499e9ae7e9bc4b63f72a25d2d48bab5c0e15a51d" }
+reth-tracing = { git = "https://github.com/scroll-tech/reth.git", branch = "feat-forward-tx-to-sequencer" }
 
 # reth-scroll
 reth-scroll-chainspec.workspace = true
