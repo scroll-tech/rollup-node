@@ -27,6 +27,8 @@ jobs:
       - uses: Swatinem/rust-cache@v2
         with:
           cache-on-failure: true
+          shared-key: "unit-tests"
+          cache-targets: "false"
       - uses: taiki-e/install-action@v2
         with:
           tool: nextest@0.9.98
@@ -47,6 +49,8 @@ jobs:
       - uses: Swatinem/rust-cache@v2
         with:
           cache-on-failure: true
+          shared-key: "integration-tests"
+          cache-targets: "false"
       - uses: taiki-e/install-action@v2
         with:
           tool: nextest@0.9.98
@@ -63,17 +67,41 @@ jobs:
       RUST_BACKTRACE: 1
     steps:
       - uses: actions/checkout@v4
+      - name: Free disk space
+        run: |
+          sudo rm -rf /usr/local/lib/android
+          sudo rm -rf /usr/share/dotnet
+          sudo rm -rf /opt/ghc
+          sudo rm -rf /usr/local/.ghcup
+          sudo apt-get clean
+          docker system prune -af
+          df -h
       - uses: rui314/setup-mold@v1
-      - uses: dtolnay/rust-toolchain@nightly
-        with:
-          toolchain: 'stable'
+      - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
         with:
           cache-on-failure: true
+          shared-key: "docker-compose-tests"
+          cache-targets: "false"
+      - name: Cache Docker layers
+        uses: actions/cache@v4
+        with:
+          path: /tmp/.buildx-cache
+          key: ${{ runner.os }}-buildx-${{ github.sha }}
+          restore-keys: |
+            ${{ runner.os }}-buildx-
       - uses: taiki-e/install-action@v2
         with:
           tool: nextest@0.9.98
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
+        with:
+          driver-opts: |
+            image=moby/buildkit:v0.12.0
       - name: Run Docker Compose integration tests
         run: cargo nextest run --all-features --workspace --locked --no-tests=pass -E 'test(docker)' --test-threads=1
+      - name: Clean up Docker
+        if: always()
+        run: |
+          docker system prune -af
+          docker volume prune -f
