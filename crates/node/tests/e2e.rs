@@ -1,14 +1,17 @@
 //! End-to-end tests for the rollup node.
 
 use alloy_eips::BlockNumberOrTag;
-use alloy_primitives::{b256, Address, Bytes, Signature, B256, U256};
+use alloy_primitives::{address, b256, Address, Bytes, Signature, B256, U256};
 use futures::StreamExt;
 use reth_network::{NetworkConfigBuilder, PeersInfo};
 use reth_rpc_api::EthApiServer;
 use reth_scroll_chainspec::SCROLL_DEV;
 use reth_scroll_node::ScrollNetworkPrimitives;
 use rollup_node::{
-    test_utils::{default_test_scroll_rollup_node_config, generate_tx, setup_engine},
+    test_utils::{
+        default_sequencer_test_scroll_rollup_node_config, default_test_scroll_rollup_node_config,
+        generate_tx, setup_engine,
+    },
     BeaconProviderArgs, DatabaseArgs, EngineDriverArgs, L1ProviderArgs,
     NetworkArgs as ScrollNetworkArgs, ScrollRollupNodeConfig, SequencerArgs,
 };
@@ -582,6 +585,116 @@ async fn can_handle_batch_revert() -> eyre::Result<()> {
     // Assert the forkchoice state was reset to 4.
     assert_eq!(status.forkchoice_state.head_block_info().number, 4);
     assert_eq!(status.forkchoice_state.safe_block_info().number, 4);
+
+    Ok(())
+}
+
+#[tokio::test]
+async fn can_handle_reorgs_while_sequencing() -> eyre::Result<()> {
+    reth_tracing::init_test_tracing();
+    let chain_spec = (*SCROLL_DEV).clone();
+
+    // Launch a node
+    let (mut nodes, _tasks, _) =
+        setup_engine(default_test_scroll_rollup_node_config(), 1, chain_spec.clone(), false)
+            .await?;
+    let node = nodes.pop().unwrap();
+
+    // Instantiate the rollup node manager.
+    let mut config = default_sequencer_test_scroll_rollup_node_config();
+    let path = node.inner.config.datadir().db().join("scroll.db?mode=rwc");
+    let path = PathBuf::from("sqlite://".to_string() + &*path.to_string_lossy());
+    config.database_args.path = Some(path.clone());
+    config.beacon_provider_args.url = Some(
+        "http://dummy:8545"
+            .parse()
+            .expect("valid url that will not be used as test batches use calldata"),
+    );
+    config.engine_driver_args.sync_at_startup = false;
+    config.sequencer_args.max_l1_messages_per_block = 1;
+
+    let (_, events) = ScrollWireProtocolHandler::new(ScrollWireConfig::new(true));
+    let (rnm, handle, l1_watcher_tx) = config
+        .clone()
+        .build(
+            node.inner.network.clone(),
+            events,
+            node.inner.add_ons_handle.rpc_handle.rpc_server_handles.clone(),
+            chain_spec.clone(),
+            path.clone(),
+        )
+        .await?;
+    let l1_watcher_tx = l1_watcher_tx.unwrap();
+
+    // Spawn a task that constantly polls the rnm to make progress.
+    tokio::spawn(async {
+        let _ = rnm.await;
+    });
+
+    // Request an event stream from the rollup node manager and manually poll rnm to process the
+    // event stream request from the handle.
+    let mut rnm_events = handle.get_event_listener().await?;
+
+    // Send an L1 message.
+    let message = TxL1Message {
+        queue_index: 0,
+        gas_limit: 21000,
+        to: Default::default(),
+        value: Default::default(),
+        sender: address!("f39Fd6e51aad88F6F4ce6aB8827279cffFb92266"),
+        input: Default::default(),
+    };
+
+    // Let the sequencer build 10 blocks before performing the reorg process.
+    let mut i = 0;
+    loop {
+        if let Some(RollupManagerEvent::BlockSequenced(_)) = rnm_events.next().await {
+            if i == 10 {
+                break
+            }
+            i += 1;
+        }
+    }
+
+    // Send a L1 message and wait for it to be indexed.
+    l1_watcher_tx
+        .send(Arc::new(L1Notification::L1Message { message, block_number: 10, block_timestamp: 0 }))
+        .await?;
+    loop {
+        if let Some(RollupManagerEvent::L1MessageIndexed(index)) = rnm_events.next().await {
+            assert_eq!(index, 0);
+            break
+        }
+    }
+    l1_watcher_tx.send(Arc::new(L1Notification::NewBlock(10))).await?;
+
+    // Wait for block that contains the L1 message.
+    let l2_reorged_height;
+    loop {
+        if let Some(RollupManagerEvent::BlockSequenced(block)) = rnm_events.next().await {
+            if block.body.transactions.iter().any(|tx| tx.is_l1_message()) {
+                l2_reorged_height = block.header.number;
+                break
+            }
+        }
+    }
+
+    // Issue and wait for the reorg.
+    l1_watcher_tx.send(Arc::new(L1Notification::Reorg(9))).await?;
+    loop {
+        if let Some(RollupManagerEvent::Reorg(height)) = rnm_events.next().await {
+            assert_eq!(height, 9);
+            break
+        }
+    }
+
+    // Get the next sequenced L2 block.
+    loop {
+        if let Some(RollupManagerEvent::BlockSequenced(block)) = rnm_events.next().await {
+            assert_eq!(block.number, l2_reorged_height);
+            break
+        }
+    }
 
     Ok(())
 }
