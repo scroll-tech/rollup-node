@@ -257,6 +257,7 @@ async fn can_sequence_transactions() {
     }
 }
 
+#[allow(clippy::large_stack_frames)]
 #[tokio::test]
 async fn can_forward_tx_to_sequencer() {
     reth_tracing::init_test_tracing();
