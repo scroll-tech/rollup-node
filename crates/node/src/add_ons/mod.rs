@@ -63,7 +63,13 @@ where
         config: ScrollRollupNodeConfig,
         scroll_wire_event: UnboundedReceiver<ScrollWireEvent>,
     ) -> Self {
-        let rpc_add_ons = RpcAddOns::default();
+        let rpc_add_ons = RpcAddOns::new(
+            ScrollEthApiBuilder::default()
+                .with_sequencer(config.network_args.sequencer_url.clone()),
+            Default::default(),
+            Default::default(),
+            Default::default(),
+        );
         let rollup_manager_addon = RollupManagerAddOn::new(config, scroll_wire_event);
         Self { rpc_add_ons, rollup_manager_addon }
     }

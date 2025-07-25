@@ -23,3 +23,11 @@ target/
 .vscode/
 
 .idea/
+
+docker-compose/grafana_data/
+docker-compose/l2reth/
+docker-compose/prometheus_data/
+docker-compose/l1devnet/
+
+# OS
+.DS_Store
