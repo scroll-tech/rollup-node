@@ -345,7 +345,8 @@ pub struct BeaconProviderArgs {
     #[arg(
         long = "beacon.blob-source",
         id = "beacon_blob_source",
-        value_name = "BEACON_BLOB_SOURCE"
+        value_name = "BEACON_BLOB_SOURCE",
+        default_value_t = BlobSource::Mock
     )]
     pub blob_source: BlobSource,
     /// The compute units per second for the provider.
