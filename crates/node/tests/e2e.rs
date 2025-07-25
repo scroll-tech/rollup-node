@@ -107,7 +107,6 @@ async fn can_sequence_and_gossip_blocks() {
         network_args: ScrollNetworkArgs {
             enable_eth_scroll_wire_bridge: true,
             enable_scroll_wire: true,
-            disable_tx_broadcast: false,
             sequencer_url: None,
         },
         database_args: DatabaseArgs { path: Some(PathBuf::from("sqlite::memory:")) },
@@ -169,7 +168,7 @@ async fn can_sequence_and_gossip_blocks() {
 
 #[allow(clippy::large_stack_frames)]
 #[tokio::test]
-async fn can_sequence_and_gossip_transactions() {
+async fn can_sequence_transactions() {
     reth_tracing::init_test_tracing();
 
     // create 2 nodes
@@ -265,19 +264,17 @@ async fn can_forward_tx_to_sequencer() {
     // create 2 nodes
     let mut sequencer_node_config = default_sequencer_test_scroll_rollup_node_config();
     sequencer_node_config.sequencer_args.block_time = 0;
-    sequencer_node_config.network_args.disable_tx_broadcast = true;
     let mut follower_node_config = default_test_scroll_rollup_node_config();
-    follower_node_config.network_args.disable_tx_broadcast = true;
 
     // Create the chain spec for scroll mainnet with Euclid v2 activated and a test genesis.
     let chain_spec = (*SCROLL_DEV).clone();
     let (mut sequencer_node, _tasks, _) =
         setup_engine(sequencer_node_config, 1, chain_spec.clone(), false, false).await.unwrap();
 
-    // let sequencer_url = format!("http://localhost:{}", sequencer_node[0].rpc_url().port().unwrap());
-    // follower_node_config.network_args.sequencer_url = Some(sequencer_url);
+    let sequencer_url = format!("http://localhost:{}", sequencer_node[0].rpc_url().port().unwrap());
+    follower_node_config.network_args.sequencer_url = Some(sequencer_url);
     let (mut follower_node, _tasks, wallet) =
-        setup_engine(follower_node_config, 1, chain_spec, false, false).await.unwrap();
+        setup_engine(follower_node_config, 1, chain_spec, false, true).await.unwrap();
 
     let wallet = Arc::new(Mutex::new(wallet));
 
@@ -351,8 +348,6 @@ async fn can_forward_tx_to_sequencer() {
         panic!("Failed to receive block from rollup node");
     }
 }
-
-
 
 /// We test the bridge from the eth-wire protocol to the scroll-wire protocol.
 ///

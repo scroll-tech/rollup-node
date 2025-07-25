@@ -76,10 +76,7 @@ where
                     .with_http_api(RpcModuleSelection::All),
             )
             .set_dev(is_dev)
-            .with_txpool(TxPoolArgs {
-                no_local_transactions_propagation: no_local_transactions_propagation,
-                ..Default::default()
-            });
+            .with_txpool(TxPoolArgs { no_local_transactions_propagation, ..Default::default() });
 
         let span = span!(Level::INFO, "node", idx);
         let _enter = span.enter();

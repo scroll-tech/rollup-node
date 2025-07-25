@@ -316,9 +316,6 @@ pub struct NetworkArgs {
     /// A bool that represents if the scroll wire protocol should be enabled.
     #[arg(long = "network.scroll-wire", default_value_t = true)]
     pub enable_scroll_wire: bool,
-    /// A bool that represents if the local transaction broadcast should be disabled.
-    #[arg(long = "network.disable-tx-broadcast", default_value_t = false)]
-    pub disable_tx_broadcast: bool,
     /// A bool that represents if the transaction receiving should be disabled.
     /// The URL for the Sequencer RPC. (can be both HTTP and WS)
     #[arg(
@@ -331,7 +328,7 @@ pub struct NetworkArgs {
 
 impl Default for NetworkArgs {
     fn default() -> Self {
-        Self { enable_eth_scroll_wire_bridge: true, enable_scroll_wire: true, disable_tx_broadcast: false, sequencer_url: None }
+        Self { enable_eth_scroll_wire_bridge: true, enable_scroll_wire: true, sequencer_url: None }
     }
 }
 

@@ -30,7 +30,6 @@ async fn test_should_consolidate_to_block_15k() -> eyre::Result<()> {
         network_args: NetworkArgs {
             enable_eth_scroll_wire_bridge: false,
             enable_scroll_wire: false,
-            disable_tx_broadcast: false,
             sequencer_url: None,
         },
         database_args: DatabaseArgs::default(),
@@ -56,7 +55,8 @@ async fn test_should_consolidate_to_block_15k() -> eyre::Result<()> {
     };
 
     let chain_spec = (*SCROLL_SEPOLIA).clone();
-    let (mut nodes, _tasks, _) = setup_engine(node_config, 1, chain_spec.clone(), false, false).await?;
+    let (mut nodes, _tasks, _) =
+        setup_engine(node_config, 1, chain_spec.clone(), false, false).await?;
     let node = nodes.pop().unwrap();
 
     // We perform consolidation up to block 15k. This allows us to capture a batch revert event at
@@ -86,7 +86,9 @@ async fn test_should_trigger_pipeline_sync_for_execution_node() {
     // Create the chain spec for scroll mainnet with Feynman activated and a test genesis.
     let chain_spec = (*SCROLL_DEV).clone();
     let (mut nodes, _tasks, _) =
-        setup_engine(sequencer_node_config.clone(), 1, chain_spec.clone(), false, false).await.unwrap();
+        setup_engine(sequencer_node_config.clone(), 1, chain_spec.clone(), false, false)
+            .await
+            .unwrap();
     let mut synced = nodes.pop().unwrap();
 
     let (mut nodes, _tasks, _) =
