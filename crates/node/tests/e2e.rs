@@ -168,7 +168,7 @@ async fn can_sequence_and_gossip_blocks() {
 
 #[allow(clippy::large_stack_frames)]
 #[tokio::test]
-async fn can_sequence_transactions() {
+async fn can_sequence_and_gossip_transactions() {
     reth_tracing::init_test_tracing();
 
     // create 2 nodes
