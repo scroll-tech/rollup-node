@@ -119,12 +119,12 @@ impl DockerComposeEnv {
 
     /// Wait for sequencer to be ready
     async fn wait_for_sequencer_ready(&self) -> Result<()> {
-        Self::wait_for_l2_node_ready(&self.get_sequencer_rpc_url(), 5).await
+        Self::wait_for_l2_node_ready(&self.get_sequencer_rpc_url(), 30).await
     }
 
     /// Wait for follower to be ready
     async fn wait_for_follower_ready(&self) -> Result<()> {
-        Self::wait_for_l2_node_ready(&self.get_follower_rpc_url(), 5).await
+        Self::wait_for_l2_node_ready(&self.get_follower_rpc_url(), 30).await
     }
 
     /// Wait for L2 node to be ready
@@ -152,7 +152,7 @@ impl DockerComposeEnv {
             }
             tokio::time::sleep(Duration::from_secs(2)).await;
         }
-        eyre::bail!("L2 node failed to become ready after {max_retries} attempts")
+        eyre::bail!("L2 node failed to become ready after {max_retries} attempts, url: {provider_url}");
     }
 
     // ===== PROVIDER FACTORIES =====
