@@ -152,7 +152,9 @@ impl DockerComposeEnv {
             }
             tokio::time::sleep(Duration::from_secs(2)).await;
         }
-        eyre::bail!("L2 node failed to become ready after {max_retries} attempts, url: {provider_url}");
+        eyre::bail!(
+            "L2 node failed to become ready after {max_retries} attempts, url: {provider_url}"
+        );
     }
 
     // ===== PROVIDER FACTORIES =====
