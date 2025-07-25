@@ -1,0 +1,51 @@
+version: '3.8'
+
+services:
+  rollup-node-sequencer:
+    build:
+      context: ../
+      dockerfile: Dockerfile
+    container_name: rollup-node-sequencer
+    entrypoint: ["bash", "/launch_rollup_node_sequencer.bash"]
+    environment:
+      - ENV=dev
+      - RUST_LOG=info
+    ports:
+      - "8545:8545"   # JSON-RPC
+      - "8546:8546"   # WebSocket
+      - "6060:6060"   # Metrics
+    volumes:
+      - ./launch_rollup_node_sequencer.bash:/launch_rollup_node_sequencer.bash:ro
+      - ./discovery-secret:/l2reth/discovery-secret:ro
+      - l2reth-sequencer:/l2reth
+    networks:
+      - test-scroll-network
+
+  rollup-node-follower:
+    build:
+      context: ../
+      dockerfile: Dockerfile
+    container_name: rollup-node-follower
+    entrypoint: ["bash", "/launch_rollup_node_follower.bash"]
+    environment:
+      - ENV=dev
+      - RUST_LOG=info
+    ports:
+      - "8547:8545"   # JSON-RPC
+      - "8548:8546"   # WebSocket
+      - "6061:6060"   # Metrics
+    volumes:
+      - ./launch_rollup_node_follower.bash:/launch_rollup_node_follower.bash:ro
+      - l2reth-follower:/l2reth
+    networks:
+      - test-scroll-network
+    depends_on:
+      - rollup-node-sequencer
+
+networks:
+  test-scroll-network:
+    driver: bridge
+
+volumes:
+  l2reth-sequencer:
+  l2reth-follower:
