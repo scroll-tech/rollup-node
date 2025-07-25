@@ -79,9 +79,8 @@ jobs:
           buildkitd-flags: --allow-insecure-entitlement security.insecure
       - name: Free up disk space
         run: |
+          echo "Initial disk usage:"
           df -h
-          docker system df
-
           sudo rm -rf /usr/share/dotnet || true
           sudo rm -rf /opt/ghc || true
           sudo rm -rf /usr/local/share/boost || true
@@ -90,11 +89,16 @@ jobs:
           sudo rm -rf /usr/local/share/powershell || true
           sudo rm -rf /usr/share/swift || true
           sudo rm -rf /opt/hostedtoolcache || true
-
+          echo "Disk usage after cleanup:"
           df -h
       - name: Clean Docker before tests
         run: |
+          echo "Docker status before cleanup:"
+          docker system df
           docker system prune -af --volumes
+          echo "Docker status after cleanup:"
+          docker system df
+          echo "Final disk usage:"
           df -h
       - name: Run Docker Compose integration tests
         run: |
