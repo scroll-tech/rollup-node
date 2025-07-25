@@ -68,8 +68,6 @@ jobs:
       - uses: Swatinem/rust-cache@v2
         with:
           cache-on-failure: true
-          shared-key: "docker-integration-tests"
-          cache-targets: "false"
       - uses: taiki-e/install-action@v2
         with:
           tool: nextest@0.9.98
@@ -102,10 +100,15 @@ jobs:
           df -h
       - name: Run Docker Compose integration tests
         run: |
-          export DOCKER_BUILDKIT=1
-          export COMPOSE_DOCKER_CLI_BUILD=1
           cargo nextest run --all-features --workspace --locked \
-            --no-tests=pass -E 'test(docker)' --test-threads=1
+            --no-tests=pass -E 'test(docker)' --test-threads=1 \
+            --failure-output immediate \
+            --success-output never \
+            --verbose
+        env:
+          RUST_LOG: debug
+          RUST_BACKTRACE: full
+          NEXTEST_VERBOSE: 1
       - name: Cleanup after tests
         if: always()
         run: |
