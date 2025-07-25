@@ -15,7 +15,7 @@ use reth_node_builder::{
     rpc::RpcHandleProvider, EngineNodeLauncher, Node, NodeBuilder, NodeConfig, NodeHandle,
     NodeTypes, NodeTypesWithDBAdapter, PayloadAttributesBuilder, PayloadTypes,
 };
-use reth_node_core::args::{DiscoveryArgs, NetworkArgs, RpcServerArgs};
+use reth_node_core::args::{DiscoveryArgs, NetworkArgs, RpcServerArgs, TxPoolArgs};
 use reth_provider::providers::BlockchainProvider;
 use reth_rpc_server_types::RpcModuleSelection;
 use reth_tasks::TaskManager;
@@ -31,6 +31,7 @@ pub async fn setup_engine(
     num_nodes: usize,
     chain_spec: Arc<<ScrollRollupNode as NodeTypes>::ChainSpec>,
     is_dev: bool,
+    no_local_transactions_propagation: bool,
 ) -> eyre::Result<(
     Vec<
         NodeHelperType<
@@ -74,7 +75,11 @@ where
                     .with_http()
                     .with_http_api(RpcModuleSelection::All),
             )
-            .set_dev(is_dev);
+            .set_dev(is_dev)
+            .with_txpool(TxPoolArgs {
+                no_local_transactions_propagation: no_local_transactions_propagation,
+                ..Default::default()
+            });
 
         let span = span!(Level::INFO, "node", idx);
         let _enter = span.enter();
