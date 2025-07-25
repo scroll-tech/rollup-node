@@ -157,7 +157,7 @@ async fn can_build_blocks_with_delayed_l1_messages() {
     reth_tracing::init_test_tracing();
 
     let chain_spec = SCROLL_DEV.clone();
-    const BLOCK_BUILDING_DURATION: Duration = tokio::time::Duration::from_millis(0);
+    const BLOCK_BUILDING_DURATION: Duration = Duration::from_millis(0);
     const BLOCK_GAP_TRIGGER: u64 = 100;
     const L1_MESSAGE_DELAY: u64 = 2;
 

@@ -13,7 +13,7 @@ use reth_e2e_test_utils::{
 use reth_engine_local::LocalPayloadAttributesBuilder;
 use reth_node_builder::{
     rpc::RpcHandleProvider, EngineNodeLauncher, Node, NodeBuilder, NodeConfig, NodeHandle,
-    NodeTypes, NodeTypesWithDBAdapter, PayloadAttributesBuilder, PayloadTypes,
+    NodeTypes, NodeTypesWithDBAdapter, PayloadAttributesBuilder, PayloadTypes, TreeConfig,
 };
 use reth_node_core::args::{DiscoveryArgs, NetworkArgs, RpcServerArgs};
 use reth_provider::providers::BlockchainProvider;
@@ -81,10 +81,12 @@ where
             .with_components(node.components_builder())
             .with_add_ons(node.add_ons())
             .launch_with_fn(|builder| {
+                let tree_config = TreeConfig::default()
+                    .with_always_process_payload_attributes_on_canonical_head(true);
                 let launcher = EngineNodeLauncher::new(
                     builder.task_executor().clone(),
                     builder.config().datadir(),
-                    Default::default(),
+                    tree_config,
                 );
                 builder.launch_with(launcher)
             })
