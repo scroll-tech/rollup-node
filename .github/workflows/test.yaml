@@ -64,9 +64,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: rui314/setup-mold@v1
-      - uses: dtolnay/rust-toolchain@nightly
-        with:
-          toolchain: 'stable'
+      - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
         with:
           cache-on-failure: true
