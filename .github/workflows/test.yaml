@@ -108,7 +108,6 @@ jobs:
         env:
           RUST_LOG: debug
           RUST_BACKTRACE: full
-          NEXTEST_VERBOSE: 1
       - name: Cleanup after tests
         if: always()
         run: |
