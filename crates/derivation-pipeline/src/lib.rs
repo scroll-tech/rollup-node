@@ -443,7 +443,7 @@ mod tests {
         {
             if a.payload_attributes.timestamp == 1696935657 {
                 attribute = a;
-                break;
+                break
             }
         }
         let expected = ScrollPayloadAttributes {
@@ -501,7 +501,7 @@ mod tests {
         {
             if a.payload_attributes.timestamp == 1696935657 {
                 attribute = a;
-                break;
+                break
             }
         }
         let expected = ScrollPayloadAttributes {
@@ -661,6 +661,7 @@ mod tests {
     }
 
     #[test]
+    #[allow(clippy::large_stack_frames)]
     fn test_should_derive_blob_batch() -> eyre::Result<()> {
         let handle = std::thread::Builder::new()
             .stack_size(16 * 1024 * 1024)
