@@ -15,7 +15,7 @@ alloy-primitives = { workspace = true, features = ["map-foldhash"] }
 alloy-rlp = { version = "0.3.10", default-features = false }
 
 # reth
-reth-eth-wire = { git = "https://github.com/scroll-tech/reth.git", rev = "fe0848193c9b2009cec53db2633028dd3d91f8a5", default-features = false }
+reth-eth-wire = { git = "https://github.com/scroll-tech/reth.git", branch = "feat-simplify-gas-price-oracle", default-features = false }
 reth-network.workspace = true
 reth-network-api.workspace = true
 

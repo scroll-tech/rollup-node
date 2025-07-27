@@ -14,10 +14,10 @@ alloy-primitives = { workspace = true, features = ["map-foldhash"] }
 reth-eth-wire-types.workspace = true
 reth-network.workspace = true
 reth-network-api.workspace = true
-reth-network-types = { git = "https://github.com/scroll-tech/reth.git", rev = "fe0848193c9b2009cec53db2633028dd3d91f8a5", default-features = false }
+reth-network-types = { git = "https://github.com/scroll-tech/reth.git", branch = "feat-simplify-gas-price-oracle", default-features = false }
 reth-network-peers.workspace = true
 reth-primitives-traits.workspace = true
-reth-storage-api = { git = "https://github.com/scroll-tech/reth.git", rev = "fe0848193c9b2009cec53db2633028dd3d91f8a5", default-features = false }
+reth-storage-api = { git = "https://github.com/scroll-tech/reth.git", branch = "feat-simplify-gas-price-oracle", default-features = false }
 
 # scroll
 reth-scroll-chainspec.workspace = true

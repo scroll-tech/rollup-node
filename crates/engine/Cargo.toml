@@ -32,7 +32,7 @@ reth-primitives-traits.workspace = true
 # reth-scroll
 reth-scroll-chainspec.workspace = true
 reth-scroll-primitives.workspace = true
-reth-scroll-engine-primitives = { git = "https://github.com/scroll-tech/reth.git", rev = "fe0848193c9b2009cec53db2633028dd3d91f8a5", default-features = false }
+reth-scroll-engine-primitives = { git = "https://github.com/scroll-tech/reth.git", branch = "feat-simplify-gas-price-oracle", default-features = false }
 
 # rollup-node
 rollup-node-primitives.workspace = true
@@ -55,7 +55,7 @@ tracing.workspace = true
 alloy-consensus.workspace = true
 arbitrary.workspace = true
 async-trait.workspace = true
-reth-testing-utils = { git = "https://github.com/scroll-tech/reth.git", rev = "fe0848193c9b2009cec53db2633028dd3d91f8a5", default-features = false }
+reth-testing-utils = { git = "https://github.com/scroll-tech/reth.git", branch = "feat-simplify-gas-price-oracle", default-features = false }
 rollup-node-providers = { workspace = true, features = ["test-utils"] }
 scroll-alloy-consensus.workspace = true
 scroll-alloy-rpc-types-engine = { workspace = true, features = ["arbitrary"] }
