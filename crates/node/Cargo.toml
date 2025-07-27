@@ -83,7 +83,7 @@ scroll-wire.workspace = true
 scroll-network.workspace = true
 
 auto_impl.workspace = true
-clap = { version = "4", features = ["derive", "env"] }
+clap = { workspace = true, features = ["derive", "env"] }
 eyre.workspace = true
 reqwest.workspace = true
 tokio.workspace = true
