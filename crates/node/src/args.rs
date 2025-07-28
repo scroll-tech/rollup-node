@@ -316,7 +316,6 @@ pub struct NetworkArgs {
     /// A bool that represents if the scroll wire protocol should be enabled.
     #[arg(long = "network.scroll-wire", default_value_t = true)]
     pub enable_scroll_wire: bool,
-    /// A bool that represents if the transaction receiving should be disabled.
     /// The URL for the Sequencer RPC. (can be both HTTP and WS)
     #[arg(
         long = "network.sequencer-url",

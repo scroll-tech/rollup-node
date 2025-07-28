@@ -270,7 +270,7 @@ async fn can_forward_tx_to_sequencer() {
     // Create the chain spec for scroll mainnet with Euclid v2 activated and a test genesis.
     let chain_spec = (*SCROLL_DEV).clone();
     let (mut sequencer_node, _tasks, _) =
-        setup_engine(sequencer_node_config, 1, chain_spec.clone(), false, false).await.unwrap();
+        setup_engine(sequencer_node_config, 1, chain_spec.clone(), false, true).await.unwrap();
 
     let sequencer_url = format!("http://localhost:{}", sequencer_node[0].rpc_url().port().unwrap());
     follower_node_config.network_args.sequencer_url = Some(sequencer_url);
