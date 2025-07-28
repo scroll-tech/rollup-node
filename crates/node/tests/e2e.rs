@@ -649,7 +649,7 @@ async fn can_handle_batch_revert() -> eyre::Result<()> {
 
     // Launch a node
     let (mut nodes, _tasks, _) =
-        setup_engine(default_test_scroll_rollup_node_config(), 1, chain_spec.clone(), false)
+        setup_engine(default_test_scroll_rollup_node_config(), 1, chain_spec.clone(), false, false)
             .await?;
     let node = nodes.pop().unwrap();
 
@@ -778,9 +778,9 @@ async fn can_handle_reorgs_while_sequencing() -> eyre::Result<()> {
     let chain_spec = (*SCROLL_DEV).clone();
 
     // Launch a node
-    let (mut nodes, _tasks, _) =
-        setup_engine(default_test_scroll_rollup_node_config(), 1, chain_spec.clone(), false)
-            .await?;
+    let mut config = default_test_scroll_rollup_node_config();
+    config.sequencer_args.block_time = 0;
+    let (mut nodes, _tasks, _) = setup_engine(config, 1, chain_spec.clone(), false, false).await?;
     let node = nodes.pop().unwrap();
 
     // Instantiate the rollup node manager.
@@ -831,6 +831,7 @@ async fn can_handle_reorgs_while_sequencing() -> eyre::Result<()> {
     // Let the sequencer build 10 blocks before performing the reorg process.
     let mut i = 0;
     loop {
+        handle.build_block().await;
         if let Some(RollupManagerEvent::BlockSequenced(_)) = rnm_events.next().await {
             if i == 10 {
                 break
@@ -852,6 +853,7 @@ async fn can_handle_reorgs_while_sequencing() -> eyre::Result<()> {
     l1_watcher_tx.send(Arc::new(L1Notification::NewBlock(10))).await?;
 
     // Wait for block that contains the L1 message.
+    handle.build_block().await;
     let l2_reorged_height;
     loop {
         if let Some(RollupManagerEvent::BlockSequenced(block)) = rnm_events.next().await {
@@ -872,6 +874,7 @@ async fn can_handle_reorgs_while_sequencing() -> eyre::Result<()> {
     }
 
     // Get the next sequenced L2 block.
+    handle.build_block().await;
     loop {
         if let Some(RollupManagerEvent::BlockSequenced(block)) = rnm_events.next().await {
             assert_eq!(block.number, l2_reorged_height);
