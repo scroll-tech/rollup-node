@@ -66,7 +66,7 @@ where
                     self.config.sequencer_args.payload_building_duration,
                 ),
                 best_transactions: (),
-                block_da_size_limit: constants::DEFAULT_PAYLOAD_SIZE_LIMIT,
+                block_da_size_limit: Some(constants::DEFAULT_PAYLOAD_SIZE_LIMIT),
             }))
             .network(
                 ScrollNetworkBuilder::new()

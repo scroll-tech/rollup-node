@@ -1,6 +1,3 @@
-/// The size of the blob cache for the provider.
-pub(crate) const PROVIDER_BLOB_CACHE_SIZE: usize = 100;
-
 /// The max retries for the L1 provider.
 pub(crate) const PROVIDER_MAX_RETRIES: u32 = 10;
 
@@ -16,7 +13,7 @@ pub(crate) const DEFAULT_BLOCK_TIME: u64 = 1000;
 /// The default payload building duration in milliseconds for the sequencer.
 pub(crate) const DEFAULT_PAYLOAD_BUILDING_DURATION: u64 = 800;
 
-/// The default payload building size limitation in milliseconds for the sequencer.
+/// The default payload size limit in bytes for the sequencer.
 pub(crate) const DEFAULT_PAYLOAD_SIZE_LIMIT: u64 = 122_880;
 
 /// The default max L1 messages per block for the sequencer.

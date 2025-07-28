@@ -4,22 +4,17 @@
 use alloy_provider::RootProvider;
 use scroll_alloy_network::Scroll;
 
-mod beacon;
-
-pub use beacon::{beacon_provider, BeaconProvider, OnlineBeaconClient};
-
 mod block;
 pub use block::BlockDataProvider;
 
 mod l1;
 pub use l1::{
-    blob::L1BlobProvider,
+    blob::{AnvilBlobProvider, BeaconClientProvider, BlobProvider, BlobSource, MockBeaconProvider},
     message::{DatabaseL1MessageProvider, L1MessageProvider},
     system_contract::{SystemContractProvider, AUTHORIZED_SIGNER_STORAGE_SLOT},
-    L1Provider, L1ProviderError, OnlineL1Provider,
+    FullL1Provider, L1Provider, L1ProviderError,
 };
 
-/// Test utils related to providers.
 #[cfg(any(test, feature = "test-utils"))]
 pub mod test_utils;
 

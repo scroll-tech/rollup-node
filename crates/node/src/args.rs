@@ -1,7 +1,9 @@
 use crate::{
     add_ons::IsDevChain,
-    constants::{self, PROVIDER_BLOB_CACHE_SIZE},
+    constants::{self},
 };
+use std::{fs, path::PathBuf, sync::Arc, time::Duration};
+
 use alloy_primitives::{hex, Address};
 use alloy_provider::{Provider, ProviderBuilder};
 use alloy_rpc_client::RpcClient;
@@ -22,7 +24,7 @@ use rollup_node_manager::{
 };
 use rollup_node_primitives::{BlockInfo, NodeConfig};
 use rollup_node_providers::{
-    beacon_provider, DatabaseL1MessageProvider, L1MessageProvider, L1Provider, OnlineL1Provider,
+    BlobSource, DatabaseL1MessageProvider, FullL1Provider, L1MessageProvider, L1Provider,
     SystemContractProvider,
 };
 use rollup_node_sequencer::{L1MessageInclusionMode, Sequencer};
@@ -35,7 +37,6 @@ use scroll_engine::{genesis_hash_from_chain_spec, EngineDriver, ForkchoiceState}
 use scroll_migration::traits::ScrollMigrator;
 use scroll_network::ScrollNetworkManager;
 use scroll_wire::ScrollWireEvent;
-use std::{fs, path::PathBuf, sync::Arc, time::Duration};
 use tokio::sync::mpsc::{Sender, UnboundedReceiver};
 
 /// A struct that represents the arguments for the rollup node.
@@ -231,18 +232,13 @@ impl ScrollRollupNodeConfig {
 
         // Construct the l1 provider.
         let l1_messages_provider = DatabaseL1MessageProvider::new(db.clone(), 0);
-        let l1_provider = if let Some(url) = self.beacon_provider_args.url {
-            let beacon_provider = beacon_provider(url.to_string());
-            let l1_provider = OnlineL1Provider::new(
-                beacon_provider,
-                PROVIDER_BLOB_CACHE_SIZE,
-                l1_messages_provider.clone(),
-            )
-            .await;
-            Some(l1_provider)
-        } else {
-            None
-        };
+        let blob_provider = self
+            .beacon_provider_args
+            .blob_source
+            .provider(self.beacon_provider_args.url)
+            .await
+            .expect("failed to construct L1 blob provider");
+        let l1_provider = FullL1Provider::new(blob_provider, l1_messages_provider.clone()).await;
 
         // Construct the Sequencer.
         let (sequencer, block_time) = if self.sequencer_args.sequencer_enabled {
@@ -314,7 +310,7 @@ pub struct EngineDriverArgs {
 }
 
 /// The network arguments.
-#[derive(Debug, Default, Clone, clap::Args)]
+#[derive(Debug, Clone, clap::Args)]
 pub struct NetworkArgs {
     /// A bool to represent if new blocks should be bridged from the eth wire protocol to the
     /// scroll wire protocol.
@@ -323,6 +319,19 @@ pub struct NetworkArgs {
     /// A bool that represents if the scroll wire protocol should be enabled.
     #[arg(long = "network.scroll-wire", default_value_t = true)]
     pub enable_scroll_wire: bool,
+    /// The URL for the Sequencer RPC. (can be both HTTP and WS)
+    #[arg(
+        long = "network.sequencer-url",
+        id = "network_sequencer_url",
+        value_name = "NETWORK_SEQUENCER_URL"
+    )]
+    pub sequencer_url: Option<String>,
+}
+
+impl Default for NetworkArgs {
+    fn default() -> Self {
+        Self { enable_eth_scroll_wire_bridge: true, enable_scroll_wire: true, sequencer_url: None }
+    }
 }
 
 /// The arguments for the L1 provider.
@@ -348,6 +357,13 @@ pub struct BeaconProviderArgs {
     /// The URL for the Beacon chain.
     #[arg(long = "beacon.url", id = "beacon_url", value_name = "BEACON_URL")]
     pub url: Option<reqwest::Url>,
+    /// The blob source for the provider.
+    #[arg(
+        long = "beacon.blob-source",
+        id = "beacon_blob_source",
+        value_name = "BEACON_BLOB_SOURCE"
+    )]
+    pub blob_source: BlobSource,
     /// The compute units per second for the provider.
     #[arg(long = "beacon.cups", id = "beacon_compute_units_per_second", value_name = "BEACON_COMPUTE_UNITS_PER_SECOND", default_value_t = constants::PROVIDER_COMPUTE_UNITS_PER_SECOND)]
     pub compute_units_per_second: u64,

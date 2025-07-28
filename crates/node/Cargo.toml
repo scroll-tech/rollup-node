@@ -83,7 +83,7 @@ scroll-wire.workspace = true
 scroll-network.workspace = true
 
 auto_impl.workspace = true
-clap = { version = "4", features = ["derive", "env"] }
+clap = { workspace = true, features = ["derive", "env"] }
 eyre.workspace = true
 reqwest.workspace = true
 tokio.workspace = true
@@ -98,6 +98,7 @@ reth-provider.workspace = true
 reth-rpc-server-types.workspace = true
 reth-scroll-node = { workspace = true, features = ["test-utils"] }
 reth-tasks.workspace = true
+reth-tokio-util.workspace = true
 reth-tracing.workspace = true
 rollup-node = { workspace = true, features = ["test-utils"] }
 scroll-alloy-rpc-types-engine.workspace = true

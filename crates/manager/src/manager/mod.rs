@@ -19,7 +19,7 @@ use rollup_node_watcher::L1Notification;
 use scroll_alloy_hardforks::ScrollHardforks;
 use scroll_alloy_network::Scroll;
 use scroll_alloy_provider::ScrollEngineApi;
-use scroll_engine::{EngineDriver, EngineDriverEvent};
+use scroll_engine::{EngineDriver, EngineDriverEvent, ForkchoiceState};
 use scroll_network::{
     BlockImportOutcome, NetworkManagerEvent, NewBlockWithPeer, ScrollNetworkManager,
 };
@@ -86,7 +86,7 @@ pub struct RollupNodeManager<
     /// The engine driver used to communicate with the engine.
     engine: EngineDriver<EC, CS, P>,
     /// The derivation pipeline, used to derive payload attributes from batches.
-    derivation_pipeline: Option<DerivationPipeline<L1P>>,
+    derivation_pipeline: DerivationPipeline<L1P>,
     /// A receiver for [`L1Notification`]s from the [`rollup_node_watcher::L1Watcher`].
     l1_notification_rx: Option<ReceiverStream<Arc<L1Notification>>>,
     /// An indexer used to index data for the rollup node.
@@ -110,6 +110,8 @@ pub struct RollupNodeManager<
 pub struct RollupManagerStatus {
     /// Whether the rollup manager is syncing.
     pub syncing: bool,
+    /// The current FCS for the manager.
+    pub forkchoice_state: ForkchoiceState,
 }
 
 impl<
@@ -153,7 +155,7 @@ where
     pub fn new(
         network: ScrollNetworkManager<N>,
         engine: EngineDriver<EC, CS, P>,
-        l1_provider: Option<L1P>,
+        l1_provider: L1P,
         database: Arc<Database>,
         l1_notification_rx: Option<Receiver<Arc<L1Notification>>>,
         consensus: Box<dyn Consensus>,
@@ -165,8 +167,7 @@ where
     ) -> (Self, RollupManagerHandle) {
         let (handle_tx, handle_rx) = mpsc::channel(EVENT_CHANNEL_SIZE);
         let indexer = Indexer::new(database.clone(), chain_spec.clone());
-        let derivation_pipeline =
-            l1_provider.map(|provider| DerivationPipeline::new(provider, database));
+        let derivation_pipeline = DerivationPipeline::new(l1_provider, database);
         let rnm = Self {
             handle_rx,
             chain_spec,
@@ -237,31 +238,29 @@ where
     fn handle_indexer_event(&mut self, event: IndexerEvent) {
         trace!(target: "scroll::node::manager", ?event, "Received indexer event");
         match event {
-            IndexerEvent::BatchCommitIndexed { batch_info, safe_head } => {
+            IndexerEvent::BatchCommitIndexed { batch_info, safe_head, l1_block_number } => {
                 // if we detected a batch revert event, we reset the pipeline and the engine driver.
                 if let Some(new_safe_head) = safe_head {
-                    if let Some(pipeline) = self.derivation_pipeline.as_mut() {
-                        pipeline.flush()
-                    }
+                    self.derivation_pipeline.flush();
                     self.engine.clear_l1_payload_attributes();
                     self.engine.set_head_block_info(new_safe_head);
                     self.engine.set_safe_block_info(new_safe_head);
                 }
                 // push the batch info into the derivation pipeline.
-                if let Some(pipeline) = &mut self.derivation_pipeline {
-                    pipeline.handle_batch_commit(batch_info);
-                }
+                self.derivation_pipeline.handle_batch_commit(batch_info, l1_block_number);
             }
             IndexerEvent::BatchFinalizationIndexed(_, Some(finalized_block)) => {
                 // update the fcs on new finalized block.
                 self.engine.set_finalized_block_info(finalized_block);
             }
-            IndexerEvent::FinalizedIndexed(l1_block_number, Some(finalized_block)) => {
+            IndexerEvent::FinalizedIndexed(l1_block_number, finalized_block) => {
                 if let Some(sequencer) = self.sequencer.as_mut() {
                     sequencer.set_l1_finalized_block_number(l1_block_number);
                 }
                 // update the fcs on new finalized block.
-                self.engine.set_finalized_block_info(finalized_block);
+                if let Some(finalized_block) = finalized_block {
+                    self.engine.set_finalized_block_info(finalized_block);
+                }
             }
             IndexerEvent::UnwindIndexed {
                 l1_block_number,
@@ -284,7 +283,12 @@ where
                     sequencer.handle_reorg(queue_index, l1_block_number);
                 }
 
-                // TODO: should clear the derivation pipeline.
+                // Handle the reorg in the derivation pipeline.
+                self.derivation_pipeline.handle_reorg(l1_block_number);
+
+                if let Some(event_sender) = self.event_sender.as_ref() {
+                    event_sender.notify(RollupManagerEvent::Reorg(l1_block_number));
+                }
             }
             IndexerEvent::L1MessageIndexed(index) => {
                 if let Some(event_sender) = self.event_sender.as_ref() {
@@ -371,15 +375,23 @@ where
 
     /// Handles an [`L1Notification`] from the L1 watcher.
     fn handle_l1_notification(&mut self, notification: L1Notification) {
-        if let L1Notification::Consensus(ref update) = notification {
-            self.consensus.update_config(update);
+        match notification {
+            L1Notification::Consensus(ref update) => self.consensus.update_config(update),
+            L1Notification::NewBlock(new_block) => {
+                if let Some(sequencer) = self.sequencer.as_mut() {
+                    sequencer.handle_new_l1_block(new_block)
+                }
+            }
+            _ => self.indexer.handle_l1_notification(notification),
         }
-        self.indexer.handle_l1_notification(notification)
     }
 
     /// Returns the current status of the [`RollupNodeManager`].
-    const fn status(&self) -> RollupManagerStatus {
-        RollupManagerStatus { syncing: self.engine.is_syncing() }
+    fn status(&self) -> RollupManagerStatus {
+        RollupManagerStatus {
+            syncing: self.engine.is_syncing(),
+            forkchoice_state: self.engine.forkchoice_state(),
+        }
     }
 
     /// Drives the [`RollupNodeManager`] future until a [`GracefulShutdown`] signal is received.
@@ -517,9 +529,7 @@ where
         );
 
         // Poll Derivation Pipeline and push attribute in queue if any.
-        while let Some(Poll::Ready(Some(attributes))) =
-            this.derivation_pipeline.as_mut().map(|f| f.poll_next_unpin(cx))
-        {
+        while let Poll::Ready(Some(attributes)) = this.derivation_pipeline.poll_next_unpin(cx) {
             this.engine.handle_l1_consolidation(attributes)
         }
 
