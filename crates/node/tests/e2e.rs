@@ -7,8 +7,12 @@ use reth_network::{NetworkConfigBuilder, PeersInfo};
 use reth_rpc_api::EthApiServer;
 use reth_scroll_chainspec::SCROLL_DEV;
 use reth_scroll_node::ScrollNetworkPrimitives;
+use reth_tokio_util::EventStream;
 use rollup_node::{
-    test_utils::{default_test_scroll_rollup_node_config, generate_tx, setup_engine},
+    test_utils::{
+        default_sequencer_test_scroll_rollup_node_config, default_test_scroll_rollup_node_config,
+        generate_tx, setup_engine,
+    },
     BeaconProviderArgs, DatabaseArgs, EngineDriverArgs, L1ProviderArgs,
     NetworkArgs as ScrollNetworkArgs, ScrollRollupNodeConfig, SequencerArgs,
 };
@@ -36,10 +40,7 @@ async fn can_bridge_l1_messages() -> eyre::Result<()> {
     let chain_spec = (*SCROLL_DEV).clone();
     let node_args = ScrollRollupNodeConfig {
         test: true,
-        network_args: ScrollNetworkArgs {
-            enable_eth_scroll_wire_bridge: true,
-            enable_scroll_wire: true,
-        },
+        network_args: ScrollNetworkArgs::default(),
         database_args: DatabaseArgs { path: Some(PathBuf::from("sqlite::memory:")) },
         l1_provider_args: L1ProviderArgs::default(),
         engine_driver_args: EngineDriverArgs::default(),
@@ -56,7 +57,7 @@ async fn can_bridge_l1_messages() -> eyre::Result<()> {
         },
         signer_args: Default::default(),
     };
-    let (mut nodes, _tasks, _wallet) = setup_engine(node_args, 1, chain_spec, false).await?;
+    let (mut nodes, _tasks, _wallet) = setup_engine(node_args, 1, chain_spec, false, false).await?;
     let node = nodes.pop().unwrap();
 
     let rnm_handle: RollupManagerHandle = node.inner.add_ons_handle.rollup_manager_handle.clone();
@@ -106,6 +107,7 @@ async fn can_sequence_and_gossip_blocks() {
         network_args: ScrollNetworkArgs {
             enable_eth_scroll_wire_bridge: true,
             enable_scroll_wire: true,
+            sequencer_url: None,
         },
         database_args: DatabaseArgs { path: Some(PathBuf::from("sqlite::memory:")) },
         l1_provider_args: L1ProviderArgs::default(),
@@ -126,7 +128,7 @@ async fn can_sequence_and_gossip_blocks() {
     };
 
     let (nodes, _tasks, wallet) =
-        setup_engine(rollup_manager_args, 2, chain_spec, false).await.unwrap();
+        setup_engine(rollup_manager_args, 2, chain_spec, false, false).await.unwrap();
     let wallet = Arc::new(Mutex::new(wallet));
 
     // generate rollup node manager event streams for each node
@@ -164,6 +166,190 @@ async fn can_sequence_and_gossip_blocks() {
     }
 }
 
+#[allow(clippy::large_stack_frames)]
+#[tokio::test]
+async fn can_sequence_and_gossip_transactions() {
+    reth_tracing::init_test_tracing();
+
+    // create 2 nodes
+    let mut sequencer_node_config = default_sequencer_test_scroll_rollup_node_config();
+    sequencer_node_config.sequencer_args.block_time = 0;
+    let follower_node_config = default_test_scroll_rollup_node_config();
+
+    // Create the chain spec for scroll mainnet with Euclid v2 activated and a test genesis.
+    let chain_spec = (*SCROLL_DEV).clone();
+    let (mut sequencer_node, _tasks, _) =
+        setup_engine(sequencer_node_config, 1, chain_spec.clone(), false, false).await.unwrap();
+
+    let (mut follower_node, _tasks, wallet) =
+        setup_engine(follower_node_config, 1, chain_spec, false, false).await.unwrap();
+
+    let wallet = Arc::new(Mutex::new(wallet));
+
+    // Connect the nodes together.
+    sequencer_node[0].network.add_peer(follower_node[0].network.record()).await;
+    follower_node[0].network.next_session_established().await;
+    sequencer_node[0].network.next_session_established().await;
+
+    // generate rollup node manager event streams for each node
+    let sequencer_rnm_handle = sequencer_node[0].inner.add_ons_handle.rollup_manager_handle.clone();
+    let mut sequencer_events = sequencer_rnm_handle.get_event_listener().await.unwrap();
+    let mut follower_events = follower_node[0]
+        .inner
+        .add_ons_handle
+        .rollup_manager_handle
+        .get_event_listener()
+        .await
+        .unwrap();
+
+    // have the sequencer build an empty block and gossip it to follower
+    sequencer_rnm_handle.build_block().await;
+
+    // wait for the sequencer to build a block with no transactions
+    if let Some(RollupManagerEvent::BlockSequenced(block)) = sequencer_events.next().await {
+        assert_eq!(block.body.transactions.len(), 0);
+    } else {
+        panic!("Failed to receive block from rollup node");
+    }
+
+    // assert that the follower node has received the block from the peer
+    wait_n_events(&mut follower_events, |e| matches!(e, RollupManagerEvent::BlockImported(_)), 1)
+        .await;
+
+    // inject a transaction into the pool of the follower node
+    let tx = generate_tx(wallet).await;
+    follower_node[0].rpc.inject_tx(tx).await.unwrap();
+
+    tokio::time::sleep(tokio::time::Duration::from_secs(10)).await;
+
+    // build block
+    sequencer_rnm_handle.build_block().await;
+
+    // wait for the sequencer to build a block with transactions
+    wait_n_events(
+        &mut sequencer_events,
+        |e| {
+            if let RollupManagerEvent::BlockSequenced(block) = e {
+                assert_eq!(block.header.number, 2);
+                assert_eq!(block.body.transactions.len(), 1);
+                return true
+            }
+            false
+        },
+        1,
+    )
+    .await;
+
+    // assert that the follower node has received the block from the peer
+    if let Some(RollupManagerEvent::NewBlockReceived(block_with_peer)) =
+        follower_events.next().await
+    {
+        assert_eq!(block_with_peer.block.body.transactions.len(), 1);
+    } else {
+        panic!("Failed to receive block from rollup node");
+    }
+
+    // assert that the block was successfully imported by the follower node
+    if let Some(RollupManagerEvent::BlockImported(block)) = follower_events.next().await {
+        assert_eq!(block.body.transactions.len(), 1);
+    } else {
+        panic!("Failed to receive block from rollup node");
+    }
+}
+
+#[allow(clippy::large_stack_frames)]
+#[tokio::test]
+async fn can_forward_tx_to_sequencer() {
+    reth_tracing::init_test_tracing();
+
+    // create 2 nodes
+    let mut sequencer_node_config = default_sequencer_test_scroll_rollup_node_config();
+    sequencer_node_config.sequencer_args.block_time = 0;
+    let mut follower_node_config = default_test_scroll_rollup_node_config();
+
+    // Create the chain spec for scroll mainnet with Euclid v2 activated and a test genesis.
+    let chain_spec = (*SCROLL_DEV).clone();
+    let (mut sequencer_node, _tasks, _) =
+        setup_engine(sequencer_node_config, 1, chain_spec.clone(), false, true).await.unwrap();
+
+    let sequencer_url = format!("http://localhost:{}", sequencer_node[0].rpc_url().port().unwrap());
+    follower_node_config.network_args.sequencer_url = Some(sequencer_url);
+    let (mut follower_node, _tasks, wallet) =
+        setup_engine(follower_node_config, 1, chain_spec, false, true).await.unwrap();
+
+    let wallet = Arc::new(Mutex::new(wallet));
+
+    // Connect the nodes together.
+    sequencer_node[0].network.add_peer(follower_node[0].network.record()).await;
+    follower_node[0].network.next_session_established().await;
+    sequencer_node[0].network.next_session_established().await;
+
+    // generate rollup node manager event streams for each node
+    let sequencer_rnm_handle = sequencer_node[0].inner.add_ons_handle.rollup_manager_handle.clone();
+    let mut sequencer_events = sequencer_rnm_handle.get_event_listener().await.unwrap();
+    let mut follower_events = follower_node[0]
+        .inner
+        .add_ons_handle
+        .rollup_manager_handle
+        .get_event_listener()
+        .await
+        .unwrap();
+
+    // have the sequencer build an empty block and gossip it to follower
+    sequencer_rnm_handle.build_block().await;
+
+    // wait for the sequencer to build a block with no transactions
+    if let Some(RollupManagerEvent::BlockSequenced(block)) = sequencer_events.next().await {
+        assert_eq!(block.body.transactions.len(), 0);
+    } else {
+        panic!("Failed to receive block from rollup node");
+    }
+
+    // assert that the follower node has received the block from the peer
+    wait_n_events(&mut follower_events, |e| matches!(e, RollupManagerEvent::BlockImported(_)), 1)
+        .await;
+
+    // inject a transaction into the pool of the follower node
+    let tx = generate_tx(wallet).await;
+    follower_node[0].rpc.inject_tx(tx).await.unwrap();
+
+    tokio::time::sleep(tokio::time::Duration::from_secs(10)).await;
+
+    // build block
+    sequencer_rnm_handle.build_block().await;
+
+    // wait for the sequencer to build a block with transactions
+    wait_n_events(
+        &mut sequencer_events,
+        |e| {
+            if let RollupManagerEvent::BlockSequenced(block) = e {
+                assert_eq!(block.header.number, 2);
+                assert_eq!(block.body.transactions.len(), 1);
+                return true
+            }
+            false
+        },
+        1,
+    )
+    .await;
+
+    // assert that the follower node has received the block from the peer
+    if let Some(RollupManagerEvent::NewBlockReceived(block_with_peer)) =
+        follower_events.next().await
+    {
+        assert_eq!(block_with_peer.block.body.transactions.len(), 1);
+    } else {
+        panic!("Failed to receive block from rollup node");
+    }
+
+    // assert that the block was successfully imported by the follower node
+    if let Some(RollupManagerEvent::BlockImported(block)) = follower_events.next().await {
+        assert_eq!(block.body.transactions.len(), 1);
+    } else {
+        panic!("Failed to receive block from rollup node");
+    }
+}
+
 /// We test the bridge from the eth-wire protocol to the scroll-wire protocol.
 ///
 /// This test will launch three nodes:
@@ -183,7 +369,7 @@ async fn can_bridge_blocks() {
 
     // Setup the bridge node and a standard node.
     let (mut nodes, tasks, _) =
-        setup_engine(default_test_scroll_rollup_node_config(), 1, chain_spec.clone(), false)
+        setup_engine(default_test_scroll_rollup_node_config(), 1, chain_spec.clone(), false, false)
             .await
             .unwrap();
     let mut bridge_node = nodes.pop().unwrap();
@@ -268,7 +454,7 @@ async fn graceful_shutdown_consolidates_most_recent_batch_on_startup() -> eyre::
 
     // Launch a node
     let (mut nodes, _tasks, _) =
-        setup_engine(default_test_scroll_rollup_node_config(), 1, chain_spec.clone(), false)
+        setup_engine(default_test_scroll_rollup_node_config(), 1, chain_spec.clone(), false, false)
             .await
             .unwrap();
     let node = nodes.pop().unwrap();
@@ -481,5 +667,21 @@ async fn loop_until_event(
             return event;
         }
         tokio::task::yield_now().await;
+    }
+}
+
+/// Waits for n events to be emitted.
+async fn wait_n_events(
+    events: &mut EventStream<RollupManagerEvent>,
+    matches: impl Fn(RollupManagerEvent) -> bool,
+    mut n: u64,
+) {
+    while let Some(event) = events.next().await {
+        if matches(event) {
+            n -= 1;
+        }
+        if n == 0 {
+            break
+        }
     }
 }
