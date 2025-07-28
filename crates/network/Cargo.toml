@@ -14,10 +14,10 @@ alloy-primitives = { workspace = true, features = ["map-foldhash"] }
 reth-eth-wire-types.workspace = true
 reth-network.workspace = true
 reth-network-api.workspace = true
-reth-network-types = { git = "https://github.com/scroll-tech/reth.git", branch = "feat-forward-tx-to-sequencer", default-features = false }
+reth-network-types = { git = "https://github.com/scroll-tech/reth.git", default-features = false }
 reth-network-peers.workspace = true
 reth-primitives-traits.workspace = true
-reth-storage-api = { git = "https://github.com/scroll-tech/reth.git", branch = "feat-forward-tx-to-sequencer", default-features = false }
+reth-storage-api = { git = "https://github.com/scroll-tech/reth.git", default-features = false }
 
 # scroll
 reth-scroll-chainspec.workspace = true
