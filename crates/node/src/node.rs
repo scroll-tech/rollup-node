@@ -1,6 +1,6 @@
 //! Node specific implementations for Scroll rollup node.
 
-use crate::args::ScrollRollupNodeConfig;
+use crate::{args::ScrollRollupNodeConfig, constants};
 use std::time::Duration;
 
 use super::add_ons::ScrollRollupNodeAddOns;
@@ -66,6 +66,7 @@ where
                     self.config.sequencer_args.payload_building_duration,
                 ),
                 best_transactions: (),
+                block_da_size_limit: Some(constants::DEFAULT_PAYLOAD_SIZE_LIMIT),
             }))
             .network(
                 ScrollNetworkBuilder::new()
