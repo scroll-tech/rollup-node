@@ -16,3 +16,4 @@ scroll-alloy-network = { workspace = true }
 tokio = { workspace = true, features = ["rt", "time"] }
 eyre = { workspace = true }
 getrandom = { workspace = true }
+tracing = { workspace = true }

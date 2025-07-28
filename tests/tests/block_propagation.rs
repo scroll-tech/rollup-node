@@ -9,32 +9,32 @@ use tests::DockerComposeEnv;
 
 #[tokio::test]
 async fn test_docker_block_propagation() -> Result<()> {
-    println!("=== STARTING test_docker_block_propagation ===");
+    tracing::info!("=== STARTING test_docker_block_propagation ===");
     let env = DockerComposeEnv::new("basic-block-propagation").await?;
 
     let sequencer = env.get_sequencer_provider().await?;
-    println!("✅ Sequencer provider created");
+    tracing::info!("✅ Sequencer provider created");
 
     let follower = env.get_follower_provider().await?;
-    println!("✅ Follower provider created");
+    tracing::info!("✅ Follower provider created");
 
     let s_chain_id = sequencer.get_chain_id().await?;
     let f_chain_id = follower.get_chain_id().await?;
-    println!(
+    tracing::info!(
         "✅ Sequencer (Chain ID: {s_chain_id}) & Follower (Chain ID: {f_chain_id}) connected."
     );
     assert_eq!(s_chain_id, f_chain_id, "Chain IDs must match");
 
     let target_block = wait_for_sequencer_blocks(&sequencer, 20).await?;
-    println!("Sequencer produced {target_block} blocks, now waiting for follower sync...");
+    tracing::info!("Sequencer produced {target_block} blocks, now waiting for follower sync...");
 
     wait_for_follower_sync(&follower, target_block).await?;
-    println!("Follower synced to block {target_block}");
+    tracing::info!("Follower synced to block {target_block}");
 
     for block_num in 1..=target_block {
         verify_blocks_match(&sequencer, &follower, block_num).await?;
     }
-    println!("✅ Block hashes match for all blocks up to {target_block}, Basic block propagation test completed successfully!");
+    tracing::info!("✅ Block hashes match for all blocks up to {target_block}, Basic block propagation test completed successfully!");
 
     Ok(())
 }
@@ -46,13 +46,15 @@ async fn wait_for_sequencer_blocks(
 ) -> Result<u64> {
     let start_block = sequencer.get_block_number().await?;
     let target_block = start_block + num_blocks;
-    println!("⏳ Waiting for sequencer to produce {num_blocks} blocks (target: {target_block})...",);
+    tracing::info!(
+        "⏳ Waiting for sequencer to produce {num_blocks} blocks (target: {target_block})..."
+    );
 
     for _ in 0..10 {
         // 10 second timeout
         let current_block = sequencer.get_block_number().await?;
         if current_block >= target_block {
-            println!("✅ Sequencer reached block {current_block}");
+            tracing::info!("✅ Sequencer reached block {current_block}");
             return Ok(current_block);
         }
         tokio::time::sleep(Duration::from_secs(1)).await;
@@ -62,13 +64,13 @@ async fn wait_for_sequencer_blocks(
 
 /// Waits for the follower to sync up to the target block.
 async fn wait_for_follower_sync(follower: &impl Provider<Scroll>, target_block: u64) -> Result<()> {
-    println!("⏳ Waiting for follower to sync to block {target_block}...");
+    tracing::info!("⏳ Waiting for follower to sync to block {target_block}...");
 
     for _ in 0..10 {
         // 10 second timeout
         let follower_block = follower.get_block_number().await?;
         if follower_block >= target_block {
-            println!("✅ Follower synced to block {follower_block}");
+            tracing::info!("✅ Follower synced to block {follower_block}");
             return Ok(());
         }
         tokio::time::sleep(Duration::from_secs(1)).await;
@@ -105,6 +107,6 @@ async fn verify_blocks_match(
         );
     }
 
-    println!("✅ Block {block_number} matches: hash={seq_hash:?}");
+    tracing::debug!("✅ Block {block_number} matches: hash={seq_hash:?}");
     Ok(())
 }
