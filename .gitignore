@@ -24,7 +24,5 @@ target/
 
 .idea/
 
-docker-compose/volumes/
-
 # OS
 .DS_Store
