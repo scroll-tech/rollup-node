@@ -155,6 +155,7 @@ reth-primitives-traits = { git = "https://github.com/scroll-tech/reth.git", defa
 reth-provider = { git = "https://github.com/scroll-tech/reth.git", default-features = false }
 reth-rpc-builder = { git = "https://github.com/scroll-tech/reth.git", default-features = false }
 reth-rpc-server-types = { git = "https://github.com/scroll-tech/reth.git", default-features = false }
+reth-storage-api = { git = "https://github.com/scroll-tech/reth.git", default-features = false }
 reth-tasks = { git = "https://github.com/scroll-tech/reth.git", default-features = false }
 reth-tokio-util = { git = "https://github.com/scroll-tech/reth.git", default-features = false }
 reth-tracing = { git = "https://github.com/scroll-tech/reth.git", default-features = false }

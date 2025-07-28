@@ -24,7 +24,13 @@ async fn test_should_consolidate_to_block_15k() -> eyre::Result<()> {
     reth_tracing::init_test_tracing();
 
     // Prepare the config for a L1 consolidation.
-    let alchemy_key = std::env::var("ALCHEMY_KEY")?;
+    let alchemy_key = if let Ok(key) = std::env::var("ALCHEMY_KEY") {
+        key
+    } else {
+        eprintln!("ALCHEMY_KEY environment variable is not set. Skipping test.");
+        return Ok(());
+    };
+
     let node_config = ScrollRollupNodeConfig {
         test: false,
         network_args: NetworkArgs {

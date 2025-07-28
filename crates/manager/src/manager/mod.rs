@@ -19,7 +19,7 @@ use rollup_node_watcher::L1Notification;
 use scroll_alloy_hardforks::ScrollHardforks;
 use scroll_alloy_network::Scroll;
 use scroll_alloy_provider::ScrollEngineApi;
-use scroll_engine::{EngineDriver, EngineDriverEvent};
+use scroll_engine::{EngineDriver, EngineDriverEvent, ForkchoiceState};
 use scroll_network::{
     BlockImportOutcome, NetworkManagerEvent, NewBlockWithPeer, ScrollNetworkManager,
 };
@@ -110,6 +110,8 @@ pub struct RollupNodeManager<
 pub struct RollupManagerStatus {
     /// Whether the rollup manager is syncing.
     pub syncing: bool,
+    /// The current FCS for the manager.
+    pub forkchoice_state: ForkchoiceState,
 }
 
 impl<
@@ -251,12 +253,14 @@ where
                 // update the fcs on new finalized block.
                 self.engine.set_finalized_block_info(finalized_block);
             }
-            IndexerEvent::FinalizedIndexed(l1_block_number, Some(finalized_block)) => {
+            IndexerEvent::FinalizedIndexed(l1_block_number, finalized_block) => {
                 if let Some(sequencer) = self.sequencer.as_mut() {
                     sequencer.set_l1_finalized_block_number(l1_block_number);
                 }
                 // update the fcs on new finalized block.
-                self.engine.set_finalized_block_info(finalized_block);
+                if let Some(finalized_block) = finalized_block {
+                    self.engine.set_finalized_block_info(finalized_block);
+                }
             }
             IndexerEvent::UnwindIndexed {
                 l1_block_number,
@@ -281,6 +285,10 @@ where
 
                 // Handle the reorg in the derivation pipeline.
                 self.derivation_pipeline.handle_reorg(l1_block_number);
+
+                if let Some(event_sender) = self.event_sender.as_ref() {
+                    event_sender.notify(RollupManagerEvent::Reorg(l1_block_number));
+                }
             }
             IndexerEvent::L1MessageIndexed(index) => {
                 if let Some(event_sender) = self.event_sender.as_ref() {
@@ -367,15 +375,23 @@ where
 
     /// Handles an [`L1Notification`] from the L1 watcher.
     fn handle_l1_notification(&mut self, notification: L1Notification) {
-        if let L1Notification::Consensus(ref update) = notification {
-            self.consensus.update_config(update);
+        match notification {
+            L1Notification::Consensus(ref update) => self.consensus.update_config(update),
+            L1Notification::NewBlock(new_block) => {
+                if let Some(sequencer) = self.sequencer.as_mut() {
+                    sequencer.handle_new_l1_block(new_block)
+                }
+            }
+            _ => self.indexer.handle_l1_notification(notification),
         }
-        self.indexer.handle_l1_notification(notification)
     }
 
     /// Returns the current status of the [`RollupNodeManager`].
-    const fn status(&self) -> RollupManagerStatus {
-        RollupManagerStatus { syncing: self.engine.is_syncing() }
+    fn status(&self) -> RollupManagerStatus {
+        RollupManagerStatus {
+            syncing: self.engine.is_syncing(),
+            forkchoice_state: self.engine.forkchoice_state(),
+        }
     }
 
     /// Drives the [`RollupNodeManager`] future until a [`GracefulShutdown`] signal is received.
