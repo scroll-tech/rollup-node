@@ -163,7 +163,9 @@ async fn can_build_blocks_with_delayed_l1_messages() {
 
     // setup a test node
     let (mut nodes, _tasks, wallet) =
-        setup_engine(default_test_scroll_rollup_node_config(), 1, chain_spec, false).await.unwrap();
+        setup_engine(default_test_scroll_rollup_node_config(), 1, chain_spec, false, false)
+            .await
+            .unwrap();
     let node = nodes.pop().unwrap();
     let wallet = Arc::new(Mutex::new(wallet));
 
@@ -288,7 +290,9 @@ async fn can_build_blocks_with_finalized_l1_messages() {
 
     // setup a test node
     let (mut nodes, _tasks, wallet) =
-        setup_engine(default_test_scroll_rollup_node_config(), 1, chain_spec, false).await.unwrap();
+        setup_engine(default_test_scroll_rollup_node_config(), 1, chain_spec, false, false)
+            .await
+            .unwrap();
     let node = nodes.pop().unwrap();
     let wallet = Arc::new(Mutex::new(wallet));
 
@@ -430,7 +434,7 @@ async fn can_sequence_blocks_with_private_key_file() -> eyre::Result<()> {
     let chain_spec = (*SCROLL_DEV).clone();
     let rollup_manager_args = ScrollRollupNodeConfig {
         test: false, // disable test mode to enable real signing
-        network_args: NetworkArgs { enable_eth_scroll_wire_bridge: true, enable_scroll_wire: true },
+        network_args: NetworkArgs::default(),
         database_args: DatabaseArgs { path: Some(PathBuf::from("sqlite::memory:")) },
         l1_provider_args: L1ProviderArgs::default(),
         engine_driver_args: EngineDriverArgs::default(),
@@ -452,7 +456,8 @@ async fn can_sequence_blocks_with_private_key_file() -> eyre::Result<()> {
         },
     };
 
-    let (nodes, _tasks, wallet) = setup_engine(rollup_manager_args, 1, chain_spec, false).await?;
+    let (nodes, _tasks, wallet) =
+        setup_engine(rollup_manager_args, 1, chain_spec, false, false).await?;
     let wallet = Arc::new(Mutex::new(wallet));
 
     let sequencer_rnm_handle = nodes[0].inner.add_ons_handle.rollup_manager_handle.clone();
@@ -517,7 +522,7 @@ async fn can_sequence_blocks_with_hex_key_file_without_prefix() -> eyre::Result<
     let chain_spec = (*SCROLL_DEV).clone();
     let rollup_manager_args = ScrollRollupNodeConfig {
         test: false, // disable test mode to enable real signing
-        network_args: NetworkArgs { enable_eth_scroll_wire_bridge: true, enable_scroll_wire: true },
+        network_args: NetworkArgs::default(),
         database_args: DatabaseArgs { path: Some(PathBuf::from("sqlite::memory:")) },
         l1_provider_args: L1ProviderArgs::default(),
         engine_driver_args: EngineDriverArgs::default(),
@@ -539,7 +544,8 @@ async fn can_sequence_blocks_with_hex_key_file_without_prefix() -> eyre::Result<
         },
     };
 
-    let (nodes, _tasks, wallet) = setup_engine(rollup_manager_args, 1, chain_spec, false).await?;
+    let (nodes, _tasks, wallet) =
+        setup_engine(rollup_manager_args, 1, chain_spec, false, false).await?;
     let wallet = Arc::new(Mutex::new(wallet));
 
     let sequencer_rnm_handle = nodes[0].inner.add_ons_handle.rollup_manager_handle.clone();
@@ -603,6 +609,7 @@ async fn can_build_blocks_and_exit_at_gas_limit() {
         },
         1,
         chain_spec,
+        false,
         false,
     )
     .await
@@ -689,6 +696,7 @@ async fn can_build_blocks_and_exit_at_time_limit() {
         },
         1,
         chain_spec,
+        false,
         false,
     )
     .await
