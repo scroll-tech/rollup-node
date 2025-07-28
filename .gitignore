@@ -24,10 +24,7 @@ target/
 
 .idea/
 
-docker-compose/grafana_data/
-docker-compose/l2reth/
-docker-compose/prometheus_data/
-docker-compose/l1devnet/
+docker-compose/volumes/
 
 # OS
 .DS_Store
