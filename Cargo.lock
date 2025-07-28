@@ -4463,7 +4463,7 @@ dependencies = [
  "js-sys",
  "log",
  "wasm-bindgen",
- "windows-core 0.61.2",
+ "windows-core 0.57.0",
 ]
 
 [[package]]
@@ -6726,7 +6726,7 @@ dependencies = [
  "once_cell",
  "socket2 0.5.10",
  "tracing",
- "windows-sys 0.59.0",
+ "windows-sys 0.52.0",
 ]
 
 [[package]]
@@ -10643,7 +10643,7 @@ dependencies = [
  "errno",
  "libc",
  "linux-raw-sys 0.4.15",
- "windows-sys 0.59.0",
+ "windows-sys 0.52.0",
 ]
 
 [[package]]
@@ -10748,7 +10748,7 @@ dependencies = [
  "security-framework 3.2.0",
  "security-framework-sys",
  "webpki-root-certs 0.26.11",
- "windows-sys 0.59.0",
+ "windows-sys 0.52.0",
 ]
 
 [[package]]
@@ -12209,6 +12209,21 @@ dependencies = [
 ]
 
 [[package]]
+name = "tests"
+version = "0.0.1"
+dependencies = [
+ "alloy-network",
+ "alloy-primitives",
+ "alloy-provider",
+ "alloy-rpc-types-eth",
+ "eyre",
+ "getrandom 0.2.16",
+ "scroll-alloy-network",
+ "tokio",
+ "tracing",
+]
+
+[[package]]
 name = "thiserror"
 version = "1.0.69"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -13270,7 +13285,7 @@ version = "0.1.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "cf221c93e13a30d793f7645a0e7762c55d169dbb0a49671918a2319d289b10bb"
 dependencies = [
- "windows-sys 0.59.0",
+ "windows-sys 0.48.0",
 ]
 
 [[package]]
