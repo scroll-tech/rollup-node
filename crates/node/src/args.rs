@@ -307,7 +307,7 @@ pub struct EngineDriverArgs {
 }
 
 /// The network arguments.
-#[derive(Debug, Default, Clone, clap::Args)]
+#[derive(Debug, Clone, clap::Args)]
 pub struct NetworkArgs {
     /// A bool to represent if new blocks should be bridged from the eth wire protocol to the
     /// scroll wire protocol.
@@ -316,6 +316,19 @@ pub struct NetworkArgs {
     /// A bool that represents if the scroll wire protocol should be enabled.
     #[arg(long = "network.scroll-wire", default_value_t = true)]
     pub enable_scroll_wire: bool,
+    /// The URL for the Sequencer RPC. (can be both HTTP and WS)
+    #[arg(
+        long = "network.sequencer-url",
+        id = "network_sequencer_url",
+        value_name = "NETWORK_SEQUENCER_URL"
+    )]
+    pub sequencer_url: Option<String>,
+}
+
+impl Default for NetworkArgs {
+    fn default() -> Self {
+        Self { enable_eth_scroll_wire_bridge: true, enable_scroll_wire: true, sequencer_url: None }
+    }
 }
 
 /// The arguments for the L1 provider.
