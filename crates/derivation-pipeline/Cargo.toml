@@ -38,6 +38,7 @@ async-trait.workspace = true
 alloy-primitives = { workspace = true, features = ["getrandom"] }
 criterion = { version = "0.6", features = ["async", "async_tokio"] }
 eyre.workspace = true
+rollup-node-providers = { workspace = true, features = ["test-utils"] }
 scroll-db = { workspace = true, features = ["test-utils"] }
 scroll-codec = { workspace = true, features = ["test-utils"] }
 tokio = { workspace = true, features = ["macros", "rt-multi-thread"] }

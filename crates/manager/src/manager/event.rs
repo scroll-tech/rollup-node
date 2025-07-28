@@ -18,4 +18,6 @@ pub enum RollupManagerEvent {
     L1MessageIndexed(u64),
     /// A new event from the signer.
     SignerEvent(SignerEvent),
+    /// A reorg event.
+    Reorg(u64),
 }

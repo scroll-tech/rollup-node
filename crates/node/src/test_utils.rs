@@ -13,9 +13,9 @@ use reth_e2e_test_utils::{
 use reth_engine_local::LocalPayloadAttributesBuilder;
 use reth_node_builder::{
     rpc::RpcHandleProvider, EngineNodeLauncher, Node, NodeBuilder, NodeConfig, NodeHandle,
-    NodeTypes, NodeTypesWithDBAdapter, PayloadAttributesBuilder, PayloadTypes,
+    NodeTypes, NodeTypesWithDBAdapter, PayloadAttributesBuilder, PayloadTypes, TreeConfig,
 };
-use reth_node_core::args::{DiscoveryArgs, NetworkArgs, RpcServerArgs};
+use reth_node_core::args::{DiscoveryArgs, NetworkArgs, RpcServerArgs, TxPoolArgs};
 use reth_provider::providers::BlockchainProvider;
 use reth_rpc_server_types::RpcModuleSelection;
 use reth_tasks::TaskManager;
@@ -27,10 +27,11 @@ use tracing::{span, Level};
 
 /// Creates the initial setup with `num_nodes` started and interconnected.
 pub async fn setup_engine(
-    scroll_node_config: ScrollRollupNodeConfig,
+    mut scroll_node_config: ScrollRollupNodeConfig,
     num_nodes: usize,
     chain_spec: Arc<<ScrollRollupNode as NodeTypes>::ChainSpec>,
     is_dev: bool,
+    no_local_transactions_propagation: bool,
 ) -> eyre::Result<(
     Vec<
         NodeHelperType<
@@ -61,6 +62,10 @@ where
     let mut nodes: Vec<NodeTestContext<_, _>> = Vec::with_capacity(num_nodes);
 
     for idx in 0..num_nodes {
+        // disable sequencer nodes after the first one
+        if idx != 0 {
+            scroll_node_config.sequencer_args.sequencer_enabled = false;
+        }
         let node_config = NodeConfig::new(chain_spec.clone())
             .with_network(network_config.clone())
             .with_unused_ports()
@@ -70,7 +75,8 @@ where
                     .with_http()
                     .with_http_api(RpcModuleSelection::All),
             )
-            .set_dev(is_dev);
+            .set_dev(is_dev)
+            .with_txpool(TxPoolArgs { no_local_transactions_propagation, ..Default::default() });
 
         let span = span!(Level::INFO, "node", idx);
         let _enter = span.enter();
@@ -81,10 +87,12 @@ where
             .with_components(node.components_builder())
             .with_add_ons(node.add_ons())
             .launch_with_fn(|builder| {
+                let tree_config = TreeConfig::default()
+                    .with_always_process_payload_attributes_on_canonical_head(true);
                 let launcher = EngineNodeLauncher::new(
                     builder.task_executor().clone(),
                     builder.config().datadir(),
-                    Default::default(),
+                    tree_config,
                 );
                 builder.launch_with(launcher)
             })
@@ -131,10 +139,7 @@ pub async fn generate_tx(wallet: Arc<Mutex<Wallet>>) -> Bytes {
 pub fn default_test_scroll_rollup_node_config() -> ScrollRollupNodeConfig {
     ScrollRollupNodeConfig {
         test: true,
-        network_args: crate::args::NetworkArgs {
-            enable_eth_scroll_wire_bridge: true,
-            enable_scroll_wire: true,
-        },
+        network_args: crate::args::NetworkArgs::default(),
         database_args: DatabaseArgs { path: Some(PathBuf::from("sqlite::memory:")) },
         l1_provider_args: L1ProviderArgs::default(),
         engine_driver_args: EngineDriverArgs { en_sync_trigger: 100, sync_at_startup: true },
@@ -151,17 +156,14 @@ pub fn default_test_scroll_rollup_node_config() -> ScrollRollupNodeConfig {
 pub fn default_sequencer_test_scroll_rollup_node_config() -> ScrollRollupNodeConfig {
     ScrollRollupNodeConfig {
         test: true,
-        network_args: crate::args::NetworkArgs {
-            enable_eth_scroll_wire_bridge: true,
-            enable_scroll_wire: true,
-        },
+        network_args: crate::args::NetworkArgs::default(),
         database_args: DatabaseArgs { path: Some(PathBuf::from("sqlite::memory:")) },
         l1_provider_args: L1ProviderArgs::default(),
         engine_driver_args: EngineDriverArgs { en_sync_trigger: 100, sync_at_startup: true },
         sequencer_args: SequencerArgs {
             sequencer_enabled: true,
             block_time: 50,
-            payload_building_duration: 0,
+            payload_building_duration: 40,
             max_l1_messages_per_block: 0,
             fee_recipient: Default::default(),
             l1_message_inclusion_mode: L1MessageInclusionMode::BlockDepth(0),
