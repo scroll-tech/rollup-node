@@ -401,11 +401,9 @@ impl<
                         false
                     };
 
-                    // If we are consolidating a batch, we insert the batch info into the database.
+                    // Insert the blocks into the database.
                     let head = block_info.last().expect("block info must not be empty").clone();
-                    if batch_info.is_some() {
-                        database.insert_blocks(block_info, batch_info).await?;
-                    }
+                    database.insert_blocks(block_info, batch_info).await?;
 
                     Result::<_, ChainOrchestratorError>::Ok(
                         ChainOrchestratorEvent::L2ChainCommitted(head, batch_info, consolidated),
@@ -427,6 +425,7 @@ impl<
                         self.database.clone(),
                         self.chain_spec.clone(),
                         block_number,
+                        self.l2_client.clone(),
                     )),
                 ))
             }
@@ -487,11 +486,23 @@ impl<
         database: Arc<Database>,
         chain_spec: Arc<ChainSpec>,
         l1_block_number: u64,
+        l2_client: Arc<P>,
     ) -> Result<ChainOrchestratorEvent, ChainOrchestratorError> {
         let txn = database.tx().await?;
-        let UnwindResult { l1_block_number, queue_index, l2_head_block_info, l2_safe_block_info } =
+        let UnwindResult { l1_block_number, queue_index, l2_head_block_number, l2_safe_block_info } =
             txn.unwind(chain_spec.genesis_hash(), l1_block_number).await?;
         txn.commit().await?;
+        let l2_head_block_info = if let Some(block_number) = l2_head_block_number {
+            let block_hash = l2_client
+                .get_block_by_number(block_number.into())
+                .await?
+                .expect("L2 head block must exist")
+                .header
+                .hash_slow();
+            Some(BlockInfo { number: block_number, hash: block_hash })
+        } else {
+            None
+        };
         Ok(ChainOrchestratorEvent::ChainUnwound {
             l1_block_number,
             queue_index,
@@ -582,6 +593,7 @@ impl<
 
         let event = ChainOrchestratorEvent::BatchCommitIndexed {
             batch_info: BatchInfo::new(batch.index, batch.hash),
+            l1_block_number: batch.block_number,
             safe_head: new_safe_head,
         };
 
@@ -1082,7 +1094,7 @@ mod test {
 
         // Verify the event structure
         match event {
-            ChainOrchestratorEvent::BatchCommitIndexed { batch_info, safe_head } => {
+            ChainOrchestratorEvent::BatchCommitIndexed { batch_info, safe_head, .. } => {
                 assert_eq!(batch_info.index, batch_commit.index);
                 assert_eq!(batch_info.hash, batch_commit.hash);
                 assert_eq!(safe_head, None); // No safe head since no batch revert
@@ -1125,7 +1137,7 @@ mod test {
         indexer.handle_l1_notification(L1Notification::BatchCommit(batch_1.clone()));
         let event = indexer.next().await.unwrap().unwrap();
         match event {
-            ChainOrchestratorEvent::BatchCommitIndexed { batch_info, safe_head } => {
+            ChainOrchestratorEvent::BatchCommitIndexed { batch_info, safe_head, .. } => {
                 assert_eq!(batch_info.index, 100);
                 assert_eq!(safe_head, None);
             }
@@ -1136,7 +1148,7 @@ mod test {
         indexer.handle_l1_notification(L1Notification::BatchCommit(batch_2.clone()));
         let event = indexer.next().await.unwrap().unwrap();
         match event {
-            ChainOrchestratorEvent::BatchCommitIndexed { batch_info, safe_head } => {
+            ChainOrchestratorEvent::BatchCommitIndexed { batch_info, safe_head, .. } => {
                 assert_eq!(batch_info.index, 101);
                 assert_eq!(safe_head, None);
             }
@@ -1147,7 +1159,7 @@ mod test {
         indexer.handle_l1_notification(L1Notification::BatchCommit(batch_3.clone()));
         let event = indexer.next().await.unwrap().unwrap();
         match event {
-            ChainOrchestratorEvent::BatchCommitIndexed { batch_info, safe_head } => {
+            ChainOrchestratorEvent::BatchCommitIndexed { batch_info, safe_head, .. } => {
                 assert_eq!(batch_info.index, 102);
                 assert_eq!(safe_head, None);
             }
@@ -1193,7 +1205,7 @@ mod test {
 
         // Verify the event indicates a batch revert
         match event {
-            ChainOrchestratorEvent::BatchCommitIndexed { batch_info, safe_head } => {
+            ChainOrchestratorEvent::BatchCommitIndexed { batch_info, safe_head, .. } => {
                 assert_eq!(batch_info.index, 101);
                 assert_eq!(batch_info.hash, new_batch_2.hash);
                 // Safe head should be the highest block from batch index <= 100
@@ -1380,6 +1392,9 @@ mod test {
         assert!(l1_messages.contains(&l1_message_block_20));
     }
 
+    // We ignore this test for now as it requires a more complex setup which leverages an L2 node
+    // and is already covered in the integration test `can_handle_reorgs_while_sequencing`
+    #[ignore]
     #[tokio::test]
     async fn test_handle_reorg_executed_l1_messages() {
         // Instantiate indexer and db

@@ -32,6 +32,8 @@ pub enum ChainOrchestratorEvent {
     BatchCommitIndexed {
         /// The batch info.
         batch_info: BatchInfo,
+        /// The L1 block number in which the batch was committed.
+        l1_block_number: u64,
         /// The safe L2 block info.
         safe_head: Option<BlockInfo>,
     },

@@ -23,7 +23,7 @@ impl MigrationInfo for () {
 
     fn genesis_hash() -> B256 {
         // Todo: Update
-        b256!("0xb5bd7381c6b550af0de40d6c490602574d76427c8cce17b54cb7917c323136f2")
+        b256!("0xc77ee681dac901672fee660088df30ef11789ec89837123cdc89690ef1fef766")
     }
 }
 

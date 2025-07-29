@@ -1,10 +1,12 @@
 //! Contains tests related to RN and EN sync.
 
-use alloy_primitives::{Address, U256};
+use alloy_primitives::{b256, Address, U256};
 use alloy_provider::{Provider, ProviderBuilder};
 use futures::StreamExt;
+use reqwest::Url;
 use reth_e2e_test_utils::NodeHelperType;
-use reth_scroll_chainspec::SCROLL_DEV;
+use reth_provider::{BlockIdReader, BlockReader};
+use reth_scroll_chainspec::{SCROLL_DEV, SCROLL_SEPOLIA};
 use rollup_node::{
     test_utils::{
         default_sequencer_test_scroll_rollup_node_config, default_test_scroll_rollup_node_config,
@@ -14,10 +16,71 @@ use rollup_node::{
     NetworkArgs, ScrollRollupNode, ScrollRollupNodeConfig, SequencerArgs,
 };
 use rollup_node_manager::RollupManagerEvent;
+use rollup_node_providers::BlobSource;
 use rollup_node_sequencer::L1MessageInclusionMode;
 use rollup_node_watcher::L1Notification;
 use scroll_alloy_consensus::TxL1Message;
 use std::{path::PathBuf, sync::Arc};
+
+#[tokio::test]
+async fn test_should_consolidate_to_block_15k() -> eyre::Result<()> {
+    reth_tracing::init_test_tracing();
+
+    // Prepare the config for a L1 consolidation.
+    let alchemy_key = if let Ok(key) = std::env::var("ALCHEMY_KEY") {
+        key
+    } else {
+        eprintln!("ALCHEMY_KEY environment variable is not set. Skipping test.");
+        return Ok(());
+    };
+
+    let node_config = ScrollRollupNodeConfig {
+        test: false,
+        network_args: NetworkArgs {
+            enable_eth_scroll_wire_bridge: false,
+            enable_scroll_wire: false,
+            sequencer_url: None,
+        },
+        database_args: DatabaseArgs::default(),
+        chain_orchestrator_args: ChainOrchestratorArgs { optimistic_sync_trigger: 100 },
+        l1_provider_args: L1ProviderArgs {
+            url: Some(Url::parse(&format!("https://eth-sepolia.g.alchemy.com/v2/{alchemy_key}"))?),
+            compute_units_per_second: 500,
+            max_retries: 10,
+            initial_backoff: 100,
+        },
+        engine_driver_args: EngineDriverArgs { sync_at_startup: false },
+        sequencer_args: SequencerArgs { sequencer_enabled: false, ..Default::default() },
+        beacon_provider_args: BeaconProviderArgs {
+            url: Some(Url::parse("https://eth-beacon-chain.drpc.org/rest/")?),
+            compute_units_per_second: 100,
+            max_retries: 10,
+            initial_backoff: 100,
+            blob_source: BlobSource::Beacon,
+        },
+        signer_args: Default::default(),
+    };
+
+    let chain_spec = (*SCROLL_SEPOLIA).clone();
+    let (mut nodes, _tasks, _) =
+        setup_engine(node_config, 1, chain_spec.clone(), false, false).await?;
+    let node = nodes.pop().unwrap();
+
+    // We perform consolidation up to block 15k. This allows us to capture a batch revert event at
+    // block 11419 (batch 1653).
+    while node.inner.provider.safe_block_num_hash()?.map(|x| x.number).unwrap_or_default() < 15000 {
+        tokio::time::sleep(tokio::time::Duration::from_secs(5)).await
+    }
+
+    let block_hash_15k = node.inner.provider.block(15000.into())?.unwrap();
+
+    assert_eq!(
+        block_hash_15k.hash_slow(),
+        b256!("86901ebce1840ee45c1d5c70bf85ce6924f7a066ef11575d0f381858c83845d4")
+    );
+
+    Ok(())
+}
 
 /// We test if the syncing of the RN is correctly triggered and released when the EN reaches sync.
 #[allow(clippy::large_stack_frames)]
@@ -27,14 +90,16 @@ async fn test_should_trigger_pipeline_sync_for_execution_node() {
     let node_config = default_test_scroll_rollup_node_config();
     let sequencer_node_config = default_sequencer_test_scroll_rollup_node_config();
 
-    // Create the chain spec for scroll mainnet with Euclid v2 activated and a test genesis.
+    // Create the chain spec for scroll mainnet with Feynman activated and a test genesis.
     let chain_spec = (*SCROLL_DEV).clone();
     let (mut nodes, _tasks, _) =
-        setup_engine(sequencer_node_config.clone(), 1, chain_spec.clone(), false).await.unwrap();
+        setup_engine(sequencer_node_config.clone(), 1, chain_spec.clone(), false, false)
+            .await
+            .unwrap();
     let mut synced = nodes.pop().unwrap();
 
     let (mut nodes, _tasks, _) =
-        setup_engine(node_config.clone(), 1, chain_spec, false).await.unwrap();
+        setup_engine(node_config.clone(), 1, chain_spec, false, false).await.unwrap();
     let mut unsynced = nodes.pop().unwrap();
 
     // Wait for the chain to be advanced by the sequencer.
@@ -81,7 +146,11 @@ async fn test_should_consolidate_after_optimistic_sync() {
     let node_config = default_test_scroll_rollup_node_config();
     let sequencer_node_config = ScrollRollupNodeConfig {
         test: true,
-        network_args: NetworkArgs { enable_eth_scroll_wire_bridge: true, enable_scroll_wire: true },
+        network_args: NetworkArgs {
+            enable_eth_scroll_wire_bridge: true,
+            enable_scroll_wire: true,
+            sequencer_url: None,
+        },
         database_args: DatabaseArgs { path: Some(PathBuf::from("sqlite::memory:")) },
         l1_provider_args: L1ProviderArgs::default(),
         engine_driver_args: EngineDriverArgs::default(),
@@ -93,7 +162,10 @@ async fn test_should_consolidate_after_optimistic_sync() {
             l1_message_inclusion_mode: L1MessageInclusionMode::BlockDepth(0),
             ..SequencerArgs::default()
         },
-        beacon_provider_args: BeaconProviderArgs::default(),
+        beacon_provider_args: BeaconProviderArgs {
+            blob_source: BlobSource::Mock,
+            ..Default::default()
+        },
         signer_args: Default::default(),
     };
 
@@ -102,13 +174,13 @@ async fn test_should_consolidate_after_optimistic_sync() {
 
     // Create a sequencer node and an unsynced node.
     let (mut nodes, _tasks, _) =
-        setup_engine(sequencer_node_config, 1, chain_spec.clone(), false).await.unwrap();
+        setup_engine(sequencer_node_config, 1, chain_spec.clone(), false, false).await.unwrap();
     let mut sequencer = nodes.pop().unwrap();
     let sequencer_l1_watcher_tx = sequencer.inner.add_ons_handle.l1_watcher_tx.clone().unwrap();
     let sequencer_handle = sequencer.inner.rollup_manager_handle.clone();
 
     let (mut nodes, _tasks, _) =
-        setup_engine(node_config.clone(), 1, chain_spec, false).await.unwrap();
+        setup_engine(node_config.clone(), 1, chain_spec, false, false).await.unwrap();
     let mut unsynced = nodes.pop().unwrap();
     let unsynced_l1_watcher_tx = unsynced.inner.add_ons_handle.l1_watcher_tx.clone().unwrap();
 
@@ -182,17 +254,23 @@ async fn test_should_consolidate_after_optimistic_sync() {
         .await;
     }
 
+    println!("im here");
+
     // Send a notification to the unsynced node that the L1 watcher is synced.
     unsynced_l1_watcher_tx.send(Arc::new(L1Notification::Synced)).await.unwrap();
 
     // Wait for the unsynced node to sync to the L1 watcher.
     wait_n_events(&unsynced, |e| matches!(e, RollupManagerEvent::L1Synced), 1).await;
 
+    println!("im here 2");
+
     // Let the unsynced node process the L1 messages.
     tokio::time::sleep(tokio::time::Duration::from_secs(1)).await;
 
     // build a new block on the sequencer node to trigger consolidation on the unsynced node.
     sequencer_handle.build_block().await;
+
+    println!("im here");
 
     // Assert that the unsynced node consolidates the chain.
     wait_n_events(&unsynced, |e| matches!(e, RollupManagerEvent::L2ChainCommitted(_, _, true)), 1)
@@ -230,7 +308,11 @@ async fn test_consolidation() {
     let node_config = default_test_scroll_rollup_node_config();
     let sequencer_node_config = ScrollRollupNodeConfig {
         test: true,
-        network_args: NetworkArgs { enable_eth_scroll_wire_bridge: true, enable_scroll_wire: true },
+        network_args: NetworkArgs {
+            enable_eth_scroll_wire_bridge: true,
+            enable_scroll_wire: true,
+            sequencer_url: None,
+        },
         database_args: DatabaseArgs { path: Some(PathBuf::from("sqlite::memory:")) },
         l1_provider_args: L1ProviderArgs::default(),
         engine_driver_args: EngineDriverArgs::default(),
@@ -242,7 +324,10 @@ async fn test_consolidation() {
             l1_message_inclusion_mode: L1MessageInclusionMode::BlockDepth(0),
             ..SequencerArgs::default()
         },
-        beacon_provider_args: BeaconProviderArgs::default(),
+        beacon_provider_args: BeaconProviderArgs {
+            blob_source: BlobSource::Mock,
+            ..Default::default()
+        },
         signer_args: Default::default(),
     };
 
@@ -251,13 +336,13 @@ async fn test_consolidation() {
 
     // Create a sequencer node and an unsynced node.
     let (mut nodes, _tasks, _) =
-        setup_engine(sequencer_node_config, 1, chain_spec.clone(), false).await.unwrap();
+        setup_engine(sequencer_node_config, 1, chain_spec.clone(), false, false).await.unwrap();
     let mut sequencer = nodes.pop().unwrap();
     let sequencer_l1_watcher_tx = sequencer.inner.add_ons_handle.l1_watcher_tx.clone().unwrap();
     let sequencer_handle = sequencer.inner.rollup_manager_handle.clone();
 
     let (mut nodes, _tasks, _) =
-        setup_engine(node_config.clone(), 1, chain_spec, false).await.unwrap();
+        setup_engine(node_config.clone(), 1, chain_spec, false, false).await.unwrap();
     let mut follower = nodes.pop().unwrap();
     let follower_l1_watcher_tx = follower.inner.add_ons_handle.l1_watcher_tx.clone().unwrap();
 

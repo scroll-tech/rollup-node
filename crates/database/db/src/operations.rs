@@ -543,15 +543,14 @@ pub trait DatabaseOperations: DatabaseConnectionProvider {
             .sort_by(|a, b| a.transaction.queue_index.cmp(&b.transaction.queue_index));
 
         // check if we need to reorg the L2 head and delete some L2 blocks
-        let (queue_index, l2_head_block_info) =
+        let (queue_index, l2_head_block_number) =
             if let Some(msg) = removed_executed_l1_messages.first() {
                 let l2_reorg_block_number = msg
                     .l2_block_number
                     .expect("we guarantee that this is Some(u64) due to the filter above")
                     .saturating_sub(1);
-                let l2_block_info = self.get_l2_block_info_by_number(l2_reorg_block_number).await?;
-                self.delete_l2_blocks_gt_block_number(l2_reorg_block_number).await?;
-                (Some(msg.transaction.queue_index), l2_block_info)
+
+                (Some(msg.transaction.queue_index), Some(l2_reorg_block_number))
             } else {
                 (None, None)
             };
@@ -568,7 +567,7 @@ pub trait DatabaseOperations: DatabaseConnectionProvider {
         };
 
         // commit the transaction
-        Ok(UnwindResult { l1_block_number, queue_index, l2_head_block_info, l2_safe_block_info })
+        Ok(UnwindResult { l1_block_number, queue_index, l2_head_block_number, l2_safe_block_info })
     }
 }
 
@@ -600,8 +599,9 @@ pub struct UnwindResult {
     pub l1_block_number: u64,
     /// The latest unconsumed queue index after the uwnind.
     pub queue_index: Option<u64>,
-    /// The L2 head block info after the unwind. This is only populated if the L2 head has reorged.
-    pub l2_head_block_info: Option<BlockInfo>,
+    /// The L2 head block number after the unwind. This is only populated if the L2 head has
+    /// reorged.
+    pub l2_head_block_number: Option<u64>,
     /// The L2 safe block info after the unwind. This is only populated if the L2 safe has reorged.
     pub l2_safe_block_info: Option<BlockInfo>,
 }

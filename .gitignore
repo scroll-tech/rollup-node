@@ -23,3 +23,6 @@ target/
 .vscode/
 
 .idea/
+
+# OS
+.DS_Store

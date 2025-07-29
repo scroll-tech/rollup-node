@@ -14,9 +14,6 @@ pub enum EngineDriverError {
     /// The execution payload provider is unavailable.
     #[error("Execution payload provider is unavailable")]
     ExecutionPayloadProviderUnavailable,
-    /// The execution payload id is missing.
-    #[error("missing payload id")]
-    MissingExecutionPayloadId,
     /// The forkchoice update failed.
     #[error("Forkchoice update failed: {0}")]
     ForkchoiceUpdateFailed(ScrollEngineApiError),

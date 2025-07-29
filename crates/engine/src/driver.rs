@@ -247,7 +247,10 @@ where
                         return Some(EngineDriverEvent::NewPayload(block))
                     }
                     Err(err) => {
-                        tracing::error!(target: "scroll::engine", ?err, "failed to build new payload")
+                        tracing::error!(target: "scroll::engine", ?err, "failed to build new payload");
+                        if let EngineDriverError::MissingPayloadId(attributes) = err {
+                            self.l1_payload_attributes.push_front(attributes);
+                        }
                     }
                 }
             }
@@ -276,6 +279,11 @@ where
     /// Returns the sync status.
     pub const fn is_syncing(&self) -> bool {
         self.syncing
+    }
+
+    /// Returns the forkchoice state.
+    pub const fn forkchoice_state(&self) -> &ForkchoiceState {
+        &self.fcs
     }
 
     /// Returns the alloy forkchoice state.

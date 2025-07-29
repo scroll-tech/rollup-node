@@ -15,7 +15,7 @@ use rollup_node::{
 };
 use rollup_node_manager::RollupManagerEvent;
 use rollup_node_primitives::{sig_encode_hash, BlockInfo, L1MessageEnvelope};
-use rollup_node_providers::{DatabaseL1MessageProvider, ScrollRootProvider};
+use rollup_node_providers::{BlobSource, DatabaseL1MessageProvider, ScrollRootProvider};
 use rollup_node_sequencer::{L1MessageInclusionMode, Sequencer};
 use rollup_node_signer::SignerEvent;
 use scroll_alloy_consensus::TxL1Message;
@@ -156,12 +156,14 @@ async fn can_build_blocks_with_delayed_l1_messages() {
     reth_tracing::init_test_tracing();
 
     let chain_spec = SCROLL_DEV.clone();
-    const BLOCK_BUILDING_DURATION: Duration = tokio::time::Duration::from_millis(0);
+    const BLOCK_BUILDING_DURATION: Duration = Duration::from_millis(0);
     const L1_MESSAGE_DELAY: u64 = 2;
 
     // setup a test node
     let (mut nodes, _tasks, wallet) =
-        setup_engine(default_test_scroll_rollup_node_config(), 1, chain_spec, false).await.unwrap();
+        setup_engine(default_test_scroll_rollup_node_config(), 1, chain_spec, false, false)
+            .await
+            .unwrap();
     let node = nodes.pop().unwrap();
     let wallet = Arc::new(Mutex::new(wallet));
 
@@ -285,7 +287,9 @@ async fn can_build_blocks_with_finalized_l1_messages() {
 
     // setup a test node
     let (mut nodes, _tasks, wallet) =
-        setup_engine(default_test_scroll_rollup_node_config(), 1, chain_spec, false).await.unwrap();
+        setup_engine(default_test_scroll_rollup_node_config(), 1, chain_spec, false, false)
+            .await
+            .unwrap();
     let node = nodes.pop().unwrap();
     let wallet = Arc::new(Mutex::new(wallet));
 
@@ -426,7 +430,7 @@ async fn can_sequence_blocks_with_private_key_file() -> eyre::Result<()> {
     let chain_spec = (*SCROLL_DEV).clone();
     let rollup_manager_args = ScrollRollupNodeConfig {
         test: false, // disable test mode to enable real signing
-        network_args: NetworkArgs { enable_eth_scroll_wire_bridge: true, enable_scroll_wire: true },
+        network_args: NetworkArgs::default(),
         database_args: DatabaseArgs { path: Some(PathBuf::from("sqlite::memory:")) },
         l1_provider_args: L1ProviderArgs::default(),
         engine_driver_args: EngineDriverArgs::default(),
@@ -439,14 +443,18 @@ async fn can_sequence_blocks_with_private_key_file() -> eyre::Result<()> {
             payload_building_duration: 1000,
             ..SequencerArgs::default()
         },
-        beacon_provider_args: BeaconProviderArgs::default(),
+        beacon_provider_args: BeaconProviderArgs {
+            blob_source: BlobSource::Mock,
+            ..Default::default()
+        },
         signer_args: SignerArgs {
             key_file: Some(temp_file.path().to_path_buf()),
             aws_kms_key_id: None,
         },
     };
 
-    let (nodes, _tasks, wallet) = setup_engine(rollup_manager_args, 1, chain_spec, false).await?;
+    let (nodes, _tasks, wallet) =
+        setup_engine(rollup_manager_args, 1, chain_spec, false, false).await?;
     let wallet = Arc::new(Mutex::new(wallet));
 
     let sequencer_rnm_handle = nodes[0].inner.add_ons_handle.rollup_manager_handle.clone();
@@ -474,9 +482,6 @@ async fn can_sequence_blocks_with_private_key_file() -> eyre::Result<()> {
     } else {
         panic!("Failed to receive BlockSequenced event");
     }
-
-    // Skip the next event.
-    let _ = sequencer_events.next().await;
 
     // Verify signing event and signature correctness
     if let Some(RollupManagerEvent::SignerEvent(SignerEvent::SignedBlock {
@@ -514,7 +519,7 @@ async fn can_sequence_blocks_with_hex_key_file_without_prefix() -> eyre::Result<
     let chain_spec = (*SCROLL_DEV).clone();
     let rollup_manager_args = ScrollRollupNodeConfig {
         test: false, // disable test mode to enable real signing
-        network_args: NetworkArgs { enable_eth_scroll_wire_bridge: true, enable_scroll_wire: true },
+        network_args: NetworkArgs::default(),
         database_args: DatabaseArgs { path: Some(PathBuf::from("sqlite::memory:")) },
         l1_provider_args: L1ProviderArgs::default(),
         engine_driver_args: EngineDriverArgs::default(),
@@ -527,14 +532,18 @@ async fn can_sequence_blocks_with_hex_key_file_without_prefix() -> eyre::Result<
             payload_building_duration: 1000,
             ..SequencerArgs::default()
         },
-        beacon_provider_args: BeaconProviderArgs::default(),
+        beacon_provider_args: BeaconProviderArgs {
+            blob_source: BlobSource::Mock,
+            ..Default::default()
+        },
         signer_args: SignerArgs {
             key_file: Some(temp_file.path().to_path_buf()),
             aws_kms_key_id: None,
         },
     };
 
-    let (nodes, _tasks, wallet) = setup_engine(rollup_manager_args, 1, chain_spec, false).await?;
+    let (nodes, _tasks, wallet) =
+        setup_engine(rollup_manager_args, 1, chain_spec, false, false).await?;
     let wallet = Arc::new(Mutex::new(wallet));
 
     let sequencer_rnm_handle = nodes[0].inner.add_ons_handle.rollup_manager_handle.clone();
@@ -562,9 +571,6 @@ async fn can_sequence_blocks_with_hex_key_file_without_prefix() -> eyre::Result<
     } else {
         panic!("Failed to receive BlockSequenced event");
     }
-
-    // Skip the next event.
-    let _ = sequencer_events.next().await;
 
     // Verify signing event and signature correctness
     if let Some(RollupManagerEvent::SignerEvent(SignerEvent::SignedBlock {
@@ -601,6 +607,7 @@ async fn can_build_blocks_and_exit_at_gas_limit() {
         },
         1,
         chain_spec,
+        false,
         false,
     )
     .await
@@ -686,6 +693,7 @@ async fn can_build_blocks_and_exit_at_time_limit() {
         },
         1,
         chain_spec,
+        false,
         false,
     )
     .await

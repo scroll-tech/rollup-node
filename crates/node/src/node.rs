@@ -1,9 +1,10 @@
 //! Node specific implementations for Scroll rollup node.
 
-use crate::args::ScrollRollupNodeConfig;
+use crate::{args::ScrollRollupNodeConfig, constants};
 use std::time::Duration;
 
 use super::add_ons::ScrollRollupNodeAddOns;
+use reth_network::protocol::IntoRlpxSubProtocol;
 use reth_node_api::NodeTypes;
 use reth_node_builder::{
     components::{BasicPayloadServiceBuilder, ComponentsBuilder},
@@ -13,11 +14,15 @@ use reth_scroll_node::{
     ScrollConsensusBuilder, ScrollExecutorBuilder, ScrollNetworkBuilder, ScrollNode,
     ScrollPayloadBuilderBuilder, ScrollPoolBuilder,
 };
+use scroll_wire::{ScrollWireConfig, ScrollWireEvent, ScrollWireProtocolHandler};
+use std::sync::Arc;
+use tokio::sync::{mpsc::UnboundedReceiver, Mutex};
 
 /// The Scroll node implementation.
 #[derive(Clone, Debug)]
 pub struct ScrollRollupNode {
     config: ScrollRollupNodeConfig,
+    scroll_wire_events: Arc<Mutex<Option<UnboundedReceiver<ScrollWireEvent>>>>,
 }
 
 impl ScrollRollupNode {
@@ -27,7 +32,8 @@ impl ScrollRollupNode {
             .validate()
             .map_err(|e| eyre::eyre!("Configuration validation failed: {}", e))
             .expect("Configuration validation failed");
-        Self { config }
+
+        Self { config, scroll_wire_events: Arc::new(Mutex::new(None)) }
     }
 }
 
@@ -49,18 +55,30 @@ where
     >;
 
     fn components_builder(&self) -> Self::ComponentsBuilder {
-        ScrollNode::components().payload(BasicPayloadServiceBuilder::new(
-            ScrollPayloadBuilderBuilder {
+        let (scroll_wire_handler, events) =
+            ScrollWireProtocolHandler::new(ScrollWireConfig::new(true));
+
+        *self.scroll_wire_events.try_lock().unwrap() = Some(events);
+
+        ScrollNode::components()
+            .payload(BasicPayloadServiceBuilder::new(ScrollPayloadBuilderBuilder {
                 payload_building_time_limit: Duration::from_millis(
                     self.config.sequencer_args.payload_building_duration,
                 ),
                 best_transactions: (),
-            },
-        ))
+                block_da_size_limit: Some(constants::DEFAULT_PAYLOAD_SIZE_LIMIT),
+            }))
+            .network(
+                ScrollNetworkBuilder::new()
+                    .with_sub_protocol(scroll_wire_handler.into_rlpx_sub_protocol()),
+            )
     }
 
     fn add_ons(&self) -> Self::AddOns {
-        ScrollRollupNodeAddOns::new(self.config.clone())
+        ScrollRollupNodeAddOns::new(
+            self.config.clone(),
+            self.scroll_wire_events.try_lock().unwrap().take().unwrap(),
+        )
     }
 }
 

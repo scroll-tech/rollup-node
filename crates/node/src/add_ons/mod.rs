@@ -24,6 +24,7 @@ use reth_scroll_node::{
 use reth_scroll_primitives::ScrollPrimitives;
 use reth_scroll_rpc::{eth::ScrollEthApiBuilder, ScrollEthApi, ScrollEthApiError};
 use scroll_alloy_evm::ScrollTransactionIntoTxEnv;
+use scroll_wire::ScrollWireEvent;
 
 mod handle;
 pub use handle::ScrollAddOnsHandle;
@@ -31,6 +32,7 @@ pub use handle::ScrollAddOnsHandle;
 mod rollup;
 pub use rollup::IsDevChain;
 use rollup::RollupManagerAddOn;
+use tokio::sync::mpsc::UnboundedReceiver;
 
 /// Add-ons for the Scroll follower node.
 #[derive(Debug)]
@@ -57,9 +59,18 @@ where
     ScrollEthApiBuilder: EthApiBuilder<N>,
 {
     /// Create a new instance of [`ScrollRollupNodeAddOns`].
-    pub fn new(config: ScrollRollupNodeConfig) -> Self {
-        let rpc_add_ons = RpcAddOns::default();
-        let rollup_manager_addon = RollupManagerAddOn::new(config);
+    pub fn new(
+        config: ScrollRollupNodeConfig,
+        scroll_wire_event: UnboundedReceiver<ScrollWireEvent>,
+    ) -> Self {
+        let rpc_add_ons = RpcAddOns::new(
+            ScrollEthApiBuilder::default()
+                .with_sequencer(config.network_args.sequencer_url.clone()),
+            Default::default(),
+            Default::default(),
+            Default::default(),
+        );
+        let rollup_manager_addon = RollupManagerAddOn::new(config, scroll_wire_event);
         Self { rpc_add_ons, rollup_manager_addon }
     }
 }
