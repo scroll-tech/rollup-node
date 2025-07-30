@@ -13,7 +13,7 @@ use rollup_node::{
         default_sequencer_test_scroll_rollup_node_config, default_test_scroll_rollup_node_config,
         generate_tx, setup_engine,
     },
-    BeaconProviderArgs, DatabaseArgs, EngineDriverArgs, L1ProviderArgs,
+    BeaconProviderArgs, DatabaseArgs, EngineDriverArgs, GasPriceOracleArgs, L1ProviderArgs,
     NetworkArgs as ScrollNetworkArgs, ScrollRollupNodeConfig, SequencerArgs,
 };
 use rollup_node_manager::{RollupManagerCommand, RollupManagerEvent, RollupManagerHandle};
