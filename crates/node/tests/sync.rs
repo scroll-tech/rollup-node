@@ -587,6 +587,7 @@ async fn test_consolidation() -> eyre::Result<()> {
     Ok(())
 }
 
+#[allow(clippy::large_stack_frames)]
 #[tokio::test]
 async fn test_chain_orchestrator_shallow_reorg() -> eyre::Result<()> {
     reth_tracing::init_test_tracing();
