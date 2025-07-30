@@ -358,10 +358,10 @@ impl Default for ChainOrchestratorArgs {
 pub struct NetworkArgs {
     /// A bool to represent if new blocks should be bridged from the eth wire protocol to the
     /// scroll wire protocol.
-    #[arg(long = "network.bridge", default_value_t = true, action = clap::ArgAction::Set)]
+    #[arg(long = "network.bridge")]
     pub enable_eth_scroll_wire_bridge: bool,
     /// A bool that represents if the scroll wire protocol should be enabled.
-    #[arg(long = "network.scroll-wire", default_value_t = true, action = clap::ArgAction::Set)]
+    #[arg(long = "network.scroll-wire")]
     pub enable_scroll_wire: bool,
     /// The URL for the Sequencer RPC. (can be both HTTP and WS)
     #[arg(
