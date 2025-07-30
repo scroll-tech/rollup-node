@@ -33,7 +33,7 @@ use strum::IntoEnumIterator;
 use tokio::sync::Mutex;
 
 mod action;
-use action::{ChainOrchestratorFuture, PendingIndexerFuture};
+use action::{ChainOrchestratorFuture, PendingChainOrchestratorFuture};
 
 mod event;
 pub use event::ChainOrchestratorEvent;
@@ -42,14 +42,11 @@ mod error;
 pub use error::ChainOrchestratorError;
 
 mod metrics;
-pub use metrics::{IndexerItem, IndexerMetrics};
+pub use metrics::{ChainOrchestratorItem, ChainOrchestratorMetrics};
 
 /// The mask used to mask the L1 message queue hash.
 const L1_MESSAGE_QUEUE_HASH_MASK: B256 =
     b256!("ffffffffffffffffffffffffffffffffffffffffffffffffffffffff00000000");
-
-/// The number of block headers we keep in memory.
-const CHAIN_BUFFER_SIZE: usize = 2000;
 
 type Chain = BoundedVec<Header>;
 
@@ -71,15 +68,17 @@ pub struct ChainOrchestrator<ChainSpec, BC, P> {
     l1_finalized_block_number: Arc<AtomicU64>,
     /// The block number of the L2 finalized block.
     l2_finalized_block_number: Arc<AtomicU64>,
-    /// The chain specification for the indexer.
+    /// The chain specification for the chain orchestrator.
     chain_spec: Arc<ChainSpec>,
-    /// The metrics for the indexer.
-    metrics: HashMap<IndexerItem, IndexerMetrics>,
+    /// The metrics for the chain orchestrator.
+    metrics: HashMap<ChainOrchestratorItem, ChainOrchestratorMetrics>,
     /// A boolean to represent if the [`ChainOrchestrator`] is in optimistic mode.
     optimistic_mode: Arc<Mutex<bool>>,
     /// The threshold for optimistic sync. If the received block is more than this many blocks
     /// ahead of the current chain, we optimistically sync the chain.
     optimistic_sync_threshold: u64,
+    /// The size of the in-memory chain buffer.
+    chain_buffer_size: usize,
     /// A boolean to represent if the L1 has been synced.
     l1_synced: bool,
     /// The waker to notify when the engine driver should be polled.
@@ -92,15 +91,16 @@ impl<
         P: Provider<Scroll> + 'static,
     > ChainOrchestrator<ChainSpec, BC, P>
 {
-    /// Creates a new indexer with the given [`Database`].
+    /// Creates a new chain orchestrator.
     pub async fn new(
         database: Arc<Database>,
         chain_spec: Arc<ChainSpec>,
         block_client: BC,
         l2_client: P,
         optimistic_sync_threshold: u64,
+        chain_buffer_size: usize,
     ) -> Self {
-        let chain = init_chain_from_db(&database, &l2_client).await;
+        let chain = init_chain_from_db(&database, &l2_client, chain_buffer_size).await;
         Self {
             network_client: Arc::new(block_client),
             l2_client: Arc::new(l2_client),
@@ -110,14 +110,15 @@ impl<
             l1_finalized_block_number: Arc::new(AtomicU64::new(0)),
             l2_finalized_block_number: Arc::new(AtomicU64::new(0)),
             chain_spec,
-            metrics: IndexerItem::iter()
+            metrics: ChainOrchestratorItem::iter()
                 .map(|i| {
                     let label = i.as_str();
-                    (i, IndexerMetrics::new_with_labels(&[("item", label)]))
+                    (i, ChainOrchestratorMetrics::new_with_labels(&[("item", label)]))
                 })
                 .collect(),
             optimistic_mode: Arc::new(Mutex::new(false)),
             optimistic_sync_threshold,
+            chain_buffer_size,
             l1_synced: false,
             waker: AtomicWaker::new(),
         }
@@ -126,13 +127,13 @@ impl<
     /// Wraps a pending chain orchestrator future, metering the completion of it.
     pub fn handle_metered(
         &mut self,
-        item: IndexerItem,
-        indexer_fut: PendingIndexerFuture,
-    ) -> PendingIndexerFuture {
+        item: ChainOrchestratorItem,
+        chain_orchestrator_fut: PendingChainOrchestratorFuture,
+    ) -> PendingChainOrchestratorFuture {
         let metric = self.metrics.get(&item).expect("metric exists").clone();
         let fut_wrapper = Box::pin(async move {
             let now = Instant::now();
-            let res = indexer_fut.await;
+            let res = chain_orchestrator_fut.await;
             metric.task_duration.record(now.elapsed().as_secs_f64());
             res
         });
@@ -146,26 +147,19 @@ impl<
 
     /// Handles a new block received from a peer.
     pub fn handle_block_from_peer(&mut self, block_with_peer: NewBlockWithPeer) {
-        let chain = self.chain.clone();
-        let l2_client = self.l2_client.clone();
-        let optimistic_mode = self.optimistic_mode.clone();
-        let optimistic_sync_threshold = self.optimistic_sync_threshold;
-        let network_client = self.network_client.clone();
-        let database = self.database.clone();
+        let ctx = HandleBlockContext {
+            chain: self.chain.clone(),
+            l2_client: self.l2_client.clone(),
+            optimistic_mode: self.optimistic_mode.clone(),
+            optimistic_sync_threshold: self.optimistic_sync_threshold,
+            network_client: self.network_client.clone(),
+            database: self.database.clone(),
+            chain_buffer_size: self.chain_buffer_size,
+        };
+
         let fut = self.handle_metered(
-            IndexerItem::NewBlock,
-            Box::pin(async move {
-                Self::handle_new_block(
-                    chain,
-                    l2_client,
-                    optimistic_mode,
-                    optimistic_sync_threshold,
-                    network_client,
-                    database,
-                    block_with_peer,
-                )
-                .await
-            }),
+            ChainOrchestratorItem::NewBlock,
+            Box::pin(async move { Self::handle_new_block(ctx, block_with_peer).await }),
         );
         self.pending_futures.push_back(ChainOrchestratorFuture::HandleL2Block(fut));
         self.waker.wake();
@@ -173,14 +167,18 @@ impl<
 
     /// Handles a new block received from the network.
     async fn handle_new_block(
-        chain: Arc<Mutex<Chain>>,
-        l2_client: Arc<P>,
-        optimistic_mode: Arc<Mutex<bool>>,
-        optimistic_sync_threshold: u64,
-        network_client: Arc<BC>,
-        database: Arc<Database>,
+        ctx: HandleBlockContext<BC, P>,
         block_with_peer: NewBlockWithPeer,
     ) -> Result<ChainOrchestratorEvent, ChainOrchestratorError> {
+        let HandleBlockContext {
+            chain,
+            l2_client,
+            optimistic_mode,
+            optimistic_sync_threshold,
+            network_client,
+            database,
+            chain_buffer_size,
+        } = ctx;
         let NewBlockWithPeer { block: received_block, peer_id, signature } = block_with_peer;
         let mut current_chain_headers = chain.lock().await.clone().into_inner();
         let max_block_number = current_chain_headers.back().expect("chain can not be empty").number;
@@ -190,12 +188,14 @@ impl<
         // If the received block has a block number that is greater than the tip
         // of the chain by the optimistic sync threshold, we optimistically sync the chain and
         // update the in-memory buffer to represent the optimistic chain.
-        if (received_block.header.number - max_block_number) >= optimistic_sync_threshold {
-            // fetch the latest `CHAIN_BUFFER_SIZE` headers from the network for the
+        if (received_block.header.number.saturating_sub(max_block_number)) >=
+            optimistic_sync_threshold
+        {
+            // fetch the latest `chain_buffer_size` headers from the network for the
             // optimistic chain.
-            let mut optimistic_headers = Chain::new(CHAIN_BUFFER_SIZE);
+            let mut optimistic_headers = Chain::new(chain_buffer_size);
             optimistic_headers.push_front(received_block.header.clone());
-            while optimistic_headers.len() < CHAIN_BUFFER_SIZE &&
+            while optimistic_headers.len() < chain_buffer_size &&
                 optimistic_headers.first().unwrap().number != 0
             {
                 tracing::trace!(target: "scroll::chain_orchestrator", number = ?(optimistic_headers.first().unwrap().number - 1), "fetching block");
@@ -237,7 +237,6 @@ impl<
         // We fetch headers for the received chain until we can reconcile it with the chain we
         // currently have in-memory.
         let mut received_chain_headers = vec![received_block.header.clone()];
-        let mut received_header_tail = received_block.header.clone();
 
         // We should never have a re-org that is deeper than the current safe head.
         let (latest_safe_block, _) =
@@ -260,7 +259,7 @@ impl<
             // If the received header tail has a block number that is less than the current header
             // tail then we should fetch more headers for the current chain to aid
             // reconciliation.
-            if received_header_tail.number <
+            if received_chain_headers.last().unwrap().number <
                 current_chain_headers.front().expect("chain can not be empty").number
             {
                 for _ in 0..BATCH_FETCH_SIZE {
@@ -277,7 +276,6 @@ impl<
                     {
                         let header = block.into_consensus_header();
                         current_chain_headers.push_front(header.clone());
-                        received_header_tail = header;
                     } else {
                         return Err(ChainOrchestratorError::MissingBlockHeader {
                             hash: current_chain_headers.front().unwrap().parent_hash,
@@ -289,13 +287,13 @@ impl<
             // We search the in-memory chain to see if we can reconcile the block import.
             if let Some(pos) = current_chain_headers
                 .iter()
-                .rposition(|h| h.hash_slow() == received_header_tail.parent_hash)
+                .rposition(|h| h.hash_slow() == received_chain_headers.last().unwrap().parent_hash)
             {
                 // If the received fork is older than the current chain, we return an event
                 // indicating that we have received an old fork.
                 if (pos < current_chain_headers.len() - 1) &&
-                    current_chain_headers.get(pos + 1).unwrap().timestamp >=
-                        received_header_tail.timestamp
+                    current_chain_headers.get(pos + 1).unwrap().timestamp >
+                        received_chain_headers.last().unwrap().timestamp
                 {
                     return Ok(ChainOrchestratorEvent::OldForkReceived {
                         headers: received_chain_headers,
@@ -308,21 +306,22 @@ impl<
 
             // If the current header block number is less than the latest safe block number then
             // we should error.
-            if received_header_tail.number <= latest_safe_block.number {
+            if received_chain_headers.last().unwrap().number <= latest_safe_block.number {
                 return Err(ChainOrchestratorError::L2SafeBlockReorgDetected);
             }
 
-            tracing::trace!(target: "scroll::chain_orchestrator", number = ?(received_header_tail.number - 1), "fetching block");
+            tracing::trace!(target: "scroll::chain_orchestrator", number = ?(received_chain_headers.last().unwrap().number - 1), "fetching block");
             if let Some(header) = network_client
-                .get_header(BlockHashOrNumber::Hash(received_header_tail.parent_hash))
+                .get_header(BlockHashOrNumber::Hash(
+                    received_chain_headers.last().unwrap().parent_hash,
+                ))
                 .await?
                 .into_data()
             {
                 received_chain_headers.push(header.clone());
-                received_header_tail = header;
             } else {
                 return Err(ChainOrchestratorError::MissingBlockHeader {
-                    hash: received_header_tail.parent_hash,
+                    hash: received_chain_headers.last().unwrap().parent_hash,
                 });
             }
         };
@@ -348,7 +347,7 @@ impl<
             position if position == current_chain_headers.len() - 1 => {
                 // Update the chain with the new blocks.
                 current_chain_headers.extend(new_blocks.iter().map(|b| b.header.clone()));
-                let mut new_chain = Chain::new(CHAIN_BUFFER_SIZE);
+                let mut new_chain = Chain::new(chain_buffer_size);
                 new_chain.extend(current_chain_headers);
                 *chain.lock().await = new_chain;
 
@@ -360,7 +359,7 @@ impl<
             // point and extend it with the new blocks.
             position => {
                 // reorg the in-memory chain to the new chain and issue a reorg event.
-                let mut new_chain = Chain::new(CHAIN_BUFFER_SIZE);
+                let mut new_chain = Chain::new(chain_buffer_size);
                 new_chain.extend(current_chain_headers.iter().take(position).cloned());
                 new_chain.extend(received_chain_headers);
                 *chain.lock().await = new_chain;
@@ -383,9 +382,10 @@ impl<
         let optimistic_mode = self.optimistic_mode.clone();
         let chain = self.chain.clone();
         let l2_client = self.l2_client.clone();
+        let chain_buffer_size = self.chain_buffer_size;
         let fut =
             self.handle_metered(
-                IndexerItem::InsertL2Block,
+                ChainOrchestratorItem::InsertL2Block,
                 Box::pin(async move {
                     // If we are in optimistic mode and the L1 is synced, we consolidate the chain
                     // and disable optimistic mode to enter consolidated mode
@@ -393,8 +393,14 @@ impl<
                     let consolidated = if !*optimistic_mode.lock().await {
                         true
                     } else if l1_synced && *optimistic_mode.lock().await {
-                        consolidate_chain(database.clone(), block_info.clone(), chain, l2_client)
-                            .await?;
+                        consolidate_chain(
+                            database.clone(),
+                            block_info.clone(),
+                            chain,
+                            l2_client,
+                            chain_buffer_size,
+                        )
+                        .await?;
                         *optimistic_mode.lock().await = false;
                         true
                     } else {
@@ -420,7 +426,7 @@ impl<
         let fut = match event {
             L1Notification::Reorg(block_number) => {
                 ChainOrchestratorFuture::HandleReorg(self.handle_metered(
-                    IndexerItem::L1Reorg,
+                    ChainOrchestratorItem::L1Reorg,
                     Box::pin(Self::handle_l1_reorg(
                         self.database.clone(),
                         self.chain_spec.clone(),
@@ -432,7 +438,7 @@ impl<
             L1Notification::NewBlock(_) | L1Notification::Consensus(_) => return,
             L1Notification::Finalized(block_number) => {
                 ChainOrchestratorFuture::HandleFinalized(self.handle_metered(
-                    IndexerItem::L1Finalization,
+                    ChainOrchestratorItem::L1Finalization,
                     Box::pin(Self::handle_finalized(
                         self.database.clone(),
                         block_number,
@@ -443,13 +449,13 @@ impl<
             }
             L1Notification::BatchCommit(batch) => {
                 ChainOrchestratorFuture::HandleBatchCommit(self.handle_metered(
-                    IndexerItem::BatchCommit,
+                    ChainOrchestratorItem::BatchCommit,
                     Box::pin(Self::handle_batch_commit(self.database.clone(), batch)),
                 ))
             }
             L1Notification::L1Message { message, block_number, block_timestamp } => {
                 ChainOrchestratorFuture::HandleL1Message(self.handle_metered(
-                    IndexerItem::L1Message,
+                    ChainOrchestratorItem::L1Message,
                     Box::pin(Self::handle_l1_message(
                         self.database.clone(),
                         self.chain_spec.clone(),
@@ -461,7 +467,7 @@ impl<
             }
             L1Notification::BatchFinalization { hash, block_number, .. } => {
                 ChainOrchestratorFuture::HandleBatchFinalization(self.handle_metered(
-                    IndexerItem::BatchFinalization,
+                    ChainOrchestratorItem::BatchFinalization,
                     Box::pin(Self::handle_batch_finalization(
                         self.database.clone(),
                         hash,
@@ -511,8 +517,8 @@ impl<
         })
     }
 
-    /// Handles a finalized event by updating the indexer L1 finalized block and returning the new
-    /// finalized L2 chain block.
+    /// Handles a finalized event by updating the chain orchestrator L1 finalized block and
+    /// returning the new finalized L2 chain block.
     async fn handle_finalized(
         database: Arc<Database>,
         block_number: u64,
@@ -532,7 +538,7 @@ impl<
             None
         };
 
-        // update the indexer l1 block number.
+        // update the chain orchestrator l1 block number.
         l1_block_number.store(block_number, Ordering::Relaxed);
 
         Ok(ChainOrchestratorEvent::L1BlockFinalized(block_number, finalized_block))
@@ -654,10 +660,11 @@ impl<
 async fn init_chain_from_db<P: Provider<Scroll> + 'static>(
     database: &Arc<Database>,
     l2_client: &P,
+    chain_buffer_size: usize,
 ) -> BoundedVec<Header> {
     let blocks = {
-        let mut blocks = Vec::with_capacity(CHAIN_BUFFER_SIZE);
-        let mut blocks_stream = database.get_l2_blocks().await.unwrap().take(CHAIN_BUFFER_SIZE);
+        let mut blocks = Vec::with_capacity(chain_buffer_size);
+        let mut blocks_stream = database.get_l2_blocks().await.unwrap().take(chain_buffer_size);
         while let Some(block_info) = blocks_stream.try_next().await.unwrap() {
             let header = l2_client
                 .get_block_by_hash(block_info.hash)
@@ -671,7 +678,7 @@ async fn init_chain_from_db<P: Provider<Scroll> + 'static>(
         blocks.reverse();
         blocks
     };
-    let mut chain: Chain = Chain::new(CHAIN_BUFFER_SIZE);
+    let mut chain: Chain = Chain::new(chain_buffer_size);
     chain.extend(blocks);
     chain
 }
@@ -703,16 +710,27 @@ impl<
     }
 }
 
+struct HandleBlockContext<BC, P> {
+    pub chain: Arc<Mutex<Chain>>,
+    pub l2_client: Arc<P>,
+    pub optimistic_mode: Arc<Mutex<bool>>,
+    pub optimistic_sync_threshold: u64,
+    pub network_client: Arc<BC>,
+    pub database: Arc<Database>,
+    pub chain_buffer_size: usize,
+}
+
 /// Consolidates the chain by reconciling the in-memory chain with the L2 client and database.
 /// This is used to ensure that the in-memory chain is consistent with the L2 chain.
 async fn consolidate_chain<P: Provider<Scroll> + 'static>(
     database: Arc<Database>,
     validated_chain: Vec<L2BlockInfoWithL1Messages>,
-    _chain: Arc<Mutex<Chain>>,
+    current_chain: Arc<Mutex<Chain>>,
     l2_client: P,
+    chain_buffer_size: usize,
 ) -> Result<(), ChainOrchestratorError> {
     // Take the current in memory chain.
-    let chain = std::mem::take(&mut *_chain.lock().await);
+    let chain = current_chain.lock().await.clone();
 
     // Find highest common ancestor between the in-memory chain and the validated chain import.
     let hca_index = chain.iter().rposition(|h| {
@@ -727,7 +745,7 @@ async fn consolidate_chain<P: Provider<Scroll> + 'static>(
     // part of the in-memory chain.
     if hca_index.is_none() {
         // If we do not have a common ancestor, we return an error.
-        *_chain.lock().await = chain;
+        *current_chain.lock().await = chain;
         return Err(ChainOrchestratorError::ChainInconsistency);
     }
 
@@ -749,7 +767,8 @@ async fn consolidate_chain<P: Provider<Scroll> + 'static>(
     if let Some(in_mem_safe_hash) = in_mem_safe_hash {
         if in_mem_safe_hash != safe_head.hash {
             // If we did not consolidate back to the safe head, we return an error.
-            *_chain.lock().await = init_chain_from_db(&database, &l2_client).await;
+            *current_chain.lock().await =
+                init_chain_from_db(&database, &l2_client, chain_buffer_size).await;
 
             return Err(ChainOrchestratorError::ChainInconsistency);
         }
@@ -778,7 +797,8 @@ async fn consolidate_chain<P: Provider<Scroll> + 'static>(
         // If the safe head of the fetched chain does not match the safe head stored in database we
         // should return an error.
         if blocks_to_consolidate.front().unwrap().header.hash_slow() != safe_head.hash {
-            *_chain.lock().await = init_chain_from_db(&database, &l2_client).await;
+            *current_chain.lock().await =
+                init_chain_from_db(&database, &l2_client, chain_buffer_size).await;
             return Err(ChainOrchestratorError::ChainInconsistency);
         }
     }
@@ -789,7 +809,7 @@ async fn consolidate_chain<P: Provider<Scroll> + 'static>(
     validate_l1_messages(&blocks_to_consolidate, database.clone()).await?;
 
     // Set the chain which has now been consolidated.
-    *_chain.lock().await = chain;
+    *current_chain.lock().await = chain;
 
     Ok(())
 }
@@ -887,6 +907,7 @@ mod test {
     type ScrollBody = <ScrollBlock as Block>::Body;
 
     const TEST_OPTIMISTIC_SYNC_THRESHOLD: u64 = 100;
+    const TEST_CHAIN_BUFFER_SIZE: usize = 2000;
 
     /// A headers+bodies client that stores the headers and bodies in memory, with an artificial
     /// soft bodies response limit that is set to 20 by default.
@@ -915,31 +936,6 @@ mod test {
             }
         }
     }
-
-    // impl TestScrollFullBlockClient {
-    //     /// Insert a header and body into the client maps.
-    //     fn insert(&self, header: SealedHeader, body: ScrollBody) {
-    //         let hash = header.hash();
-    //         self.headers.lock().insert(hash, header.unseal());
-    //         self.bodies.lock().insert(hash, body);
-    //     }
-
-    //     /// Set the soft response limit.
-    //     const fn set_soft_limit(&mut self, limit: usize) {
-    //         self.soft_limit = limit;
-    //     }
-
-    //     /// Get the block with the highest block number.
-    //     fn highest_block(&self) -> Option<SealedBlock<ScrollBlock>> {
-    //         self.headers.lock().iter().max_by_key(|(_, header)| header.number).and_then(
-    //             |(hash, header)| {
-    //                 self.bodies.lock().get(hash).map(|body| {
-    //                     SealedBlock::from_parts_unchecked(header.clone(), body.clone(), *hash)
-    //                 })
-    //             },
-    //         )
-    //     }
-    // }
 
     impl DownloadClient for TestScrollFullBlockClient {
         /// Reports a bad message from a specific peer.
@@ -1051,7 +1047,7 @@ mod test {
         type Block = ScrollBlock;
     }
 
-    async fn setup_test_indexer() -> (
+    async fn setup_test_chain_orchestrator() -> (
         ChainOrchestrator<ScrollChainSpec, TestScrollFullBlockClient, RootProvider<Scroll>>,
         Arc<Database>,
     ) {
@@ -1071,6 +1067,7 @@ mod test {
                 TestScrollFullBlockClient::default(),
                 provider,
                 TEST_OPTIMISTIC_SYNC_THRESHOLD,
+                TEST_CHAIN_BUFFER_SIZE,
             )
             .await,
             db,
@@ -1080,7 +1077,7 @@ mod test {
     #[tokio::test]
     async fn test_handle_commit_batch() {
         // Instantiate indexer and db
-        let (mut indexer, db) = setup_test_indexer().await;
+        let (mut indexer, db) = setup_test_chain_orchestrator().await;
 
         // Generate unstructured bytes.
         let mut bytes = [0u8; 1024];
@@ -1109,7 +1106,7 @@ mod test {
     #[tokio::test]
     async fn test_handle_batch_commit_with_revert() {
         // Instantiate indexer and db
-        let (mut indexer, db) = setup_test_indexer().await;
+        let (mut chain_orchestrator, db) = setup_test_chain_orchestrator().await;
 
         // Generate unstructured bytes.
         let mut bytes = [0u8; 1024];
@@ -1134,8 +1131,8 @@ mod test {
         };
 
         // Index first batch
-        indexer.handle_l1_notification(L1Notification::BatchCommit(batch_1.clone()));
-        let event = indexer.next().await.unwrap().unwrap();
+        chain_orchestrator.handle_l1_notification(L1Notification::BatchCommit(batch_1.clone()));
+        let event = chain_orchestrator.next().await.unwrap().unwrap();
         match event {
             ChainOrchestratorEvent::BatchCommitIndexed { batch_info, safe_head, .. } => {
                 assert_eq!(batch_info.index, 100);
@@ -1145,8 +1142,8 @@ mod test {
         }
 
         // Index second batch
-        indexer.handle_l1_notification(L1Notification::BatchCommit(batch_2.clone()));
-        let event = indexer.next().await.unwrap().unwrap();
+        chain_orchestrator.handle_l1_notification(L1Notification::BatchCommit(batch_2.clone()));
+        let event = chain_orchestrator.next().await.unwrap().unwrap();
         match event {
             ChainOrchestratorEvent::BatchCommitIndexed { batch_info, safe_head, .. } => {
                 assert_eq!(batch_info.index, 101);
@@ -1156,8 +1153,8 @@ mod test {
         }
 
         // Index third batch
-        indexer.handle_l1_notification(L1Notification::BatchCommit(batch_3.clone()));
-        let event = indexer.next().await.unwrap().unwrap();
+        chain_orchestrator.handle_l1_notification(L1Notification::BatchCommit(batch_3.clone()));
+        let event = chain_orchestrator.next().await.unwrap().unwrap();
         match event {
             ChainOrchestratorEvent::BatchCommitIndexed { batch_info, safe_head, .. } => {
                 assert_eq!(batch_info.index, 102);
@@ -1183,14 +1180,14 @@ mod test {
             l1_messages: vec![],
         };
 
-        indexer.consolidate_l2_blocks(vec![block_1.clone()], Some(batch_1_info));
-        indexer.next().await.unwrap().unwrap();
+        chain_orchestrator.consolidate_l2_blocks(vec![block_1.clone()], Some(batch_1_info));
+        chain_orchestrator.next().await.unwrap().unwrap();
 
-        indexer.consolidate_l2_blocks(vec![block_2.clone()], Some(batch_2_info));
-        indexer.next().await.unwrap().unwrap();
+        chain_orchestrator.consolidate_l2_blocks(vec![block_2.clone()], Some(batch_2_info));
+        chain_orchestrator.next().await.unwrap().unwrap();
 
-        indexer.consolidate_l2_blocks(vec![block_3.clone()], Some(batch_2_info));
-        indexer.next().await.unwrap().unwrap();
+        chain_orchestrator.consolidate_l2_blocks(vec![block_3.clone()], Some(batch_2_info));
+        chain_orchestrator.next().await.unwrap().unwrap();
 
         // Now simulate a batch revert by submitting a new batch with index 101
         // This should delete batch 102 and any blocks associated with it
@@ -1200,8 +1197,8 @@ mod test {
             ..Arbitrary::arbitrary(&mut u).unwrap()
         };
 
-        indexer.handle_l1_notification(L1Notification::BatchCommit(new_batch_2.clone()));
-        let event = indexer.next().await.unwrap().unwrap();
+        chain_orchestrator.handle_l1_notification(L1Notification::BatchCommit(new_batch_2.clone()));
+        let event = chain_orchestrator.next().await.unwrap().unwrap();
 
         // Verify the event indicates a batch revert
         match event {
@@ -1230,7 +1227,7 @@ mod test {
     #[tokio::test]
     async fn test_handle_l1_message() {
         // Instantiate indexer and db
-        let (mut indexer, db) = setup_test_indexer().await;
+        let (mut indexer, db) = setup_test_chain_orchestrator().await;
 
         // Generate unstructured bytes.
         let mut bytes = [0u8; 1024];
@@ -1260,7 +1257,7 @@ mod test {
     #[tokio::test]
     async fn test_l1_message_hash_queue() {
         // Instantiate indexer and db
-        let (mut indexer, db) = setup_test_indexer().await;
+        let (mut indexer, db) = setup_test_chain_orchestrator().await;
 
         // insert the previous L1 message in database.
         indexer.handle_l1_notification(L1Notification::L1Message {
@@ -1299,7 +1296,7 @@ mod test {
     #[tokio::test]
     async fn test_handle_reorg() {
         // Instantiate indexer and db
-        let (mut indexer, db) = setup_test_indexer().await;
+        let (mut indexer, db) = setup_test_chain_orchestrator().await;
 
         // Generate unstructured bytes.
         let mut bytes = [0u8; 1024];
@@ -1398,7 +1395,7 @@ mod test {
     #[tokio::test]
     async fn test_handle_reorg_executed_l1_messages() {
         // Instantiate indexer and db
-        let (mut indexer, _database) = setup_test_indexer().await;
+        let (mut indexer, _database) = setup_test_chain_orchestrator().await;
 
         // Generate unstructured bytes.
         let mut bytes = [0u8; 8192];

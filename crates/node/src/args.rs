@@ -287,6 +287,7 @@ impl ScrollRollupNodeConfig {
             block_client,
             l2_provider,
             self.chain_orchestrator_args.optimistic_sync_trigger,
+            self.chain_orchestrator_args.chain_buffer_size,
         )
         .await;
 
@@ -338,11 +339,17 @@ pub struct ChainOrchestratorArgs {
     /// at which the engine driver triggers optimistic sync.
     #[arg(long = "chain.optimistic-sync-trigger", default_value_t = constants::BLOCK_GAP_TRIGGER)]
     pub optimistic_sync_trigger: u64,
+    /// The size of the in-memory chain buffer used by the chain orchestrator.
+    #[arg(long = "chain.chain-buffer-size", default_value_t = constants::CHAIN_BUFFER_SIZE)]
+    pub chain_buffer_size: usize,
 }
 
 impl Default for ChainOrchestratorArgs {
     fn default() -> Self {
-        Self { optimistic_sync_trigger: constants::BLOCK_GAP_TRIGGER }
+        Self {
+            optimistic_sync_trigger: constants::BLOCK_GAP_TRIGGER,
+            chain_buffer_size: constants::CHAIN_BUFFER_SIZE,
+        }
     }
 }
 

@@ -7,18 +7,18 @@ use std::{
 };
 
 /// A future that resolves to a `Result<ChainOrchestratorEvent, ChainOrchestratorError>`.
-pub(super) type PendingIndexerFuture =
+pub(super) type PendingChainOrchestratorFuture =
     Pin<Box<dyn Future<Output = Result<ChainOrchestratorEvent, ChainOrchestratorError>> + Send>>;
 
 /// A type that represents a future that is being executed by the chain orchestrator.
 pub(super) enum ChainOrchestratorFuture {
-    HandleReorg(PendingIndexerFuture),
-    HandleFinalized(PendingIndexerFuture),
-    HandleBatchCommit(PendingIndexerFuture),
-    HandleBatchFinalization(PendingIndexerFuture),
-    HandleL1Message(PendingIndexerFuture),
-    HandleDerivedBlock(PendingIndexerFuture),
-    HandleL2Block(PendingIndexerFuture),
+    HandleReorg(PendingChainOrchestratorFuture),
+    HandleFinalized(PendingChainOrchestratorFuture),
+    HandleBatchCommit(PendingChainOrchestratorFuture),
+    HandleBatchFinalization(PendingChainOrchestratorFuture),
+    HandleL1Message(PendingChainOrchestratorFuture),
+    HandleDerivedBlock(PendingChainOrchestratorFuture),
+    HandleL2Block(PendingChainOrchestratorFuture),
 }
 
 impl ChainOrchestratorFuture {

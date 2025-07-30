@@ -1,8 +1,8 @@
 use alloy_primitives::B256;
 use reth_scroll_primitives::ScrollBlock;
 use rollup_node_chain_orchestrator::ChainOrchestratorEvent;
-use rollup_node_primitives::{BatchInfo, ChainImport, L2BlockInfoWithL1Messages};
 use rollup_node_signer::SignerEvent;
+use rollup_node_watcher::L1Notification;
 use scroll_db::L1MessageStart;
 use scroll_engine::ConsolidationOutcome;
 use scroll_network::NewBlockWithPeer;
@@ -18,8 +18,6 @@ pub enum RollupManagerEvent {
     BlockImported(ScrollBlock),
     /// Consolidated block derived from L1.
     L1DerivedBlockConsolidated(ConsolidationOutcome),
-    /// An L1 message with the given index has been indexed.
-    L1MessageIndexed(u64),
     /// A new event from the signer.
     SignerEvent(SignerEvent),
     /// A reorg event.
@@ -38,12 +36,6 @@ pub enum RollupManagerEvent {
         /// The L1 message start index or hash.
         start: L1MessageStart,
     },
-    /// An optimistic sync has been triggered by the chain orchestrator.
-    OptimisticSyncTriggered(ScrollBlock),
-    /// A chain extension has been triggered by the chain orchestrator.
-    ChainExtensionTriggered(ChainImport),
-    /// An L2 chain has been committed.
-    L2ChainCommitted(L2BlockInfoWithL1Messages, Option<BatchInfo>, bool),
-    /// The L1 watcher has synced to the tip of the L1 chain.
-    L1Synced,
+    /// An event was received from the L1 watcher.
+    L1NotificationEvent(L1Notification),
 }

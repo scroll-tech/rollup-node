@@ -307,9 +307,9 @@ where
         // retrieve the execution payload
         let execution_payload = get_payload(
             client.clone(),
-            fc_updated
-                .payload_id
-                .ok_or(EngineDriverError::MissingPayloadId(payload_attributes_with_batch_info))?,
+            fc_updated.payload_id.ok_or(EngineDriverError::L1ConsolidationMissingPayloadId(
+                payload_attributes_with_batch_info,
+            ))?,
         )
         .await?;
         // issue the execution payload to the EL
@@ -344,7 +344,8 @@ where
     tracing::trace!(target: "scroll::engine::future", ?payload_attributes, "building new payload");
 
     // start a payload building job on top of the current unsafe head.
-    let fc_updated = forkchoice_updated(client.clone(), fcs, Some(payload_attributes)).await?;
+    let fc_updated =
+        forkchoice_updated(client.clone(), fcs, Some(payload_attributes.clone())).await?;
 
     // wait for the payload building to take place.
     tokio::time::sleep(block_building_duration).await;
@@ -352,7 +353,9 @@ where
     // retrieve the execution payload
     let payload = get_payload(
         client.clone(),
-        fc_updated.payload_id.expect("payload attributes has been set"),
+        fc_updated
+            .payload_id
+            .ok_or(EngineDriverError::PayloadBuildingMissingPayloadId(payload_attributes))?,
     )
     .await?;
     let block = try_into_block(ExecutionData { payload, sidecar: Default::default() }, chain_spec)?;

@@ -2,9 +2,9 @@ use metrics::Histogram;
 use metrics_derive::Metrics;
 use strum::EnumIter;
 
-/// An enum representing the items the indexer can handle.
+/// An enum representing the items the chain orchestrator can handle.
 #[derive(Debug, PartialEq, Eq, Hash, EnumIter)]
-pub enum IndexerItem {
+pub enum ChainOrchestratorItem {
     /// Handle a block received from the network.
     NewBlock,
     /// L2 block.
@@ -21,8 +21,8 @@ pub enum IndexerItem {
     BatchFinalization,
 }
 
-impl IndexerItem {
-    /// Returns the str representation of the [`IndexerItem`].
+impl ChainOrchestratorItem {
+    /// Returns the str representation of the [`ChainOrchestratorItem`].
     pub const fn as_str(&self) -> &'static str {
         match self {
             Self::NewBlock => "new_block",
@@ -39,7 +39,7 @@ impl IndexerItem {
 /// The metrics for the [`super::ChainOrchestrator`].
 #[derive(Metrics, Clone)]
 #[metrics(scope = "indexer")]
-pub struct IndexerMetrics {
-    /// The duration of the task for the indexer.
+pub struct ChainOrchestratorMetrics {
+    /// The duration of the task for the chain orchestrator.
     pub task_duration: Histogram,
 }

@@ -230,8 +230,13 @@ where
     }
 
     /// Handles an indexer event.
-    fn handle_indexer_event(&mut self, event: ChainOrchestratorEvent) {
-        trace!(target: "scroll::node::manager", ?event, "Received indexer event");
+    fn handle_chain_orchestrator_event(&mut self, event: ChainOrchestratorEvent) {
+        trace!(target: "scroll::node::manager", ?event, "Received chain orchestrator event");
+
+        if let Some(event_sender) = self.event_sender.as_ref() {
+            event_sender.notify(RollupManagerEvent::ChainOrchestratorEvent(event.clone()));
+        }
+
         match event {
             ChainOrchestratorEvent::BatchCommitIndexed {
                 batch_info,
@@ -289,33 +294,13 @@ where
                     event_sender.notify(RollupManagerEvent::Reorg(l1_block_number));
                 }
             }
-
-            ChainOrchestratorEvent::L1MessageCommitted(index) => {
-                if let Some(event_sender) = self.event_sender.as_ref() {
-                    event_sender.notify(RollupManagerEvent::L1MessageIndexed(index));
-                }
-            }
-            ChainOrchestratorEvent::OldForkReceived { ref headers, ref peer_id, signature: _ } => {
-                trace!(target: "scroll::node::manager", ?headers, ?peer_id, "Received old fork from peer");
-                if let Some(event_sender) = self.event_sender.as_ref() {
-                    event_sender.notify(RollupManagerEvent::ChainOrchestratorEvent(event));
-                }
-            }
             ChainOrchestratorEvent::ChainExtended(chain_import) => {
                 trace!(target: "scroll::node::manager", head = ?chain_import.chain.last().unwrap().header.clone(), peer_id = ?chain_import.peer_id.clone(),  "Received chain extension from peer");
-                if let Some(event_sender) = self.event_sender.as_ref() {
-                    event_sender
-                        .notify(RollupManagerEvent::ChainExtensionTriggered(chain_import.clone()));
-                }
-
                 // Issue the new chain to the engine driver for processing.
                 self.engine.handle_chain_import(chain_import)
             }
             ChainOrchestratorEvent::ChainReorged(chain_import) => {
                 trace!(target: "scroll::node::manager", head = ?chain_import.chain.last().unwrap().header, ?chain_import.peer_id, "Received chain reorg from peer");
-                // if let Some(event_sender) = self.event_sender.as_ref() {
-                //     event_sender.notify(RollupManagerEvent::ChainOrchestratorEvent(event));
-                // }
 
                 // Issue the new chain to the engine driver for processing.
                 self.engine.handle_chain_import(chain_import)
@@ -323,28 +308,12 @@ where
             ChainOrchestratorEvent::OptimisticSync(block) => {
                 let block_info: BlockInfo = (&block).into();
                 trace!(target: "scroll::node::manager", ?block_info, "Received optimistic sync from peer");
-                if let Some(event_sender) = self.event_sender.as_ref() {
-                    event_sender.notify(RollupManagerEvent::OptimisticSyncTriggered(block));
-                }
 
                 // Issue the new block info to the engine driver for processing.
                 self.engine.handle_optimistic_sync(block_info)
             }
-            ChainOrchestratorEvent::L2ChainCommitted(block_infos, batch_into, consolidated) => {
-                trace!(target: "scroll::node::manager", ?block_infos, ?batch_into, ?consolidated, "Received L2 chain committed event");
-                if let Some(event_sender) = self.event_sender.as_ref() {
-                    event_sender.notify(RollupManagerEvent::L2ChainCommitted(
-                        block_infos,
-                        batch_into,
-                        consolidated,
-                    ));
-                }
-            }
             event => {
                 trace!(target: "scroll::node::manager", ?event, "Received chain orchestrator event");
-                if let Some(event_sender) = self.event_sender.as_ref() {
-                    event_sender.notify(RollupManagerEvent::ChainOrchestratorEvent(event));
-                }
             }
         }
     }
@@ -402,6 +371,10 @@ where
 
     /// Handles an [`L1Notification`] from the L1 watcher.
     fn handle_l1_notification(&mut self, notification: L1Notification) {
+        if let Some(event_sender) = self.event_sender.as_ref() {
+            event_sender.notify(RollupManagerEvent::L1NotificationEvent(notification.clone()));
+        }
+
         match notification {
             L1Notification::Consensus(ref update) => self.consensus.update_config(update),
             L1Notification::NewBlock(new_block) => {
@@ -410,9 +383,6 @@ where
                 }
             }
             L1Notification::Synced => {
-                if let Some(event_sender) = self.event_sender.as_ref() {
-                    event_sender.notify(RollupManagerEvent::L1Synced);
-                }
                 self.chain.handle_l1_notification(L1Notification::Synced);
             }
             _ => self.chain.handle_l1_notification(notification),
@@ -483,6 +453,10 @@ where
                 RollupManagerCommand::Status(tx) => {
                     tx.send(this.status()).expect("Failed to send status to handle");
                 }
+                RollupManagerCommand::UpdateFcsHead(head) => {
+                    trace!(target: "scroll::node::manager", ?head, "Updating FCS head block info");
+                    this.engine.set_head_block_info(head);
+                }
             }
         }
 
@@ -514,7 +488,7 @@ where
         // Drain all Indexer events.
         while let Poll::Ready(Some(result)) = this.chain.poll_next_unpin(cx) {
             match result {
-                Ok(event) => this.handle_indexer_event(event),
+                Ok(event) => this.handle_chain_orchestrator_event(event),
                 Err(err) => {
                     match &err {
                         ChainOrchestratorError::L1MessageMismatch { expected, actual } => {
@@ -544,7 +518,7 @@ where
                     error!(
                         target: "scroll::node::manager",
                         ?err,
-                        "Error occurred at indexer level"
+                        "Error occurred in the chain orchestrator"
                     );
                 }
             }

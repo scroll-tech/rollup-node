@@ -16,6 +16,7 @@ use rollup_node::{
     BeaconProviderArgs, ChainOrchestratorArgs, DatabaseArgs, EngineDriverArgs, L1ProviderArgs,
     NetworkArgs as ScrollNetworkArgs, ScrollRollupNodeConfig, SequencerArgs,
 };
+use rollup_node_chain_orchestrator::ChainOrchestratorEvent;
 use rollup_node_manager::{RollupManagerCommand, RollupManagerEvent, RollupManagerHandle};
 use rollup_node_primitives::BatchCommitData;
 use rollup_node_providers::BlobSource;
@@ -76,19 +77,43 @@ async fn can_bridge_l1_messages() -> eyre::Result<()> {
             block_timestamp: 1000,
         }))
         .await?;
-    if let Some(RollupManagerEvent::L1MessageIndexed(index)) = rnm_events.next().await {
-        assert_eq!(index, 0);
-    } else {
-        panic!("Incorrect index for L1 message");
-    };
+
+    wait_n_events(
+        &mut rnm_events,
+        |e| {
+            if let RollupManagerEvent::ChainOrchestratorEvent(
+                rollup_node_chain_orchestrator::ChainOrchestratorEvent::L1MessageCommitted(index),
+            ) = e
+            {
+                assert_eq!(index, 0);
+                true
+            } else {
+                false
+            }
+        },
+        1,
+    )
+    .await;
 
     rnm_handle.build_block().await;
-    if let Some(RollupManagerEvent::BlockSequenced(block)) = rnm_events.next().await {
-        assert_eq!(block.body.transactions.len(), 1);
-        assert_eq!(block.body.transactions[0].as_l1_message().unwrap().inner(), &l1_message,);
-    } else {
-        panic!("Failed to receive block from rollup node");
-    }
+
+    wait_n_events(
+        &mut rnm_events,
+        |e| {
+            if let RollupManagerEvent::BlockSequenced(block) = e {
+                assert_eq!(block.body.transactions.len(), 1);
+                assert_eq!(
+                    block.body.transactions[0].as_l1_message().unwrap().inner(),
+                    &l1_message
+                );
+                true
+            } else {
+                false
+            }
+        },
+        1,
+    )
+    .await;
 
     Ok(())
 }
@@ -141,33 +166,64 @@ async fn can_sequence_and_gossip_blocks() {
     sequencer_rnm_handle.build_block().await;
 
     // wait for the sequencer to build a block
-    if let Some(RollupManagerEvent::BlockSequenced(block)) = sequencer_events.next().await {
-        assert_eq!(block.body.transactions.len(), 1);
-    } else {
-        panic!("Failed to receive block from rollup node");
-    }
+    wait_n_events(
+        &mut sequencer_events,
+        |e| {
+            if let RollupManagerEvent::BlockSequenced(block) = e {
+                assert_eq!(block.body.transactions.len(), 1);
+                true
+            } else {
+                false
+            }
+        },
+        1,
+    )
+    .await;
 
     // assert that the follower node has received the block from the peer
-    if let Some(RollupManagerEvent::NewBlockReceived(block_with_peer)) =
-        follower_events.next().await
-    {
-        assert_eq!(block_with_peer.block.body.transactions.len(), 1);
-    } else {
-        panic!("Failed to receive block from rollup node");
-    }
+    wait_n_events(
+        &mut follower_events,
+        |e| {
+            if let RollupManagerEvent::NewBlockReceived(block_with_peer) = e {
+                assert_eq!(block_with_peer.block.body.transactions.len(), 1);
+                true
+            } else {
+                false
+            }
+        },
+        1,
+    )
+    .await;
 
     // assert that a chain extension is triggered on the follower node
-    if let Some(RollupManagerEvent::ChainExtensionTriggered(_)) = follower_events.next().await {
-    } else {
-        panic!("Failed to receive chain extension event from rollup node");
-    }
+    wait_n_events(
+        &mut follower_events,
+        |e| {
+            matches!(
+                e,
+                RollupManagerEvent::ChainOrchestratorEvent(
+                    rollup_node_chain_orchestrator::ChainOrchestratorEvent::ChainExtended(_)
+                )
+            )
+        },
+        1,
+    )
+    .await;
 
     // assert that the block was successfully imported by the follower node
-    if let Some(RollupManagerEvent::BlockImported(block)) = follower_events.next().await {
-        assert_eq!(block.body.transactions.len(), 1);
-    } else {
-        panic!("Failed to receive block from rollup node");
-    }
+    wait_n_events(
+        &mut follower_events,
+        |e| {
+            if let RollupManagerEvent::BlockImported(block) = e {
+                assert_eq!(block.body.transactions.len(), 1);
+                true
+            } else {
+                false
+            }
+        },
+        1,
+    )
+    .await;
 }
 
 #[allow(clippy::large_stack_frames)]
@@ -250,26 +306,49 @@ async fn can_forward_tx_to_sequencer() {
     let _ = follower_events.next().await;
 
     // assert that the follower node has received the block from the peer
-    if let Some(RollupManagerEvent::NewBlockReceived(block_with_peer)) =
-        follower_events.next().await
-    {
-        assert_eq!(block_with_peer.block.body.transactions.len(), 1);
-    } else {
-        panic!("Failed to receive block from rollup node");
-    }
+    wait_n_events(
+        &mut follower_events,
+        |e| {
+            if let RollupManagerEvent::NewBlockReceived(block_with_peer) = e {
+                assert_eq!(block_with_peer.block.body.transactions.len(), 1);
+                true
+            } else {
+                false
+            }
+        },
+        1,
+    )
+    .await;
 
     // assert that a chain extension is triggered on the follower node
-    if let Some(RollupManagerEvent::ChainExtensionTriggered(_)) = follower_events.next().await {
-    } else {
-        panic!("Failed to receive chain extension event from rollup node");
-    }
+    wait_n_events(
+        &mut follower_events,
+        |e| {
+            matches!(
+                e,
+                RollupManagerEvent::ChainOrchestratorEvent(
+                    rollup_node_chain_orchestrator::ChainOrchestratorEvent::ChainExtended(_)
+                )
+            )
+        },
+        1,
+    )
+    .await;
 
     // assert that the block was successfully imported by the follower node
-    if let Some(RollupManagerEvent::BlockImported(block)) = follower_events.next().await {
-        assert_eq!(block.body.transactions.len(), 1);
-    } else {
-        panic!("Failed to receive block from rollup node");
-    }
+    wait_n_events(
+        &mut follower_events,
+        |e| {
+            if let RollupManagerEvent::BlockImported(block) = e {
+                assert_eq!(block.body.transactions.len(), 1);
+                true
+            } else {
+                false
+            }
+        },
+        1,
+    )
+    .await;
 }
 
 #[allow(clippy::large_stack_frames)]
@@ -823,7 +902,10 @@ async fn can_handle_reorgs_while_sequencing() -> eyre::Result<()> {
         .send(Arc::new(L1Notification::L1Message { message, block_number: 10, block_timestamp: 0 }))
         .await?;
     loop {
-        if let Some(RollupManagerEvent::L1MessageIndexed(index)) = rnm_events.next().await {
+        if let Some(RollupManagerEvent::ChainOrchestratorEvent(
+            ChainOrchestratorEvent::L1MessageCommitted(index),
+        )) = rnm_events.next().await
+        {
             assert_eq!(index, 0);
             break
         }

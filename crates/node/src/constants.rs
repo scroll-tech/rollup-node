@@ -21,3 +21,6 @@ pub(crate) const DEFAULT_MAX_L1_MESSAGES_PER_BLOCK: u64 = 4;
 
 /// The gap in blocks between the P2P and EN which triggers sync.
 pub(crate) const BLOCK_GAP_TRIGGER: u64 = 100_000;
+
+/// The number of block headers to keep in the in-memory chain buffer in the chain orchestrator.
+pub(crate) const CHAIN_BUFFER_SIZE: usize = 2000;

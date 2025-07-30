@@ -224,8 +224,11 @@ where
                     }
                     Err(err) => {
                         tracing::error!(target: "scroll::engine", ?err, "failed to consolidate block derived from L1");
-                        if let EngineDriverError::MissingPayloadId(attributes) = err {
+                        if let EngineDriverError::L1ConsolidationMissingPayloadId(attributes) = err
+                        {
+                            tracing::info!(target: "scroll::engine", "retrying L1 consolidation job for missing payload id");
                             self.l1_payload_attributes.push_front(attributes);
+                            self.waker.wake();
                         }
                     }
                 }
@@ -248,8 +251,9 @@ where
                     }
                     Err(err) => {
                         tracing::error!(target: "scroll::engine", ?err, "failed to build new payload");
-                        if let EngineDriverError::MissingPayloadId(attributes) = err {
-                            self.l1_payload_attributes.push_front(attributes);
+                        if let EngineDriverError::PayloadBuildingMissingPayloadId(attributes) = err
+                        {
+                            self.sequencer_payload_attributes = Some(attributes);
                         }
                     }
                 }
@@ -338,6 +342,13 @@ where
                     }
                     Err(err) => {
                         tracing::error!(target: "scroll::engine", ?err, "failed to build new payload");
+
+                        if let EngineDriverError::PayloadBuildingMissingPayloadId(attributes) = err
+                        {
+                            tracing::info!(target: "scroll::engine", "retrying payload building job for missing payload id");
+                            this.sequencer_payload_attributes = Some(attributes);
+                            this.waker.wake();
+                        }
                     }
                 },
                 // The job is still in progress, reassign the handle and continue.
