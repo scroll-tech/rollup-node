@@ -491,7 +491,7 @@ impl SignerArgs {
 pub struct GasPriceOracleArgs {
     /// Minimum suggested priority fee (tip) in wei, default `100`
     #[arg(long, default_value_t = 100)]
-    #[arg(long = "gpo.default-sugguest-priority-fee", id = "default_sugguest_priority_fee", value_name = "DEFAULT_SUGGUEST_PRIORITY_FEE", default_value_t = constants::DEFAULT_SUGGUEST_PRIORITY_FEE)]
+    #[arg(long = "gpo.default-suggest-priority-fee", id = "default_suggest_priority_fee", value_name = "DEFAULT_SUGGEST_PRIORITY_FEE", default_value_t = constants::DEFAULT_SUGGEST_PRIORITY_FEE)]
     pub default_suggested_priority_fee: u64,
 }
 
