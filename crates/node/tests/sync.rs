@@ -14,8 +14,8 @@ use rollup_node::{
         default_sequencer_test_scroll_rollup_node_config, default_test_scroll_rollup_node_config,
         setup_engine,
     },
-    BeaconProviderArgs, ChainOrchestratorArgs, DatabaseArgs, EngineDriverArgs, L1ProviderArgs,
-    NetworkArgs, ScrollRollupNodeConfig, SequencerArgs,
+    BeaconProviderArgs, ChainOrchestratorArgs, DatabaseArgs, EngineDriverArgs, GasPriceOracleArgs,
+    L1ProviderArgs, NetworkArgs, ScrollRollupNodeConfig, SequencerArgs,
 };
 use rollup_node_chain_orchestrator::ChainOrchestratorEvent;
 use rollup_node_manager::RollupManagerEvent;
@@ -66,6 +66,7 @@ async fn test_should_consolidate_to_block_15k() -> eyre::Result<()> {
             blob_source: BlobSource::Beacon,
         },
         signer_args: Default::default(),
+        gas_price_oracle_args: GasPriceOracleArgs::default(),
     };
 
     let chain_spec = (*SCROLL_SEPOLIA).clone();
@@ -200,6 +201,7 @@ async fn test_should_consolidate_after_optimistic_sync() -> eyre::Result<()> {
             ..Default::default()
         },
         signer_args: Default::default(),
+        gas_price_oracle_args: GasPriceOracleArgs::default(),
     };
 
     // Create the chain spec for scroll dev with Euclid v2 activated and a test genesis.
@@ -446,6 +448,7 @@ async fn test_consolidation() -> eyre::Result<()> {
             ..Default::default()
         },
         signer_args: Default::default(),
+        gas_price_oracle_args: GasPriceOracleArgs::default(),
     };
 
     // Create the chain spec for scroll dev with Euclid v2 activated and a test genesis.
@@ -617,6 +620,7 @@ async fn test_chain_orchestrator_shallow_reorg_with_gap() -> eyre::Result<()> {
             ..Default::default()
         },
         signer_args: Default::default(),
+        gas_price_oracle_args: GasPriceOracleArgs::default(),
     };
 
     // Create the chain spec for scroll dev with Euclid v2 activated and a test genesis.

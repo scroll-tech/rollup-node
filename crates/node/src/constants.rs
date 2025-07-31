@@ -24,3 +24,6 @@ pub(crate) const BLOCK_GAP_TRIGGER: u64 = 100_000;
 
 /// The number of block headers to keep in the in-memory chain buffer in the chain orchestrator.
 pub(crate) const CHAIN_BUFFER_SIZE: usize = 2000;
+
+/// The default suggested priority fee for the gas price oracle.
+pub(crate) const DEFAULT_SUGGEST_PRIORITY_FEE: u64 = 100;

@@ -13,8 +13,8 @@ use rollup_node::{
         default_sequencer_test_scroll_rollup_node_config, default_test_scroll_rollup_node_config,
         generate_tx, setup_engine,
     },
-    BeaconProviderArgs, ChainOrchestratorArgs, DatabaseArgs, EngineDriverArgs, L1ProviderArgs,
-    NetworkArgs as ScrollNetworkArgs, ScrollRollupNodeConfig, SequencerArgs,
+    BeaconProviderArgs, ChainOrchestratorArgs, DatabaseArgs, EngineDriverArgs, GasPriceOracleArgs,
+    L1ProviderArgs, NetworkArgs as ScrollNetworkArgs, ScrollRollupNodeConfig, SequencerArgs,
 };
 use rollup_node_chain_orchestrator::ChainOrchestratorEvent;
 use rollup_node_manager::{RollupManagerCommand, RollupManagerEvent, RollupManagerHandle};
@@ -54,6 +54,7 @@ async fn can_bridge_l1_messages() -> eyre::Result<()> {
             ..Default::default()
         },
         signer_args: Default::default(),
+        gas_price_oracle_args: GasPriceOracleArgs::default(),
     };
     let (mut nodes, _tasks, _wallet) = setup_engine(node_args, 1, chain_spec, false, false).await?;
     let node = nodes.pop().unwrap();
@@ -148,6 +149,7 @@ async fn can_sequence_and_gossip_blocks() {
             ..Default::default()
         },
         signer_args: Default::default(),
+        gas_price_oracle_args: GasPriceOracleArgs::default(),
     };
 
     let (nodes, _tasks, wallet) =
