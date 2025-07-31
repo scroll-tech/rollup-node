@@ -77,6 +77,11 @@ impl<T> BoundedVec<T> {
         &self.data
     }
 
+    /// Returns a mutable reference to the inner `VecDeque<T>` of the bounded vec.
+    pub const fn inner_mut(&mut self) -> &mut VecDeque<T> {
+        &mut self.data
+    }
+
     /// Returns the inner `VecDeque<T>` of the bounded vec.
     pub fn into_inner(self) -> VecDeque<T> {
         self.data

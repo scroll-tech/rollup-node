@@ -432,6 +432,7 @@ impl<
                         self.chain_spec.clone(),
                         block_number,
                         self.l2_client.clone(),
+                        self.chain.clone(),
                     )),
                 ))
             }
@@ -493,18 +494,23 @@ impl<
         chain_spec: Arc<ChainSpec>,
         l1_block_number: u64,
         l2_client: Arc<P>,
+        current_chain: Arc<Mutex<Chain>>,
     ) -> Result<ChainOrchestratorEvent, ChainOrchestratorError> {
         let txn = database.tx().await?;
         let UnwindResult { l1_block_number, queue_index, l2_head_block_number, l2_safe_block_info } =
             txn.unwind(chain_spec.genesis_hash(), l1_block_number).await?;
         txn.commit().await?;
         let l2_head_block_info = if let Some(block_number) = l2_head_block_number {
+            // Fetch the block hash of the new L2 head block.
             let block_hash = l2_client
                 .get_block_by_number(block_number.into())
                 .await?
                 .expect("L2 head block must exist")
                 .header
                 .hash_slow();
+            // Remove all blocks in the in-memory chain that are greater than the new L2 head block.
+            let mut current_chain_headers = current_chain.lock().await;
+            current_chain_headers.inner_mut().retain(|h| h.number <= block_number);
             Some(BlockInfo { number: block_number, hash: block_hash })
         } else {
             None

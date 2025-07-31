@@ -4,6 +4,8 @@ use alloy_primitives::{b256, Address, U256};
 use alloy_provider::{Provider, ProviderBuilder};
 use futures::StreamExt;
 use reqwest::Url;
+use reth_network::{NetworkEvent, NetworkEventListenerProvider};
+use reth_network_api::{events::PeerEvent, test_utils::PeersHandleProvider};
 use reth_provider::{BlockIdReader, BlockReader};
 use reth_scroll_chainspec::{SCROLL_DEV, SCROLL_SEPOLIA};
 use reth_tokio_util::EventStream;
@@ -589,7 +591,7 @@ async fn test_consolidation() -> eyre::Result<()> {
 
 #[allow(clippy::large_stack_frames)]
 #[tokio::test]
-async fn test_chain_orchestrator_shallow_reorg() -> eyre::Result<()> {
+async fn test_chain_orchestrator_shallow_reorg_with_gap() -> eyre::Result<()> {
     reth_tracing::init_test_tracing();
     let node_config = default_test_scroll_rollup_node_config();
     let sequencer_node_config = ScrollRollupNodeConfig {
@@ -628,12 +630,10 @@ async fn test_chain_orchestrator_shallow_reorg() -> eyre::Result<()> {
     let mut sequencer = nodes.pop().unwrap();
     let sequencer_handle = sequencer.inner.rollup_manager_handle.clone();
     let mut sequencer_events = sequencer_handle.get_event_listener().await?;
-    let sequencer_l1_watcher_tx = sequencer.inner.add_ons_handle.l1_watcher_tx.clone().unwrap();
 
     let (mut nodes, _tasks, _) =
         setup_engine(node_config.clone(), 1, chain_spec.clone(), false, false).await.unwrap();
     let mut follower = nodes.pop().unwrap();
-    let follower_l1_watcher_tx = follower.inner.add_ons_handle.l1_watcher_tx.clone().unwrap();
     let mut follower_events = follower.inner.rollup_manager_handle.get_event_listener().await?;
 
     // Connect the nodes together.
@@ -642,15 +642,15 @@ async fn test_chain_orchestrator_shallow_reorg() -> eyre::Result<()> {
     sequencer.network.next_session_established().await;
 
     // initially the sequencer should build 100 empty blocks and the follower should follow them
-    let mut reorg_block = BlockInfo::default();
-    for _ in 0..100 {
+    let mut reorg_block_info = BlockInfo::default();
+    for i in 0..100 {
         sequencer_handle.build_block().await;
         wait_n_events(
             &mut sequencer_events,
             |e| {
                 if let RollupManagerEvent::BlockSequenced(block) = e {
-                    if block.header.number == 97 {
-                        reorg_block = BlockInfo { number: 97, hash: block.header.hash_slow() };
+                    if i == 95 {
+                        reorg_block_info = (&block).into();
                     }
                     true
                 } else {
@@ -675,55 +675,40 @@ async fn test_chain_orchestrator_shallow_reorg() -> eyre::Result<()> {
         .await;
     }
 
-    // Now revert the head of the sequencer node to block 97
-    sequencer_handle.update_fcs_head(reorg_block).await;
+    // disconnect the two nodes
+    let mut sequencer_network_events = sequencer.inner.network.event_listener();
+    let mut follower_network_events = follower.inner.network.event_listener();
+    sequencer.inner.network.peers_handle().remove_peer(follower.network.record().id);
+    while let Some(ev) = sequencer_network_events.next().await {
+        if let NetworkEvent::Peer(PeerEvent::SessionClosed { peer_id: _, reason: _ }) = ev {
+            break
+        }
+    }
+    while let Some(ev) = sequencer_network_events.next().await {
+        if let NetworkEvent::Peer(PeerEvent::PeerRemoved(_)) = ev {
+            break
+        }
+    }
+    while let Some(ev) = follower_network_events.next().await {
+        if let NetworkEvent::Peer(PeerEvent::SessionClosed { peer_id: _, reason: _ }) = ev {
+            break
+        }
+    }
 
-    // Create a L1 message and send it to the sequencer node.
-    let l1_message = TxL1Message {
-        queue_index: 0,
-        gas_limit: 21000,
-        sender: Address::random(),
-        to: Address::random(),
-        value: U256::from(1),
-        input: Default::default(),
-    };
-    let l1_message_notification = Arc::new(L1Notification::L1Message {
-        message: l1_message.clone(),
-        block_number: 0,
-        block_timestamp: 0,
-    });
+    sequencer_handle.update_fcs_head(reorg_block_info).await;
 
-    // send the L1 message to both the sequencer and follower nodes.
-    sequencer_l1_watcher_tx.send(l1_message_notification.clone()).await.unwrap();
-    wait_n_events(
-        &mut sequencer_events,
-        |e| {
-            matches!(
-                e,
-                RollupManagerEvent::ChainOrchestratorEvent(
-                    ChainOrchestratorEvent::L1MessageCommitted(_)
-                )
-            )
-        },
-        1,
-    )
-    .await;
-    follower_l1_watcher_tx.send(l1_message_notification).await.unwrap();
-    wait_n_events(
-        &mut follower_events,
-        |e| {
-            matches!(
-                e,
-                RollupManagerEvent::ChainOrchestratorEvent(
-                    ChainOrchestratorEvent::L1MessageCommitted(_)
-                )
-            )
-        },
-        1,
-    )
-    .await;
+    // Have the sequencer build 2 new blocks, one containing the L1 message.
+    sequencer_handle.build_block().await;
+    wait_n_events(&mut sequencer_events, |e| matches!(e, RollupManagerEvent::BlockSequenced(_)), 1)
+        .await;
+    sequencer_handle.build_block().await;
+    wait_n_events(&mut sequencer_events, |e| matches!(e, RollupManagerEvent::BlockSequenced(_)), 1)
+        .await;
 
-    // Have the sequencer build a block with the L1 message.
+    // connect the two nodes again
+    follower.connect(&mut sequencer).await;
+
+    // now build a final block
     sequencer_handle.build_block().await;
 
     // Wait for the follower node to reorg to the new chain.

@@ -312,9 +312,7 @@ where
                 // Issue the new block info to the engine driver for processing.
                 self.engine.handle_optimistic_sync(block_info)
             }
-            event => {
-                trace!(target: "scroll::node::manager", ?event, "Received chain orchestrator event");
-            }
+            _ => {}
         }
     }
 
