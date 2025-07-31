@@ -1,6 +1,17 @@
 version: '3.8'
 
 services:
+  l1-node:
+    image: ghcr.io/foundry-rs/foundry:latest
+    container_name: l1-node
+    entrypoint: [ "bash", "/launch_l1.bash" ]
+    ports:
+      - "8544:8545"
+    volumes:
+      - ./launch_l1.bash:/launch_l1.bash:ro
+    networks:
+      - test-scroll-network
+
   rollup-node-sequencer:
     build:
       context: ../
@@ -8,7 +19,6 @@ services:
     container_name: rollup-node-sequencer
     entrypoint: ["bash", "/launch_rollup_node_sequencer.bash"]
     environment:
-      - ENV=dev
       - RUST_LOG=info
     ports:
       - "8545:8545"   # JSON-RPC
@@ -17,6 +27,7 @@ services:
     volumes:
       - ./launch_rollup_node_sequencer.bash:/launch_rollup_node_sequencer.bash:ro
       - ./discovery-secret:/l2reth/discovery-secret:ro
+      - ./sequencer-key.txt:/l2reth/sequencer-key.txt:ro
       - l2reth-sequencer:/l2reth
     networks:
       - test-scroll-network
@@ -28,7 +39,6 @@ services:
     container_name: rollup-node-follower
     entrypoint: ["bash", "/launch_rollup_node_follower.bash"]
     environment:
-      - ENV=dev
       - RUST_LOG=info
     ports:
       - "8547:8545"   # JSON-RPC
@@ -42,6 +52,25 @@ services:
     depends_on:
       - rollup-node-sequencer
 
+  l2geth:
+    image: scrolltech/l2geth:scroll-v5.8.74
+    platform: linux/amd64
+    container_name: l2geth
+    entrypoint: ["bash", "/launch_l2geth.bash"]
+    ports:
+      - "8549:8545"    # JSON-RPC
+      - "8550:8546"    # WebSocket
+      - "6062:6060"    # Metrics
+    volumes:
+      - ./l2geth-genesis-dev.json:/l2geth-genesis-dev.json:ro
+      - ./launch_l2geth.bash:/launch_l2geth.bash:ro
+      - l2geth-data:/l2geth
+    networks:
+      - test-scroll-network
+    depends_on:
+      - rollup-node-sequencer
+      - l1-node
+
 networks:
   test-scroll-network:
     driver: bridge
@@ -49,3 +78,4 @@ networks:
 volumes:
   l2reth-sequencer:
   l2reth-follower:
+  l2geth-data:
