@@ -66,6 +66,9 @@ pub struct ScrollRollupNodeConfig {
     /// The signer arguments
     #[command(flatten)]
     pub signer_args: SignerArgs,
+    /// The gas price oracle args
+    #[command(flatten)]
+    pub gas_price_oracle_args: GasPriceOracleArgs,
 }
 
 impl ScrollRollupNodeConfig {
@@ -483,6 +486,15 @@ impl SignerArgs {
     }
 }
 
+/// The arguments for the sequencer.
+#[derive(Debug, Default, Clone, clap::Args)]
+pub struct GasPriceOracleArgs {
+    /// Minimum suggested priority fee (tip) in wei, default `100`
+    #[arg(long, default_value_t = 100)]
+    #[arg(long = "gpo.default-suggest-priority-fee", id = "default_suggest_priority_fee", value_name = "DEFAULT_SUGGEST_PRIORITY_FEE", default_value_t = constants::DEFAULT_SUGGEST_PRIORITY_FEE)]
+    pub default_suggested_priority_fee: u64,
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -499,6 +511,7 @@ mod tests {
             l1_provider_args: L1ProviderArgs::default(),
             beacon_provider_args: BeaconProviderArgs::default(),
             network_args: NetworkArgs::default(),
+            gas_price_oracle_args: GasPriceOracleArgs::default(),
         };
 
         let result = config.validate();
@@ -522,6 +535,7 @@ mod tests {
             l1_provider_args: L1ProviderArgs::default(),
             beacon_provider_args: BeaconProviderArgs::default(),
             network_args: NetworkArgs::default(),
+            gas_price_oracle_args: GasPriceOracleArgs::default(),
         };
 
         let result = config.validate();
@@ -545,6 +559,7 @@ mod tests {
             l1_provider_args: L1ProviderArgs::default(),
             beacon_provider_args: BeaconProviderArgs::default(),
             network_args: NetworkArgs::default(),
+            gas_price_oracle_args: GasPriceOracleArgs::default(),
         };
 
         assert!(config.validate().is_ok());
@@ -561,6 +576,7 @@ mod tests {
             l1_provider_args: L1ProviderArgs::default(),
             beacon_provider_args: BeaconProviderArgs::default(),
             network_args: NetworkArgs::default(),
+            gas_price_oracle_args: GasPriceOracleArgs::default(),
         };
 
         assert!(config.validate().is_ok());
@@ -577,6 +593,7 @@ mod tests {
             l1_provider_args: L1ProviderArgs::default(),
             beacon_provider_args: BeaconProviderArgs::default(),
             network_args: NetworkArgs::default(),
+            gas_price_oracle_args: GasPriceOracleArgs::default(),
         };
 
         assert!(config.validate().is_ok());
@@ -593,6 +610,7 @@ mod tests {
             l1_provider_args: L1ProviderArgs::default(),
             beacon_provider_args: BeaconProviderArgs::default(),
             network_args: NetworkArgs::default(),
+            gas_price_oracle_args: GasPriceOracleArgs::default(),
         };
 
         assert!(config.validate().is_ok());
