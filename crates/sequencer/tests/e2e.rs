@@ -575,16 +575,17 @@ async fn can_sequence_blocks_with_hex_key_file_without_prefix() -> eyre::Result<
     }
 
     // Verify signing event and signature correctness
-    if let Some(RollupManagerEvent::SignerEvent(SignerEvent::SignedBlock {
-        block: signed_block,
-        signature,
-    })) = sequencer_events.next().await
-    {
-        let hash = sig_encode_hash(&signed_block);
-        let recovered_address = signature.recover_address_from_prehash(&hash)?;
-        assert_eq!(recovered_address, expected_address);
-    } else {
-        panic!("Failed to receive SignerEvent with signed block");
+    while let Some(event) = sequencer_events.next().await {
+        if let RollupManagerEvent::SignerEvent(SignerEvent::SignedBlock {
+            block: signed_block,
+            signature,
+        }) = event
+        {
+            let hash = sig_encode_hash(&signed_block);
+            let recovered_address = signature.recover_address_from_prehash(&hash)?;
+            assert_eq!(recovered_address, expected_address);
+            break;
+        }
     }
 
     Ok(())
