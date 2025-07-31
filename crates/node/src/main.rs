@@ -23,6 +23,9 @@ fn main() {
             let handle = builder
                 .node(ScrollRollupNode::new(args))
                 .launch_with_fn(|builder| {
+                    // Log ScrollChainConfig during node launch as requested in the issue
+                    let chain = &builder.config().chain;
+                    info!(target: "reth::cli", "ScrollChainConfig: {:?}", chain);
                     // We must use `always_process_payload_attributes_on_canonical_head` in order to
                     // be able to build payloads with the forkchoice state API
                     // on top of heads part of the canonical state. Not
