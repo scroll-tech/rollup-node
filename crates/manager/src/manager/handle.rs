@@ -1,18 +1,18 @@
+use super::{RollupManagerCommand, RollupManagerEvent};
 use reth_network_api::FullNetwork;
 use reth_scroll_node::ScrollNetworkPrimitives;
-use super::{RollupManagerCommand, RollupManagerEvent};
 use reth_tokio_util::EventStream;
-use tokio::sync::{mpsc, oneshot};
 use scroll_network::ScrollNetworkHandle;
+use tokio::sync::{mpsc, oneshot};
 
 /// The handle used to send commands to the rollup manager.
 #[derive(Debug, Clone)]
-pub struct RollupManagerHandle<N:FullNetwork<Primitives = ScrollNetworkPrimitives>> {
+pub struct RollupManagerHandle<N: FullNetwork<Primitives = ScrollNetworkPrimitives>> {
     /// The channel used to send commands to the rollup manager.
     to_manager_tx: mpsc::Sender<RollupManagerCommand<N>>,
 }
 
-impl <N:FullNetwork<Primitives = ScrollNetworkPrimitives>> RollupManagerHandle<N> {
+impl<N: FullNetwork<Primitives = ScrollNetworkPrimitives>> RollupManagerHandle<N> {
     /// Create a new rollup manager handle.
     pub const fn new(to_manager_tx: mpsc::Sender<RollupManagerCommand<N>>) -> Self {
         Self { to_manager_tx }
@@ -28,7 +28,10 @@ impl <N:FullNetwork<Primitives = ScrollNetworkPrimitives>> RollupManagerHandle<N
         self.send_command(RollupManagerCommand::BuildBlock).await;
     }
 
-    pub async fn get_network_handle(&self) -> Result<ScrollNetworkHandle<N>, oneshot::error::RecvError> {
+    /// Sends a command to the rollup manager to get the network handle.
+    pub async fn get_network_handle(
+        &self,
+    ) -> Result<ScrollNetworkHandle<N>, oneshot::error::RecvError> {
         let (tx, rx) = oneshot::channel();
         self.send_command(RollupManagerCommand::NetworkHandle(tx)).await;
         rx.await
