@@ -4,6 +4,7 @@ use alloy_eips::BlockNumberOrTag;
 use alloy_primitives::{address, b256, Address, Bytes, Signature, B256, U256};
 use futures::StreamExt;
 use reth_network::{NetworkConfigBuilder, PeersInfo};
+use reth_network_api::block::EthWireProvider;
 use reth_rpc_api::EthApiServer;
 use reth_scroll_chainspec::SCROLL_DEV;
 use reth_scroll_node::ScrollNetworkPrimitives;
@@ -882,6 +883,37 @@ async fn can_handle_reorgs_while_sequencing() -> eyre::Result<()> {
             assert_eq!(block.number, l2_reorged_height);
             break
         }
+    }
+
+    Ok(())
+}
+
+#[tokio::test]
+async fn can_gossip_over_eth_wire() -> eyre::Result<()> {
+    reth_tracing::init_test_tracing();
+
+    // Create the chain spec for scroll dev with Feynman activated and a test genesis.
+    let chain_spec = (*SCROLL_DEV).clone();
+
+    // Setup the rollup node manager.
+    let (mut nodes, _tasks, _) = setup_engine(
+        default_sequencer_test_scroll_rollup_node_config(),
+        2,
+        chain_spec.clone(),
+        false,
+        false,
+    )
+    .await
+    .unwrap();
+    let _sequencer = nodes.pop().unwrap();
+    let follower = nodes.pop().unwrap();
+
+    let mut eth_wire_blocks = follower.inner.network.eth_wire_block_listener().await?;
+
+    if let Some(block) = eth_wire_blocks.next().await {
+        println!("Received block from eth-wire network: {block:?}");
+    } else {
+        panic!("Failed to receive block from eth-wire network");
     }
 
     Ok(())
