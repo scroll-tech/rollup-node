@@ -1,4 +1,5 @@
 use alloy_primitives::{b256, B256};
+use reth_scroll_chainspec::{SCROLL_MAINNET_GENESIS_HASH, SCROLL_SEPOLIA_GENESIS_HASH};
 
 pub enum DataSource {
     Url(String),
@@ -8,6 +9,7 @@ pub enum DataSource {
 pub trait MigrationInfo {
     fn data_source() -> Option<DataSource>;
     fn data_hash() -> Option<B256>;
+    fn genesis_hash() -> B256;
 }
 
 impl MigrationInfo for () {
@@ -17,6 +19,11 @@ impl MigrationInfo for () {
 
     fn data_hash() -> Option<B256> {
         None
+    }
+
+    fn genesis_hash() -> B256 {
+        // Todo: Update
+        b256!("0xc77ee681dac901672fee660088df30ef11789ec89837123cdc89690ef1fef766")
     }
 }
 
@@ -33,6 +40,10 @@ impl MigrationInfo for ScrollMainnetMigrationInfo {
     fn data_hash() -> Option<B256> {
         Some(b256!("fa2746026ec9590e37e495cb20046e20a38fd0e7099abd2012640dddf6c88b25"))
     }
+
+    fn genesis_hash() -> B256 {
+        SCROLL_MAINNET_GENESIS_HASH
+    }
 }
 
 pub struct ScrollMainnetTestMigrationInfo;
@@ -44,6 +55,10 @@ impl MigrationInfo for ScrollMainnetTestMigrationInfo {
 
     fn data_hash() -> Option<B256> {
         None
+    }
+
+    fn genesis_hash() -> B256 {
+        SCROLL_MAINNET_GENESIS_HASH
     }
 }
 
@@ -59,5 +74,9 @@ impl MigrationInfo for ScrollSepoliaMigrationInfo {
 
     fn data_hash() -> Option<B256> {
         Some(b256!("a02354c12ca0f918bf4768255af9ed13c137db7e56252348f304b17bb4088924"))
+    }
+
+    fn genesis_hash() -> B256 {
+        SCROLL_SEPOLIA_GENESIS_HASH
     }
 }

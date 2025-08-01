@@ -64,11 +64,12 @@ lint: fmt lint-toml clippy udeps codespell zepter
 
 .PHONY: test
 test:
-	cargo test \
+	cargo nextest run \
 	--workspace \
 	--locked \
 	--all-features \
-	--no-fail-fast
+	--no-fail-fast \
+	-E 'not test(docker)'
 
 # Used to update the mainnet-sample.sql data. Provide the path to the sqlite database that should be read from
 # using `DB_PATH`.

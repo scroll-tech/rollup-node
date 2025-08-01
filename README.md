@@ -24,7 +24,7 @@ This repository is a modular Rust workspace for the Scroll rollup node. It is de
 │   │   └── migration/
 │   ├── derivation-pipeline/
 │   ├── engine/
-│   ├── indexer/
+│   ├── chain-orchestrator/
 │   ├── l1/
 │   ├── network/
 │   ├── node/
@@ -46,7 +46,7 @@ This repository is a modular Rust workspace for the Scroll rollup node. It is de
 - **crates/database/migration/**: Database schema migrations using SeaORM.
 - **crates/derivation-pipeline/**: Stateless pipeline for transforming batches into block-building payloads.
 - **crates/engine/**: Core engine logic for block execution, fork choice, and payload management.
-- **crates/indexer/**: Indexes L1 and L2 data for efficient querying and notification.
+- **crates/chain-orchestrator/**: Responsible for orchestrating the L2 chain based on events from L1 and data gossiped over the P2P network.
 - **crates/l1/**: Primitives and ABI bindings for L1 contracts and messages.
 - **crates/network/**: P2P networking stack for node communication.
 - **crates/node/**: Node manager and orchestration logic.

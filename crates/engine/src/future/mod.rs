@@ -3,20 +3,21 @@ use crate::{api::*, ForkchoiceState};
 
 use alloy_provider::Provider;
 use alloy_rpc_types_engine::{
-    ExecutionData, ExecutionPayloadV1, ForkchoiceState as AlloyForkchoiceState, PayloadStatusEnum,
+    ExecutionData, ExecutionPayloadV1, ForkchoiceState as AlloyForkchoiceState, ForkchoiceUpdated,
+    PayloadStatusEnum,
 };
 use eyre::Result;
 use reth_scroll_engine_primitives::try_into_block;
 use reth_scroll_primitives::ScrollBlock;
 use rollup_node_primitives::{
-    BatchInfo, BlockInfo, L2BlockInfoWithL1Messages, MeteredFuture,
+    BatchInfo, BlockInfo, ChainImport, L2BlockInfoWithL1Messages, MeteredFuture,
     ScrollPayloadAttributesWithBatchInfo,
 };
 use scroll_alloy_hardforks::ScrollHardforks;
 use scroll_alloy_network::Scroll;
 use scroll_alloy_provider::ScrollEngineApi;
 use scroll_alloy_rpc_types_engine::ScrollPayloadAttributes;
-use scroll_network::{BlockImportOutcome, NewBlockWithPeer};
+use scroll_network::BlockImportOutcome;
 use std::{
     future::Future,
     pin::Pin,
@@ -30,7 +31,7 @@ mod result;
 pub(crate) use result::EngineDriverFutureResult;
 
 /// A future that represents a block import job.
-type BlockImportFuture = Pin<
+type ChainImportFuture = Pin<
     Box<
         dyn Future<
                 Output = Result<
@@ -40,6 +41,10 @@ type BlockImportFuture = Pin<
             > + Send,
     >,
 >;
+
+/// A future that represents an L1 consolidation job.
+type L1ConsolidationFuture =
+    Pin<Box<dyn Future<Output = Result<ConsolidationOutcome, EngineDriverError>> + Send>>;
 
 /// An enum that represents the different outcomes of an L1 consolidation job.
 #[derive(Debug, Clone)]
@@ -77,10 +82,6 @@ impl ConsolidationOutcome {
     }
 }
 
-/// A future that represents an L1 consolidation job.
-type L1ConsolidationFuture =
-    Pin<Box<dyn Future<Output = Result<ConsolidationOutcome, EngineDriverError>> + Send>>;
-
 /// A future that represents a new payload processing.
 type NewPayloadFuture =
     Pin<Box<dyn Future<Output = Result<ScrollBlock, EngineDriverError>> + Send>>;
@@ -89,25 +90,36 @@ type NewPayloadFuture =
 pub(crate) type BuildNewPayloadFuture =
     MeteredFuture<Pin<Box<dyn Future<Output = Result<ScrollBlock, EngineDriverError>> + Send>>>;
 
+/// A future that represents a new payload building job.
+pub(crate) type OptimisticSyncFuture =
+    Pin<Box<dyn Future<Output = Result<ForkchoiceUpdated, EngineDriverError>> + Send>>;
+
 /// An enum that represents the different types of futures that can be executed on the engine API.
 /// It can be a block import job, an L1 consolidation job, or a new payload processing.
 pub(crate) enum EngineFuture {
-    BlockImport(BlockImportFuture),
+    ChainImport(ChainImportFuture),
     L1Consolidation(L1ConsolidationFuture),
     NewPayload(NewPayloadFuture),
+    OptimisticSync(OptimisticSyncFuture),
 }
 
 impl EngineFuture {
-    /// Creates a new [`EngineFuture::BlockImport`] future from the provided parameters.
-    pub(crate) fn block_import<EC>(
+    pub(crate) fn chain_import<EC>(
         client: Arc<EC>,
-        block_with_peer: NewBlockWithPeer,
+        chain_import: ChainImport,
         fcs: AlloyForkchoiceState,
     ) -> Self
     where
         EC: ScrollEngineApi + Unpin + Send + Sync + 'static,
     {
-        Self::BlockImport(Box::pin(handle_execution_payload(client, block_with_peer, fcs)))
+        Self::ChainImport(Box::pin(handle_chain_import(client, chain_import, fcs)))
+    }
+
+    pub(crate) fn optimistic_sync<EC>(client: Arc<EC>, fcs: AlloyForkchoiceState) -> Self
+    where
+        EC: ScrollEngineApi + Unpin + Send + Sync + 'static,
+    {
+        Self::OptimisticSync(Box::pin(forkchoice_updated(client, fcs, None)))
     }
 
     /// Creates a new [`EngineFuture::L1Consolidation`] future from the provided parameters.
@@ -150,9 +162,10 @@ impl Future for EngineFuture {
     fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<EngineDriverFutureResult> {
         let this = self.get_mut();
         match this {
-            Self::BlockImport(fut) => fut.as_mut().poll(cx).map(Into::into),
+            Self::ChainImport(fut) => fut.as_mut().poll(cx).map(Into::into),
             Self::L1Consolidation(fut) => fut.as_mut().poll(cx).map(Into::into),
             Self::NewPayload(fut) => fut.as_mut().poll(cx).map(Into::into),
+            Self::OptimisticSync(fut) => fut.as_mut().poll(cx).map(Into::into),
         }
     }
 }
@@ -162,42 +175,48 @@ impl Future for EngineFuture {
 ///   - Sets the current fork choice for the EL via `engine_forkchoiceUpdatedV1`.
 #[instrument(skip_all, level = "trace",
         fields(
-            peer_id = %block_with_peer.peer_id,
-            block_hash = %block_with_peer.block.hash_slow(),
+            peer_id = %chain_import.peer_id,
+            block_hash = %chain_import.chain.last().unwrap().hash_slow(),
             fcs = ?fcs
         )
     )]
-async fn handle_execution_payload<EC>(
+async fn handle_chain_import<EC>(
     client: Arc<EC>,
-    block_with_peer: NewBlockWithPeer,
+    chain_import: ChainImport,
     mut fcs: AlloyForkchoiceState,
 ) -> Result<(Option<BlockInfo>, Option<BlockImportOutcome>, PayloadStatusEnum), EngineDriverError>
 where
     EC: ScrollEngineApi + Unpin + Send + Sync + 'static,
 {
-    tracing::trace!(target: "scroll::engine::future", ?fcs, ?block_with_peer, "handling execution payload");
+    tracing::trace!(target: "scroll::engine::future", ?fcs, ?chain_import.peer_id, chain = ?chain_import.chain.last().unwrap().hash_slow(), "handling execution payload");
 
-    // Unpack the block with peer.
-    let NewBlockWithPeer { peer_id, block, signature } = block_with_peer;
+    let ChainImport { chain, peer_id, signature } = chain_import;
 
-    // Extract the block info from the payload.
-    let block_info: BlockInfo = (&block).into();
+    // Extract the block info from the last payload.
+    let head = chain.last().unwrap().clone();
 
-    // Create the execution payload.
-    let payload = ExecutionPayloadV1::from_block_slow(&block);
+    let mut payload_status = None;
+    for block in chain {
+        // Create the execution payload.
+        let payload = ExecutionPayloadV1::from_block_slow(&block);
 
-    // Issue the new payload to the EN.
-    let payload_status = new_payload(client.clone(), payload).await?;
+        // Issue the new payload to the EN.
+        let status = new_payload(client.clone(), payload).await?;
 
-    // Check if the payload is invalid and return early.
-    if let PayloadStatusEnum::Invalid { validation_error } = payload_status.clone() {
-        tracing::error!(target: "scroll::engine", ?validation_error, "execution payload is invalid");
+        // Check if the payload is invalid and return early.
+        if let PayloadStatusEnum::Invalid { ref validation_error } = status {
+            tracing::error!(target: "scroll::engine", ?validation_error, "execution payload is invalid");
 
-        // If the payload is invalid, return early.
-        return Ok((None, Some(BlockImportOutcome::invalid_block(peer_id)), payload_status));
+            // If the payload is invalid, return early.
+            return Ok((None, Some(BlockImportOutcome::invalid_block(peer_id)), status));
+        }
+
+        payload_status = Some(status);
     }
+    let payload_status = payload_status.unwrap();
 
     // Update the fork choice state with the new block hash.
+    let block_info: BlockInfo = (&head).into();
     fcs.head_block_hash = block_info.hash;
 
     // Invoke the FCU with the new state.
@@ -209,7 +228,7 @@ where
             Some(block_info),
             Some(BlockImportOutcome::valid_block(
                 peer_id,
-                block,
+                head,
                 Into::<Vec<u8>>::into(signature).into(),
             )),
             PayloadStatusEnum::Valid,
@@ -288,9 +307,9 @@ where
         // retrieve the execution payload
         let execution_payload = get_payload(
             client.clone(),
-            fc_updated
-                .payload_id
-                .ok_or(EngineDriverError::MissingPayloadId(payload_attributes_with_batch_info))?,
+            fc_updated.payload_id.ok_or(EngineDriverError::L1ConsolidationMissingPayloadId(
+                payload_attributes_with_batch_info,
+            ))?,
         )
         .await?;
         // issue the execution payload to the EL
@@ -325,7 +344,8 @@ where
     tracing::trace!(target: "scroll::engine::future", ?payload_attributes, "building new payload");
 
     // start a payload building job on top of the current unsafe head.
-    let fc_updated = forkchoice_updated(client.clone(), fcs, Some(payload_attributes)).await?;
+    let fc_updated =
+        forkchoice_updated(client.clone(), fcs, Some(payload_attributes.clone())).await?;
 
     // wait for the payload building to take place.
     tokio::time::sleep(block_building_duration).await;
@@ -333,7 +353,9 @@ where
     // retrieve the execution payload
     let payload = get_payload(
         client.clone(),
-        fc_updated.payload_id.expect("payload attributes has been set"),
+        fc_updated
+            .payload_id
+            .ok_or(EngineDriverError::PayloadBuildingMissingPayloadId(payload_attributes))?,
     )
     .await?;
     let block = try_into_block(ExecutionData { payload, sidecar: Default::default() }, chain_spec)?;
