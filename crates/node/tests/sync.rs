@@ -12,8 +12,8 @@ use rollup_node::{
         default_sequencer_test_scroll_rollup_node_config, default_test_scroll_rollup_node_config,
         setup_engine,
     },
-    BeaconProviderArgs, DatabaseArgs, EngineDriverArgs, L1ProviderArgs, NetworkArgs,
-    ScrollRollupNode, ScrollRollupNodeConfig, SequencerArgs,
+    BeaconProviderArgs, DatabaseArgs, EngineDriverArgs, GasPriceOracleArgs, L1ProviderArgs,
+    NetworkArgs, ScrollRollupNode, ScrollRollupNodeConfig, SequencerArgs,
 };
 use rollup_node_manager::{RollupManagerCommand, RollupManagerEvent};
 use rollup_node_providers::BlobSource;
@@ -58,6 +58,7 @@ async fn test_should_consolidate_to_block_15k() -> eyre::Result<()> {
             blob_source: BlobSource::Beacon,
         },
         signer_args: Default::default(),
+        gas_price_oracle_args: GasPriceOracleArgs::default(),
     };
 
     let chain_spec = (*SCROLL_SEPOLIA).clone();

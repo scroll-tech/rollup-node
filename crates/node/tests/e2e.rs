@@ -4,6 +4,7 @@ use alloy_eips::BlockNumberOrTag;
 use alloy_primitives::{address, b256, Address, Bytes, Signature, B256, U256};
 use futures::StreamExt;
 use reth_network::{NetworkConfigBuilder, PeersInfo};
+use reth_network_api::block::EthWireProvider;
 use reth_rpc_api::EthApiServer;
 use reth_scroll_chainspec::SCROLL_DEV;
 use reth_scroll_node::ScrollNetworkPrimitives;
@@ -13,7 +14,7 @@ use rollup_node::{
         default_sequencer_test_scroll_rollup_node_config, default_test_scroll_rollup_node_config,
         generate_tx, setup_engine,
     },
-    BeaconProviderArgs, DatabaseArgs, EngineDriverArgs, L1ProviderArgs,
+    BeaconProviderArgs, DatabaseArgs, EngineDriverArgs, GasPriceOracleArgs, L1ProviderArgs,
     NetworkArgs as ScrollNetworkArgs, ScrollRollupNodeConfig, SequencerArgs,
 };
 use rollup_node_manager::{RollupManagerCommand, RollupManagerEvent, RollupManagerHandle};
@@ -52,6 +53,7 @@ async fn can_bridge_l1_messages() -> eyre::Result<()> {
             ..Default::default()
         },
         signer_args: Default::default(),
+        gas_price_oracle_args: GasPriceOracleArgs::default(),
     };
     let (mut nodes, _tasks, _wallet) = setup_engine(node_args, 1, chain_spec, false, false).await?;
     let node = nodes.pop().unwrap();
@@ -121,6 +123,7 @@ async fn can_sequence_and_gossip_blocks() {
             ..Default::default()
         },
         signer_args: Default::default(),
+        gas_price_oracle_args: GasPriceOracleArgs::default(),
     };
 
     let (nodes, _tasks, wallet) =
@@ -155,11 +158,8 @@ async fn can_sequence_and_gossip_blocks() {
     }
 
     // assert that the block was successfully imported by the follower node
-    if let Some(RollupManagerEvent::BlockImported(block)) = follower_events.next().await {
-        assert_eq!(block.body.transactions.len(), 1);
-    } else {
-        panic!("Failed to receive block from rollup node");
-    }
+    wait_n_events(&mut follower_events, |e| matches!(e, RollupManagerEvent::BlockImported(_)), 1)
+        .await;
 }
 
 #[allow(clippy::large_stack_frames)]
@@ -237,20 +237,34 @@ async fn can_sequence_and_gossip_transactions() {
     .await;
 
     // assert that the follower node has received the block from the peer
-    if let Some(RollupManagerEvent::NewBlockReceived(block_with_peer)) =
-        follower_events.next().await
-    {
-        assert_eq!(block_with_peer.block.body.transactions.len(), 1);
-    } else {
-        panic!("Failed to receive block from rollup node");
-    }
+    wait_n_events(
+        &mut follower_events,
+        |e| {
+            if let RollupManagerEvent::NewBlockReceived(block_with_peer) = e {
+                assert_eq!(block_with_peer.block.body.transactions.len(), 1);
+                true
+            } else {
+                false
+            }
+        },
+        1,
+    )
+    .await;
 
     // assert that the block was successfully imported by the follower node
-    if let Some(RollupManagerEvent::BlockImported(block)) = follower_events.next().await {
-        assert_eq!(block.body.transactions.len(), 1);
-    } else {
-        panic!("Failed to receive block from rollup node");
-    }
+    wait_n_events(
+        &mut follower_events,
+        |e| {
+            if let RollupManagerEvent::BlockImported(block) = e {
+                assert_eq!(block.body.transactions.len(), 1);
+                true
+            } else {
+                false
+            }
+        },
+        1,
+    )
+    .await;
 }
 
 #[allow(clippy::large_stack_frames)]
@@ -330,20 +344,27 @@ async fn can_forward_tx_to_sequencer() {
     .await;
 
     // assert that the follower node has received the block from the peer
-    if let Some(RollupManagerEvent::NewBlockReceived(block_with_peer)) =
-        follower_events.next().await
-    {
-        assert_eq!(block_with_peer.block.body.transactions.len(), 1);
-    } else {
-        panic!("Failed to receive block from rollup node");
-    }
+    wait_n_events(
+        &mut follower_events,
+        |e| matches!(e, RollupManagerEvent::NewBlockReceived(_)),
+        1,
+    )
+    .await;
 
     // assert that the block was successfully imported by the follower node
-    if let Some(RollupManagerEvent::BlockImported(block)) = follower_events.next().await {
-        assert_eq!(block.body.transactions.len(), 1);
-    } else {
-        panic!("Failed to receive block from rollup node");
-    }
+    wait_n_events(
+        &mut follower_events,
+        |e| {
+            if let RollupManagerEvent::BlockImported(block) = e {
+                assert_eq!(block.body.transactions.len(), 1);
+                true
+            } else {
+                false
+            }
+        },
+        1,
+    )
+    .await;
 }
 
 /// We test the bridge from the eth-wire protocol to the scroll-wire protocol.
@@ -758,7 +779,7 @@ async fn can_handle_batch_revert() -> eyre::Result<()> {
     l1_watcher_tx.send(Arc::new(L1Notification::BatchCommit(revert_batch_data))).await?;
 
     // Wait for the third batch to be proceeded.
-    tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
+    tokio::time::sleep(tokio::time::Duration::from_millis(300)).await;
 
     let (tx, rx) = oneshot::channel();
     handle.send_command(RollupManagerCommand::Status(tx)).await;
@@ -880,6 +901,37 @@ async fn can_handle_reorgs_while_sequencing() -> eyre::Result<()> {
             assert_eq!(block.number, l2_reorged_height);
             break
         }
+    }
+
+    Ok(())
+}
+
+#[tokio::test]
+async fn can_gossip_over_eth_wire() -> eyre::Result<()> {
+    reth_tracing::init_test_tracing();
+
+    // Create the chain spec for scroll dev with Feynman activated and a test genesis.
+    let chain_spec = (*SCROLL_DEV).clone();
+
+    // Setup the rollup node manager.
+    let (mut nodes, _tasks, _) = setup_engine(
+        default_sequencer_test_scroll_rollup_node_config(),
+        2,
+        chain_spec.clone(),
+        false,
+        false,
+    )
+    .await
+    .unwrap();
+    let _sequencer = nodes.pop().unwrap();
+    let follower = nodes.pop().unwrap();
+
+    let mut eth_wire_blocks = follower.inner.network.eth_wire_block_listener().await?;
+
+    if let Some(block) = eth_wire_blocks.next().await {
+        println!("Received block from eth-wire network: {block:?}");
+    } else {
+        panic!("Failed to receive block from eth-wire network");
     }
 
     Ok(())

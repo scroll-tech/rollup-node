@@ -17,7 +17,7 @@ reth-network-api.workspace = true
 reth-network-types = { git = "https://github.com/scroll-tech/reth.git", default-features = false }
 reth-network-peers.workspace = true
 reth-primitives-traits.workspace = true
-reth-storage-api = { workspace = true, default-features = false }
+reth-storage-api = { git = "https://github.com/scroll-tech/reth.git", default-features = false }
 
 # scroll
 reth-scroll-chainspec.workspace = true

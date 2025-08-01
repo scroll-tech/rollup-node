@@ -10,8 +10,8 @@ use reth_scroll_chainspec::SCROLL_DEV;
 use reth_scroll_node::test_utils::setup;
 use rollup_node::{
     test_utils::{default_test_scroll_rollup_node_config, setup_engine},
-    BeaconProviderArgs, DatabaseArgs, EngineDriverArgs, L1ProviderArgs, NetworkArgs,
-    ScrollRollupNodeConfig, SequencerArgs, SignerArgs,
+    BeaconProviderArgs, DatabaseArgs, EngineDriverArgs, GasPriceOracleArgs, L1ProviderArgs,
+    NetworkArgs, ScrollRollupNodeConfig, SequencerArgs, SignerArgs,
 };
 use rollup_node_manager::RollupManagerEvent;
 use rollup_node_primitives::{sig_encode_hash, BlockInfo, L1MessageEnvelope};
@@ -454,6 +454,7 @@ async fn can_sequence_blocks_with_private_key_file() -> eyre::Result<()> {
             key_file: Some(temp_file.path().to_path_buf()),
             aws_kms_key_id: None,
         },
+        gas_price_oracle_args: GasPriceOracleArgs::default(),
     };
 
     let (nodes, _tasks, wallet) =
@@ -542,6 +543,7 @@ async fn can_sequence_blocks_with_hex_key_file_without_prefix() -> eyre::Result<
             key_file: Some(temp_file.path().to_path_buf()),
             aws_kms_key_id: None,
         },
+        gas_price_oracle_args: GasPriceOracleArgs::default(),
     };
 
     let (nodes, _tasks, wallet) =

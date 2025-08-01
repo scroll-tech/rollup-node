@@ -1,6 +1,8 @@
 //! The [`ScrollRollupNodeAddOns`] implementation for the Scroll rollup node.
 
 use super::args::ScrollRollupNodeConfig;
+use crate::constants;
+
 use reth_evm::{ConfigureEvm, EvmFactory, EvmFactoryFor};
 use reth_network::NetworkProtocols;
 use reth_network_api::FullNetwork;
@@ -8,7 +10,7 @@ use reth_node_api::{AddOnsContext, NodeAddOns};
 use reth_node_builder::{
     rpc::{
         BasicEngineApiBuilder, EngineValidatorAddOn, EngineValidatorBuilder, EthApiBuilder,
-        RethRpcAddOns, RpcAddOns, RpcHandle,
+        Identity, RethRpcAddOns, RethRpcMiddleware, RpcAddOns,
     },
     FullNodeComponents,
 };
@@ -22,7 +24,7 @@ use reth_scroll_node::{
     ScrollEngineValidator, ScrollEngineValidatorBuilder, ScrollNetworkPrimitives, ScrollStorage,
 };
 use reth_scroll_primitives::ScrollPrimitives;
-use reth_scroll_rpc::{eth::ScrollEthApiBuilder, ScrollEthApi, ScrollEthApiError};
+use reth_scroll_rpc::{eth::ScrollEthApiBuilder, ScrollEthApiError};
 use scroll_alloy_evm::ScrollTransactionIntoTxEnv;
 use scroll_wire::ScrollWireEvent;
 
@@ -36,7 +38,7 @@ use tokio::sync::mpsc::UnboundedReceiver;
 
 /// Add-ons for the Scroll follower node.
 #[derive(Debug)]
-pub struct ScrollRollupNodeAddOns<N>
+pub struct ScrollRollupNodeAddOns<N, RpcMiddleware = Identity>
 where
     N: FullNodeComponents,
     ScrollEthApiBuilder: EthApiBuilder<N>,
@@ -48,6 +50,7 @@ where
         ScrollEthApiBuilder,
         ScrollEngineValidatorBuilder,
         BasicEngineApiBuilder<ScrollEngineValidatorBuilder>,
+        RpcMiddleware,
     >,
 
     /// Rollup manager addon responsible for managing the components of the rollup node.
@@ -65,16 +68,33 @@ where
     ) -> Self {
         let rpc_add_ons = RpcAddOns::new(
             ScrollEthApiBuilder::default()
+                .with_min_suggested_priority_fee(
+                    config.gas_price_oracle_args.default_suggested_priority_fee,
+                )
+                .with_payload_size_limit(constants::DEFAULT_PAYLOAD_SIZE_LIMIT)
                 .with_sequencer(config.network_args.sequencer_url.clone()),
             Default::default(),
             Default::default(),
-            Default::default(),
+            Identity::new(),
         );
         let rollup_manager_addon = RollupManagerAddOn::new(config, scroll_wire_event);
         Self { rpc_add_ons, rollup_manager_addon }
     }
 }
-impl<N> NodeAddOns<N> for ScrollRollupNodeAddOns<N>
+
+impl<N, RpcMiddleware> ScrollRollupNodeAddOns<N, RpcMiddleware>
+where
+    N: FullNodeComponents,
+    ScrollEthApiBuilder: EthApiBuilder<N>,
+{
+    /// Sets the provided middleware for the rollup node addons.
+    pub fn with_middleware<T>(self, middleware: T) -> ScrollRollupNodeAddOns<N, T> {
+        let rpc_add_ons = self.rpc_add_ons.with_rpc_middleware(middleware);
+        ScrollRollupNodeAddOns { rpc_add_ons, rollup_manager_addon: self.rollup_manager_addon }
+    }
+}
+
+impl<N, RpcMiddleware> NodeAddOns<N> for ScrollRollupNodeAddOns<N, RpcMiddleware>
 where
     N: FullNodeComponents<
         Types: NodeTypes<
@@ -88,16 +108,13 @@ where
     >,
     ScrollEthApiError: FromEvmError<N::Evm>,
     EvmFactoryFor<N::Evm>: EvmFactory<Tx = ScrollTransactionIntoTxEnv<TxEnv>>,
+    RpcMiddleware: RethRpcMiddleware,
 {
-    type Handle = ScrollAddOnsHandle<N, ScrollEthApi<N>>;
+    type Handle = ScrollAddOnsHandle<N, <ScrollEthApiBuilder as EthApiBuilder<N>>::EthApi>;
 
-    async fn launch_add_ons(
-        self,
-        ctx: reth_node_api::AddOnsContext<'_, N>,
-    ) -> eyre::Result<Self::Handle> {
+    async fn launch_add_ons(self, ctx: AddOnsContext<'_, N>) -> eyre::Result<Self::Handle> {
         let Self { rpc_add_ons, rollup_manager_addon: rollup_node_manager_addon } = self;
-        let rpc_handle: RpcHandle<N, ScrollEthApi<N>> =
-            rpc_add_ons.launch_add_ons_with(ctx.clone(), |_| Ok(())).await?;
+        let rpc_handle = rpc_add_ons.launch_add_ons_with(ctx.clone(), |_| Ok(())).await?;
         let (rollup_manager_handle, l1_watcher_tx) =
             rollup_node_manager_addon.launch(ctx.clone(), rpc_handle.clone()).await?;
         Ok(ScrollAddOnsHandle {
@@ -109,7 +126,7 @@ where
     }
 }
 
-impl<N> RethRpcAddOns<N> for ScrollRollupNodeAddOns<N>
+impl<N, RpcMiddleware> RethRpcAddOns<N> for ScrollRollupNodeAddOns<N, RpcMiddleware>
 where
     N: FullNodeComponents<
         Types: NodeTypes<
@@ -123,8 +140,9 @@ where
     >,
     ScrollEthApiError: FromEvmError<N::Evm>,
     EvmFactoryFor<N::Evm>: EvmFactory<Tx = ScrollTransactionIntoTxEnv<TxEnv>>,
+    RpcMiddleware: RethRpcMiddleware,
 {
-    type EthApi = ScrollEthApi<N>;
+    type EthApi = <ScrollEthApiBuilder as EthApiBuilder<N>>::EthApi;
 
     fn hooks_mut(&mut self) -> &mut reth_node_builder::rpc::RpcHooks<N, Self::EthApi> {
         self.rpc_add_ons.hooks_mut()
