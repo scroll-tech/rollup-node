@@ -17,8 +17,8 @@ fn main() {
         std::env::set_var("RUST_BACKTRACE", "1");
     }
 
-    if let Err(err) = Cli::<ScrollChainSpecParser, ScrollRollupNodeConfig>::parse()
-        .run::<_, _, ScrollRollupNode>(|builder, args| async move {
+    if let Err(err) = Cli::<ScrollChainSpecParser, ScrollRollupNodeConfig>::parse().run(
+        |builder, args| async move {
             info!(target: "reth::cli", "Launching node");
             let handle = builder
                 .node(ScrollRollupNode::new(args))
@@ -45,8 +45,8 @@ fn main() {
                 })
                 .await?;
             handle.node_exit_future.await
-        })
-    {
+        },
+    ) {
         eprintln!("Error: {err:?}");
         std::process::exit(1);
     }
