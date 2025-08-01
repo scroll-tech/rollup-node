@@ -1,11 +1,10 @@
 use super::{RollupManagerEvent, RollupManagerStatus};
 
-use reth_tokio_util::EventStream;
-use tokio::sync::oneshot;
-use scroll_network::ScrollNetworkHandle;
 use reth_network_api::FullNetwork;
 use reth_scroll_node::ScrollNetworkPrimitives;
-
+use reth_tokio_util::EventStream;
+use scroll_network::ScrollNetworkHandle;
+use tokio::sync::oneshot;
 
 /// The commands that can be sent to the rollup manager.
 #[derive(Debug)]
@@ -16,6 +15,6 @@ pub enum RollupManagerCommand<N: FullNetwork<Primitives = ScrollNetworkPrimitive
     EventListener(oneshot::Sender<EventStream<RollupManagerEvent>>),
     /// Report the current status of the manager via the oneshot channel.
     Status(oneshot::Sender<RollupManagerStatus>),
-
+    /// Returns the network handle.
     NetworkHandle(oneshot::Sender<ScrollNetworkHandle<N>>),
 }
