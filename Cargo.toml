@@ -206,5 +206,5 @@ tracing = "0.1.0"
 getrandom = { version = "0.2", features = ["js"] }
 
 [patch.crates-io]
-revm = { git = "https://github.com/scroll-tech/revm", branch = "feat/reth-v78" }
-op-revm = { git = "https://github.com/scroll-tech/revm", branch = "feat/reth-v78" }
+revm = { git = "https://github.com/scroll-tech/revm" }
+op-revm = { git = "https://github.com/scroll-tech/revm" }
