@@ -1,9 +1,10 @@
-//! All L1 related primitives.
+//! A library containing the logic required to interact with L1.
 
-#![cfg_attr(not(feature = "std"), no_std)]
+mod abi;
+mod constants;
+mod event;
+mod watcher;
 
-#[cfg(not(feature = "std"))]
-extern crate alloc as std;
-
-/// L1 contracts Abi.
-pub mod abi;
+pub use constants::*;
+pub use event::L1Event;
+pub use watcher::L1Watcher;

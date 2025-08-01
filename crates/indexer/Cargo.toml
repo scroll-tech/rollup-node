@@ -1,51 +1,15 @@
 [package]
-name = "rollup-node-indexer"
+name = "scroll-indexer"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
 exclude.workspace = true
 
+[dependencies]
+# rollup-node
+scroll-l1.workspace = true
+scroll-primitives.workspace = true
+
 [lints]
 workspace = true
-
-[dependencies]
-# alloy
-alloy-primitives.workspace = true
-
-# rollup-node
-scroll-db.workspace = true
-rollup-node-primitives.workspace = true
-rollup-node-watcher.workspace = true
-
-# scroll
-scroll-alloy-consensus.workspace = true
-scroll-alloy-hardforks.workspace = true
-
-# reth
-reth-chainspec.workspace = true
-
-# misc
-futures.workspace = true
-metrics.workspace = true
-metrics-derive.workspace = true
-strum = "0.27.1"
-thiserror.workspace = true
-tokio.workspace = true
-
-[dev-dependencies]
-alloy-primitives = { workspace = true, features = ["arbitrary"] }
-
-# rollup-node
-scroll-db = { workspace = true, features = ["test-utils"] }
-rollup-node-primitives = { workspace = true, features = ["arbitrary"] }
-
-# scroll
-reth-scroll-chainspec.workspace = true
-reth-scroll-forks.workspace = true
-
-# misc
-arbitrary.workspace = true
-futures.workspace = true
-rand.workspace = true
-tokio.workspace = true

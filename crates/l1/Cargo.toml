@@ -6,22 +6,16 @@ rust-version.workspace = true
 license.workspace = true
 exclude.workspace = true
 
-[lints]
-workspace = true
-
 [dependencies]
 # alloy
+alloy-sol-types = { version = "0.8.20", features = ["json"] }
 alloy-primitives.workspace = true
-alloy-sol-types.workspace = true
 
-# scroll alloy
-scroll-alloy-consensus.workspace = true
+# rollup-node
+scroll-primitives.workspace = true
 
 # misc
-arbitrary = { workspace = true, optional = true, features = ["derive"] }
-derive_more.workspace = true
+futures.workspace = true
 
-[features]
-default = ["std"]
-std = ["alloy-primitives/std", "scroll-alloy-consensus/std", "alloy-sol-types/std", "derive_more/std"]
-test-utils = ["std", "dep:arbitrary", "alloy-primitives/arbitrary"]
+[lints]
+workspace = true

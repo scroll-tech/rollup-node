@@ -1,142 +1,56 @@
 [package]
-name = "rollup-node"
+name = "rollup-node-manager"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
 exclude.workspace = true
 
-[[bin]]
-name = "rollup-node"
-path = "src/main.rs"
+[dependencies]
+# alloy
+alloy-eips.workspace = true
+alloy-rpc-types-engine.workspace = true
+
+# scroll-alloy
+scroll-alloy-network.workspace = true
+scroll-alloy-provider.workspace = true
+
+# reth
+reth-engine-primitives = { git = "https://github.com/scroll-tech/reth.git", branch = "feat/add-deref-blanket-engine-api", default-features = false, features = ["scroll"] }
+reth-network-peers.workspace = true
+reth-rpc-api.workspace = true
+reth-tasks.workspace = true
+reth-tokio-util = { git = "https://github.com/scroll-tech/reth.git", branch = "feat/add-deref-blanket-engine-api", default-features = false }
+
+# reth-scroll
+reth-scroll-engine-primitives.workspace = true
+reth-scroll-primitives.workspace = true
+
+# scroll
+scroll-engine.workspace = true
+scroll-indexer.workspace = true
+scroll-l1.workspace = true
+scroll-network.workspace = true
+scroll-pipeline.workspace = true
+scroll-wire.workspace = true
+
+# misc
+futures.workspace = true
+secp256k1 = { workspace = true, features = ["global-context", "rand-std", "recovery"] }
+tokio-stream.workspace = true
+tokio.workspace = true
+tracing.workspace = true
 
 [lints]
 workspace = true
 
-[dependencies]
-# alloy
-alloy-primitives.workspace = true
-alloy-provider.workspace = true
-alloy-rpc-client.workspace = true
-alloy-signer-local.workspace = true
-alloy-signer-aws = "1.0.9"
-alloy-signer = "1.0.9"
-alloy-transport.workspace = true
-
-scroll-alloy-consensus.workspace = true
-scroll-alloy-evm = { git = "https://github.com/scroll-tech/reth.git" }
-scroll-alloy-hardforks.workspace = true
-scroll-alloy-network.workspace = true
-scroll-alloy-provider.workspace = true
-
-reth-scroll-engine-primitives.workspace = true
-reth-scroll-evm = { git = "https://github.com/scroll-tech/reth.git" }
-reth-scroll-cli = { git = "https://github.com/scroll-tech/reth.git" }
-reth-scroll-primitives.workspace = true
-reth-scroll-chainspec.workspace = true
-reth-scroll-node.workspace = true
-reth-scroll-rpc = { git = "https://github.com/scroll-tech/reth.git" }
-
-reth-chainspec.workspace = true
-reth-cli-util = { git = "https://github.com/scroll-tech/reth.git" }
-reth-eth-wire-types.workspace = true
-reth-evm = { git = "https://github.com/scroll-tech/reth.git" }
-reth-node-builder.workspace = true
-reth-node-api = { git = "https://github.com/scroll-tech/reth.git", default-features = false }
-reth-node-core.workspace = true
-reth-node-types = { git = "https://github.com/scroll-tech/reth.git", default-features = false }
-reth-network.workspace = true
-reth-network-api.workspace = true
-reth-revm = { git = "https://github.com/scroll-tech/reth.git", default-features = false }
-reth-rpc-api = { git = "https://github.com/scroll-tech/reth.git", default-features = false }
-reth-rpc-eth-api = { git = "https://github.com/scroll-tech/reth.git", default-features = false }
-reth-rpc-eth-types = { git = "https://github.com/scroll-tech/reth.git", default-features = false }
-reth-tasks.workspace = true
-reth-transaction-pool = { git = "https://github.com/scroll-tech/reth.git", default-features = false }
-reth-trie-db = { git = "https://github.com/scroll-tech/reth.git", default-features = false }
-
-# rollup node
-rollup-node-manager.workspace = true
-rollup-node-primitives.workspace = true
-rollup-node-providers.workspace = true
-rollup-node-sequencer.workspace = true
-rollup-node-signer.workspace = true
-rollup-node-watcher.workspace = true
-
-# AWS dependencies
-aws-config = "1.8.0"
-aws-sdk-kms = "1.76.0"
-
-# test-utils
-alloy-rpc-types-engine = { workspace = true, optional = true }
-reth-e2e-test-utils = { workspace = true, optional = true }
-reth-engine-local = { git = "https://github.com/scroll-tech/reth.git", default-features = false, optional = true }
-reth-provider = { workspace = true, optional = true }
-reth-rpc-server-types = { workspace = true, optional = true }
-scroll-alloy-rpc-types-engine = { workspace = true, optional = true }
-scroll-derivation-pipeline = { workspace = true, optional = true }
-
-scroll-db.workspace = true
-scroll-engine.workspace = true
-scroll-migration.workspace = true
-scroll-wire.workspace = true
-scroll-network.workspace = true
-
-auto_impl.workspace = true
-clap = { version = "4", features = ["derive", "env"] }
-eyre.workspace = true
-reqwest.workspace = true
-tokio.workspace = true
-tracing.workspace = true
-
-[dev-dependencies]
-alloy-eips.workspace = true
-futures.workspace = true
-reth-e2e-test-utils.workspace = true
-reth-node-core.workspace = true
-reth-provider.workspace = true
-reth-rpc-server-types.workspace = true
-reth-scroll-node = { workspace = true, features = ["test-utils"] }
-reth-tasks.workspace = true
-reth-tracing.workspace = true
-rollup-node = { workspace = true, features = ["test-utils"] }
-scroll-alloy-rpc-types-engine.workspace = true
-serde_json = { version = "1.0.94", default-features = false, features = ["alloc"] }
-
 [features]
-test-utils = [
-    "reth-chainspec/test-utils",
-    "reth-evm/test-utils",
-    "reth-e2e-test-utils",
-    "reth-engine-local",
-    "reth-network/test-utils",
-    "reth-node-builder/test-utils",
-    "reth-provider/test-utils",
-    "reth-revm/test-utils",
-    "reth-scroll-node/test-utils",
-    "reth-transaction-pool/test-utils",
-    "reth-trie-db/test-utils",
-    "rollup-node-providers/test-utils",
-    "rollup-node-watcher/test-utils",
-    "scroll-db/test-utils",
-    "scroll-engine/test-utils",
-    "reth-chainspec/test-utils",
-    "reth-evm/test-utils",
-    "reth-network/test-utils",
-    "reth-node-builder/test-utils",
-    "reth-provider/test-utils",
-    "reth-revm/test-utils",
-    "reth-scroll-node/test-utils",
-    "reth-transaction-pool/test-utils",
-    "reth-trie-db/test-utils",
-    "rollup-node-providers/test-utils",
-    "rollup-node-watcher/test-utils",
-    "scroll-db/test-utils",
-    "scroll-engine/test-utils",
-    "rollup-node/test-utils",
-    "reth-e2e-test-utils",
-    "reth-rpc-server-types",
-    "scroll-alloy-rpc-types-engine",
-    "alloy-rpc-types-engine",
-    "scroll-derivation-pipeline",
+serde = [
+	"alloy-rpc-types-engine/serde",
+	"reth-scroll-primitives/serde",
+	"scroll-engine/serde",
+	"scroll-network/serde",
+	"scroll-wire/serde",
+	"secp256k1/serde",
+	"alloy-eips/serde"
 ]
