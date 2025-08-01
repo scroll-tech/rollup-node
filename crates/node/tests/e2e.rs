@@ -7,8 +7,8 @@ use reth_network::{NetworkConfigBuilder, Peers, PeersInfo};
 use reth_rpc_api::EthApiServer;
 use reth_scroll_chainspec::SCROLL_DEV;
 use reth_scroll_node::ScrollNetworkPrimitives;
-use reth_tokio_util::EventStream;
 use reth_scroll_primitives::ScrollBlock;
+use reth_tokio_util::EventStream;
 use rollup_node::{
     test_utils::{
         default_sequencer_test_scroll_rollup_node_config, default_test_scroll_rollup_node_config,
@@ -17,7 +17,7 @@ use rollup_node::{
     BeaconProviderArgs, DatabaseArgs, EngineDriverArgs, GasPriceOracleArgs, L1ProviderArgs,
     NetworkArgs as ScrollNetworkArgs, ScrollRollupNodeConfig, SequencerArgs,
 };
-use rollup_node_manager::{RollupManagerCommand, RollupManagerEvent, RollupManagerHandle};
+use rollup_node_manager::{RollupManagerCommand, RollupManagerEvent};
 use rollup_node_primitives::BatchCommitData;
 use rollup_node_providers::BlobSource;
 use rollup_node_sequencer::L1MessageInclusionMode;
@@ -25,16 +25,8 @@ use rollup_node_watcher::L1Notification;
 use scroll_alloy_consensus::TxL1Message;
 use scroll_network::{NewBlockWithPeer, SCROLL_MAINNET};
 use scroll_wire::{ScrollWireConfig, ScrollWireProtocolHandler};
-use std::{path::PathBuf, sync::Arc};
+use std::{path::PathBuf, sync::Arc, time::Duration};
 use tokio::sync::{oneshot, Mutex};
-use scroll_wire::ScrollWireConfig;
-use std::{
-    path::PathBuf,
-    sync::Arc,
-    task::{Context, Poll},
-    time::Duration,
-};
-use tokio::sync::Mutex;
 use tokio::time;
 use tracing::trace;
 
@@ -185,6 +177,7 @@ async fn can_penalize_peer_for_invalid_block() {
         network_args: ScrollNetworkArgs {
             enable_eth_scroll_wire_bridge: true,
             enable_scroll_wire: true,
+            sequencer_url: None,
         },
         database_args: DatabaseArgs { path: Some(PathBuf::from("sqlite::memory:")) },
         l1_provider_args: L1ProviderArgs::default(),
@@ -197,11 +190,16 @@ async fn can_penalize_peer_for_invalid_block() {
             payload_building_duration: 1000,
             ..SequencerArgs::default()
         },
-        beacon_provider_args: BeaconProviderArgs::default(),
+        beacon_provider_args: BeaconProviderArgs {
+            blob_source: BlobSource::Mock,
+            ..Default::default()
+        },
         signer_args: Default::default(),
+        gas_price_oracle_args: GasPriceOracleArgs::default(),
     };
 
-    let (nodes, _tasks, _) = setup_engine(rollup_manager_args, 2, chain_spec, false).await.unwrap();
+    let (nodes, _tasks, _) =
+        setup_engine(rollup_manager_args, 2, chain_spec, false, false).await.unwrap();
 
     let node0_rmn_handle = nodes[0].inner.add_ons_handle.rollup_manager_handle.clone();
     let node0_network_handle = node0_rmn_handle.get_network_handle().await.unwrap();
@@ -322,7 +320,7 @@ async fn can_sequence_and_gossip_transactions() {
             if let RollupManagerEvent::BlockSequenced(block) = e {
                 assert_eq!(block.header.number, 2);
                 assert_eq!(block.body.transactions.len(), 1);
-                return true
+                return true;
             }
             false
         },
@@ -415,7 +413,7 @@ async fn can_forward_tx_to_sequencer() {
             if let RollupManagerEvent::BlockSequenced(block) = e {
                 assert_eq!(block.header.number, 2);
                 assert_eq!(block.body.transactions.len(), 1);
-                return true
+                return true;
             }
             false
         },
@@ -820,7 +818,7 @@ async fn can_handle_batch_revert() -> eyre::Result<()> {
             rnm_events.next().await
         {
             if consolidation_outcome.block_info().block_info.number == 4 {
-                break
+                break;
             }
         }
     }
@@ -834,7 +832,7 @@ async fn can_handle_batch_revert() -> eyre::Result<()> {
             rnm_events.next().await
         {
             if consolidation_outcome.block_info().block_info.number == 46 {
-                break
+                break;
             }
         }
     }
@@ -928,7 +926,7 @@ async fn can_handle_reorgs_while_sequencing() -> eyre::Result<()> {
         handle.build_block().await;
         if let Some(RollupManagerEvent::BlockSequenced(_)) = rnm_events.next().await {
             if i == 10 {
-                break
+                break;
             }
             i += 1;
         }
@@ -941,7 +939,7 @@ async fn can_handle_reorgs_while_sequencing() -> eyre::Result<()> {
     loop {
         if let Some(RollupManagerEvent::L1MessageIndexed(index)) = rnm_events.next().await {
             assert_eq!(index, 0);
-            break
+            break;
         }
     }
     l1_watcher_tx.send(Arc::new(L1Notification::NewBlock(10))).await?;
@@ -953,7 +951,7 @@ async fn can_handle_reorgs_while_sequencing() -> eyre::Result<()> {
         if let Some(RollupManagerEvent::BlockSequenced(block)) = rnm_events.next().await {
             if block.body.transactions.iter().any(|tx| tx.is_l1_message()) {
                 l2_reorged_height = block.header.number;
-                break
+                break;
             }
         }
     }
@@ -963,7 +961,7 @@ async fn can_handle_reorgs_while_sequencing() -> eyre::Result<()> {
     loop {
         if let Some(RollupManagerEvent::Reorg(height)) = rnm_events.next().await {
             assert_eq!(height, 9);
-            break
+            break;
         }
     }
 
@@ -972,7 +970,7 @@ async fn can_handle_reorgs_while_sequencing() -> eyre::Result<()> {
     loop {
         if let Some(RollupManagerEvent::BlockSequenced(block)) = rnm_events.next().await {
             assert_eq!(block.number, l2_reorged_height);
-            break
+            break;
         }
     }
 
@@ -996,7 +994,7 @@ async fn wait_n_events(
             n -= 1;
         }
         if n == 0 {
-            break
+            break;
         }
     }
 }
