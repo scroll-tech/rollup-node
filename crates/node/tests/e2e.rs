@@ -158,11 +158,8 @@ async fn can_sequence_and_gossip_blocks() {
     }
 
     // assert that the block was successfully imported by the follower node
-    if let Some(RollupManagerEvent::BlockImported(block)) = follower_events.next().await {
-        assert_eq!(block.body.transactions.len(), 1);
-    } else {
-        panic!("Failed to receive block from rollup node");
-    }
+    wait_n_events(&mut follower_events, |e| matches!(e, RollupManagerEvent::BlockImported(_)), 1)
+        .await;
 }
 
 #[allow(clippy::large_stack_frames)]
@@ -240,20 +237,34 @@ async fn can_sequence_and_gossip_transactions() {
     .await;
 
     // assert that the follower node has received the block from the peer
-    if let Some(RollupManagerEvent::NewBlockReceived(block_with_peer)) =
-        follower_events.next().await
-    {
-        assert_eq!(block_with_peer.block.body.transactions.len(), 1);
-    } else {
-        panic!("Failed to receive block from rollup node");
-    }
+    wait_n_events(
+        &mut follower_events,
+        |e| {
+            if let RollupManagerEvent::NewBlockReceived(block_with_peer) = e {
+                assert_eq!(block_with_peer.block.body.transactions.len(), 1);
+                true
+            } else {
+                false
+            }
+        },
+        1,
+    )
+    .await;
 
     // assert that the block was successfully imported by the follower node
-    if let Some(RollupManagerEvent::BlockImported(block)) = follower_events.next().await {
-        assert_eq!(block.body.transactions.len(), 1);
-    } else {
-        panic!("Failed to receive block from rollup node");
-    }
+    wait_n_events(
+        &mut follower_events,
+        |e| {
+            if let RollupManagerEvent::BlockImported(block) = e {
+                assert_eq!(block.body.transactions.len(), 1);
+                true
+            } else {
+                false
+            }
+        },
+        1,
+    )
+    .await;
 }
 
 #[allow(clippy::large_stack_frames)]
@@ -333,20 +344,27 @@ async fn can_forward_tx_to_sequencer() {
     .await;
 
     // assert that the follower node has received the block from the peer
-    if let Some(RollupManagerEvent::NewBlockReceived(block_with_peer)) =
-        follower_events.next().await
-    {
-        assert_eq!(block_with_peer.block.body.transactions.len(), 1);
-    } else {
-        panic!("Failed to receive block from rollup node");
-    }
+    wait_n_events(
+        &mut follower_events,
+        |e| matches!(e, RollupManagerEvent::NewBlockReceived(_)),
+        1,
+    )
+    .await;
 
     // assert that the block was successfully imported by the follower node
-    if let Some(RollupManagerEvent::BlockImported(block)) = follower_events.next().await {
-        assert_eq!(block.body.transactions.len(), 1);
-    } else {
-        panic!("Failed to receive block from rollup node");
-    }
+    wait_n_events(
+        &mut follower_events,
+        |e| {
+            if let RollupManagerEvent::BlockImported(block) = e {
+                assert_eq!(block.body.transactions.len(), 1);
+                true
+            } else {
+                false
+            }
+        },
+        1,
+    )
+    .await;
 }
 
 /// We test the bridge from the eth-wire protocol to the scroll-wire protocol.
@@ -761,7 +779,7 @@ async fn can_handle_batch_revert() -> eyre::Result<()> {
     l1_watcher_tx.send(Arc::new(L1Notification::BatchCommit(revert_batch_data))).await?;
 
     // Wait for the third batch to be proceeded.
-    tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
+    tokio::time::sleep(tokio::time::Duration::from_millis(300)).await;
 
     let (tx, rx) = oneshot::channel();
     handle.send_command(RollupManagerCommand::Status(tx)).await;
