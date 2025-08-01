@@ -4,8 +4,9 @@ use super::{
     BlockImportOutcome, BlockValidation, NetworkHandleMessage, NetworkManagerEvent,
     NewBlockWithPeer, ScrollNetworkHandle,
 };
-use alloy_primitives::FixedBytes;
+use alloy_primitives::{FixedBytes, U128};
 use futures::{FutureExt, Stream, StreamExt};
+use reth_eth_wire_types::NewBlock as EthWireNewBlock;
 use reth_network::{
     cache::LruCache, NetworkConfig as RethNetworkConfig, NetworkHandle as RethNetworkHandle,
     NetworkManager as RethNetworkManager,
@@ -77,7 +78,7 @@ impl ScrollNetworkManager<RethNetworkHandle<ScrollNetworkPrimitives>> {
     }
 }
 
-impl<N: FullNetwork> ScrollNetworkManager<N> {
+impl<N: FullNetwork<Primitives = ScrollNetworkPrimitives>> ScrollNetworkManager<N> {
     /// Creates a new [`ScrollNetworkManager`] instance from the provided parts.
     ///
     /// This is used when the scroll-wire [`ScrollWireProtocolHandler`] and the inner network
@@ -116,6 +117,14 @@ impl<N: FullNetwork> ScrollNetworkManager<N> {
             .iter()
             .filter_map(|(peer_id, blocks)| (!blocks.contains(&hash)).then_some(*peer_id))
             .collect();
+
+        let eth_wire_new_block = {
+            let td = U128::from_limbs([0, block.block.header.number]);
+            let mut eth_wire_block = block.block.clone();
+            eth_wire_block.header.extra_data = block.signature.clone().into();
+            EthWireNewBlock { block: eth_wire_block, td }
+        };
+        self.inner_network_handle().eth_wire_announce_block(eth_wire_new_block, hash);
 
         // Announce block to the filtered set of peers
         for peer_id in peers {
@@ -184,7 +193,7 @@ impl<N: FullNetwork> ScrollNetworkManager<N> {
     }
 }
 
-impl<N: FullNetwork> Stream for ScrollNetworkManager<N> {
+impl<N: FullNetwork<Primitives = ScrollNetworkPrimitives>> Stream for ScrollNetworkManager<N> {
     type Item = NetworkManagerEvent;
 
     fn poll_next(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
