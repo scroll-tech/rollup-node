@@ -113,7 +113,7 @@ impl ScrollRollupNodeConfig {
             impl L1MessageProvider,
             impl ScrollHardforks + EthChainSpec<Header: BlockHeader> + IsDevChain + Clone + 'static,
         >,
-        RollupManagerHandle,
+        RollupManagerHandle<N>,
         Option<Sender<Arc<L1Notification>>>,
     )> {
         // Instantiate the network manager
