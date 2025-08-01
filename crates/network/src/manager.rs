@@ -159,8 +159,8 @@ impl<N: FullNetwork> ScrollNetworkManager<N> {
     fn on_block_import_result(&mut self, outcome: BlockImportOutcome) {
         let BlockImportOutcome { peer, result } = outcome;
         match result {
-            Ok(BlockValidation::ValidBlock { new_block: msg })
-            | Ok(BlockValidation::ValidHeader { new_block: msg }) => {
+            Ok(BlockValidation::ValidBlock { new_block: msg }) |
+            Ok(BlockValidation::ValidHeader { new_block: msg }) => {
                 trace!(target: "scroll::network::manager", peer_id = ?peer, block = ?msg.block, "Block import successful - announcing block to network");
                 let hash = msg.block.hash_slow();
                 self.scroll_wire
