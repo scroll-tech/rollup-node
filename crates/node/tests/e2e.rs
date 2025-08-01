@@ -26,8 +26,10 @@ use scroll_alloy_consensus::TxL1Message;
 use scroll_network::{NewBlockWithPeer, SCROLL_MAINNET};
 use scroll_wire::{ScrollWireConfig, ScrollWireProtocolHandler};
 use std::{path::PathBuf, sync::Arc, time::Duration};
-use tokio::sync::{oneshot, Mutex};
-use tokio::time;
+use tokio::{
+    sync::{oneshot, Mutex},
+    time,
+};
 use tracing::trace;
 
 #[tokio::test]
@@ -216,7 +218,8 @@ async fn can_penalize_peer_for_invalid_block() {
     // create invalid block
     let block = ScrollBlock::default();
 
-    // send invalid block from node0 to node1. We don't care about the signature here since we use a NoopConsensus in the test.
+    // send invalid block from node0 to node1. We don't care about the signature here since we use a
+    // NoopConsensus in the test.
     node0_network_handle.announce_block(block, Signature::new(U256::from(1), U256::from(1), false));
 
     eventually(
@@ -246,9 +249,7 @@ where
             return;
         }
 
-        if start.elapsed() > timeout {
-            panic!("Timeout while waiting for condition: {}", message);
-        }
+        assert!(start.elapsed() <= timeout, "Timeout while waiting for condition: {message}");
 
         interval.tick().await;
     }

@@ -9,7 +9,10 @@ use {rollup_node_watcher::L1Notification, std::sync::Arc, tokio::sync::mpsc::Sen
 
 /// A handle for scroll addons, which includes handles for the rollup manager and RPC server.
 #[derive(Debug, Clone)]
-pub struct ScrollAddOnsHandle<Node: FullNodeComponents<Network: FullNetwork<Primitives = ScrollNetworkPrimitives>>, EthApi: EthApiTypes> {
+pub struct ScrollAddOnsHandle<
+    Node: FullNodeComponents<Network: FullNetwork<Primitives = ScrollNetworkPrimitives>>,
+    EthApi: EthApiTypes,
+> {
     /// The handle used to send commands to the rollup manager.
     pub rollup_manager_handle: RollupManagerHandle<Node::Network>,
     /// The handle used to send commands to the RPC server.
@@ -19,8 +22,10 @@ pub struct ScrollAddOnsHandle<Node: FullNodeComponents<Network: FullNetwork<Prim
     pub l1_watcher_tx: Option<Sender<Arc<L1Notification>>>,
 }
 
-impl<Node: FullNodeComponents<Network: FullNetwork<Primitives = ScrollNetworkPrimitives>>, EthApi: EthApiTypes> RpcHandleProvider<Node, EthApi>
-    for ScrollAddOnsHandle<Node, EthApi>
+impl<
+        Node: FullNodeComponents<Network: FullNetwork<Primitives = ScrollNetworkPrimitives>>,
+        EthApi: EthApiTypes,
+    > RpcHandleProvider<Node, EthApi> for ScrollAddOnsHandle<Node, EthApi>
 {
     fn rpc_handle(&self) -> &RpcHandle<Node, EthApi> {
         &self.rpc_handle
