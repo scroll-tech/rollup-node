@@ -186,7 +186,7 @@ where
                         self.metrics.block_import_duration.record(duration.as_secs_f64());
 
                         // Return the block import outcome
-                        return block_import_outcome.map(EngineDriverEvent::BlockImportOutcome);
+                        return block_import_outcome.map(EngineDriverEvent::BlockImportOutcome)
                     }
                     Err(err) => {
                         tracing::error!(target: "scroll::engine", ?err, "failed to import block");
@@ -213,7 +213,7 @@ where
                         // record the metric.
                         self.metrics.l1_consolidation_duration.record(duration.as_secs_f64());
 
-                        return Some(EngineDriverEvent::L1BlockConsolidated(consolidation_outcome));
+                        return Some(EngineDriverEvent::L1BlockConsolidated(consolidation_outcome))
                     }
                     Err(err) => {
                         tracing::error!(target: "scroll::engine", ?err, "failed to consolidate block derived from L1")
@@ -234,7 +234,7 @@ where
                         self.metrics.build_new_payload_duration.record(duration.as_secs_f64());
                         self.metrics.gas_per_block.record(block.gas_used as f64);
 
-                        return Some(EngineDriverEvent::NewPayload(block));
+                        return Some(EngineDriverEvent::NewPayload(block))
                     }
                     Err(err) => {
                         tracing::error!(target: "scroll::engine", ?err, "failed to build new payload");

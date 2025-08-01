@@ -321,7 +321,7 @@ async fn can_sequence_and_gossip_transactions() {
             if let RollupManagerEvent::BlockSequenced(block) = e {
                 assert_eq!(block.header.number, 2);
                 assert_eq!(block.body.transactions.len(), 1);
-                return true;
+                return true
             }
             false
         },
@@ -414,7 +414,7 @@ async fn can_forward_tx_to_sequencer() {
             if let RollupManagerEvent::BlockSequenced(block) = e {
                 assert_eq!(block.header.number, 2);
                 assert_eq!(block.body.transactions.len(), 1);
-                return true;
+                return true
             }
             false
         },
@@ -620,7 +620,7 @@ async fn graceful_shutdown_consolidates_most_recent_batch_on_startup() -> eyre::
         };
 
         if block_info.number == 4 {
-            break;
+            break
         };
         i += 1;
     }
@@ -819,7 +819,7 @@ async fn can_handle_batch_revert() -> eyre::Result<()> {
             rnm_events.next().await
         {
             if consolidation_outcome.block_info().block_info.number == 4 {
-                break;
+                break
             }
         }
     }
@@ -833,7 +833,7 @@ async fn can_handle_batch_revert() -> eyre::Result<()> {
             rnm_events.next().await
         {
             if consolidation_outcome.block_info().block_info.number == 46 {
-                break;
+                break
             }
         }
     }
@@ -927,7 +927,7 @@ async fn can_handle_reorgs_while_sequencing() -> eyre::Result<()> {
         handle.build_block().await;
         if let Some(RollupManagerEvent::BlockSequenced(_)) = rnm_events.next().await {
             if i == 10 {
-                break;
+                break
             }
             i += 1;
         }
@@ -940,7 +940,7 @@ async fn can_handle_reorgs_while_sequencing() -> eyre::Result<()> {
     loop {
         if let Some(RollupManagerEvent::L1MessageIndexed(index)) = rnm_events.next().await {
             assert_eq!(index, 0);
-            break;
+            break
         }
     }
     l1_watcher_tx.send(Arc::new(L1Notification::NewBlock(10))).await?;
@@ -952,7 +952,7 @@ async fn can_handle_reorgs_while_sequencing() -> eyre::Result<()> {
         if let Some(RollupManagerEvent::BlockSequenced(block)) = rnm_events.next().await {
             if block.body.transactions.iter().any(|tx| tx.is_l1_message()) {
                 l2_reorged_height = block.header.number;
-                break;
+                break
             }
         }
     }
@@ -962,7 +962,7 @@ async fn can_handle_reorgs_while_sequencing() -> eyre::Result<()> {
     loop {
         if let Some(RollupManagerEvent::Reorg(height)) = rnm_events.next().await {
             assert_eq!(height, 9);
-            break;
+            break
         }
     }
 
@@ -971,7 +971,7 @@ async fn can_handle_reorgs_while_sequencing() -> eyre::Result<()> {
     loop {
         if let Some(RollupManagerEvent::BlockSequenced(block)) = rnm_events.next().await {
             assert_eq!(block.number, l2_reorged_height);
-            break;
+            break
         }
     }
 
@@ -995,7 +995,7 @@ async fn wait_n_events(
             n -= 1;
         }
         if n == 0 {
-            break;
+            break
         }
     }
 }

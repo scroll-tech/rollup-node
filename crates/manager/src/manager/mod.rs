@@ -189,7 +189,7 @@ where
     /// Returns a new event listener for the rollup node manager.
     pub fn event_listener(&mut self) -> EventStream<RollupManagerEvent> {
         if let Some(event_sender) = &self.event_sender {
-            return event_sender.new_listener();
+            return event_sender.new_listener()
         };
 
         let event_sender = EventSender::new(EVENT_CHANNEL_SIZE);
