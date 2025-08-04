@@ -317,8 +317,6 @@ where
                     let _ = signer.sign_block(payload.clone()).inspect_err(|err| error!(target: "scroll::node::manager", ?err, "Failed to send new payload to signer"));
                 }
 
-                println!("new payload sequenced by {:?}", self.signer.as_ref().map(|s| s.address));
-
                 if let Some(event_sender) = self.event_sender.as_ref() {
                     event_sender.notify(RollupManagerEvent::BlockSequenced(payload.clone()));
                 }
