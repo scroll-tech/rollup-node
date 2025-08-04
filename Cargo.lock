@@ -10336,6 +10336,7 @@ dependencies = [
  "reth-node-builder",
  "reth-node-core",
  "reth-node-types",
+ "reth-primitives-traits",
  "reth-provider",
  "reth-revm",
  "reth-rpc-api",
@@ -10524,6 +10525,7 @@ dependencies = [
 name = "rollup-node-signer"
 version = "0.0.1"
 dependencies = [
+ "alloy-primitives",
  "alloy-signer",
  "alloy-signer-local",
  "futures",
