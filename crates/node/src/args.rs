@@ -137,6 +137,10 @@ impl ScrollRollupNodeConfig {
         RollupManagerHandle,
         Option<Sender<Arc<L1Notification>>>,
     )> {
+        tracing::info!(target: "rollup_node::args",
+            "Building rollup node with config:\n{:#?}",
+            self
+        );
         // Instantiate the network manager
         let scroll_network_manager = ScrollNetworkManager::from_parts(network.clone(), events);
 
@@ -223,24 +227,16 @@ impl ScrollRollupNodeConfig {
         );
 
         // Create the consensus.
-        let consensus: Box<dyn Consensus> = match self.consensus_args.algorithm {
-            ConsensusAlgorithm::Noop => Box::new(NoopConsensus::default()),
-            ConsensusAlgorithm::SystemContract => {
-                let authorized_signer = if let Some(address) = self.consensus_args.authorized_signer
-                {
-                    address
-                } else if let Some(provider) = l1_provider.as_ref() {
-                    provider
-                        .authorized_signer(node_config.address_book.system_contract_address)
-                        .await?
-                } else {
-                    return Err(eyre::eyre!(
-                        "System contract consensus requires either an authorized signer or a L1 provider URL"
-                    ));
-                };
-                Box::new(SystemContractConsensus::new(authorized_signer))
-            }
+        let authorized_signer = if let Some(provider) = l1_provider.as_ref() {
+            Some(
+                provider
+                    .authorized_signer(node_config.address_book.system_contract_address)
+                    .await?,
+            )
+        } else {
+            None
         };
+        let consensus = self.consensus_args.consensus(authorized_signer)?;
 
         let (l1_notification_tx, l1_notification_rx): (Option<Sender<Arc<L1Notification>>>, _) =
             if let Some(provider) = l1_provider.filter(|_| !self.test) {
@@ -348,6 +344,31 @@ impl ConsensusArgs {
     /// Create a new [`ConsensusArgs`] with the no-op consensus algorithm.
     pub const fn noop() -> Self {
         Self { algorithm: ConsensusAlgorithm::Noop, authorized_signer: None }
+    }
+
+    /// Creates a consensus instance based on the configured algorithm and authorized signer.
+    ///
+    /// The `authorized_signer` field of `ConsensusArgs` takes precedence over the
+    /// `authorized_signer` parameter passed to this method.
+    pub fn consensus(
+        &self,
+        authorized_signer: Option<Address>,
+    ) -> eyre::Result<Box<dyn Consensus>> {
+        match self.algorithm {
+            ConsensusAlgorithm::Noop => Ok(Box::new(NoopConsensus::default())),
+            ConsensusAlgorithm::SystemContract => {
+                let authorized_signer = if let Some(address) = self.authorized_signer {
+                    address
+                } else if let Some(address) = authorized_signer {
+                    address
+                } else {
+                    return Err(eyre::eyre!(
+                        "System contract consensus requires either an authorized signer or a L1 provider URL"
+                    ));
+                };
+                Ok(Box::new(SystemContractConsensus::new(authorized_signer)))
+            }
+        }
     }
 }
 
