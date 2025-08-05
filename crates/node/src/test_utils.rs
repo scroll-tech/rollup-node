@@ -1,6 +1,6 @@
 //! This crate contains utilities for running end-to-end tests for the scroll reth node.
 
-use crate::GasPriceOracleArgs;
+use crate::{ConsensusArgs, GasPriceOracleArgs};
 
 use super::{
     BeaconProviderArgs, DatabaseArgs, EngineDriverArgs, L1ProviderArgs, ScrollRollupNode,
@@ -152,6 +152,7 @@ pub fn default_test_scroll_rollup_node_config() -> ScrollRollupNodeConfig {
         },
         signer_args: Default::default(),
         gas_price_oracle_args: GasPriceOracleArgs::default(),
+        consensus_args: ConsensusArgs::noop(),
     }
 }
 
@@ -177,5 +178,6 @@ pub fn default_sequencer_test_scroll_rollup_node_config() -> ScrollRollupNodeCon
         },
         signer_args: Default::default(),
         gas_price_oracle_args: GasPriceOracleArgs::default(),
+        consensus_args: ConsensusArgs::noop(),
     }
 }

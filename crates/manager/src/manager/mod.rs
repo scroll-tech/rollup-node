@@ -510,21 +510,22 @@ where
         proceed_if!(
             en_synced,
             // Check if we need to trigger the build of a new payload.
-            match (
-                this.block_building_trigger.as_mut().map(|x| x.poll_tick(cx)),
-                this.engine.is_payload_building_in_progress(),
+            if let (Some(Poll::Ready(_)), Some(sequencer)) = (
+                this.block_building_trigger.as_mut().map(|se| se.poll_tick(cx)),
+                this.sequencer.as_mut()
             ) {
-                (Some(Poll::Ready(_)), false) => {
-                    if let Some(sequencer) = this.sequencer.as_mut() {
-                        sequencer.build_payload_attributes();
-                    }
-                }
-                (Some(Poll::Ready(_)), true) => {
-                    // If the sequencer is already building a payload, we don't need to trigger it
-                    // again.
+                if !this.consensus.should_sequence_block(
+                    this.signer
+                        .as_ref()
+                        .map(|s| &s.address)
+                        .expect("signer must be set if sequencer is present"),
+                ) {
+                    trace!(target: "scroll::node::manager", "Signer is not authorized to sequence block for this slot");
+                } else if this.engine.is_payload_building_in_progress() {
                     warn!(target: "scroll::node::manager", "Payload building is already in progress skipping slot");
+                } else {
+                    sequencer.build_payload_attributes();
                 }
-                _ => {}
             }
         );
 

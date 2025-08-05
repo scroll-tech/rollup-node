@@ -15,6 +15,8 @@ pub trait Consensus: Send + Debug {
         block: &ScrollBlock,
         signature: &Signature,
     ) -> Result<(), ConsensusError>;
+    /// Returns a boolean indicating whether the sequencer should sequence a block.
+    fn should_sequence_block(&self, sequencer: &Address) -> bool;
 }
 
 /// A no-op consensus instance.
@@ -31,6 +33,10 @@ impl Consensus for NoopConsensus {
         _signature: &Signature,
     ) -> Result<(), ConsensusError> {
         Ok(())
+    }
+
+    fn should_sequence_block(&self, _sequencer: &Address) -> bool {
+        true
     }
 }
 
@@ -70,6 +76,10 @@ impl Consensus for SystemContractConsensus {
             }))
         }
         Ok(())
+    }
+
+    fn should_sequence_block(&self, sequencer: &Address) -> bool {
+        sequencer == &self.authorized_signer
     }
 }
 
