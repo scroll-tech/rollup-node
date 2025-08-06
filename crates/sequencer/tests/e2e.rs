@@ -9,6 +9,7 @@ use reth_node_core::primitives::SignedTransaction;
 use reth_scroll_chainspec::SCROLL_DEV;
 use reth_scroll_node::test_utils::setup;
 use rollup_node::{
+    constants::SCROLL_GAS_LIMIT,
     test_utils::{default_test_scroll_rollup_node_config, setup_engine},
     BeaconProviderArgs, ConsensusArgs, DatabaseArgs, EngineDriverArgs, GasPriceOracleArgs,
     L1ProviderArgs, NetworkArgs, ScrollRollupNodeConfig, SequencerArgs, SignerArgs,
@@ -73,8 +74,14 @@ async fn can_build_blocks() {
     let provider = Arc::new(DatabaseL1MessageProvider::new(database.clone(), 0));
 
     // create a sequencer
-    let mut sequencer =
-        Sequencer::new(provider, Default::default(), 4, 1, L1MessageInclusionMode::BlockDepth(0));
+    let mut sequencer = Sequencer::new(
+        provider,
+        Default::default(),
+        SCROLL_GAS_LIMIT,
+        4,
+        1,
+        L1MessageInclusionMode::BlockDepth(0),
+    );
 
     // add a transaction to the pool
     let mut wallet_lock = wallet.lock().await;
@@ -198,6 +205,7 @@ async fn can_build_blocks_with_delayed_l1_messages() {
     let mut sequencer = Sequencer::new(
         provider,
         Default::default(),
+        SCROLL_GAS_LIMIT,
         4,
         0,
         L1MessageInclusionMode::BlockDepth(L1_MESSAGE_DELAY),
@@ -325,6 +333,7 @@ async fn can_build_blocks_with_finalized_l1_messages() {
     let mut sequencer = Sequencer::new(
         provider,
         Default::default(),
+        SCROLL_GAS_LIMIT,
         4,
         5, // current L1 block number
         L1MessageInclusionMode::Finalized,
