@@ -15,7 +15,7 @@ alloy-primitives = { workspace = true, features = ["map-foldhash"] }
 alloy-rlp = { version = "0.3.10", default-features = false }
 
 # reth
-reth-eth-wire = { git = "https://github.com/scroll-tech/reth.git", default-features = false }
+reth-eth-wire = { git = "https://github.com/scroll-tech/reth.git", branch = "feat-forward-sequencer-no-blocking", default-features = false }
 reth-network.workspace = true
 reth-network-api.workspace = true
 
