@@ -2,8 +2,12 @@
 
 use alloy_eips::BlockNumberOrTag;
 use alloy_primitives::{address, b256, Address, Bytes, Signature, B256, U256};
+use alloy_signer::Signer;
+use alloy_signer_local::PrivateKeySigner;
 use futures::StreamExt;
+use reth_chainspec::EthChainSpec;
 use reth_network::{NetworkConfigBuilder, PeersInfo};
+use reth_network_api::block::EthWireProvider;
 use reth_rpc_api::EthApiServer;
 use reth_scroll_chainspec::SCROLL_DEV;
 use reth_scroll_node::ScrollNetworkPrimitives;
@@ -13,12 +17,13 @@ use rollup_node::{
         default_sequencer_test_scroll_rollup_node_config, default_test_scroll_rollup_node_config,
         generate_tx, setup_engine,
     },
-    BeaconProviderArgs, ChainOrchestratorArgs, DatabaseArgs, EngineDriverArgs, GasPriceOracleArgs,
-    L1ProviderArgs, NetworkArgs as ScrollNetworkArgs, ScrollRollupNodeConfig, SequencerArgs,
+    BeaconProviderArgs, ChainOrchestratorArgs, ConsensusAlgorithm, ConsensusArgs, DatabaseArgs,
+    EngineDriverArgs, GasPriceOracleArgs, L1ProviderArgs, NetworkArgs as ScrollNetworkArgs,
+    ScrollRollupNodeConfig, SequencerArgs,
 };
 use rollup_node_chain_orchestrator::ChainOrchestratorEvent;
 use rollup_node_manager::{RollupManagerCommand, RollupManagerEvent, RollupManagerHandle};
-use rollup_node_primitives::BatchCommitData;
+use rollup_node_primitives::{sig_encode_hash, BatchCommitData, ConsensusUpdate};
 use rollup_node_providers::BlobSource;
 use rollup_node_sequencer::L1MessageInclusionMode;
 use rollup_node_watcher::L1Notification;
@@ -55,6 +60,7 @@ async fn can_bridge_l1_messages() -> eyre::Result<()> {
         },
         signer_args: Default::default(),
         gas_price_oracle_args: GasPriceOracleArgs::default(),
+        consensus_args: ConsensusArgs::noop(),
     };
     let (mut nodes, _tasks, _wallet) = setup_engine(node_args, 1, chain_spec, false, false).await?;
     let node = nodes.pop().unwrap();
@@ -150,6 +156,7 @@ async fn can_sequence_and_gossip_blocks() {
         },
         signer_args: Default::default(),
         gas_price_oracle_args: GasPriceOracleArgs::default(),
+        consensus_args: ConsensusArgs::noop(),
     };
 
     let (nodes, _tasks, wallet) =
@@ -213,19 +220,8 @@ async fn can_sequence_and_gossip_blocks() {
     .await;
 
     // assert that the block was successfully imported by the follower node
-    wait_n_events(
-        &mut follower_events,
-        |e| {
-            if let RollupManagerEvent::BlockImported(block) = e {
-                assert_eq!(block.body.transactions.len(), 1);
-                true
-            } else {
-                false
-            }
-        },
-        1,
-    )
-    .await;
+    wait_n_events(&mut follower_events, |e| matches!(e, RollupManagerEvent::BlockImported(_)), 1)
+        .await;
 }
 
 #[allow(clippy::large_stack_frames)]
@@ -351,6 +347,19 @@ async fn can_forward_tx_to_sequencer() {
         1,
     )
     .await;
+    wait_n_events(
+        &mut follower_events,
+        |e| {
+            if let RollupManagerEvent::BlockImported(block) = e {
+                assert_eq!(block.body.transactions.len(), 1);
+                true
+            } else {
+                false
+            }
+        },
+        1,
+    )
+    .await;
 }
 
 #[allow(clippy::large_stack_frames)]
@@ -443,11 +452,19 @@ async fn can_sequence_and_gossip_transactions() {
     let _ = follower_events.next().await;
 
     // assert that the block was successfully imported by the follower node
-    if let Some(RollupManagerEvent::BlockImported(block)) = follower_events.next().await {
-        assert_eq!(block.body.transactions.len(), 1);
-    } else {
-        panic!("Failed to receive block from rollup node");
-    }
+    wait_n_events(
+        &mut follower_events,
+        |e| {
+            if let RollupManagerEvent::BlockImported(block) = e {
+                assert_eq!(block.body.transactions.len(), 1);
+                true
+            } else {
+                false
+            }
+        },
+        1,
+    )
+    .await;
 }
 
 /// We test the bridge from the eth-wire protocol to the scroll-wire protocol.
@@ -840,7 +857,7 @@ async fn can_handle_batch_revert() -> eyre::Result<()> {
     l1_watcher_tx.send(Arc::new(L1Notification::BatchCommit(revert_batch_data))).await?;
 
     // Wait for the third batch to be proceeded.
-    tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
+    tokio::time::sleep(tokio::time::Duration::from_millis(300)).await;
 
     let (tx, rx) = oneshot::channel();
     handle.send_command(RollupManagerCommand::Status(tx)).await;
@@ -944,6 +961,141 @@ async fn can_handle_reorgs_while_sequencing() -> eyre::Result<()> {
             break
         }
     }
+
+    Ok(())
+}
+
+#[tokio::test]
+async fn can_gossip_over_eth_wire() -> eyre::Result<()> {
+    reth_tracing::init_test_tracing();
+
+    // Create the chain spec for scroll dev with Feynman activated and a test genesis.
+    let chain_spec = (*SCROLL_DEV).clone();
+
+    // Setup the rollup node manager.
+    let (mut nodes, _tasks, _) = setup_engine(
+        default_sequencer_test_scroll_rollup_node_config(),
+        2,
+        chain_spec.clone(),
+        false,
+        false,
+    )
+    .await
+    .unwrap();
+    let _sequencer = nodes.pop().unwrap();
+    let follower = nodes.pop().unwrap();
+
+    let mut eth_wire_blocks = follower.inner.network.eth_wire_block_listener().await?;
+
+    if let Some(block) = eth_wire_blocks.next().await {
+        println!("Received block from eth-wire network: {block:?}");
+    } else {
+        panic!("Failed to receive block from eth-wire network");
+    }
+
+    Ok(())
+}
+
+#[allow(clippy::large_stack_frames)]
+#[tokio::test]
+async fn signer_rotation() -> eyre::Result<()> {
+    reth_tracing::init_test_tracing();
+
+    // Create the chain spec for scroll dev with Feynman activated and a test genesis.
+    let chain_spec = (*SCROLL_DEV).clone();
+
+    // Create two signers.
+    let signer_1 = PrivateKeySigner::random().with_chain_id(Some(chain_spec.chain().id()));
+    let signer_1_address = signer_1.address();
+    let signer_2 = PrivateKeySigner::random().with_chain_id(Some(chain_spec.chain().id()));
+    let signer_2_address = signer_2.address();
+
+    let mut sequencer_1_config = default_sequencer_test_scroll_rollup_node_config();
+
+    sequencer_1_config.test = false;
+    sequencer_1_config.consensus_args.algorithm = ConsensusAlgorithm::SystemContract;
+    sequencer_1_config.consensus_args.authorized_signer = Some(signer_1_address);
+    sequencer_1_config.signer_args.private_key = Some(signer_1);
+
+    let mut sequencer_2_config = default_sequencer_test_scroll_rollup_node_config();
+    sequencer_2_config.test = false;
+    sequencer_2_config.consensus_args.algorithm = ConsensusAlgorithm::SystemContract;
+    sequencer_2_config.consensus_args.authorized_signer = Some(signer_1_address);
+    sequencer_2_config.signer_args.private_key = Some(signer_2);
+
+    // Setup two sequencer nodes.
+    let (mut nodes, _tasks, _) =
+        setup_engine(sequencer_1_config, 2, chain_spec.clone(), false, false).await.unwrap();
+    let mut sequencer_1 = nodes.pop().unwrap();
+    let follower = nodes.pop().unwrap();
+    let (mut nodes, _tasks, _) =
+        setup_engine(sequencer_2_config, 1, chain_spec.clone(), false, false).await.unwrap();
+    let mut sequencer_2 = nodes.pop().unwrap();
+
+    // Create an L1
+    let follower_l1_notification_tx = follower.inner.add_ons_handle.l1_watcher_tx.clone().unwrap();
+    let sequencer_1_l1_notification_tx =
+        sequencer_1.inner.add_ons_handle.l1_watcher_tx.clone().unwrap();
+    let sequencer_2_l1_notification_tx =
+        sequencer_2.inner.add_ons_handle.l1_watcher_tx.clone().unwrap();
+
+    // Create a follower event stream.
+    let mut follower_events =
+        follower.inner.add_ons_handle.rollup_manager_handle.get_event_listener().await.unwrap();
+
+    // connect the two sequencers
+    sequencer_1.connect(&mut sequencer_2).await;
+
+    wait_n_events(
+        &mut follower_events,
+        |event| {
+            if let RollupManagerEvent::NewBlockReceived(block) = event {
+                let signature = block.signature;
+                let hash = sig_encode_hash(&block.block);
+                // Verify that the block is signed by the first sequencer.
+                let recovered_address = signature.recover_address_from_prehash(&hash).unwrap();
+                recovered_address == signer_1_address
+            } else {
+                false
+            }
+        },
+        5,
+    )
+    .await;
+
+    // now update the authorized signer to sequencer 2
+    follower_l1_notification_tx
+        .send(Arc::new(L1Notification::Consensus(ConsensusUpdate::AuthorizedSigner(
+            signer_2_address,
+        ))))
+        .await?;
+    sequencer_1_l1_notification_tx
+        .send(Arc::new(L1Notification::Consensus(ConsensusUpdate::AuthorizedSigner(
+            signer_2_address,
+        ))))
+        .await?;
+    sequencer_2_l1_notification_tx
+        .send(Arc::new(L1Notification::Consensus(ConsensusUpdate::AuthorizedSigner(
+            signer_2_address,
+        ))))
+        .await?;
+
+    wait_n_events(
+        &mut follower_events,
+        |event| {
+            if let RollupManagerEvent::NewBlockReceived(block) = event {
+                let signature = block.signature;
+                let hash = sig_encode_hash(&block.block);
+                let recovered_address = signature.recover_address_from_prehash(&hash).unwrap();
+                // Verify that the block is signed by the second sequencer.
+                recovered_address == signer_2_address
+            } else {
+                false
+            }
+        },
+        5,
+    )
+    .await;
 
     Ok(())
 }

@@ -4,9 +4,10 @@ use super::{
     BlockImportOutcome, BlockValidation, NetworkHandleMessage, NetworkManagerEvent,
     NewBlockWithPeer, ScrollNetworkHandle,
 };
-use alloy_primitives::{FixedBytes, Signature};
+use alloy_primitives::{FixedBytes, Signature, U128};
 use futures::{FutureExt, Stream, StreamExt};
 use reth_chainspec::EthChainSpec;
+use reth_eth_wire_types::NewBlock as EthWireNewBlock;
 use reth_network::{
     cache::LruCache, NetworkConfig as RethNetworkConfig, NetworkHandle as RethNetworkHandle,
     NetworkManager as RethNetworkManager,
@@ -99,8 +100,10 @@ impl<CS: ScrollHardforks + EthChainSpec + Send + Sync + 'static>
     }
 }
 
-impl<N: FullNetwork, CS: ScrollHardforks + EthChainSpec + Send + Sync + 'static>
-    ScrollNetworkManager<N, CS>
+impl<
+        N: FullNetwork<Primitives = ScrollNetworkPrimitives>,
+        CS: ScrollHardforks + EthChainSpec + Send + Sync + 'static,
+    > ScrollNetworkManager<N, CS>
 {
     /// Creates a new [`ScrollNetworkManager`] instance from the provided parts.
     ///
@@ -151,6 +154,14 @@ impl<N: FullNetwork, CS: ScrollHardforks + EthChainSpec + Send + Sync + 'static>
             .iter()
             .filter_map(|(peer_id, blocks)| (!blocks.contains(&hash)).then_some(*peer_id))
             .collect();
+
+        let eth_wire_new_block = {
+            let td = U128::from_limbs([0, block.block.header.number]);
+            let mut eth_wire_block = block.block.clone();
+            eth_wire_block.header.extra_data = block.signature.clone().into();
+            EthWireNewBlock { block: eth_wire_block, td }
+        };
+        self.inner_network_handle().eth_wire_announce_block(eth_wire_new_block, hash);
 
         // Announce block to the filtered set of peers
         for peer_id in peers {
@@ -253,8 +264,10 @@ impl<N: FullNetwork, CS: ScrollHardforks + EthChainSpec + Send + Sync + 'static>
     }
 }
 
-impl<N: FullNetwork, CS: ScrollHardforks + EthChainSpec + Send + Sync + 'static> Stream
-    for ScrollNetworkManager<N, CS>
+impl<
+        N: FullNetwork<Primitives = ScrollNetworkPrimitives>,
+        CS: ScrollHardforks + EthChainSpec + Send + Sync + 'static,
+    > Stream for ScrollNetworkManager<N, CS>
 {
     type Item = NetworkManagerEvent;
 
