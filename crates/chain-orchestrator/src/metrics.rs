@@ -7,6 +7,8 @@ use strum::EnumIter;
 pub enum ChainOrchestratorItem {
     /// Handle a block received from the network.
     NewBlock,
+    /// Insert consolidated L2 blocks into the database.
+    InsertConsolidatedL2Blocks,
     /// L2 block.
     InsertL2Block,
     /// L1 reorg.
@@ -26,6 +28,7 @@ impl ChainOrchestratorItem {
     pub const fn as_str(&self) -> &'static str {
         match self {
             Self::NewBlock => "new_block",
+            Self::InsertConsolidatedL2Blocks => "insert_consolidated_l2_blocks",
             Self::InsertL2Block => "l2_block",
             Self::L1Reorg => "l1_reorg",
             Self::L1Finalization => "l1_finalization",

@@ -325,7 +325,7 @@ where
                     if let Some(event_sender) = self.event_sender.as_ref() {
                         event_sender.notify(RollupManagerEvent::BlockImported(block.clone()));
                     }
-                    self.chain.consolidate_l2_blocks(vec![(&block).into()], None);
+                    self.chain.consolidate_validated_l2_blocks(vec![(&block).into()]);
                 }
                 self.network.handle().block_import_outcome(outcome);
             }
@@ -335,15 +335,13 @@ where
                 }
 
                 if let Some(event_sender) = self.event_sender.as_ref() {
-                    event_sender.notify(RollupManagerEvent::BlockSequenced(payload.clone()));
+                    event_sender.notify(RollupManagerEvent::BlockSequenced(payload));
                 }
-
-                self.chain.consolidate_l2_blocks(vec![(&payload).into()], None);
             }
             EngineDriverEvent::L1BlockConsolidated(consolidation_outcome) => {
-                self.chain.consolidate_l2_blocks(
+                self.chain.persist_l1_consolidated_blocks(
                     vec![consolidation_outcome.block_info().clone()],
-                    Some(*consolidation_outcome.batch_info()),
+                    *consolidation_outcome.batch_info(),
                 );
 
                 if let Some(event_sender) = self.event_sender.as_ref() {
@@ -357,9 +355,8 @@ where
                     if let Some(event_sender) = self.event_sender.as_ref() {
                         event_sender.notify(RollupManagerEvent::BlockImported(block));
                     }
-                    self.chain.consolidate_l2_blocks(
+                    self.chain.consolidate_validated_l2_blocks(
                         outcome.chain.iter().map(|b| b.into()).collect(),
-                        None,
                     );
                 }
                 self.network.handle().block_import_outcome(outcome.outcome);

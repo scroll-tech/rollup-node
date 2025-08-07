@@ -202,7 +202,7 @@ impl<
         let database = ctx.database.clone();
         let block_info: L2BlockInfoWithL1Messages = (&block_with_peer.block).into();
         Self::do_handle_block_from_peer(ctx, block_with_peer).await?;
-        database.insert_block(block_info.clone(), None).await?;
+        database.update_l1_messages_with_l2_block(block_info.clone()).await?;
         Ok(ChainOrchestratorEvent::L2ChainCommitted(block_info, None, true))
     }
 
@@ -412,12 +412,32 @@ impl<
         }
     }
 
-    /// Inserts an L2 block in the database.
-    pub fn consolidate_l2_blocks(
+    /// Persist L1 consolidate blocks in the database.
+    pub fn persist_l1_consolidated_blocks(
         &mut self,
-        block_info: Vec<L2BlockInfoWithL1Messages>,
-        batch_info: Option<BatchInfo>,
+        block_infos: Vec<L2BlockInfoWithL1Messages>,
+        batch_info: BatchInfo,
     ) {
+        let database = self.database.clone();
+        let fut = self.handle_metered(
+            ChainOrchestratorItem::InsertConsolidatedL2Blocks,
+            Box::pin(async move {
+                let head = block_infos.last().expect("block info must not be empty").clone();
+                for block in block_infos {
+                    database.insert_block(block, batch_info).await?;
+                }
+                Result::<_, ChainOrchestratorError>::Ok(Some(
+                    ChainOrchestratorEvent::L2ConsolidatedBlockCommitted(head),
+                ))
+            }),
+        );
+
+        self.pending_futures.push_back(ChainOrchestratorFuture::HandleDerivedBlock(fut));
+        self.waker.wake();
+    }
+
+    /// Consolidates L2 blocks from the network which have been validated
+    pub fn consolidate_validated_l2_blocks(&mut self, block_info: Vec<L2BlockInfoWithL1Messages>) {
         let database = self.database.clone();
         let l1_synced = self.l1_synced;
         let optimistic_mode = self.optimistic_mode.clone();
@@ -449,10 +469,10 @@ impl<
 
                 // Insert the blocks into the database.
                 let head = block_info.last().expect("block info must not be empty").clone();
-                database.insert_blocks(block_info, batch_info).await?;
+                database.update_l1_messages_from_l2_blocks(block_info).await?;
 
                 Result::<_, ChainOrchestratorError>::Ok(Some(
-                    ChainOrchestratorEvent::L2ChainCommitted(head, batch_info, consolidated),
+                    ChainOrchestratorEvent::L2ChainCommitted(head, None, consolidated),
                 ))
             }),
         );
@@ -962,7 +982,7 @@ mod test {
     /// A headers+bodies client that stores the headers and bodies in memory, with an artificial
     /// soft bodies response limit that is set to 20 by default.
     ///
-    /// This full block client can be [Cloned] and shared between multiple tasks.
+    /// This full block client can be [Clone]d and shared between multiple tasks.
     #[derive(Clone, Debug)]
     struct TestScrollFullBlockClient {
         headers: Arc<Mutex<HashMap<B256, Header>>>,
@@ -1230,13 +1250,13 @@ mod test {
             l1_messages: vec![],
         };
 
-        chain_orchestrator.consolidate_l2_blocks(vec![block_1.clone()], Some(batch_1_info));
+        chain_orchestrator.persist_l1_consolidated_blocks(vec![block_1.clone()], batch_1_info);
         chain_orchestrator.next().await.unwrap().unwrap();
 
-        chain_orchestrator.consolidate_l2_blocks(vec![block_2.clone()], Some(batch_2_info));
+        chain_orchestrator.persist_l1_consolidated_blocks(vec![block_2.clone()], batch_2_info);
         chain_orchestrator.next().await.unwrap().unwrap();
 
-        chain_orchestrator.consolidate_l2_blocks(vec![block_3.clone()], Some(batch_2_info));
+        chain_orchestrator.persist_l1_consolidated_blocks(vec![block_3.clone()], batch_2_info);
         chain_orchestrator.next().await.unwrap().unwrap();
 
         // Now simulate a batch revert by submitting a new batch with index 101
@@ -1513,7 +1533,12 @@ mod test {
             } else {
                 None
             };
-            indexer.consolidate_l2_blocks(vec![l2_block.clone()], batch_info);
+            if let Some(batch_info) = batch_info {
+                indexer.persist_l1_consolidated_blocks(vec![l2_block.clone()], batch_info);
+            } else {
+                indexer.consolidate_validated_l2_blocks(vec![l2_block.clone()]);
+            }
+
             indexer.next().await.unwrap().unwrap();
             blocks.push(l2_block);
         }

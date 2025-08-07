@@ -289,7 +289,7 @@ pub trait DatabaseOperations: DatabaseConnectionProvider {
     async fn get_l2_block_and_batch_info_by_hash(
         &self,
         block_hash: B256,
-    ) -> Result<Option<(BlockInfo, Option<BatchInfo>)>, DatabaseError> {
+    ) -> Result<Option<(BlockInfo, BatchInfo)>, DatabaseError> {
         tracing::trace!(target: "scroll::db", ?block_hash, "Fetching L2 block and batch info by hash from database.");
         Ok(models::l2_block::Entity::find()
             .filter(models::l2_block::Column::BlockHash.eq(block_hash.to_vec()))
@@ -297,7 +297,7 @@ pub trait DatabaseOperations: DatabaseConnectionProvider {
             .await
             .map(|x| {
                 x.map(|x| {
-                    let (block_info, batch_info): (BlockInfo, Option<BatchInfo>) = x.into();
+                    let (block_info, batch_info): (BlockInfo, BatchInfo) = x.into();
                     (block_info, batch_info)
                 })
             })?)
@@ -314,7 +314,7 @@ pub trait DatabaseOperations: DatabaseConnectionProvider {
             .await
             .map(|x| {
                 x.map(|x| {
-                    let (block_info, _maybe_batch_info): (BlockInfo, Option<BatchInfo>) = x.into();
+                    let (block_info, _maybe_batch_info): (BlockInfo, BatchInfo) = x.into();
                     block_info
                 })
             })?)
@@ -330,15 +330,7 @@ pub trait DatabaseOperations: DatabaseConnectionProvider {
             .order_by_desc(models::l2_block::Column::BlockNumber)
             .one(self.get_connection())
             .await
-            .map(|x| {
-                x.map(|x| {
-                    (
-                        x.block_info(),
-                        x.batch_info()
-                            .expect("Batch info must be present due to database query arguments"),
-                    )
-                })
-            })?)
+            .map(|x| x.map(|x| (x.block_info(), x.batch_info())))?)
     }
 
     /// Get an iterator over all L2 blocks in the database starting from the most recent one.
@@ -425,7 +417,7 @@ pub trait DatabaseOperations: DatabaseConnectionProvider {
     async fn insert_blocks(
         &self,
         blocks: Vec<L2BlockInfoWithL1Messages>,
-        batch_info: Option<BatchInfo>,
+        batch_info: BatchInfo,
     ) -> Result<(), DatabaseError> {
         for block in blocks {
             self.insert_block(block, batch_info).await?;
@@ -437,34 +429,50 @@ pub trait DatabaseOperations: DatabaseConnectionProvider {
     async fn insert_block(
         &self,
         block_info: L2BlockInfoWithL1Messages,
-        batch_info: Option<BatchInfo>,
+        batch_info: BatchInfo,
     ) -> Result<(), DatabaseError> {
         // We only insert safe blocks into the database, we do not persist unsafe blocks.
-        if batch_info.is_some() {
-            tracing::trace!(
-                target: "scroll::db",
-                batch_hash = ?batch_info.as_ref().map(|b| b.hash),
-                batch_index = batch_info.as_ref().map(|b| b.index),
-                block_number = block_info.block_info.number,
-                block_hash = ?block_info.block_info.hash,
-                "Inserting block into database."
-            );
-            let l2_block: models::l2_block::ActiveModel =
-                (block_info.block_info, batch_info).into();
-            models::l2_block::Entity::insert(l2_block)
-                .on_conflict(
-                    OnConflict::column(models::l2_block::Column::BlockNumber)
-                        .update_columns([
-                            models::l2_block::Column::BlockHash,
-                            models::l2_block::Column::BatchHash,
-                            models::l2_block::Column::BatchIndex,
-                        ])
-                        .to_owned(),
-                )
-                .exec(self.get_connection())
-                .await?;
-        }
+        tracing::trace!(
+            target: "scroll::db",
+            batch_hash = ?batch_info.hash,
+            batch_index = batch_info.index,
+            block_number = block_info.block_info.number,
+            block_hash = ?block_info.block_info.hash,
+            "Inserting block into database."
+        );
+        let l2_block: models::l2_block::ActiveModel = (block_info.block_info, batch_info).into();
+        models::l2_block::Entity::insert(l2_block)
+            .on_conflict(
+                OnConflict::column(models::l2_block::Column::BlockNumber)
+                    .update_columns([
+                        models::l2_block::Column::BlockHash,
+                        models::l2_block::Column::BatchHash,
+                        models::l2_block::Column::BatchIndex,
+                    ])
+                    .to_owned(),
+            )
+            .exec(self.get_connection())
+            .await?;
 
+        Ok(())
+    }
+
+    /// Update the executed L1 messages from the provided L2 blocks in the database.
+    async fn update_l1_messages_from_l2_blocks(
+        &self,
+        blocks: Vec<L2BlockInfoWithL1Messages>,
+    ) -> Result<(), DatabaseError> {
+        for block in blocks {
+            self.update_l1_messages_with_l2_block(block).await?;
+        }
+        Ok(())
+    }
+
+    /// Update the executed L1 messages with the provided L2 block number in the database.
+    async fn update_l1_messages_with_l2_block(
+        &self,
+        block_info: L2BlockInfoWithL1Messages,
+    ) -> Result<(), DatabaseError> {
         tracing::trace!(
             target: "scroll::db",
             block_number = block_info.block_info.number,

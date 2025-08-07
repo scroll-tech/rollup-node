@@ -21,23 +21,23 @@ impl<MI: MigrationInfo + Send + Sync> MigrationTrait for Migration<MI> {
                     .if_not_exists()
                     .col(pk_auto(L2Block::BlockNumber))
                     .col(binary_len(L2Block::BlockHash, 32))
-                    .col(big_unsigned_null(L2Block::BatchIndex))
-                    .col(binary_len_null(L2Block::BatchHash, 32))
+                    .col(big_unsigned(L2Block::BatchIndex))
+                    .col(binary_len(L2Block::BatchHash, 32))
                     .foreign_key(
                         ForeignKey::create()
                             .name("fk_batch_index")
                             .from(L2Block::Table, L2Block::BatchIndex)
                             .to(BatchCommit::Table, BatchCommit::Index)
-                            .on_delete(ForeignKeyAction::SetNull)
-                            .on_update(ForeignKeyAction::SetNull),
+                            .on_delete(ForeignKeyAction::Cascade)
+                            .on_update(ForeignKeyAction::Cascade),
                     )
                     .foreign_key(
                         ForeignKey::create()
                             .name("fk_batch_hash")
                             .from(L2Block::Table, L2Block::BatchHash)
                             .to(BatchCommit::Table, BatchCommit::Hash)
-                            .on_delete(ForeignKeyAction::SetNull)
-                            .on_update(ForeignKeyAction::SetNull),
+                            .on_delete(ForeignKeyAction::Cascade)
+                            .on_update(ForeignKeyAction::Cascade),
                     )
                     .to_owned(),
             )

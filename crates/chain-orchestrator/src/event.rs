@@ -61,4 +61,6 @@ pub enum ChainOrchestratorEvent {
     /// An L2 block has been committed returning the [`L2BlockInfoWithL1Messages`] and an
     /// optional [`BatchInfo`] if the block is associated with a committed batch.
     L2ChainCommitted(L2BlockInfoWithL1Messages, Option<BatchInfo>, bool),
+    /// An L2 consolidated block has been committed returning the [`L2BlockInfoWithL1Messages`].
+    L2ConsolidatedBlockCommitted(L2BlockInfoWithL1Messages),
 }
