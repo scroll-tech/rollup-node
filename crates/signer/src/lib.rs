@@ -50,6 +50,7 @@ impl Signer {
     fn new(signer: impl alloy_signer::Signer + Send + Sync + 'static) -> (Self, SignerHandle) {
         let (req_tx, req_rx) = tokio::sync::mpsc::unbounded_channel();
         let (event_tx, event_rx) = tokio::sync::mpsc::unbounded_channel();
+        let address = signer.address();
         let signer = Self {
             signer: Arc::new(signer),
             requests: req_rx.into(),
@@ -57,7 +58,7 @@ impl Signer {
             sender: event_tx,
             metrics: SignerMetrics::default(),
         };
-        (signer, SignerHandle::new(req_tx, event_rx.into()))
+        (signer, SignerHandle::new(req_tx, event_rx.into(), address))
     }
 
     /// Spawns a new `Signer` instance onto the tokio runtime.

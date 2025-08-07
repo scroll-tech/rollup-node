@@ -11,4 +11,5 @@ exec rollup-node node --chain dev --datadir=/l2reth --metrics=0.0.0.0:6060 --net
   --sequencer.payload-building-duration 230 \
   --txpool.pending-max-count=1000 \
   --builder.gaslimit=20000000 \
-  --rpc.max-connections=5000
+  --rpc.max-connections=5000 \
+  --consensus.algorithm=noop

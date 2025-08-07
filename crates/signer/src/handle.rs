@@ -1,3 +1,4 @@
+use alloy_primitives::Address;
 use futures::{stream::StreamExt, Stream};
 use tokio::sync::mpsc::UnboundedSender;
 use tokio_stream::wrappers::UnboundedReceiverStream;
@@ -11,6 +12,8 @@ pub struct SignerHandle {
     pub request_tx: UnboundedSender<SignerRequest>,
     /// A channel to receive events from the signer.
     pub event_rx: UnboundedReceiverStream<SignerEvent>,
+    /// The signer address.
+    pub address: Address,
 }
 
 impl SignerHandle {
@@ -18,8 +21,9 @@ impl SignerHandle {
     pub const fn new(
         request_tx: UnboundedSender<SignerRequest>,
         event_rx: UnboundedReceiverStream<SignerEvent>,
+        address: Address,
     ) -> Self {
-        Self { request_tx, event_rx }
+        Self { request_tx, event_rx, address }
     }
 
     /// Sends a request to sign a block.

@@ -45,6 +45,9 @@ pub struct ScrollRollupNodeConfig {
     /// Whether the rollup node should be run in test mode.
     #[arg(long)]
     pub test: bool,
+    /// Consensus args
+    #[command(flatten)]
+    pub consensus_args: ConsensusArgs,
     /// Database args
     #[command(flatten)]
     pub database_args: DatabaseArgs,
@@ -74,14 +77,32 @@ pub struct ScrollRollupNodeConfig {
 impl ScrollRollupNodeConfig {
     /// Validate that either signer key file or AWS KMS key ID is provided when sequencer is enabled
     pub fn validate(&self) -> Result<(), String> {
-        if !self.test && self.sequencer_args.sequencer_enabled {
-            if self.signer_args.key_file.is_none() && self.signer_args.aws_kms_key_id.is_none() {
-                return Err("Either signer key file or AWS KMS key ID is required when sequencer is enabled".to_string());
+        if self.sequencer_args.sequencer_enabled &
+            !matches!(self.consensus_args.algorithm, ConsensusAlgorithm::Noop)
+        {
+            if self.signer_args.key_file.is_none() &&
+                self.signer_args.aws_kms_key_id.is_none() &&
+                self.signer_args.private_key.is_none()
+            {
+                return Err("Either signer key file, AWS KMS key ID or private key is required when sequencer is enabled".to_string());
             }
-            if self.signer_args.key_file.is_some() && self.signer_args.aws_kms_key_id.is_some() {
-                return Err("Cannot specify both signer key file and AWS KMS key ID".to_string());
+
+            if (self.signer_args.key_file.is_some() as u8 +
+                self.signer_args.aws_kms_key_id.is_some() as u8 +
+                self.signer_args.private_key.is_some() as u8) >
+                1
+            {
+                return Err("Cannot specify more than one signer key source".to_string());
             }
         }
+
+        if self.consensus_args.algorithm == ConsensusAlgorithm::SystemContract &&
+            self.consensus_args.authorized_signer.is_none() &&
+            self.l1_provider_args.url.is_none()
+        {
+            return Err("System contract consensus requires either an authorized signer or a L1 provider URL".to_string());
+        }
+
         Ok(())
     }
 }
@@ -116,6 +137,10 @@ impl ScrollRollupNodeConfig {
         RollupManagerHandle<N>,
         Option<Sender<Arc<L1Notification>>>,
     )> {
+        tracing::info!(target: "rollup_node::args",
+            "Building rollup node with config:\n{:#?}",
+            self
+        );
         // Instantiate the network manager
         let scroll_network_manager = ScrollNetworkManager::from_parts(network.clone(), events);
 
@@ -202,14 +227,16 @@ impl ScrollRollupNodeConfig {
         );
 
         // Create the consensus.
-        let consensus: Box<dyn Consensus> = if let Some(ref provider) = l1_provider {
-            let signer = provider
-                .authorized_signer(node_config.address_book.system_contract_address)
-                .await?;
-            Box::new(SystemContractConsensus::new(signer))
+        let authorized_signer = if let Some(provider) = l1_provider.as_ref() {
+            Some(
+                provider
+                    .authorized_signer(node_config.address_book.system_contract_address)
+                    .await?,
+            )
         } else {
-            Box::new(NoopConsensus::default())
+            None
         };
+        let consensus = self.consensus_args.consensus(authorized_signer)?;
 
         let (l1_notification_tx, l1_notification_rx): (Option<Sender<Arc<L1Notification>>>, _) =
             if let Some(provider) = l1_provider.filter(|_| !self.test) {
@@ -295,6 +322,70 @@ pub struct DatabaseArgs {
     /// Database path
     #[arg(long)]
     pub path: Option<PathBuf>,
+}
+
+/// The database arguments.
+#[derive(Debug, Default, Clone, clap::Args)]
+pub struct ConsensusArgs {
+    /// The type of consensus to use.
+    #[arg(
+        long = "consensus.algorithm",
+        value_name = "CONSENSUS_ALGORITHM",
+        default_value = "system-contract"
+    )]
+    pub algorithm: ConsensusAlgorithm,
+
+    /// The optional authorized signer for system contract consensus.
+    #[arg(long = "consensus.authorized-signer", value_name = "ADDRESS")]
+    pub authorized_signer: Option<Address>,
+}
+
+impl ConsensusArgs {
+    /// Create a new [`ConsensusArgs`] with the no-op consensus algorithm.
+    pub const fn noop() -> Self {
+        Self { algorithm: ConsensusAlgorithm::Noop, authorized_signer: None }
+    }
+
+    /// Creates a consensus instance based on the configured algorithm and authorized signer.
+    ///
+    /// The `authorized_signer` field of `ConsensusArgs` takes precedence over the
+    /// `authorized_signer` parameter passed to this method.
+    pub fn consensus(
+        &self,
+        authorized_signer: Option<Address>,
+    ) -> eyre::Result<Box<dyn Consensus>> {
+        match self.algorithm {
+            ConsensusAlgorithm::Noop => Ok(Box::new(NoopConsensus::default())),
+            ConsensusAlgorithm::SystemContract => {
+                let authorized_signer = if let Some(address) = self.authorized_signer {
+                    address
+                } else if let Some(address) = authorized_signer {
+                    address
+                } else {
+                    return Err(eyre::eyre!(
+                        "System contract consensus requires either an authorized signer or a L1 provider URL"
+                    ));
+                };
+                Ok(Box::new(SystemContractConsensus::new(authorized_signer)))
+            }
+        }
+    }
+}
+
+/// The consensus algorithm to use.
+#[derive(Debug, clap::ValueEnum, Clone, PartialEq, Eq)]
+pub enum ConsensusAlgorithm {
+    /// System contract consensus with an optional authorized signer. If the authorized signer is
+    /// not provided the system will use the L1 provider to query the authorized signer from L1.
+    SystemContract,
+    /// No-op consensus that does not validate blocks.
+    Noop,
+}
+
+impl Default for ConsensusAlgorithm {
+    fn default() -> Self {
+        Self::SystemContract
+    }
 }
 
 /// The engine driver args.
@@ -424,6 +515,9 @@ pub struct SignerArgs {
         help = "AWS KMS Key ID for signing transactions. Mutually exclusive with --signer.key-file"
     )]
     pub aws_kms_key_id: Option<String>,
+
+    /// The private key signer, if any.
+    pub private_key: Option<PrivateKeySigner>,
 }
 
 impl SignerArgs {
@@ -455,7 +549,7 @@ impl SignerArgs {
                 .map_err(|e| eyre::eyre!("Failed to create signer from key file: {}", e))?
                 .with_chain_id(Some(chain_id));
 
-            tracing::info!(
+            tracing::info!(target: "scroll::node::args",
                 "Created private key signer with address: {} for chain ID: {}",
                 private_key_signer.address(),
                 chain_id
@@ -474,12 +568,17 @@ impl SignerArgs {
                 .map_err(|e| eyre::eyre!("Failed to initialize AWS KMS signer: {}", e))?;
 
             tracing::info!(
+                target: "scroll::node::args",
                 "Created AWS KMS signer with address: {} for chain ID: {}",
                 aws_signer.address(),
                 chain_id
             );
 
             Ok(Some(Box::new(aws_signer)))
+        } else if let Some(private_key) = &self.private_key {
+            tracing::info!(target: "scroll::node::args", "Created private key signer with address: {} for chain ID: {}", private_key.address(), chain_id);
+            let signer = private_key.clone().with_chain_id(Some(chain_id));
+            Ok(Some(Box::new(signer)))
         } else {
             Ok(None)
         }
@@ -505,19 +604,23 @@ mod tests {
         let config = ScrollRollupNodeConfig {
             test: false,
             sequencer_args: SequencerArgs { sequencer_enabled: true, ..Default::default() },
-            signer_args: SignerArgs { key_file: None, aws_kms_key_id: None },
+            signer_args: SignerArgs { key_file: None, aws_kms_key_id: None, private_key: None },
             database_args: DatabaseArgs::default(),
             engine_driver_args: EngineDriverArgs::default(),
             l1_provider_args: L1ProviderArgs::default(),
             beacon_provider_args: BeaconProviderArgs::default(),
             network_args: NetworkArgs::default(),
             gas_price_oracle_args: GasPriceOracleArgs::default(),
+            consensus_args: ConsensusArgs {
+                algorithm: ConsensusAlgorithm::SystemContract,
+                authorized_signer: None,
+            },
         };
 
         let result = config.validate();
         assert!(result.is_err());
         assert!(result.unwrap_err().contains(
-            "Either signer key file or AWS KMS key ID is required when sequencer is enabled"
+            "Either signer key file, AWS KMS key ID or private key is required when sequencer is enabled"
         ));
     }
 
@@ -529,6 +632,7 @@ mod tests {
             signer_args: SignerArgs {
                 key_file: Some(PathBuf::from("/path/to/key")),
                 aws_kms_key_id: Some("key-id".to_string()),
+                private_key: None,
             },
             database_args: DatabaseArgs::default(),
             engine_driver_args: EngineDriverArgs::default(),
@@ -536,13 +640,15 @@ mod tests {
             beacon_provider_args: BeaconProviderArgs::default(),
             network_args: NetworkArgs::default(),
             gas_price_oracle_args: GasPriceOracleArgs::default(),
+            consensus_args: ConsensusArgs {
+                algorithm: ConsensusAlgorithm::SystemContract,
+                authorized_signer: None,
+            },
         };
 
         let result = config.validate();
         assert!(result.is_err());
-        assert!(result
-            .unwrap_err()
-            .contains("Cannot specify both signer key file and AWS KMS key ID"));
+        assert!(result.unwrap_err().contains("Cannot specify more than one signer key source"));
     }
 
     #[test]
@@ -553,6 +659,7 @@ mod tests {
             signer_args: SignerArgs {
                 key_file: Some(PathBuf::from("/path/to/key")),
                 aws_kms_key_id: None,
+                private_key: None,
             },
             database_args: DatabaseArgs::default(),
             engine_driver_args: EngineDriverArgs::default(),
@@ -560,6 +667,7 @@ mod tests {
             beacon_provider_args: BeaconProviderArgs::default(),
             network_args: NetworkArgs::default(),
             gas_price_oracle_args: GasPriceOracleArgs::default(),
+            consensus_args: ConsensusArgs::noop(),
         };
 
         assert!(config.validate().is_ok());
@@ -570,30 +678,18 @@ mod tests {
         let config = ScrollRollupNodeConfig {
             test: false,
             sequencer_args: SequencerArgs { sequencer_enabled: true, ..Default::default() },
-            signer_args: SignerArgs { key_file: None, aws_kms_key_id: Some("key-id".to_string()) },
+            signer_args: SignerArgs {
+                key_file: None,
+                aws_kms_key_id: Some("key-id".to_string()),
+                private_key: None,
+            },
             database_args: DatabaseArgs::default(),
             engine_driver_args: EngineDriverArgs::default(),
             l1_provider_args: L1ProviderArgs::default(),
             beacon_provider_args: BeaconProviderArgs::default(),
             network_args: NetworkArgs::default(),
             gas_price_oracle_args: GasPriceOracleArgs::default(),
-        };
-
-        assert!(config.validate().is_ok());
-    }
-
-    #[test]
-    fn test_validate_test_mode_without_any_signer_succeeds() {
-        let config = ScrollRollupNodeConfig {
-            test: true,
-            sequencer_args: SequencerArgs { sequencer_enabled: true, ..Default::default() },
-            signer_args: SignerArgs { key_file: None, aws_kms_key_id: None },
-            database_args: DatabaseArgs::default(),
-            engine_driver_args: EngineDriverArgs::default(),
-            l1_provider_args: L1ProviderArgs::default(),
-            beacon_provider_args: BeaconProviderArgs::default(),
-            network_args: NetworkArgs::default(),
-            gas_price_oracle_args: GasPriceOracleArgs::default(),
+            consensus_args: ConsensusArgs::noop(),
         };
 
         assert!(config.validate().is_ok());
@@ -604,13 +700,14 @@ mod tests {
         let config = ScrollRollupNodeConfig {
             test: false,
             sequencer_args: SequencerArgs { sequencer_enabled: false, ..Default::default() },
-            signer_args: SignerArgs { key_file: None, aws_kms_key_id: None },
+            signer_args: SignerArgs { key_file: None, aws_kms_key_id: None, private_key: None },
             database_args: DatabaseArgs::default(),
             engine_driver_args: EngineDriverArgs::default(),
             l1_provider_args: L1ProviderArgs::default(),
             beacon_provider_args: BeaconProviderArgs::default(),
             network_args: NetworkArgs::default(),
             gas_price_oracle_args: GasPriceOracleArgs::default(),
+            consensus_args: ConsensusArgs::noop(),
         };
 
         assert!(config.validate().is_ok());
