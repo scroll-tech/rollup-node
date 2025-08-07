@@ -1,7 +1,7 @@
 use super::*;
 
-#[derive(Debug)]
 /// A type that represents the result of the engine driver future.
+#[derive(Debug)]
 pub(crate) enum EngineDriverFutureResult {
     BlockImport(
         Result<

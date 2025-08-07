@@ -228,8 +228,8 @@ async fn can_penalize_peer_for_invalid_block() {
     node0_network_handle.announce_block(block, Signature::new(U256::from(1), U256::from(1), false));
 
     eventually(
-        Duration::from_secs(100),
-        Duration::from_millis(10000),
+        Duration::from_secs(5),
+        Duration::from_millis(10),
         "Peer0 reputation should be lower after sending invalid block",
         || async {
             // check that the node0 is penalized on node1
