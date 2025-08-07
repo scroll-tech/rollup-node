@@ -17,7 +17,7 @@ use reth_network::NetworkProtocols;
 use reth_network_api::FullNetwork;
 use reth_node_builder::rpc::RethRpcServerHandles;
 use reth_node_core::primitives::BlockHeader;
-use reth_scroll_chainspec::SCROLL_FEE_VAULT_ADDRESS;
+use reth_scroll_chainspec::{ChainConfig, ScrollChainConfig, SCROLL_FEE_VAULT_ADDRESS};
 use reth_scroll_node::ScrollNetworkPrimitives;
 use rollup_node_manager::{
     Consensus, NoopConsensus, RollupManagerHandle, RollupNodeManager, SystemContractConsensus,
@@ -112,6 +112,7 @@ impl ScrollRollupNodeConfig {
     pub async fn build<
         N: FullNetwork<Primitives = ScrollNetworkPrimitives> + NetworkProtocols,
         CS: ScrollHardforks
+            + ChainConfig<Config = ScrollChainConfig>
             + EthChainSpec<Header: BlockHeader>
             + IsDevChain
             + Clone
@@ -268,12 +269,13 @@ impl ScrollRollupNodeConfig {
         let l1_provider = FullL1Provider::new(blob_provider, l1_messages_provider.clone()).await;
 
         // Construct the Sequencer.
+        let chain_config = chain_spec.chain_config();
         let (sequencer, block_time) = if self.sequencer_args.sequencer_enabled {
             let args = &self.sequencer_args;
             let sequencer = Sequencer::new(
                 Arc::new(l1_messages_provider),
                 args.fee_recipient,
-                args.max_l1_messages_per_block,
+                chain_config.l1_config.num_l1_messages_per_block,
                 0,
                 self.sequencer_args.l1_message_inclusion_mode,
             );
@@ -479,9 +481,6 @@ pub struct SequencerArgs {
     /// The payload building duration for the sequencer (milliseconds)
     #[arg(long = "sequencer.payload-building-duration", id = "sequencer_payload_building_duration", value_name = "SEQUENCER_PAYLOAD_BUILDING_DURATION", default_value_t = constants::DEFAULT_PAYLOAD_BUILDING_DURATION)]
     pub payload_building_duration: u64,
-    /// The max L1 messages per block for the sequencer.
-    #[arg(long = "sequencer.max-l1-messages-per-block", id = "sequencer_max_l1_messages_per_block", value_name = "SEQUENCER_MAX_L1_MESSAGES_PER_BLOCK", default_value_t = constants::DEFAULT_MAX_L1_MESSAGES_PER_BLOCK)]
-    pub max_l1_messages_per_block: u64,
     /// The fee recipient for the sequencer.
     #[arg(long = "sequencer.fee-recipient", id = "sequencer_fee_recipient", value_name = "SEQUENCER_FEE_RECIPIENT", default_value_t = SCROLL_FEE_VAULT_ADDRESS)]
     pub fee_recipient: Address,
