@@ -159,14 +159,55 @@ impl<
 
         let fut = self.handle_metered(
             ChainOrchestratorItem::NewBlock,
-            Box::pin(async move { Self::handle_new_block(ctx, block_with_peer).await }),
+            Box::pin(async move {
+                Self::do_handle_block_from_peer(ctx, block_with_peer).await.map(Into::into)
+            }),
         );
         self.pending_futures.push_back(ChainOrchestratorFuture::HandleL2Block(fut));
         self.waker.wake();
     }
 
+    /// Handles a sequenced block.
+    pub fn handle_sequenced_block(&mut self, block_with_peer: NewBlockWithPeer) {
+        tracing::trace!(
+            target: "scroll::chain_orchestrator",
+            "Handling sequenced block {:?}",
+            Into::<BlockInfo>::into(&block_with_peer.block)
+        );
+        let ctx = HandleBlockContext {
+            chain: self.chain.clone(),
+            l2_client: self.l2_client.clone(),
+            optimistic_mode: self.optimistic_mode.clone(),
+            optimistic_sync_threshold: self.optimistic_sync_threshold,
+            network_client: self.network_client.clone(),
+            database: self.database.clone(),
+            chain_buffer_size: self.chain_buffer_size,
+        };
+
+        let fut = self.handle_metered(
+            ChainOrchestratorItem::NewBlock,
+            Box::pin(async move {
+                Self::do_handle_sequenced_block(ctx, block_with_peer).await.map(Into::into)
+            }),
+        );
+        self.pending_futures.push_back(ChainOrchestratorFuture::HandleL2Block(fut));
+        self.waker.wake();
+    }
+
+    /// Handles a sequenced block by inserting it into the database and returning an event.
+    async fn do_handle_sequenced_block(
+        ctx: HandleBlockContext<BC, P>,
+        block_with_peer: NewBlockWithPeer,
+    ) -> Result<ChainOrchestratorEvent, ChainOrchestratorError> {
+        let database = ctx.database.clone();
+        let block_info: L2BlockInfoWithL1Messages = (&block_with_peer.block).into();
+        Self::do_handle_block_from_peer(ctx, block_with_peer).await?;
+        database.insert_block(block_info.clone(), None).await?;
+        Ok(ChainOrchestratorEvent::L2ChainCommitted(block_info, None, true))
+    }
+
     /// Handles a new block received from the network.
-    async fn handle_new_block(
+    async fn do_handle_block_from_peer(
         ctx: HandleBlockContext<BC, P>,
         block_with_peer: NewBlockWithPeer,
     ) -> Result<ChainOrchestratorEvent, ChainOrchestratorError> {
@@ -253,7 +294,7 @@ impl<
             {
                 return Ok(ChainOrchestratorEvent::InsufficientDataForReceivedBlock(
                     received_block.hash_slow(),
-                ))
+                ));
             }
 
             // If the received header tail has a block number that is less than the current header
@@ -383,39 +424,38 @@ impl<
         let chain = self.chain.clone();
         let l2_client = self.l2_client.clone();
         let chain_buffer_size = self.chain_buffer_size;
-        let fut =
-            self.handle_metered(
-                ChainOrchestratorItem::InsertL2Block,
-                Box::pin(async move {
-                    // If we are in optimistic mode and the L1 is synced, we consolidate the chain
-                    // and disable optimistic mode to enter consolidated mode
-                    // (consolidated_mode = !optimistic_mode).
-                    let consolidated = if !*optimistic_mode.lock().await {
-                        true
-                    } else if l1_synced && *optimistic_mode.lock().await {
-                        consolidate_chain(
-                            database.clone(),
-                            block_info.clone(),
-                            chain,
-                            l2_client,
-                            chain_buffer_size,
-                        )
-                        .await?;
-                        *optimistic_mode.lock().await = false;
-                        true
-                    } else {
-                        false
-                    };
-
-                    // Insert the blocks into the database.
-                    let head = block_info.last().expect("block info must not be empty").clone();
-                    database.insert_blocks(block_info, batch_info).await?;
-
-                    Result::<_, ChainOrchestratorError>::Ok(
-                        ChainOrchestratorEvent::L2ChainCommitted(head, batch_info, consolidated),
+        let fut = self.handle_metered(
+            ChainOrchestratorItem::InsertL2Block,
+            Box::pin(async move {
+                // If we are in optimistic mode and the L1 is synced, we consolidate the chain
+                // and disable optimistic mode to enter consolidated mode
+                // (consolidated_mode = !optimistic_mode).
+                let consolidated = if !*optimistic_mode.lock().await {
+                    true
+                } else if l1_synced && *optimistic_mode.lock().await {
+                    consolidate_chain(
+                        database.clone(),
+                        block_info.clone(),
+                        chain,
+                        l2_client,
+                        chain_buffer_size,
                     )
-                }),
-            );
+                    .await?;
+                    *optimistic_mode.lock().await = false;
+                    true
+                } else {
+                    false
+                };
+
+                // Insert the blocks into the database.
+                let head = block_info.last().expect("block info must not be empty").clone();
+                database.insert_blocks(block_info, batch_info).await?;
+
+                Result::<_, ChainOrchestratorError>::Ok(Some(
+                    ChainOrchestratorEvent::L2ChainCommitted(head, batch_info, consolidated),
+                ))
+            }),
+        );
 
         self.pending_futures.push_back(ChainOrchestratorFuture::HandleDerivedBlock(fut));
         self.waker.wake();
@@ -495,7 +535,7 @@ impl<
         l1_block_number: u64,
         l2_client: Arc<P>,
         current_chain: Arc<Mutex<Chain>>,
-    ) -> Result<ChainOrchestratorEvent, ChainOrchestratorError> {
+    ) -> Result<Option<ChainOrchestratorEvent>, ChainOrchestratorError> {
         let txn = database.tx().await?;
         let UnwindResult { l1_block_number, queue_index, l2_head_block_number, l2_safe_block_info } =
             txn.unwind(chain_spec.genesis_hash(), l1_block_number).await?;
@@ -515,12 +555,12 @@ impl<
         } else {
             None
         };
-        Ok(ChainOrchestratorEvent::ChainUnwound {
+        Ok(Some(ChainOrchestratorEvent::ChainUnwound {
             l1_block_number,
             queue_index,
             l2_head_block_info,
             l2_safe_block_info,
-        })
+        }))
     }
 
     /// Handles a finalized event by updating the chain orchestrator L1 finalized block and
@@ -530,7 +570,7 @@ impl<
         block_number: u64,
         l1_block_number: Arc<AtomicU64>,
         l2_block_number: Arc<AtomicU64>,
-    ) -> Result<ChainOrchestratorEvent, ChainOrchestratorError> {
+    ) -> Result<Option<ChainOrchestratorEvent>, ChainOrchestratorError> {
         // Set the latest finalized L1 block in the database.
         database.set_latest_finalized_l1_block_number(block_number).await?;
 
@@ -547,7 +587,7 @@ impl<
         // update the chain orchestrator l1 block number.
         l1_block_number.store(block_number, Ordering::Relaxed);
 
-        Ok(ChainOrchestratorEvent::L1BlockFinalized(block_number, finalized_block))
+        Ok(Some(ChainOrchestratorEvent::L1BlockFinalized(block_number, finalized_block)))
     }
 
     /// Handles an L1 message by inserting it into the database.
@@ -557,7 +597,7 @@ impl<
         l1_message: TxL1Message,
         l1_block_number: u64,
         block_timestamp: u64,
-    ) -> Result<ChainOrchestratorEvent, ChainOrchestratorError> {
+    ) -> Result<Option<ChainOrchestratorEvent>, ChainOrchestratorError> {
         let event = ChainOrchestratorEvent::L1MessageCommitted(l1_message.queue_index);
 
         let queue_hash = if chain_spec
@@ -581,14 +621,14 @@ impl<
 
         let l1_message = L1MessageEnvelope::new(l1_message, l1_block_number, None, queue_hash);
         database.insert_l1_message(l1_message).await?;
-        Ok(event)
+        Ok(Some(event))
     }
 
     /// Handles a batch input by inserting it into the database.
     async fn handle_batch_commit(
         database: Arc<Database>,
         batch: BatchCommitData,
-    ) -> Result<ChainOrchestratorEvent, ChainOrchestratorError> {
+    ) -> Result<Option<ChainOrchestratorEvent>, ChainOrchestratorError> {
         let txn = database.tx().await?;
         let prev_batch_index = batch.index - 1;
 
@@ -613,7 +653,7 @@ impl<
         txn.insert_batch(batch).await?;
         txn.commit().await?;
 
-        Ok(event)
+        Ok(Some(event))
     }
 
     /// Handles a batch finalization event by updating the batch input in the database.
@@ -623,7 +663,7 @@ impl<
         block_number: u64,
         l1_block_number: Arc<AtomicU64>,
         l2_block_number: Arc<AtomicU64>,
-    ) -> Result<ChainOrchestratorEvent, ChainOrchestratorError> {
+    ) -> Result<Option<ChainOrchestratorEvent>, ChainOrchestratorError> {
         // finalized the batch.
         database.finalize_batch(batch_hash, block_number).await?;
 
@@ -637,7 +677,7 @@ impl<
         }
 
         let event = ChainOrchestratorEvent::BatchFinalized(batch_hash, finalized_block);
-        Ok(event)
+        Ok(Some(event))
     }
 
     /// Returns the highest finalized block for the provided batch hash. Will return [`None`] if the
@@ -702,12 +742,16 @@ impl<
         self.waker.register(cx.waker());
 
         // Remove and poll the next future in the queue
-        if let Some(mut action) = self.pending_futures.pop_front() {
-            return match action.poll(cx) {
-                Poll::Ready(result) => Poll::Ready(Some(result)),
+        while let Some(mut action) = self.pending_futures.pop_front() {
+            match action.poll(cx) {
+                Poll::Ready(result) => match result {
+                    Ok(None) => {}
+                    Ok(Some(event)) => return Poll::Ready(Some(Ok(event))),
+                    Err(e) => return Poll::Ready(Some(Err(e))),
+                },
                 Poll::Pending => {
                     self.pending_futures.push_front(action);
-                    Poll::Pending
+                    return Poll::Pending
                 }
             };
         }
@@ -918,7 +962,7 @@ mod test {
     /// A headers+bodies client that stores the headers and bodies in memory, with an artificial
     /// soft bodies response limit that is set to 20 by default.
     ///
-    /// This full block client can be [Clone]d and shared between multiple tasks.
+    /// This full block client can be [Cloned] and shared between multiple tasks.
     #[derive(Clone, Debug)]
     struct TestScrollFullBlockClient {
         headers: Arc<Mutex<HashMap<B256, Header>>>,

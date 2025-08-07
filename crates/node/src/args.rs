@@ -214,6 +214,7 @@ impl ScrollRollupNodeConfig {
             network.clone(),
             events,
             eth_wire_listener,
+            self.network_args.eth_wire_gossip,
         );
 
         // On startup we replay the latest batch of blocks from the database as such we set the safe
@@ -465,11 +466,19 @@ pub struct NetworkArgs {
         value_name = "NETWORK_SEQUENCER_URL"
     )]
     pub sequencer_url: Option<String>,
+    /// A bool that represents if blocks should be gossiped over the eth-wire protocol.
+    #[arg(long = "network.eth-wire-gossip")]
+    pub eth_wire_gossip: bool,
 }
 
 impl Default for NetworkArgs {
     fn default() -> Self {
-        Self { enable_eth_scroll_wire_bridge: true, enable_scroll_wire: true, sequencer_url: None }
+        Self {
+            enable_eth_scroll_wire_bridge: true,
+            enable_scroll_wire: true,
+            sequencer_url: None,
+            eth_wire_gossip: false,
+        }
     }
 }
 

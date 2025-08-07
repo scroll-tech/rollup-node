@@ -90,17 +90,6 @@ impl<T> BoundedVec<T> {
 
 impl<T> Extend<T> for BoundedVec<T> {
     fn extend<I: IntoIterator<Item = T>>(&mut self, iter: I) {
-        let iter = iter.into_iter();
-
-        // if size hint returns an upper bound, skip values until whole iterator can fit in the
-        // bounded vec.
-        let iter = if let (_, Some(upper_bound)) = iter.size_hint() {
-            iter.skip(upper_bound.saturating_sub(self.data.capacity()))
-        } else {
-            #[allow(clippy::iter_skip_zero)]
-            iter.skip(0)
-        };
-
         for elem in iter {
             self.push_back(elem)
         }

@@ -536,6 +536,11 @@ where
                         ));
                     }
 
+                    this.chain.handle_sequenced_block(NewBlockWithPeer {
+                        peer_id: Default::default(),
+                        block: block.clone(),
+                        signature,
+                    });
                     this.network.handle().announce_block(block, signature);
                 }
             }
@@ -545,7 +550,7 @@ where
             en_synced,
             // Check if we need to trigger the build of a new payload.
             if let (Some(Poll::Ready(_)), Some(sequencer)) = (
-                this.block_building_trigger.as_mut().map(|se| se.poll_tick(cx)),
+                this.block_building_trigger.as_mut().map(|trigger| trigger.poll_tick(cx)),
                 this.sequencer.as_mut()
             ) {
                 if !this.consensus.should_sequence_block(

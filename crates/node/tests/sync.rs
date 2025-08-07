@@ -15,8 +15,7 @@ use rollup_node::{
         setup_engine,
     },
     BeaconProviderArgs, ChainOrchestratorArgs, ConsensusArgs, DatabaseArgs, EngineDriverArgs,
-    GasPriceOracleArgs, L1ProviderArgs, NetworkArgs, ScrollRollupNode, ScrollRollupNodeConfig,
-    SequencerArgs,
+    GasPriceOracleArgs, L1ProviderArgs, NetworkArgs, ScrollRollupNodeConfig, SequencerArgs,
 };
 use rollup_node_chain_orchestrator::ChainOrchestratorEvent;
 use rollup_node_manager::RollupManagerEvent;
@@ -45,6 +44,7 @@ async fn test_should_consolidate_to_block_15k() -> eyre::Result<()> {
             enable_eth_scroll_wire_bridge: false,
             enable_scroll_wire: false,
             sequencer_url: None,
+            eth_wire_gossip: false,
         },
         database_args: DatabaseArgs::default(),
         chain_orchestrator_args: ChainOrchestratorArgs {
@@ -186,6 +186,7 @@ async fn test_should_consolidate_after_optimistic_sync() -> eyre::Result<()> {
             enable_eth_scroll_wire_bridge: true,
             enable_scroll_wire: true,
             sequencer_url: None,
+            eth_wire_gossip: false,
         },
         database_args: DatabaseArgs { path: Some(PathBuf::from("sqlite::memory:")) },
         l1_provider_args: L1ProviderArgs::default(),
@@ -204,6 +205,7 @@ async fn test_should_consolidate_after_optimistic_sync() -> eyre::Result<()> {
         },
         signer_args: Default::default(),
         gas_price_oracle_args: GasPriceOracleArgs::default(),
+        consensus_args: ConsensusArgs::noop(),
     };
 
     // Create the chain spec for scroll dev with Euclid v2 activated and a test genesis.
@@ -433,6 +435,7 @@ async fn test_consolidation() -> eyre::Result<()> {
             enable_eth_scroll_wire_bridge: true,
             enable_scroll_wire: true,
             sequencer_url: None,
+            eth_wire_gossip: false,
         },
         database_args: DatabaseArgs { path: Some(PathBuf::from("sqlite::memory:")) },
         l1_provider_args: L1ProviderArgs::default(),
@@ -451,6 +454,7 @@ async fn test_consolidation() -> eyre::Result<()> {
         },
         signer_args: Default::default(),
         gas_price_oracle_args: GasPriceOracleArgs::default(),
+        consensus_args: ConsensusArgs::noop(),
     };
 
     // Create the chain spec for scroll dev with Euclid v2 activated and a test genesis.
@@ -602,7 +606,7 @@ async fn test_chain_orchestrator_shallow_reorg_with_gap() -> eyre::Result<()> {
     let sequencer_node_config = ScrollRollupNodeConfig {
         test: true,
         network_args: NetworkArgs {
-            enable_eth_scroll_wire_bridge: true,
+            enable_eth_scroll_wire_bridge: false,
             enable_scroll_wire: true,
             ..Default::default()
         },
@@ -623,6 +627,7 @@ async fn test_chain_orchestrator_shallow_reorg_with_gap() -> eyre::Result<()> {
         },
         signer_args: Default::default(),
         gas_price_oracle_args: GasPriceOracleArgs::default(),
+        consensus_args: ConsensusArgs::noop(),
     };
 
     // Create the chain spec for scroll dev with Euclid v2 activated and a test genesis.

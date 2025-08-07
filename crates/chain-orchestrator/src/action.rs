@@ -7,8 +7,9 @@ use std::{
 };
 
 /// A future that resolves to a `Result<ChainOrchestratorEvent, ChainOrchestratorError>`.
-pub(super) type PendingChainOrchestratorFuture =
-    Pin<Box<dyn Future<Output = Result<ChainOrchestratorEvent, ChainOrchestratorError>> + Send>>;
+pub(super) type PendingChainOrchestratorFuture = Pin<
+    Box<dyn Future<Output = Result<Option<ChainOrchestratorEvent>, ChainOrchestratorError>> + Send>,
+>;
 
 /// A type that represents a future that is being executed by the chain orchestrator.
 pub(super) enum ChainOrchestratorFuture {
@@ -26,7 +27,7 @@ impl ChainOrchestratorFuture {
     pub(super) fn poll(
         &mut self,
         cx: &mut Context<'_>,
-    ) -> Poll<Result<ChainOrchestratorEvent, ChainOrchestratorError>> {
+    ) -> Poll<Result<Option<ChainOrchestratorEvent>, ChainOrchestratorError>> {
         match self {
             Self::HandleReorg(fut) |
             Self::HandleFinalized(fut) |

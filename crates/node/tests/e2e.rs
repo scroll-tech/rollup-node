@@ -137,6 +137,7 @@ async fn can_sequence_and_gossip_blocks() {
             enable_eth_scroll_wire_bridge: true,
             enable_scroll_wire: true,
             sequencer_url: None,
+            eth_wire_gossip: false,
         },
         database_args: DatabaseArgs { path: Some(PathBuf::from("sqlite::memory:")) },
         l1_provider_args: L1ProviderArgs::default(),
@@ -232,7 +233,9 @@ async fn can_forward_tx_to_sequencer() {
     // create 2 nodes
     let mut sequencer_node_config = default_sequencer_test_scroll_rollup_node_config();
     sequencer_node_config.sequencer_args.block_time = 0;
+    sequencer_node_config.network_args.enable_eth_scroll_wire_bridge = false;
     let mut follower_node_config = default_test_scroll_rollup_node_config();
+    follower_node_config.network_args.enable_eth_scroll_wire_bridge = false;
 
     // Create the chain spec for scroll mainnet with Euclid v2 activated and a test genesis.
     let chain_spec = (*SCROLL_DEV).clone();
@@ -334,19 +337,6 @@ async fn can_forward_tx_to_sequencer() {
     .await;
 
     // assert that the block was successfully imported by the follower node
-    wait_n_events(
-        &mut follower_events,
-        |e| {
-            if let RollupManagerEvent::BlockImported(block) = e {
-                assert_eq!(block.body.transactions.len(), 1);
-                true
-            } else {
-                false
-            }
-        },
-        1,
-    )
-    .await;
     wait_n_events(
         &mut follower_events,
         |e| {
@@ -504,6 +494,7 @@ async fn can_bridge_blocks() {
         network_config,
         scroll_wire_config,
         None,
+        false,
     )
     .await;
     let scroll_network_handle = scroll_network.handle();
@@ -973,15 +964,10 @@ async fn can_gossip_over_eth_wire() -> eyre::Result<()> {
     let chain_spec = (*SCROLL_DEV).clone();
 
     // Setup the rollup node manager.
-    let (mut nodes, _tasks, _) = setup_engine(
-        default_sequencer_test_scroll_rollup_node_config(),
-        2,
-        chain_spec.clone(),
-        false,
-        false,
-    )
-    .await
-    .unwrap();
+    let mut config = default_sequencer_test_scroll_rollup_node_config();
+    config.network_args.eth_wire_gossip = true;
+    let (mut nodes, _tasks, _) =
+        setup_engine(config, 2, chain_spec.clone(), false, false).await.unwrap();
     let _sequencer = nodes.pop().unwrap();
     let follower = nodes.pop().unwrap();
 
@@ -1016,18 +1002,20 @@ async fn signer_rotation() -> eyre::Result<()> {
     sequencer_1_config.consensus_args.algorithm = ConsensusAlgorithm::SystemContract;
     sequencer_1_config.consensus_args.authorized_signer = Some(signer_1_address);
     sequencer_1_config.signer_args.private_key = Some(signer_1);
+    sequencer_1_config.network_args.enable_eth_scroll_wire_bridge = false;
 
     let mut sequencer_2_config = default_sequencer_test_scroll_rollup_node_config();
     sequencer_2_config.test = false;
     sequencer_2_config.consensus_args.algorithm = ConsensusAlgorithm::SystemContract;
     sequencer_2_config.consensus_args.authorized_signer = Some(signer_1_address);
     sequencer_2_config.signer_args.private_key = Some(signer_2);
+    sequencer_2_config.network_args.enable_eth_scroll_wire_bridge = false;
 
     // Setup two sequencer nodes.
     let (mut nodes, _tasks, _) =
         setup_engine(sequencer_1_config, 2, chain_spec.clone(), false, false).await.unwrap();
-    let mut sequencer_1 = nodes.pop().unwrap();
     let follower = nodes.pop().unwrap();
+    let mut sequencer_1 = nodes.pop().unwrap();
     let (mut nodes, _tasks, _) =
         setup_engine(sequencer_2_config, 1, chain_spec.clone(), false, false).await.unwrap();
     let mut sequencer_2 = nodes.pop().unwrap();
@@ -1042,23 +1030,40 @@ async fn signer_rotation() -> eyre::Result<()> {
     // Create a follower event stream.
     let mut follower_events =
         follower.inner.add_ons_handle.rollup_manager_handle.get_event_listener().await.unwrap();
+    let mut sequencer_2_events =
+        sequencer_2.inner.add_ons_handle.rollup_manager_handle.get_event_listener().await.unwrap();
 
     // connect the two sequencers
     sequencer_1.connect(&mut sequencer_2).await;
 
+    for _ in 0..5 {
+        wait_n_events(
+            &mut follower_events,
+            |event| {
+                if let RollupManagerEvent::NewBlockReceived(block) = event {
+                    let signature = block.signature;
+                    let hash = sig_encode_hash(&block.block);
+                    // Verify that the block is signed by the first sequencer.
+                    let recovered_address = signature.recover_address_from_prehash(&hash).unwrap();
+                    recovered_address == signer_1_address
+                } else {
+                    false
+                }
+            },
+            1,
+        )
+        .await;
+        wait_n_events(
+            &mut follower_events,
+            |event| matches!(event, RollupManagerEvent::BlockImported(_)),
+            1,
+        )
+        .await;
+    }
+
     wait_n_events(
-        &mut follower_events,
-        |event| {
-            if let RollupManagerEvent::NewBlockReceived(block) = event {
-                let signature = block.signature;
-                let hash = sig_encode_hash(&block.block);
-                // Verify that the block is signed by the first sequencer.
-                let recovered_address = signature.recover_address_from_prehash(&hash).unwrap();
-                recovered_address == signer_1_address
-            } else {
-                false
-            }
-        },
+        &mut sequencer_2_events,
+        |e| matches!(e, RollupManagerEvent::BlockImported(_)),
         5,
     )
     .await;

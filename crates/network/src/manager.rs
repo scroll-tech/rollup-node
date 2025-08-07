@@ -55,6 +55,8 @@ pub struct ScrollNetworkManager<N, CS> {
     eth_wire_listener: Option<EventStream<RethNewBlockWithPeer<ScrollBlock>>>,
     /// The scroll wire protocol manager.
     scroll_wire: ScrollWireManager,
+    /// Should blocks be announced over the eth-wire protocol.
+    eth_wire_gossip: bool,
 }
 
 impl<CS: ScrollHardforks + EthChainSpec + Send + Sync + 'static>
@@ -67,6 +69,7 @@ impl<CS: ScrollHardforks + EthChainSpec + Send + Sync + 'static>
         mut network_config: RethNetworkConfig<C, ScrollNetworkPrimitives>,
         scroll_wire_config: ScrollWireConfig,
         eth_wire_listener: Option<EventStream<RethNewBlockWithPeer<ScrollBlock>>>,
+        eth_wire_gossip: bool,
     ) -> Self {
         // Create the scroll-wire protocol handler.
         let (scroll_wire_handler, events) = ScrollWireProtocolHandler::new(scroll_wire_config);
@@ -96,6 +99,7 @@ impl<CS: ScrollHardforks + EthChainSpec + Send + Sync + 'static>
             from_handle_rx: from_handle_rx.into(),
             scroll_wire,
             eth_wire_listener,
+            eth_wire_gossip,
         }
     }
 }
@@ -114,6 +118,7 @@ impl<
         inner_network_handle: N,
         events: UnboundedReceiver<ScrollWireEvent>,
         eth_wire_listener: Option<EventStream<RethNewBlockWithPeer<ScrollBlock>>>,
+        eth_wire_gossip: bool,
     ) -> Self {
         // Create the channel for sending messages to the network manager from the network handle.
         let (to_manager_tx, from_handle_rx) = mpsc::unbounded_channel();
@@ -129,6 +134,7 @@ impl<
             from_handle_rx: from_handle_rx.into(),
             scroll_wire,
             eth_wire_listener,
+            eth_wire_gossip,
         }
     }
 
@@ -155,13 +161,15 @@ impl<
             .filter_map(|(peer_id, blocks)| (!blocks.contains(&hash)).then_some(*peer_id))
             .collect();
 
-        let eth_wire_new_block = {
-            let td = U128::from_limbs([0, block.block.header.number]);
-            let mut eth_wire_block = block.block.clone();
-            eth_wire_block.header.extra_data = block.signature.clone().into();
-            EthWireNewBlock { block: eth_wire_block, td }
-        };
-        self.inner_network_handle().eth_wire_announce_block(eth_wire_new_block, hash);
+        if self.eth_wire_gossip {
+            let eth_wire_new_block = {
+                let td = U128::from_limbs([0, block.block.header.number]);
+                let mut eth_wire_block = block.block.clone();
+                eth_wire_block.header.extra_data = block.signature.clone().into();
+                EthWireNewBlock { block: eth_wire_block, td }
+            };
+            self.inner_network_handle().eth_wire_announce_block(eth_wire_new_block, hash);
+        }
 
         // Announce block to the filtered set of peers
         for peer_id in peers {
@@ -234,8 +242,15 @@ impl<
         &mut self,
         block: reth_network_api::block::NewBlockWithPeer<ScrollBlock>,
     ) -> Option<NetworkManagerEvent> {
-        trace!(target: "scroll::node::manager", ?block, "Received new block from eth-wire protocol");
         let reth_network_api::block::NewBlockWithPeer { peer_id, mut block } = block;
+        let block_hash = block.hash_slow();
+        self.scroll_wire
+            .state_mut()
+            .entry(peer_id)
+            .or_insert_with(|| LruCache::new(LRU_CACHE_SIZE))
+            .insert(block_hash);
+
+        trace!(target: "scroll::bridge::import", peer_id = %peer_id, block_hash = %block_hash, "Received new block from eth-wire protocol");
 
         // We purge the extra data field post euclid v2 to align with protocol specification.
         let extra_data = if self.chain_spec.is_euclid_v2_active_at_timestamp(block.timestamp) {
@@ -255,7 +270,6 @@ impl<
             .checked_sub(ECDSA_SIGNATURE_LEN)
             .and_then(|i| Signature::from_raw(&extra_data[i..]).ok())
         {
-            trace!(target: "scroll::bridge::import", peer_id = %peer_id, block = ?block.hash_slow(), "Received new block from eth-wire protocol");
             Some(NetworkManagerEvent::NewBlock(NewBlockWithPeer { peer_id, block, signature }))
         } else {
             tracing::warn!(target: "scroll::bridge::import", peer_id = %peer_id, "Failed to extract signature from block extra data");
