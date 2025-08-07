@@ -202,6 +202,7 @@ async fn can_penalize_peer_for_invalid_block() {
         },
         signer_args: Default::default(),
         gas_price_oracle_args: GasPriceOracleArgs::default(),
+        consensus_args: ConsensusArgs::noop(),
     };
 
     let (nodes, _tasks, _) =
