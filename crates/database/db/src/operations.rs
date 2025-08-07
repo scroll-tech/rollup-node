@@ -170,25 +170,23 @@ pub trait DatabaseOperations: DatabaseConnectionProvider {
 
     /// Insert an [`L1MessageEnvelope`] into the database.
     async fn insert_l1_message(&self, l1_message: L1MessageEnvelope) -> Result<(), DatabaseError> {
-        tracing::trace!(target: "scroll::db", queue_index = l1_message.transaction.queue_index, "Inserting L1 message into database.");
+        let l1_index = l1_message.transaction.queue_index;
+        tracing::trace!(target: "scroll::db", queue_index = l1_index, "Inserting L1 message into database.");
+
         let l1_message: models::l1_message::ActiveModel = l1_message.into();
-        models::l1_message::Entity::insert(l1_message)
+        let result = models::l1_message::Entity::insert(l1_message)
             .on_conflict(
                 OnConflict::column(models::l1_message::Column::QueueIndex)
-                    .update_columns(vec![
-                        models::l1_message::Column::QueueHash,
-                        models::l1_message::Column::Hash,
-                        models::l1_message::Column::L1BlockNumber,
-                        models::l1_message::Column::GasLimit,
-                        models::l1_message::Column::To,
-                        models::l1_message::Column::Value,
-                        models::l1_message::Column::Sender,
-                        models::l1_message::Column::Input,
-                    ])
+                    .do_nothing_on([models::l1_message::Column::QueueIndex])
                     .to_owned(),
             )
             .exec(self.get_connection())
-            .await?;
+            .await;
+
+        if let Err(err) = result {
+            tracing::info!("L1 message with queue_index {} already exists: {}", l1_index, err);
+        }
+
         Ok(())
     }
 
