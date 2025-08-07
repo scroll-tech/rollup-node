@@ -129,7 +129,11 @@ impl ScrollRollupNodeConfig {
     )>
     where
         N: FullNetwork<Primitives = ScrollNetworkPrimitives> + NetworkProtocols,
-        CS: EthChainSpec<Header: BlockHeader> + ChainConfig<Config = ScrollChainConfig>+ ScrollHardforks + IsDevChain + 'static,
+        CS: EthChainSpec<Header: BlockHeader>
+            + ChainConfig<Config = ScrollChainConfig>
+            + ScrollHardforks
+            + IsDevChain
+            + 'static,
     {
         tracing::info!(target: "rollup_node::args",
             "Building rollup node with config:\n{:#?}",
