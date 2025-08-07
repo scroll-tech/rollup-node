@@ -21,12 +21,22 @@ impl<T> BoundedVec<T> {
 
     /// Pushes a value at the back of the buffer. If the buffer is full, pops the data at the front
     /// of the buffer first.
-    pub fn push(&mut self, elem: T) {
+    pub fn push_back(&mut self, elem: T) {
         if self.is_full() {
             self.data.pop_front();
         }
 
         self.data.push_back(elem)
+    }
+
+    /// Pushes a value at the front of the buffer. If the buffer is full, pops the data at the back
+    /// of the buffer first.
+    pub fn push_front(&mut self, elem: T) {
+        if self.is_full() {
+            self.data.pop_back();
+        }
+
+        self.data.push_front(elem)
     }
 
     /// Pops the last element from the structure and returns it if any.
@@ -37,6 +47,11 @@ impl<T> BoundedVec<T> {
     /// Returns the last element in the vector, if any.
     pub fn last(&self) -> Option<&T> {
         self.data.back()
+    }
+
+    /// Returns the first element in the vector, if any.
+    pub fn first(&self) -> Option<&T> {
+        self.data.front()
     }
 
     /// Clears the structure by removing all the elements.
@@ -56,23 +71,27 @@ impl<T> BoundedVec<T> {
     fn is_full(&self) -> bool {
         self.data.len() == self.data.capacity()
     }
+
+    /// Returns the inner `VecDeque<T>` of the bounded vec.
+    pub const fn inner(&self) -> &VecDeque<T> {
+        &self.data
+    }
+
+    /// Returns a mutable reference to the inner `VecDeque<T>` of the bounded vec.
+    pub const fn inner_mut(&mut self) -> &mut VecDeque<T> {
+        &mut self.data
+    }
+
+    /// Returns the inner `VecDeque<T>` of the bounded vec.
+    pub fn into_inner(self) -> VecDeque<T> {
+        self.data
+    }
 }
 
 impl<T> Extend<T> for BoundedVec<T> {
     fn extend<I: IntoIterator<Item = T>>(&mut self, iter: I) {
-        let iter = iter.into_iter();
-
-        // if size hint returns an upper bound, skip values until whole iterator can fit in the
-        // bounded vec.
-        let iter = if let (_, Some(upper_bound)) = iter.size_hint() {
-            iter.skip(upper_bound.saturating_sub(self.data.capacity()))
-        } else {
-            #[allow(clippy::iter_skip_zero)]
-            iter.skip(0)
-        };
-
         for elem in iter {
-            self.push(elem)
+            self.push_back(elem)
         }
     }
 }

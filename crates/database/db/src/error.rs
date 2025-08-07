@@ -1,3 +1,4 @@
+use super::L1MessageStart;
 use alloy_eips::BlockId;
 use alloy_primitives::B256;
 
@@ -15,5 +16,5 @@ pub enum DatabaseError {
     BlockNotFound(BlockId),
     /// The L1 message was not found in database.
     #[error("L1 message at index [{0}] not found in database")]
-    L1MessageNotFound(u64),
+    L1MessageNotFound(L1MessageStart),
 }

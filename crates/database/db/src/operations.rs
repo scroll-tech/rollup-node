@@ -12,6 +12,7 @@ use sea_orm::{
     ActiveModelTrait, ColumnTrait, Condition, EntityTrait, QueryFilter, QueryOrder, QuerySelect,
     Set,
 };
+use std::fmt;
 
 /// The [`DatabaseOperations`] trait provides methods for interacting with the database.
 #[async_trait::async_trait]
@@ -243,12 +244,30 @@ pub trait DatabaseOperations: DatabaseConnectionProvider {
             .map(|x| x.map(Into::into))?)
     }
 
-    /// Gets an iterator over all [`L1MessageEnvelope`]s in the database.
+    /// Get an iterator over all [`L1MessageEnvelope`]s in the database starting from the provided
+    /// `start` point.
     async fn get_l1_messages<'a>(
         &'a self,
+        start: Option<L1MessageStart>,
     ) -> Result<impl Stream<Item = Result<L1MessageEnvelope, DatabaseError>> + 'a, DatabaseError>
     {
+        let queue_index = match start {
+            Some(L1MessageStart::Index(i)) => i,
+            Some(L1MessageStart::Hash(ref h)) => {
+                // Lookup message by hash
+                let record = models::l1_message::Entity::find()
+                    .filter(models::l1_message::Column::Hash.eq(h.to_vec()))
+                    .one(self.get_connection())
+                    .await?
+                    .ok_or_else(|| DatabaseError::L1MessageNotFound(L1MessageStart::Hash(*h)))?;
+
+                record.queue_index as u64
+            }
+            None => 0,
+        };
+
         Ok(models::l1_message::Entity::find()
+            .filter(models::l1_message::Column::QueueIndex.gte(queue_index))
             .stream(self.get_connection())
             .await?
             .map(|res| Ok(res.map(Into::into)?)))
@@ -264,6 +283,24 @@ pub trait DatabaseOperations: DatabaseConnectionProvider {
             .one(self.get_connection())
             .await
             .map(|x| x.map(Into::into))?)
+    }
+
+    /// Get the [`BlockInfo`] and optional [`BatchInfo`] for the provided block hash.
+    async fn get_l2_block_and_batch_info_by_hash(
+        &self,
+        block_hash: B256,
+    ) -> Result<Option<(BlockInfo, Option<BatchInfo>)>, DatabaseError> {
+        tracing::trace!(target: "scroll::db", ?block_hash, "Fetching L2 block and batch info by hash from database.");
+        Ok(models::l2_block::Entity::find()
+            .filter(models::l2_block::Column::BlockHash.eq(block_hash.to_vec()))
+            .one(self.get_connection())
+            .await
+            .map(|x| {
+                x.map(|x| {
+                    let (block_info, batch_info): (BlockInfo, Option<BatchInfo>) = x.into();
+                    (block_info, batch_info)
+                })
+            })?)
     }
 
     /// Get a [`BlockInfo`] from the database by its block number.
@@ -304,14 +341,16 @@ pub trait DatabaseOperations: DatabaseConnectionProvider {
             })?)
     }
 
-    /// Get the latest L2 [`BlockInfo`] from the database.
-    async fn get_latest_l2_block(&self) -> Result<Option<BlockInfo>, DatabaseError> {
-        tracing::trace!(target: "scroll::db", "Fetching latest L2 block from database.");
+    /// Get an iterator over all L2 blocks in the database starting from the most recent one.
+    async fn get_l2_blocks<'a>(
+        &'a self,
+    ) -> Result<impl Stream<Item = Result<BlockInfo, DatabaseError>> + 'a, DatabaseError> {
+        tracing::trace!(target: "scroll::db", "Fetching L2 blocks from database.");
         Ok(models::l2_block::Entity::find()
             .order_by_desc(models::l2_block::Column::BlockNumber)
-            .one(self.get_connection())
-            .await
-            .map(|x| x.map(|x| x.block_info()))?)
+            .stream(self.get_connection())
+            .await?
+            .map(|res| Ok(res.map(|res| res.block_info())?)))
     }
 
     /// Prepare the database on startup and return metadata used for other components in the
@@ -382,33 +421,49 @@ pub trait DatabaseOperations: DatabaseConnectionProvider {
             .map(|x| x.rows_affected)?)
     }
 
+    /// Insert multiple blocks into the database.
+    async fn insert_blocks(
+        &self,
+        blocks: Vec<L2BlockInfoWithL1Messages>,
+        batch_info: Option<BatchInfo>,
+    ) -> Result<(), DatabaseError> {
+        for block in blocks {
+            self.insert_block(block, batch_info).await?;
+        }
+        Ok(())
+    }
+
     /// Insert a new block in the database.
     async fn insert_block(
         &self,
         block_info: L2BlockInfoWithL1Messages,
         batch_info: Option<BatchInfo>,
     ) -> Result<(), DatabaseError> {
-        tracing::trace!(
-            target: "scroll::db",
-            batch_hash = ?batch_info.as_ref().map(|b| b.hash),
-            batch_index = batch_info.as_ref().map(|b| b.index),
-            block_number = block_info.block_info.number,
-            block_hash = ?block_info.block_info.hash,
-            "Inserting block into database."
-        );
-        let l2_block: models::l2_block::ActiveModel = (block_info.block_info, batch_info).into();
-        models::l2_block::Entity::insert(l2_block)
-            .on_conflict(
-                OnConflict::column(models::l2_block::Column::BlockNumber)
-                    .update_columns([
-                        models::l2_block::Column::BlockHash,
-                        models::l2_block::Column::BatchHash,
-                        models::l2_block::Column::BatchIndex,
-                    ])
-                    .to_owned(),
-            )
-            .exec(self.get_connection())
-            .await?;
+        // We only insert safe blocks into the database, we do not persist unsafe blocks.
+        if batch_info.is_some() {
+            tracing::trace!(
+                target: "scroll::db",
+                batch_hash = ?batch_info.as_ref().map(|b| b.hash),
+                batch_index = batch_info.as_ref().map(|b| b.index),
+                block_number = block_info.block_info.number,
+                block_hash = ?block_info.block_info.hash,
+                "Inserting block into database."
+            );
+            let l2_block: models::l2_block::ActiveModel =
+                (block_info.block_info, batch_info).into();
+            models::l2_block::Entity::insert(l2_block)
+                .on_conflict(
+                    OnConflict::column(models::l2_block::Column::BlockNumber)
+                        .update_columns([
+                            models::l2_block::Column::BlockHash,
+                            models::l2_block::Column::BatchHash,
+                            models::l2_block::Column::BatchIndex,
+                        ])
+                        .to_owned(),
+                )
+                .exec(self.get_connection())
+                .await?;
+        }
 
         tracing::trace!(
             target: "scroll::db",
@@ -488,15 +543,14 @@ pub trait DatabaseOperations: DatabaseConnectionProvider {
             .sort_by(|a, b| a.transaction.queue_index.cmp(&b.transaction.queue_index));
 
         // check if we need to reorg the L2 head and delete some L2 blocks
-        let (queue_index, l2_head_block_info) =
+        let (queue_index, l2_head_block_number) =
             if let Some(msg) = removed_executed_l1_messages.first() {
                 let l2_reorg_block_number = msg
                     .l2_block_number
                     .expect("we guarantee that this is Some(u64) due to the filter above")
                     .saturating_sub(1);
-                let l2_block_info = self.get_l2_block_info_by_number(l2_reorg_block_number).await?;
-                self.delete_l2_blocks_gt_block_number(l2_reorg_block_number).await?;
-                (Some(msg.transaction.queue_index), l2_block_info)
+
+                (Some(msg.transaction.queue_index), Some(l2_reorg_block_number))
             } else {
                 (None, None)
             };
@@ -513,7 +567,28 @@ pub trait DatabaseOperations: DatabaseConnectionProvider {
         };
 
         // commit the transaction
-        Ok(UnwindResult { l1_block_number, queue_index, l2_head_block_info, l2_safe_block_info })
+        Ok(UnwindResult { l1_block_number, queue_index, l2_head_block_number, l2_safe_block_info })
+    }
+}
+
+/// This type defines the start of an L1 message stream.
+///
+/// It can either be an index, which is the queue index of the first message to return, or a hash,
+/// which is the hash of the first message to return.
+#[derive(Debug, Clone)]
+pub enum L1MessageStart {
+    /// Start from the provided queue index.
+    Index(u64),
+    /// Start from the provided queue hash.
+    Hash(B256),
+}
+
+impl fmt::Display for L1MessageStart {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Index(index) => write!(f, "Index({index})"),
+            Self::Hash(hash) => write!(f, "Hash({hash:#x})"),
+        }
     }
 }
 
@@ -524,8 +599,9 @@ pub struct UnwindResult {
     pub l1_block_number: u64,
     /// The latest unconsumed queue index after the uwnind.
     pub queue_index: Option<u64>,
-    /// The L2 head block info after the unwind. This is only populated if the L2 head has reorged.
-    pub l2_head_block_info: Option<BlockInfo>,
+    /// The L2 head block number after the unwind. This is only populated if the L2 head has
+    /// reorged.
+    pub l2_head_block_number: Option<u64>,
     /// The L2 safe block info after the unwind. This is only populated if the L2 safe has reorged.
     pub l2_safe_block_info: Option<BlockInfo>,
 }

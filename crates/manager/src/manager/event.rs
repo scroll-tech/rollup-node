@@ -1,5 +1,9 @@
+use alloy_primitives::B256;
 use reth_scroll_primitives::ScrollBlock;
+use rollup_node_chain_orchestrator::ChainOrchestratorEvent;
 use rollup_node_signer::SignerEvent;
+use rollup_node_watcher::L1Notification;
+use scroll_db::L1MessageStart;
 use scroll_engine::ConsolidationOutcome;
 use scroll_network::NewBlockWithPeer;
 
@@ -14,10 +18,24 @@ pub enum RollupManagerEvent {
     BlockImported(ScrollBlock),
     /// Consolidated block derived from L1.
     L1DerivedBlockConsolidated(ConsolidationOutcome),
-    /// An L1 message with the given index has been indexed.
-    L1MessageIndexed(u64),
     /// A new event from the signer.
     SignerEvent(SignerEvent),
     /// A reorg event.
     Reorg(u64),
+    /// An event from the chain orchestrator.
+    ChainOrchestratorEvent(ChainOrchestratorEvent),
+    /// An error occurred consolidating the L1 messages.
+    L1MessageConsolidationError {
+        /// The expected L1 messages hash.
+        expected: B256,
+        /// The actual L1 messages hash.
+        actual: B256,
+    },
+    /// A block has been received containing an L1 message that is not in the database.
+    L1MessageMissingInDatabase {
+        /// The L1 message start index or hash.
+        start: L1MessageStart,
+    },
+    /// An event was received from the L1 watcher.
+    L1NotificationEvent(L1Notification),
 }
