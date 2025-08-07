@@ -1,3 +1,5 @@
+//! Constants related to the [`crate::ScrollRollupNode`]
+
 /// The max retries for the L1 provider.
 pub(crate) const PROVIDER_MAX_RETRIES: u32 = 10;
 
@@ -21,3 +23,7 @@ pub(crate) const BLOCK_GAP_TRIGGER: u64 = 500_000;
 
 /// The default suggested priority fee for the gas price oracle.
 pub(crate) const DEFAULT_SUGGEST_PRIORITY_FEE: u64 = 100;
+
+/// Scroll default gas limit.
+/// Should match <https://github.com/scroll-tech/reth/blob/scroll/crates/scroll/node/src/builder/payload.rs#L36>.
+pub const SCROLL_GAS_LIMIT: u64 = 20_000_000;

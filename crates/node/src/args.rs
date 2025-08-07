@@ -1,6 +1,7 @@
 use crate::{
     add_ons::IsDevChain,
     constants::{self},
+    context::RollupNodeContext,
 };
 use std::{fs, path::PathBuf, sync::Arc, time::Duration};
 
@@ -109,23 +110,11 @@ impl ScrollRollupNodeConfig {
 
 impl ScrollRollupNodeConfig {
     /// Consumes the [`ScrollRollupNodeConfig`] and builds a [`RollupNodeManager`].
-    pub async fn build<
-        N: FullNetwork<Primitives = ScrollNetworkPrimitives> + NetworkProtocols,
-        CS: ScrollHardforks
-            + ChainConfig<Config = ScrollChainConfig>
-            + EthChainSpec<Header: BlockHeader>
-            + IsDevChain
-            + Clone
-            + Send
-            + Sync
-            + 'static,
-    >(
+    pub async fn build<N, CS>(
         self,
-        network: N,
+        ctx: RollupNodeContext<N, CS>,
         events: UnboundedReceiver<ScrollWireEvent>,
         rpc_server_handles: RethRpcServerHandles,
-        chain_spec: CS,
-        db_path: PathBuf,
     ) -> eyre::Result<(
         RollupNodeManager<
             N,
@@ -137,13 +126,21 @@ impl ScrollRollupNodeConfig {
         >,
         RollupManagerHandle,
         Option<Sender<Arc<L1Notification>>>,
-    )> {
+    )>
+    where
+        N: FullNetwork<Primitives = ScrollNetworkPrimitives> + NetworkProtocols,
+        CS: EthChainSpec<Header: BlockHeader> + ChainConfig<Config = ScrollChainConfig>+ ScrollHardforks + IsDevChain + 'static,
+    {
         tracing::info!(target: "rollup_node::args",
             "Building rollup node with config:\n{:#?}",
             self
         );
         // Instantiate the network manager
+        let network = ctx.network;
         let scroll_network_manager = ScrollNetworkManager::from_parts(network.clone(), events);
+
+        // Get the chain spec.
+        let chain_spec = ctx.chain_spec;
 
         // Get the rollup node config.
         let named_chain = chain_spec.chain().named().expect("expected named chain");
@@ -174,6 +171,7 @@ impl ScrollRollupNodeConfig {
             .expect("failed to create payload provider");
 
         // Instantiate the database
+        let db_path = ctx.datadir;
         let database_path = if let Some(database_path) = self.database_args.path {
             database_path.to_string_lossy().to_string()
         } else {
@@ -275,6 +273,7 @@ impl ScrollRollupNodeConfig {
             let sequencer = Sequencer::new(
                 Arc::new(l1_messages_provider),
                 args.fee_recipient,
+                ctx.block_gas_limit,
                 chain_config.l1_config.num_l1_messages_per_block,
                 0,
                 self.sequencer_args.l1_message_inclusion_mode,
