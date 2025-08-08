@@ -9,8 +9,8 @@ use rollup_node_primitives::{
 use scroll_alloy_rpc_types_engine::BlockDataHint;
 use sea_orm::{
     sea_query::{Expr, OnConflict},
-    ActiveModelTrait, ColumnTrait, Condition, EntityTrait, QueryFilter, QueryOrder, QuerySelect,
-    Set,
+    ActiveModelTrait, ColumnTrait, Condition, DbErr, EntityTrait, QueryFilter, QueryOrder,
+    QuerySelect, Set,
 };
 
 /// The [`DatabaseOperations`] trait provides methods for interacting with the database.
@@ -184,7 +184,16 @@ pub trait DatabaseOperations: DatabaseConnectionProvider {
             .await;
 
         if let Err(err) = result {
-            tracing::info!("L1 message with queue_index {} already exists: {}", l1_index, err);
+            match err {
+                DbErr::RecordNotInserted => {
+                    tracing::info!(
+                        "L1 message with queue_index {} already exists: {}",
+                        l1_index,
+                        err
+                    );
+                }
+                _ => return Err(err.into()),
+            }
         }
 
         Ok(())
