@@ -114,7 +114,9 @@ where
 
     async fn launch_add_ons(self, ctx: AddOnsContext<'_, N>) -> eyre::Result<Self::Handle> {
         let Self { mut rpc_add_ons, rollup_manager_addon: rollup_node_manager_addon } = self;
-        rpc_add_ons.eth_api_builder.with_propagate_local_transactions(!ctx.config.txpool.no_local_transactions_propagation);
+        rpc_add_ons.eth_api_builder.with_propagate_local_transactions(
+            !ctx.config.txpool.no_local_transactions_propagation,
+        );
         let rpc_handle = rpc_add_ons.launch_add_ons_with(ctx.clone(), |_| Ok(())).await?;
         let (rollup_manager_handle, l1_watcher_tx) =
             rollup_node_manager_addon.launch(ctx.clone(), rpc_handle.clone()).await?;
