@@ -19,6 +19,8 @@ use alloy_eips::eip4844::Blob;
 use alloy_primitives::B256;
 use eyre::OptionExt;
 
+const BLOB_SIZE: usize = 131072;
+
 /// An instance of the trait can be used to fetch L1 blob data.
 #[async_trait::async_trait]
 #[auto_impl::auto_impl(Arc, &)]
@@ -56,7 +58,9 @@ impl BlobSource {
                 .await,
             ),
             Self::Mock => Arc::new(MockBeaconProvider::default()),
-            Self::S3 => Arc::new(S3BlobProvider::new_http(url.ok_or_eyre("missing url for s3 blob provider")?)),
+            Self::S3 => Arc::new(S3BlobProvider::new_http(
+                url.ok_or_eyre("missing url for s3 blob provider")?,
+            )),
             Self::Anvil => Arc::new(AnvilBlobProvider::new_http(
                 url.ok_or_eyre("missing url for anvil blob provider")?,
             )),
@@ -72,15 +76,20 @@ mod tests {
     #[tokio::test]
     async fn test_s3_blob_provider() {
         let provider = S3BlobProvider::new_http(
-            reqwest::Url::parse("https://scroll-mainnet-blob-data.s3.us-west-2.amazonaws.com").unwrap()
+            reqwest::Url::parse("https://scroll-mainnet-blob-data.s3.us-west-2.amazonaws.com")
+                .unwrap(),
         );
         let blob = provider
             .blob(
                 0,
-                B256::from_str("0x0155ba17dcd008d7ba499d0e2f1fdc26dcc9fb4d83ee37d5c4bb3d1040c3f48a").unwrap()
+                B256::from_str(
+                    "0x0155ba17dcd008d7ba499d0e2f1fdc26dcc9fb4d83ee37d5c4bb3d1040c3f48a",
+                )
+                .unwrap(),
             )
             .await
             .unwrap();
+
         assert!(blob.is_some());
     }
 }
