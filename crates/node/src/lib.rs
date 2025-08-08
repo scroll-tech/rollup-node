@@ -2,10 +2,12 @@
 
 pub mod add_ons;
 mod args;
-mod constants;
+pub mod constants;
+mod context;
 mod node;
 #[cfg(feature = "test-utils")]
 pub mod test_utils;
 
 pub use args::*;
+pub use context::RollupNodeContext;
 pub use node::ScrollRollupNode;
