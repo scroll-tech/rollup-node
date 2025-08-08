@@ -14,13 +14,14 @@ use reth_scroll_node::ScrollNetworkPrimitives;
 use reth_scroll_primitives::ScrollBlock;
 use reth_tokio_util::EventStream;
 use rollup_node::{
+    constants::SCROLL_GAS_LIMIT,
     test_utils::{
         default_sequencer_test_scroll_rollup_node_config, default_test_scroll_rollup_node_config,
         generate_tx, setup_engine,
     },
     BeaconProviderArgs, ConsensusAlgorithm, ConsensusArgs, DatabaseArgs, EngineDriverArgs,
-    GasPriceOracleArgs, L1ProviderArgs, NetworkArgs as ScrollNetworkArgs, ScrollRollupNodeConfig,
-    SequencerArgs,
+    GasPriceOracleArgs, L1ProviderArgs, NetworkArgs as ScrollNetworkArgs, RollupNodeContext,
+    ScrollRollupNodeConfig, SequencerArgs,
 };
 use rollup_node_manager::{RollupManagerCommand, RollupManagerEvent};
 use rollup_node_primitives::{sig_encode_hash, BatchCommitData, ConsensusUpdate};
@@ -589,11 +590,14 @@ async fn graceful_shutdown_consolidates_most_recent_batch_on_startup() -> eyre::
     let (rnm, handle, l1_notification_tx) = config
         .clone()
         .build(
-            node.inner.network.clone(),
+            RollupNodeContext::new(
+                node.inner.network.clone(),
+                chain_spec.clone(),
+                path.clone(),
+                SCROLL_GAS_LIMIT,
+            ),
             events,
             node.inner.add_ons_handle.rpc_handle.rpc_server_handles.clone(),
-            chain_spec.clone(),
-            path.clone(),
         )
         .await?;
 
@@ -696,11 +700,14 @@ async fn graceful_shutdown_consolidates_most_recent_batch_on_startup() -> eyre::
     let (rnm, handle, l1_notification_tx) = config
         .clone()
         .build(
-            node.inner.network.clone(),
+            RollupNodeContext::new(
+                node.inner.network.clone(),
+                chain_spec,
+                path.clone(),
+                SCROLL_GAS_LIMIT,
+            ),
             events,
             node.inner.add_ons_handle.rpc_handle.rpc_server_handles.clone(),
-            chain_spec,
-            path.clone(),
         )
         .await?;
     let l1_notification_tx = l1_notification_tx.unwrap();
@@ -787,11 +794,14 @@ async fn can_handle_batch_revert() -> eyre::Result<()> {
     let (rnm, handle, l1_watcher_tx) = config
         .clone()
         .build(
-            node.inner.network.clone(),
+            RollupNodeContext::new(
+                node.inner.network.clone(),
+                chain_spec.clone(),
+                path.clone(),
+                SCROLL_GAS_LIMIT,
+            ),
             events,
             node.inner.add_ons_handle.rpc_handle.rpc_server_handles.clone(),
-            chain_spec.clone(),
-            path.clone(),
         )
         .await?;
     let l1_watcher_tx = l1_watcher_tx.unwrap();
@@ -919,11 +929,14 @@ async fn can_handle_reorgs_while_sequencing() -> eyre::Result<()> {
     let (rnm, handle, l1_watcher_tx) = config
         .clone()
         .build(
-            node.inner.network.clone(),
+            RollupNodeContext::new(
+                node.inner.network.clone(),
+                chain_spec.clone(),
+                path.clone(),
+                SCROLL_GAS_LIMIT,
+            ),
             events,
             node.inner.add_ons_handle.rpc_handle.rpc_server_handles.clone(),
-            chain_spec.clone(),
-            path.clone(),
         )
         .await?;
     let l1_watcher_tx = l1_watcher_tx.unwrap();
