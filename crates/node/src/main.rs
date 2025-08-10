@@ -23,6 +23,8 @@ fn main() {
             let handle = builder
                 .node(ScrollRollupNode::new(args))
                 .launch_with_fn(|builder| {
+                    info!(target: "reth::cli", config = ?builder.config().chain.config, "Running with config");
+
                     // We must use `always_process_payload_attributes_on_canonical_head` in order to
                     // be able to build payloads with the forkchoice state API
                     // on top of heads part of the canonical state. Not

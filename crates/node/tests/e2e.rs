@@ -49,7 +49,6 @@ async fn can_bridge_l1_messages() -> eyre::Result<()> {
         sequencer_args: SequencerArgs {
             sequencer_enabled: true,
             block_time: 0,
-            max_l1_messages_per_block: 4,
             l1_message_inclusion_mode: L1MessageInclusionMode::BlockDepth(0),
             ..SequencerArgs::default()
         },
@@ -119,7 +118,6 @@ async fn can_sequence_and_gossip_blocks() {
         sequencer_args: SequencerArgs {
             sequencer_enabled: true,
             block_time: 0,
-            max_l1_messages_per_block: 4,
             l1_message_inclusion_mode: L1MessageInclusionMode::BlockDepth(0),
             payload_building_duration: 1000,
             ..SequencerArgs::default()
@@ -831,7 +829,6 @@ async fn can_handle_reorgs_while_sequencing() -> eyre::Result<()> {
             .expect("valid url that will not be used as test batches use calldata"),
     );
     config.engine_driver_args.sync_at_startup = false;
-    config.sequencer_args.max_l1_messages_per_block = 1;
 
     let (_, events) = ScrollWireProtocolHandler::new(ScrollWireConfig::new(true));
     let (rnm, handle, l1_watcher_tx) = config
