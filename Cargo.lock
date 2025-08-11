@@ -6537,9 +6537,9 @@ dependencies = [
 
 [[package]]
 name = "proc-macro2"
-version = "1.0.95"
+version = "1.0.96"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "02b3e5e68a3a1a02aad3ec490a98007cbc13c37cbe84a3cd7b8e406d76e7f778"
+checksum = "beef09f85ae72cea1ef96ba6870c51e6382ebfa4f0e85b643459331f3daa5be0"
 dependencies = [
  "unicode-ident",
 ]
@@ -7110,7 +7110,7 @@ checksum = "95325155c684b1c89f7765e30bc1c42e4a6da51ca513615660cb8a62ef9a88e3"
 [[package]]
 name = "reth-basic-payload-builder"
 version = "1.6.0"
-source = "git+https://github.com/scroll-tech/reth.git?branch=feat-forward-sequencer-no-blocking#886f8eab8e1b82fef982b62e06283d5b76450cae"
+source = "git+https://github.com/scroll-tech/reth.git#b364426fe29db2fbfe83ce4a6740296707409ff3"
 dependencies = [
  "alloy-consensus 1.0.24",
  "alloy-eips 1.0.24",
@@ -7134,7 +7134,7 @@ dependencies = [
 [[package]]
 name = "reth-chain-state"
 version = "1.6.0"
-source = "git+https://github.com/scroll-tech/reth.git?branch=feat-forward-sequencer-no-blocking#886f8eab8e1b82fef982b62e06283d5b76450cae"
+source = "git+https://github.com/scroll-tech/reth.git#b364426fe29db2fbfe83ce4a6740296707409ff3"
 dependencies = [
  "alloy-consensus 1.0.24",
  "alloy-eips 1.0.24",
@@ -7165,7 +7165,7 @@ dependencies = [
 [[package]]
 name = "reth-chainspec"
 version = "1.6.0"
-source = "git+https://github.com/scroll-tech/reth.git?branch=feat-forward-sequencer-no-blocking#886f8eab8e1b82fef982b62e06283d5b76450cae"
+source = "git+https://github.com/scroll-tech/reth.git#b364426fe29db2fbfe83ce4a6740296707409ff3"
 dependencies = [
  "alloy-chains",
  "alloy-consensus 1.0.24",
@@ -7185,7 +7185,7 @@ dependencies = [
 [[package]]
 name = "reth-cli"
 version = "1.6.0"
-source = "git+https://github.com/scroll-tech/reth.git?branch=feat-forward-sequencer-no-blocking#886f8eab8e1b82fef982b62e06283d5b76450cae"
+source = "git+https://github.com/scroll-tech/reth.git#b364426fe29db2fbfe83ce4a6740296707409ff3"
 dependencies = [
  "alloy-genesis",
  "clap",
@@ -7199,7 +7199,7 @@ dependencies = [
 [[package]]
 name = "reth-cli-commands"
 version = "1.6.0"
-source = "git+https://github.com/scroll-tech/reth.git?branch=feat-forward-sequencer-no-blocking#886f8eab8e1b82fef982b62e06283d5b76450cae"
+source = "git+https://github.com/scroll-tech/reth.git#b364426fe29db2fbfe83ce4a6740296707409ff3"
 dependencies = [
  "ahash 0.8.12",
  "alloy-chains",
@@ -7272,7 +7272,7 @@ dependencies = [
 [[package]]
 name = "reth-cli-runner"
 version = "1.6.0"
-source = "git+https://github.com/scroll-tech/reth.git?branch=feat-forward-sequencer-no-blocking#886f8eab8e1b82fef982b62e06283d5b76450cae"
+source = "git+https://github.com/scroll-tech/reth.git#b364426fe29db2fbfe83ce4a6740296707409ff3"
 dependencies = [
  "reth-tasks",
  "tokio",
@@ -7282,7 +7282,7 @@ dependencies = [
 [[package]]
 name = "reth-cli-util"
 version = "1.6.0"
-source = "git+https://github.com/scroll-tech/reth.git?branch=feat-forward-sequencer-no-blocking#886f8eab8e1b82fef982b62e06283d5b76450cae"
+source = "git+https://github.com/scroll-tech/reth.git#b364426fe29db2fbfe83ce4a6740296707409ff3"
 dependencies = [
  "alloy-eips 1.0.24",
  "alloy-primitives",
@@ -7299,7 +7299,7 @@ dependencies = [
 [[package]]
 name = "reth-codecs"
 version = "1.6.0"
-source = "git+https://github.com/scroll-tech/reth.git?branch=feat-forward-sequencer-no-blocking#886f8eab8e1b82fef982b62e06283d5b76450cae"
+source = "git+https://github.com/scroll-tech/reth.git#b364426fe29db2fbfe83ce4a6740296707409ff3"
 dependencies = [
  "alloy-consensus 1.0.24",
  "alloy-eips 1.0.24",
@@ -7319,7 +7319,7 @@ dependencies = [
 [[package]]
 name = "reth-codecs-derive"
 version = "1.6.0"
-source = "git+https://github.com/scroll-tech/reth.git?branch=feat-forward-sequencer-no-blocking#886f8eab8e1b82fef982b62e06283d5b76450cae"
+source = "git+https://github.com/scroll-tech/reth.git#b364426fe29db2fbfe83ce4a6740296707409ff3"
 dependencies = [
  "convert_case",
  "proc-macro2",
@@ -7330,7 +7330,7 @@ dependencies = [
 [[package]]
 name = "reth-config"
 version = "1.6.0"
-source = "git+https://github.com/scroll-tech/reth.git?branch=feat-forward-sequencer-no-blocking#886f8eab8e1b82fef982b62e06283d5b76450cae"
+source = "git+https://github.com/scroll-tech/reth.git#b364426fe29db2fbfe83ce4a6740296707409ff3"
 dependencies = [
  "eyre",
  "humantime-serde",
@@ -7345,7 +7345,7 @@ dependencies = [
 [[package]]
 name = "reth-consensus"
 version = "1.6.0"
-source = "git+https://github.com/scroll-tech/reth.git?branch=feat-forward-sequencer-no-blocking#886f8eab8e1b82fef982b62e06283d5b76450cae"
+source = "git+https://github.com/scroll-tech/reth.git#b364426fe29db2fbfe83ce4a6740296707409ff3"
 dependencies = [
  "alloy-consensus 1.0.24",
  "alloy-primitives",
@@ -7358,7 +7358,7 @@ dependencies = [
 [[package]]
 name = "reth-consensus-common"
 version = "1.6.0"
-source = "git+https://github.com/scroll-tech/reth.git?branch=feat-forward-sequencer-no-blocking#886f8eab8e1b82fef982b62e06283d5b76450cae"
+source = "git+https://github.com/scroll-tech/reth.git#b364426fe29db2fbfe83ce4a6740296707409ff3"
 dependencies = [
  "alloy-consensus 1.0.24",
  "alloy-eips 1.0.24",
@@ -7370,7 +7370,7 @@ dependencies = [
 [[package]]
 name = "reth-consensus-debug-client"
 version = "1.6.0"
-source = "git+https://github.com/scroll-tech/reth.git?branch=feat-forward-sequencer-no-blocking#886f8eab8e1b82fef982b62e06283d5b76450cae"
+source = "git+https://github.com/scroll-tech/reth.git#b364426fe29db2fbfe83ce4a6740296707409ff3"
 dependencies = [
  "alloy-consensus 1.0.24",
  "alloy-eips 1.0.24",
@@ -7395,7 +7395,7 @@ dependencies = [
 [[package]]
 name = "reth-db"
 version = "1.6.0"
-source = "git+https://github.com/scroll-tech/reth.git?branch=feat-forward-sequencer-no-blocking#886f8eab8e1b82fef982b62e06283d5b76450cae"
+source = "git+https://github.com/scroll-tech/reth.git#b364426fe29db2fbfe83ce4a6740296707409ff3"
 dependencies = [
  "alloy-primitives",
  "derive_more",
@@ -7421,7 +7421,7 @@ dependencies = [
 [[package]]
 name = "reth-db-api"
 version = "1.6.0"
-source = "git+https://github.com/scroll-tech/reth.git?branch=feat-forward-sequencer-no-blocking#886f8eab8e1b82fef982b62e06283d5b76450cae"
+source = "git+https://github.com/scroll-tech/reth.git#b364426fe29db2fbfe83ce4a6740296707409ff3"
 dependencies = [
  "alloy-consensus 1.0.24",
  "alloy-genesis",
@@ -7450,7 +7450,7 @@ dependencies = [
 [[package]]
 name = "reth-db-common"
 version = "1.6.0"
-source = "git+https://github.com/scroll-tech/reth.git?branch=feat-forward-sequencer-no-blocking#886f8eab8e1b82fef982b62e06283d5b76450cae"
+source = "git+https://github.com/scroll-tech/reth.git#b364426fe29db2fbfe83ce4a6740296707409ff3"
 dependencies = [
  "alloy-consensus 1.0.24",
  "alloy-genesis",
@@ -7479,7 +7479,7 @@ dependencies = [
 [[package]]
 name = "reth-db-models"
 version = "1.6.0"
-source = "git+https://github.com/scroll-tech/reth.git?branch=feat-forward-sequencer-no-blocking#886f8eab8e1b82fef982b62e06283d5b76450cae"
+source = "git+https://github.com/scroll-tech/reth.git#b364426fe29db2fbfe83ce4a6740296707409ff3"
 dependencies = [
  "alloy-eips 1.0.24",
  "alloy-primitives",
@@ -7494,7 +7494,7 @@ dependencies = [
 [[package]]
 name = "reth-discv4"
 version = "1.6.0"
-source = "git+https://github.com/scroll-tech/reth.git?branch=feat-forward-sequencer-no-blocking#886f8eab8e1b82fef982b62e06283d5b76450cae"
+source = "git+https://github.com/scroll-tech/reth.git#b364426fe29db2fbfe83ce4a6740296707409ff3"
 dependencies = [
  "alloy-primitives",
  "alloy-rlp",
@@ -7520,7 +7520,7 @@ dependencies = [
 [[package]]
 name = "reth-discv5"
 version = "1.6.0"
-source = "git+https://github.com/scroll-tech/reth.git?branch=feat-forward-sequencer-no-blocking#886f8eab8e1b82fef982b62e06283d5b76450cae"
+source = "git+https://github.com/scroll-tech/reth.git#b364426fe29db2fbfe83ce4a6740296707409ff3"
 dependencies = [
  "alloy-primitives",
  "alloy-rlp",
@@ -7544,7 +7544,7 @@ dependencies = [
 [[package]]
 name = "reth-dns-discovery"
 version = "1.6.0"
-source = "git+https://github.com/scroll-tech/reth.git?branch=feat-forward-sequencer-no-blocking#886f8eab8e1b82fef982b62e06283d5b76450cae"
+source = "git+https://github.com/scroll-tech/reth.git#b364426fe29db2fbfe83ce4a6740296707409ff3"
 dependencies = [
  "alloy-primitives",
  "data-encoding",
@@ -7568,7 +7568,7 @@ dependencies = [
 [[package]]
 name = "reth-downloaders"
 version = "1.6.0"
-source = "git+https://github.com/scroll-tech/reth.git?branch=feat-forward-sequencer-no-blocking#886f8eab8e1b82fef982b62e06283d5b76450cae"
+source = "git+https://github.com/scroll-tech/reth.git#b364426fe29db2fbfe83ce4a6740296707409ff3"
 dependencies = [
  "alloy-consensus 1.0.24",
  "alloy-eips 1.0.24",
@@ -7603,7 +7603,7 @@ dependencies = [
 [[package]]
 name = "reth-e2e-test-utils"
 version = "1.6.0"
-source = "git+https://github.com/scroll-tech/reth.git?branch=feat-forward-sequencer-no-blocking#886f8eab8e1b82fef982b62e06283d5b76450cae"
+source = "git+https://github.com/scroll-tech/reth.git#b364426fe29db2fbfe83ce4a6740296707409ff3"
 dependencies = [
  "alloy-consensus 1.0.24",
  "alloy-eips 1.0.24",
@@ -7665,7 +7665,7 @@ dependencies = [
 [[package]]
 name = "reth-ecies"
 version = "1.6.0"
-source = "git+https://github.com/scroll-tech/reth.git?branch=feat-forward-sequencer-no-blocking#886f8eab8e1b82fef982b62e06283d5b76450cae"
+source = "git+https://github.com/scroll-tech/reth.git#b364426fe29db2fbfe83ce4a6740296707409ff3"
 dependencies = [
  "aes",
  "alloy-primitives",
@@ -7696,7 +7696,7 @@ dependencies = [
 [[package]]
 name = "reth-engine-local"
 version = "1.6.0"
-source = "git+https://github.com/scroll-tech/reth.git?branch=feat-forward-sequencer-no-blocking#886f8eab8e1b82fef982b62e06283d5b76450cae"
+source = "git+https://github.com/scroll-tech/reth.git#b364426fe29db2fbfe83ce4a6740296707409ff3"
 dependencies = [
  "alloy-consensus 1.0.24",
  "alloy-primitives",
@@ -7719,7 +7719,7 @@ dependencies = [
 [[package]]
 name = "reth-engine-primitives"
 version = "1.6.0"
-source = "git+https://github.com/scroll-tech/reth.git?branch=feat-forward-sequencer-no-blocking#886f8eab8e1b82fef982b62e06283d5b76450cae"
+source = "git+https://github.com/scroll-tech/reth.git#b364426fe29db2fbfe83ce4a6740296707409ff3"
 dependencies = [
  "alloy-consensus 1.0.24",
  "alloy-eips 1.0.24",
@@ -7744,7 +7744,7 @@ dependencies = [
 [[package]]
 name = "reth-engine-service"
 version = "1.6.0"
-source = "git+https://github.com/scroll-tech/reth.git?branch=feat-forward-sequencer-no-blocking#886f8eab8e1b82fef982b62e06283d5b76450cae"
+source = "git+https://github.com/scroll-tech/reth.git#b364426fe29db2fbfe83ce4a6740296707409ff3"
 dependencies = [
  "futures",
  "pin-project",
@@ -7767,7 +7767,7 @@ dependencies = [
 [[package]]
 name = "reth-engine-tree"
 version = "1.6.0"
-source = "git+https://github.com/scroll-tech/reth.git?branch=feat-forward-sequencer-no-blocking#886f8eab8e1b82fef982b62e06283d5b76450cae"
+source = "git+https://github.com/scroll-tech/reth.git#b364426fe29db2fbfe83ce4a6740296707409ff3"
 dependencies = [
  "alloy-consensus 1.0.24",
  "alloy-eips 1.0.24",
@@ -7820,7 +7820,7 @@ dependencies = [
 [[package]]
 name = "reth-engine-util"
 version = "1.6.0"
-source = "git+https://github.com/scroll-tech/reth.git?branch=feat-forward-sequencer-no-blocking#886f8eab8e1b82fef982b62e06283d5b76450cae"
+source = "git+https://github.com/scroll-tech/reth.git#b364426fe29db2fbfe83ce4a6740296707409ff3"
 dependencies = [
  "alloy-consensus 1.0.24",
  "alloy-rpc-types-engine 1.0.24",
@@ -7847,7 +7847,7 @@ dependencies = [
 [[package]]
 name = "reth-era"
 version = "1.6.0"
-source = "git+https://github.com/scroll-tech/reth.git?branch=feat-forward-sequencer-no-blocking#886f8eab8e1b82fef982b62e06283d5b76450cae"
+source = "git+https://github.com/scroll-tech/reth.git#b364426fe29db2fbfe83ce4a6740296707409ff3"
 dependencies = [
  "alloy-consensus 1.0.24",
  "alloy-eips 1.0.24",
@@ -7863,7 +7863,7 @@ dependencies = [
 [[package]]
 name = "reth-era-downloader"
 version = "1.6.0"
-source = "git+https://github.com/scroll-tech/reth.git?branch=feat-forward-sequencer-no-blocking#886f8eab8e1b82fef982b62e06283d5b76450cae"
+source = "git+https://github.com/scroll-tech/reth.git#b364426fe29db2fbfe83ce4a6740296707409ff3"
 dependencies = [
  "alloy-primitives",
  "bytes",
@@ -7878,7 +7878,7 @@ dependencies = [
 [[package]]
 name = "reth-era-utils"
 version = "1.6.0"
-source = "git+https://github.com/scroll-tech/reth.git?branch=feat-forward-sequencer-no-blocking#886f8eab8e1b82fef982b62e06283d5b76450cae"
+source = "git+https://github.com/scroll-tech/reth.git#b364426fe29db2fbfe83ce4a6740296707409ff3"
 dependencies = [
  "alloy-consensus 1.0.24",
  "alloy-primitives",
@@ -7902,7 +7902,7 @@ dependencies = [
 [[package]]
 name = "reth-errors"
 version = "1.6.0"
-source = "git+https://github.com/scroll-tech/reth.git?branch=feat-forward-sequencer-no-blocking#886f8eab8e1b82fef982b62e06283d5b76450cae"
+source = "git+https://github.com/scroll-tech/reth.git#b364426fe29db2fbfe83ce4a6740296707409ff3"
 dependencies = [
  "reth-consensus",
  "reth-execution-errors",
@@ -7913,7 +7913,7 @@ dependencies = [
 [[package]]
 name = "reth-eth-wire"
 version = "1.6.0"
-source = "git+https://github.com/scroll-tech/reth.git?branch=feat-forward-sequencer-no-blocking#886f8eab8e1b82fef982b62e06283d5b76450cae"
+source = "git+https://github.com/scroll-tech/reth.git#b364426fe29db2fbfe83ce4a6740296707409ff3"
 dependencies = [
  "alloy-chains",
  "alloy-primitives",
@@ -7941,7 +7941,7 @@ dependencies = [
 [[package]]
 name = "reth-eth-wire-types"
 version = "1.6.0"
-source = "git+https://github.com/scroll-tech/reth.git?branch=feat-forward-sequencer-no-blocking#886f8eab8e1b82fef982b62e06283d5b76450cae"
+source = "git+https://github.com/scroll-tech/reth.git#b364426fe29db2fbfe83ce4a6740296707409ff3"
 dependencies = [
  "alloy-chains",
  "alloy-consensus 1.0.24",
@@ -7962,7 +7962,7 @@ dependencies = [
 [[package]]
 name = "reth-ethereum-consensus"
 version = "1.6.0"
-source = "git+https://github.com/scroll-tech/reth.git?branch=feat-forward-sequencer-no-blocking#886f8eab8e1b82fef982b62e06283d5b76450cae"
+source = "git+https://github.com/scroll-tech/reth.git#b364426fe29db2fbfe83ce4a6740296707409ff3"
 dependencies = [
  "alloy-consensus 1.0.24",
  "alloy-eips 1.0.24",
@@ -7978,7 +7978,7 @@ dependencies = [
 [[package]]
 name = "reth-ethereum-engine-primitives"
 version = "1.6.0"
-source = "git+https://github.com/scroll-tech/reth.git?branch=feat-forward-sequencer-no-blocking#886f8eab8e1b82fef982b62e06283d5b76450cae"
+source = "git+https://github.com/scroll-tech/reth.git#b364426fe29db2fbfe83ce4a6740296707409ff3"
 dependencies = [
  "alloy-eips 1.0.24",
  "alloy-primitives",
@@ -7996,7 +7996,7 @@ dependencies = [
 [[package]]
 name = "reth-ethereum-forks"
 version = "1.6.0"
-source = "git+https://github.com/scroll-tech/reth.git?branch=feat-forward-sequencer-no-blocking#886f8eab8e1b82fef982b62e06283d5b76450cae"
+source = "git+https://github.com/scroll-tech/reth.git#b364426fe29db2fbfe83ce4a6740296707409ff3"
 dependencies = [
  "alloy-eip2124",
  "alloy-hardforks",
@@ -8010,7 +8010,7 @@ dependencies = [
 [[package]]
 name = "reth-ethereum-payload-builder"
 version = "1.6.0"
-source = "git+https://github.com/scroll-tech/reth.git?branch=feat-forward-sequencer-no-blocking#886f8eab8e1b82fef982b62e06283d5b76450cae"
+source = "git+https://github.com/scroll-tech/reth.git#b364426fe29db2fbfe83ce4a6740296707409ff3"
 dependencies = [
  "alloy-consensus 1.0.24",
  "alloy-eips 1.0.24",
@@ -8037,7 +8037,7 @@ dependencies = [
 [[package]]
 name = "reth-ethereum-primitives"
 version = "1.6.0"
-source = "git+https://github.com/scroll-tech/reth.git?branch=feat-forward-sequencer-no-blocking#886f8eab8e1b82fef982b62e06283d5b76450cae"
+source = "git+https://github.com/scroll-tech/reth.git#b364426fe29db2fbfe83ce4a6740296707409ff3"
 dependencies = [
  "alloy-consensus 1.0.24",
  "alloy-eips 1.0.24",
@@ -8055,7 +8055,7 @@ dependencies = [
 [[package]]
 name = "reth-etl"
 version = "1.6.0"
-source = "git+https://github.com/scroll-tech/reth.git?branch=feat-forward-sequencer-no-blocking#886f8eab8e1b82fef982b62e06283d5b76450cae"
+source = "git+https://github.com/scroll-tech/reth.git#b364426fe29db2fbfe83ce4a6740296707409ff3"
 dependencies = [
  "rayon",
  "reth-db-api",
@@ -8065,7 +8065,7 @@ dependencies = [
 [[package]]
 name = "reth-evm"
 version = "1.6.0"
-source = "git+https://github.com/scroll-tech/reth.git?branch=feat-forward-sequencer-no-blocking#886f8eab8e1b82fef982b62e06283d5b76450cae"
+source = "git+https://github.com/scroll-tech/reth.git#b364426fe29db2fbfe83ce4a6740296707409ff3"
 dependencies = [
  "alloy-consensus 1.0.24",
  "alloy-eips 1.0.24",
@@ -8089,7 +8089,7 @@ dependencies = [
 [[package]]
 name = "reth-evm-ethereum"
 version = "1.6.0"
-source = "git+https://github.com/scroll-tech/reth.git?branch=feat-forward-sequencer-no-blocking#886f8eab8e1b82fef982b62e06283d5b76450cae"
+source = "git+https://github.com/scroll-tech/reth.git#b364426fe29db2fbfe83ce4a6740296707409ff3"
 dependencies = [
  "alloy-consensus 1.0.24",
  "alloy-eips 1.0.24",
@@ -8107,7 +8107,7 @@ dependencies = [
 [[package]]
 name = "reth-execution-errors"
 version = "1.6.0"
-source = "git+https://github.com/scroll-tech/reth.git?branch=feat-forward-sequencer-no-blocking#886f8eab8e1b82fef982b62e06283d5b76450cae"
+source = "git+https://github.com/scroll-tech/reth.git#b364426fe29db2fbfe83ce4a6740296707409ff3"
 dependencies = [
  "alloy-evm",
  "alloy-primitives",
@@ -8120,7 +8120,7 @@ dependencies = [
 [[package]]
 name = "reth-execution-types"
 version = "1.6.0"
-source = "git+https://github.com/scroll-tech/reth.git?branch=feat-forward-sequencer-no-blocking#886f8eab8e1b82fef982b62e06283d5b76450cae"
+source = "git+https://github.com/scroll-tech/reth.git#b364426fe29db2fbfe83ce4a6740296707409ff3"
 dependencies = [
  "alloy-consensus 1.0.24",
  "alloy-eips 1.0.24",
@@ -8138,7 +8138,7 @@ dependencies = [
 [[package]]
 name = "reth-exex"
 version = "1.6.0"
-source = "git+https://github.com/scroll-tech/reth.git?branch=feat-forward-sequencer-no-blocking#886f8eab8e1b82fef982b62e06283d5b76450cae"
+source = "git+https://github.com/scroll-tech/reth.git#b364426fe29db2fbfe83ce4a6740296707409ff3"
 dependencies = [
  "alloy-consensus 1.0.24",
  "alloy-eips 1.0.24",
@@ -8176,7 +8176,7 @@ dependencies = [
 [[package]]
 name = "reth-exex-types"
 version = "1.6.0"
-source = "git+https://github.com/scroll-tech/reth.git?branch=feat-forward-sequencer-no-blocking#886f8eab8e1b82fef982b62e06283d5b76450cae"
+source = "git+https://github.com/scroll-tech/reth.git#b364426fe29db2fbfe83ce4a6740296707409ff3"
 dependencies = [
  "alloy-eips 1.0.24",
  "alloy-primitives",
@@ -8190,7 +8190,7 @@ dependencies = [
 [[package]]
 name = "reth-fs-util"
 version = "1.6.0"
-source = "git+https://github.com/scroll-tech/reth.git?branch=feat-forward-sequencer-no-blocking#886f8eab8e1b82fef982b62e06283d5b76450cae"
+source = "git+https://github.com/scroll-tech/reth.git#b364426fe29db2fbfe83ce4a6740296707409ff3"
 dependencies = [
  "serde",
  "serde_json",
@@ -8200,7 +8200,7 @@ dependencies = [
 [[package]]
 name = "reth-invalid-block-hooks"
 version = "1.6.0"
-source = "git+https://github.com/scroll-tech/reth.git?branch=feat-forward-sequencer-no-blocking#886f8eab8e1b82fef982b62e06283d5b76450cae"
+source = "git+https://github.com/scroll-tech/reth.git#b364426fe29db2fbfe83ce4a6740296707409ff3"
 dependencies = [
  "alloy-consensus 1.0.24",
  "alloy-primitives",
@@ -8228,7 +8228,7 @@ dependencies = [
 [[package]]
 name = "reth-ipc"
 version = "1.6.0"
-source = "git+https://github.com/scroll-tech/reth.git?branch=feat-forward-sequencer-no-blocking#886f8eab8e1b82fef982b62e06283d5b76450cae"
+source = "git+https://github.com/scroll-tech/reth.git#b364426fe29db2fbfe83ce4a6740296707409ff3"
 dependencies = [
  "bytes",
  "futures",
@@ -8248,7 +8248,7 @@ dependencies = [
 [[package]]
 name = "reth-libmdbx"
 version = "1.6.0"
-source = "git+https://github.com/scroll-tech/reth.git?branch=feat-forward-sequencer-no-blocking#886f8eab8e1b82fef982b62e06283d5b76450cae"
+source = "git+https://github.com/scroll-tech/reth.git#b364426fe29db2fbfe83ce4a6740296707409ff3"
 dependencies = [
  "bitflags 2.9.1",
  "byteorder",
@@ -8265,7 +8265,7 @@ dependencies = [
 [[package]]
 name = "reth-mdbx-sys"
 version = "1.6.0"
-source = "git+https://github.com/scroll-tech/reth.git?branch=feat-forward-sequencer-no-blocking#886f8eab8e1b82fef982b62e06283d5b76450cae"
+source = "git+https://github.com/scroll-tech/reth.git#b364426fe29db2fbfe83ce4a6740296707409ff3"
 dependencies = [
  "bindgen 0.70.1",
  "cc",
@@ -8274,7 +8274,7 @@ dependencies = [
 [[package]]
 name = "reth-metrics"
 version = "1.6.0"
-source = "git+https://github.com/scroll-tech/reth.git?branch=feat-forward-sequencer-no-blocking#886f8eab8e1b82fef982b62e06283d5b76450cae"
+source = "git+https://github.com/scroll-tech/reth.git#b364426fe29db2fbfe83ce4a6740296707409ff3"
 dependencies = [
  "futures",
  "metrics",
@@ -8286,7 +8286,7 @@ dependencies = [
 [[package]]
 name = "reth-net-banlist"
 version = "1.6.0"
-source = "git+https://github.com/scroll-tech/reth.git?branch=feat-forward-sequencer-no-blocking#886f8eab8e1b82fef982b62e06283d5b76450cae"
+source = "git+https://github.com/scroll-tech/reth.git#b364426fe29db2fbfe83ce4a6740296707409ff3"
 dependencies = [
  "alloy-primitives",
 ]
@@ -8294,7 +8294,7 @@ dependencies = [
 [[package]]
 name = "reth-net-nat"
 version = "1.6.0"
-source = "git+https://github.com/scroll-tech/reth.git?branch=feat-forward-sequencer-no-blocking#886f8eab8e1b82fef982b62e06283d5b76450cae"
+source = "git+https://github.com/scroll-tech/reth.git#b364426fe29db2fbfe83ce4a6740296707409ff3"
 dependencies = [
  "futures-util",
  "if-addrs",
@@ -8308,7 +8308,7 @@ dependencies = [
 [[package]]
 name = "reth-network"
 version = "1.6.0"
-source = "git+https://github.com/scroll-tech/reth.git?branch=feat-forward-sequencer-no-blocking#886f8eab8e1b82fef982b62e06283d5b76450cae"
+source = "git+https://github.com/scroll-tech/reth.git#b364426fe29db2fbfe83ce4a6740296707409ff3"
 dependencies = [
  "alloy-consensus 1.0.24",
  "alloy-eips 1.0.24",
@@ -8363,7 +8363,7 @@ dependencies = [
 [[package]]
 name = "reth-network-api"
 version = "1.6.0"
-source = "git+https://github.com/scroll-tech/reth.git?branch=feat-forward-sequencer-no-blocking#886f8eab8e1b82fef982b62e06283d5b76450cae"
+source = "git+https://github.com/scroll-tech/reth.git#b364426fe29db2fbfe83ce4a6740296707409ff3"
 dependencies = [
  "alloy-consensus 1.0.24",
  "alloy-primitives",
@@ -8389,7 +8389,7 @@ dependencies = [
 [[package]]
 name = "reth-network-p2p"
 version = "1.6.0"
-source = "git+https://github.com/scroll-tech/reth.git?branch=feat-forward-sequencer-no-blocking#886f8eab8e1b82fef982b62e06283d5b76450cae"
+source = "git+https://github.com/scroll-tech/reth.git#b364426fe29db2fbfe83ce4a6740296707409ff3"
 dependencies = [
  "alloy-consensus 1.0.24",
  "alloy-eips 1.0.24",
@@ -8412,7 +8412,7 @@ dependencies = [
 [[package]]
 name = "reth-network-peers"
 version = "1.6.0"
-source = "git+https://github.com/scroll-tech/reth.git?branch=feat-forward-sequencer-no-blocking#886f8eab8e1b82fef982b62e06283d5b76450cae"
+source = "git+https://github.com/scroll-tech/reth.git#b364426fe29db2fbfe83ce4a6740296707409ff3"
 dependencies = [
  "alloy-primitives",
  "alloy-rlp",
@@ -8427,7 +8427,7 @@ dependencies = [
 [[package]]
 name = "reth-network-types"
 version = "1.6.0"
-source = "git+https://github.com/scroll-tech/reth.git?branch=feat-forward-sequencer-no-blocking#886f8eab8e1b82fef982b62e06283d5b76450cae"
+source = "git+https://github.com/scroll-tech/reth.git#b364426fe29db2fbfe83ce4a6740296707409ff3"
 dependencies = [
  "alloy-eip2124",
  "humantime-serde",
@@ -8441,7 +8441,7 @@ dependencies = [
 [[package]]
 name = "reth-nippy-jar"
 version = "1.6.0"
-source = "git+https://github.com/scroll-tech/reth.git?branch=feat-forward-sequencer-no-blocking#886f8eab8e1b82fef982b62e06283d5b76450cae"
+source = "git+https://github.com/scroll-tech/reth.git#b364426fe29db2fbfe83ce4a6740296707409ff3"
 dependencies = [
  "anyhow",
  "bincode",
@@ -8458,7 +8458,7 @@ dependencies = [
 [[package]]
 name = "reth-node-api"
 version = "1.6.0"
-source = "git+https://github.com/scroll-tech/reth.git?branch=feat-forward-sequencer-no-blocking#886f8eab8e1b82fef982b62e06283d5b76450cae"
+source = "git+https://github.com/scroll-tech/reth.git#b364426fe29db2fbfe83ce4a6740296707409ff3"
 dependencies = [
  "alloy-rpc-types-engine 1.0.24",
  "eyre",
@@ -8482,7 +8482,7 @@ dependencies = [
 [[package]]
 name = "reth-node-builder"
 version = "1.6.0"
-source = "git+https://github.com/scroll-tech/reth.git?branch=feat-forward-sequencer-no-blocking#886f8eab8e1b82fef982b62e06283d5b76450cae"
+source = "git+https://github.com/scroll-tech/reth.git#b364426fe29db2fbfe83ce4a6740296707409ff3"
 dependencies = [
  "alloy-consensus 1.0.24",
  "alloy-eips 1.0.24",
@@ -8548,7 +8548,7 @@ dependencies = [
 [[package]]
 name = "reth-node-core"
 version = "1.6.0"
-source = "git+https://github.com/scroll-tech/reth.git?branch=feat-forward-sequencer-no-blocking#886f8eab8e1b82fef982b62e06283d5b76450cae"
+source = "git+https://github.com/scroll-tech/reth.git#b364426fe29db2fbfe83ce4a6740296707409ff3"
 dependencies = [
  "alloy-consensus 1.0.24",
  "alloy-eips 1.0.24",
@@ -8600,7 +8600,7 @@ dependencies = [
 [[package]]
 name = "reth-node-ethereum"
 version = "1.6.0"
-source = "git+https://github.com/scroll-tech/reth.git?branch=feat-forward-sequencer-no-blocking#886f8eab8e1b82fef982b62e06283d5b76450cae"
+source = "git+https://github.com/scroll-tech/reth.git#b364426fe29db2fbfe83ce4a6740296707409ff3"
 dependencies = [
  "alloy-eips 1.0.24",
  "alloy-network",
@@ -8638,7 +8638,7 @@ dependencies = [
 [[package]]
 name = "reth-node-ethstats"
 version = "1.6.0"
-source = "git+https://github.com/scroll-tech/reth.git?branch=feat-forward-sequencer-no-blocking#886f8eab8e1b82fef982b62e06283d5b76450cae"
+source = "git+https://github.com/scroll-tech/reth.git#b364426fe29db2fbfe83ce4a6740296707409ff3"
 dependencies = [
  "alloy-consensus 1.0.24",
  "alloy-primitives",
@@ -8662,7 +8662,7 @@ dependencies = [
 [[package]]
 name = "reth-node-events"
 version = "1.6.0"
-source = "git+https://github.com/scroll-tech/reth.git?branch=feat-forward-sequencer-no-blocking#886f8eab8e1b82fef982b62e06283d5b76450cae"
+source = "git+https://github.com/scroll-tech/reth.git#b364426fe29db2fbfe83ce4a6740296707409ff3"
 dependencies = [
  "alloy-consensus 1.0.24",
  "alloy-eips 1.0.24",
@@ -8686,7 +8686,7 @@ dependencies = [
 [[package]]
 name = "reth-node-metrics"
 version = "1.6.0"
-source = "git+https://github.com/scroll-tech/reth.git?branch=feat-forward-sequencer-no-blocking#886f8eab8e1b82fef982b62e06283d5b76450cae"
+source = "git+https://github.com/scroll-tech/reth.git#b364426fe29db2fbfe83ce4a6740296707409ff3"
 dependencies = [
  "eyre",
  "http 1.3.1",
@@ -8706,7 +8706,7 @@ dependencies = [
 [[package]]
 name = "reth-node-types"
 version = "1.6.0"
-source = "git+https://github.com/scroll-tech/reth.git?branch=feat-forward-sequencer-no-blocking#886f8eab8e1b82fef982b62e06283d5b76450cae"
+source = "git+https://github.com/scroll-tech/reth.git#b364426fe29db2fbfe83ce4a6740296707409ff3"
 dependencies = [
  "reth-chainspec",
  "reth-db-api",
@@ -8719,7 +8719,7 @@ dependencies = [
 [[package]]
 name = "reth-optimism-primitives"
 version = "1.6.0"
-source = "git+https://github.com/scroll-tech/reth.git?branch=feat-forward-sequencer-no-blocking#886f8eab8e1b82fef982b62e06283d5b76450cae"
+source = "git+https://github.com/scroll-tech/reth.git#b364426fe29db2fbfe83ce4a6740296707409ff3"
 dependencies = [
  "alloy-consensus 1.0.24",
  "alloy-eips 1.0.24",
@@ -8738,7 +8738,7 @@ dependencies = [
 [[package]]
 name = "reth-payload-builder"
 version = "1.6.0"
-source = "git+https://github.com/scroll-tech/reth.git?branch=feat-forward-sequencer-no-blocking#886f8eab8e1b82fef982b62e06283d5b76450cae"
+source = "git+https://github.com/scroll-tech/reth.git#b364426fe29db2fbfe83ce4a6740296707409ff3"
 dependencies = [
  "alloy-consensus 1.0.24",
  "alloy-primitives",
@@ -8759,7 +8759,7 @@ dependencies = [
 [[package]]
 name = "reth-payload-builder-primitives"
 version = "1.6.0"
-source = "git+https://github.com/scroll-tech/reth.git?branch=feat-forward-sequencer-no-blocking#886f8eab8e1b82fef982b62e06283d5b76450cae"
+source = "git+https://github.com/scroll-tech/reth.git#b364426fe29db2fbfe83ce4a6740296707409ff3"
 dependencies = [
  "pin-project",
  "reth-payload-primitives",
@@ -8771,7 +8771,7 @@ dependencies = [
 [[package]]
 name = "reth-payload-primitives"
 version = "1.6.0"
-source = "git+https://github.com/scroll-tech/reth.git?branch=feat-forward-sequencer-no-blocking#886f8eab8e1b82fef982b62e06283d5b76450cae"
+source = "git+https://github.com/scroll-tech/reth.git#b364426fe29db2fbfe83ce4a6740296707409ff3"
 dependencies = [
  "alloy-eips 1.0.24",
  "alloy-primitives",
@@ -8791,7 +8791,7 @@ dependencies = [
 [[package]]
 name = "reth-payload-util"
 version = "1.6.0"
-source = "git+https://github.com/scroll-tech/reth.git?branch=feat-forward-sequencer-no-blocking#886f8eab8e1b82fef982b62e06283d5b76450cae"
+source = "git+https://github.com/scroll-tech/reth.git#b364426fe29db2fbfe83ce4a6740296707409ff3"
 dependencies = [
  "alloy-consensus 1.0.24",
  "alloy-primitives",
@@ -8801,7 +8801,7 @@ dependencies = [
 [[package]]
 name = "reth-payload-validator"
 version = "1.6.0"
-source = "git+https://github.com/scroll-tech/reth.git?branch=feat-forward-sequencer-no-blocking#886f8eab8e1b82fef982b62e06283d5b76450cae"
+source = "git+https://github.com/scroll-tech/reth.git#b364426fe29db2fbfe83ce4a6740296707409ff3"
 dependencies = [
  "alloy-consensus 1.0.24",
  "alloy-rpc-types-engine 1.0.24",
@@ -8811,7 +8811,7 @@ dependencies = [
 [[package]]
 name = "reth-primitives"
 version = "1.6.0"
-source = "git+https://github.com/scroll-tech/reth.git?branch=feat-forward-sequencer-no-blocking#886f8eab8e1b82fef982b62e06283d5b76450cae"
+source = "git+https://github.com/scroll-tech/reth.git#b364426fe29db2fbfe83ce4a6740296707409ff3"
 dependencies = [
  "alloy-consensus 1.0.24",
  "arbitrary",
@@ -8826,7 +8826,7 @@ dependencies = [
 [[package]]
 name = "reth-primitives-traits"
 version = "1.6.0"
-source = "git+https://github.com/scroll-tech/reth.git?branch=feat-forward-sequencer-no-blocking#886f8eab8e1b82fef982b62e06283d5b76450cae"
+source = "git+https://github.com/scroll-tech/reth.git#b364426fe29db2fbfe83ce4a6740296707409ff3"
 dependencies = [
  "alloy-consensus 1.0.24",
  "alloy-eips 1.0.24",
@@ -8860,7 +8860,7 @@ dependencies = [
 [[package]]
 name = "reth-provider"
 version = "1.6.0"
-source = "git+https://github.com/scroll-tech/reth.git?branch=feat-forward-sequencer-no-blocking#886f8eab8e1b82fef982b62e06283d5b76450cae"
+source = "git+https://github.com/scroll-tech/reth.git#b364426fe29db2fbfe83ce4a6740296707409ff3"
 dependencies = [
  "alloy-consensus 1.0.24",
  "alloy-eips 1.0.24",
@@ -8905,7 +8905,7 @@ dependencies = [
 [[package]]
 name = "reth-prune"
 version = "1.6.0"
-source = "git+https://github.com/scroll-tech/reth.git?branch=feat-forward-sequencer-no-blocking#886f8eab8e1b82fef982b62e06283d5b76450cae"
+source = "git+https://github.com/scroll-tech/reth.git#b364426fe29db2fbfe83ce4a6740296707409ff3"
 dependencies = [
  "alloy-consensus 1.0.24",
  "alloy-eips 1.0.24",
@@ -8933,7 +8933,7 @@ dependencies = [
 [[package]]
 name = "reth-prune-types"
 version = "1.6.0"
-source = "git+https://github.com/scroll-tech/reth.git?branch=feat-forward-sequencer-no-blocking#886f8eab8e1b82fef982b62e06283d5b76450cae"
+source = "git+https://github.com/scroll-tech/reth.git#b364426fe29db2fbfe83ce4a6740296707409ff3"
 dependencies = [
  "alloy-primitives",
  "arbitrary",
@@ -8947,7 +8947,7 @@ dependencies = [
 [[package]]
 name = "reth-revm"
 version = "1.6.0"
-source = "git+https://github.com/scroll-tech/reth.git?branch=feat-forward-sequencer-no-blocking#886f8eab8e1b82fef982b62e06283d5b76450cae"
+source = "git+https://github.com/scroll-tech/reth.git#b364426fe29db2fbfe83ce4a6740296707409ff3"
 dependencies = [
  "alloy-primitives",
  "reth-primitives-traits",
@@ -8960,7 +8960,7 @@ dependencies = [
 [[package]]
 name = "reth-rpc"
 version = "1.6.0"
-source = "git+https://github.com/scroll-tech/reth.git?branch=feat-forward-sequencer-no-blocking#886f8eab8e1b82fef982b62e06283d5b76450cae"
+source = "git+https://github.com/scroll-tech/reth.git#b364426fe29db2fbfe83ce4a6740296707409ff3"
 dependencies = [
  "alloy-consensus 1.0.24",
  "alloy-dyn-abi",
@@ -9015,6 +9015,7 @@ dependencies = [
  "reth-rpc-eth-api",
  "reth-rpc-eth-types",
  "reth-rpc-server-types",
+ "reth-scroll-evm",
  "reth-storage-api",
  "reth-tasks",
  "reth-transaction-pool",
@@ -9036,7 +9037,7 @@ dependencies = [
 [[package]]
 name = "reth-rpc-api"
 version = "1.6.0"
-source = "git+https://github.com/scroll-tech/reth.git?branch=feat-forward-sequencer-no-blocking#886f8eab8e1b82fef982b62e06283d5b76450cae"
+source = "git+https://github.com/scroll-tech/reth.git#b364426fe29db2fbfe83ce4a6740296707409ff3"
 dependencies = [
  "alloy-eips 1.0.24",
  "alloy-genesis",
@@ -9064,7 +9065,7 @@ dependencies = [
 [[package]]
 name = "reth-rpc-builder"
 version = "1.6.0"
-source = "git+https://github.com/scroll-tech/reth.git?branch=feat-forward-sequencer-no-blocking#886f8eab8e1b82fef982b62e06283d5b76450cae"
+source = "git+https://github.com/scroll-tech/reth.git#b364426fe29db2fbfe83ce4a6740296707409ff3"
 dependencies = [
  "alloy-network",
  "alloy-provider",
@@ -9102,7 +9103,7 @@ dependencies = [
 [[package]]
 name = "reth-rpc-convert"
 version = "1.6.0"
-source = "git+https://github.com/scroll-tech/reth.git?branch=feat-forward-sequencer-no-blocking#886f8eab8e1b82fef982b62e06283d5b76450cae"
+source = "git+https://github.com/scroll-tech/reth.git#b364426fe29db2fbfe83ce4a6740296707409ff3"
 dependencies = [
  "alloy-consensus 1.0.24",
  "alloy-json-rpc",
@@ -9127,7 +9128,7 @@ dependencies = [
 [[package]]
 name = "reth-rpc-engine-api"
 version = "1.6.0"
-source = "git+https://github.com/scroll-tech/reth.git?branch=feat-forward-sequencer-no-blocking#886f8eab8e1b82fef982b62e06283d5b76450cae"
+source = "git+https://github.com/scroll-tech/reth.git#b364426fe29db2fbfe83ce4a6740296707409ff3"
 dependencies = [
  "alloy-eips 1.0.24",
  "alloy-primitives",
@@ -9157,7 +9158,7 @@ dependencies = [
 [[package]]
 name = "reth-rpc-eth-api"
 version = "1.6.0"
-source = "git+https://github.com/scroll-tech/reth.git?branch=feat-forward-sequencer-no-blocking#886f8eab8e1b82fef982b62e06283d5b76450cae"
+source = "git+https://github.com/scroll-tech/reth.git#b364426fe29db2fbfe83ce4a6740296707409ff3"
 dependencies = [
  "alloy-consensus 1.0.24",
  "alloy-dyn-abi",
@@ -9202,7 +9203,7 @@ dependencies = [
 [[package]]
 name = "reth-rpc-eth-types"
 version = "1.6.0"
-source = "git+https://github.com/scroll-tech/reth.git?branch=feat-forward-sequencer-no-blocking#886f8eab8e1b82fef982b62e06283d5b76450cae"
+source = "git+https://github.com/scroll-tech/reth.git#b364426fe29db2fbfe83ce4a6740296707409ff3"
 dependencies = [
  "alloy-consensus 1.0.24",
  "alloy-eips 1.0.24",
@@ -9246,7 +9247,7 @@ dependencies = [
 [[package]]
 name = "reth-rpc-layer"
 version = "1.6.0"
-source = "git+https://github.com/scroll-tech/reth.git?branch=feat-forward-sequencer-no-blocking#886f8eab8e1b82fef982b62e06283d5b76450cae"
+source = "git+https://github.com/scroll-tech/reth.git#b364426fe29db2fbfe83ce4a6740296707409ff3"
 dependencies = [
  "alloy-rpc-types-engine 1.0.24",
  "http 1.3.1",
@@ -9260,7 +9261,7 @@ dependencies = [
 [[package]]
 name = "reth-rpc-server-types"
 version = "1.6.0"
-source = "git+https://github.com/scroll-tech/reth.git?branch=feat-forward-sequencer-no-blocking#886f8eab8e1b82fef982b62e06283d5b76450cae"
+source = "git+https://github.com/scroll-tech/reth.git#b364426fe29db2fbfe83ce4a6740296707409ff3"
 dependencies = [
  "alloy-eips 1.0.24",
  "alloy-primitives",
@@ -9276,7 +9277,7 @@ dependencies = [
 [[package]]
 name = "reth-scroll-chainspec"
 version = "1.6.0"
-source = "git+https://github.com/scroll-tech/reth.git?branch=feat-forward-sequencer-no-blocking#886f8eab8e1b82fef982b62e06283d5b76450cae"
+source = "git+https://github.com/scroll-tech/reth.git#b364426fe29db2fbfe83ce4a6740296707409ff3"
 dependencies = [
  "alloy-chains",
  "alloy-consensus 1.0.24",
@@ -9301,7 +9302,7 @@ dependencies = [
 [[package]]
 name = "reth-scroll-cli"
 version = "1.6.0"
-source = "git+https://github.com/scroll-tech/reth.git?branch=feat-forward-sequencer-no-blocking#886f8eab8e1b82fef982b62e06283d5b76450cae"
+source = "git+https://github.com/scroll-tech/reth.git#b364426fe29db2fbfe83ce4a6740296707409ff3"
 dependencies = [
  "clap",
  "eyre",
@@ -9325,7 +9326,7 @@ dependencies = [
 [[package]]
 name = "reth-scroll-consensus"
 version = "1.6.0"
-source = "git+https://github.com/scroll-tech/reth.git?branch=feat-forward-sequencer-no-blocking#886f8eab8e1b82fef982b62e06283d5b76450cae"
+source = "git+https://github.com/scroll-tech/reth.git#b364426fe29db2fbfe83ce4a6740296707409ff3"
 dependencies = [
  "alloy-consensus 1.0.24",
  "alloy-primitives",
@@ -9344,7 +9345,7 @@ dependencies = [
 [[package]]
 name = "reth-scroll-engine-primitives"
 version = "1.6.0"
-source = "git+https://github.com/scroll-tech/reth.git?branch=feat-forward-sequencer-no-blocking#886f8eab8e1b82fef982b62e06283d5b76450cae"
+source = "git+https://github.com/scroll-tech/reth.git#b364426fe29db2fbfe83ce4a6740296707409ff3"
 dependencies = [
  "alloy-consensus 1.0.24",
  "alloy-eips 1.0.24",
@@ -9369,7 +9370,7 @@ dependencies = [
 [[package]]
 name = "reth-scroll-evm"
 version = "1.6.0"
-source = "git+https://github.com/scroll-tech/reth.git?branch=feat-forward-sequencer-no-blocking#886f8eab8e1b82fef982b62e06283d5b76450cae"
+source = "git+https://github.com/scroll-tech/reth.git#b364426fe29db2fbfe83ce4a6740296707409ff3"
 dependencies = [
  "alloy-consensus 1.0.24",
  "alloy-eips 1.0.24",
@@ -9398,7 +9399,7 @@ dependencies = [
 [[package]]
 name = "reth-scroll-forks"
 version = "1.6.0"
-source = "git+https://github.com/scroll-tech/reth.git?branch=feat-forward-sequencer-no-blocking#886f8eab8e1b82fef982b62e06283d5b76450cae"
+source = "git+https://github.com/scroll-tech/reth.git#b364426fe29db2fbfe83ce4a6740296707409ff3"
 dependencies = [
  "alloy-chains",
  "alloy-primitives",
@@ -9412,7 +9413,7 @@ dependencies = [
 [[package]]
 name = "reth-scroll-node"
 version = "1.6.0"
-source = "git+https://github.com/scroll-tech/reth.git?branch=feat-forward-sequencer-no-blocking#886f8eab8e1b82fef982b62e06283d5b76450cae"
+source = "git+https://github.com/scroll-tech/reth.git#b364426fe29db2fbfe83ce4a6740296707409ff3"
 dependencies = [
  "alloy-consensus 1.0.24",
  "alloy-genesis",
@@ -9464,7 +9465,7 @@ dependencies = [
 [[package]]
 name = "reth-scroll-payload"
 version = "1.6.0"
-source = "git+https://github.com/scroll-tech/reth.git?branch=feat-forward-sequencer-no-blocking#886f8eab8e1b82fef982b62e06283d5b76450cae"
+source = "git+https://github.com/scroll-tech/reth.git#b364426fe29db2fbfe83ce4a6740296707409ff3"
 dependencies = [
  "alloy-consensus 1.0.24",
  "alloy-primitives",
@@ -9495,7 +9496,7 @@ dependencies = [
 [[package]]
 name = "reth-scroll-primitives"
 version = "1.6.0"
-source = "git+https://github.com/scroll-tech/reth.git?branch=feat-forward-sequencer-no-blocking#886f8eab8e1b82fef982b62e06283d5b76450cae"
+source = "git+https://github.com/scroll-tech/reth.git#b364426fe29db2fbfe83ce4a6740296707409ff3"
 dependencies = [
  "alloy-consensus 1.0.24",
  "alloy-eips 1.0.24",
@@ -9515,7 +9516,7 @@ dependencies = [
 [[package]]
 name = "reth-scroll-rpc"
 version = "1.6.0"
-source = "git+https://github.com/scroll-tech/reth.git?branch=feat-forward-sequencer-no-blocking#886f8eab8e1b82fef982b62e06283d5b76450cae"
+source = "git+https://github.com/scroll-tech/reth.git#b364426fe29db2fbfe83ce4a6740296707409ff3"
 dependencies = [
  "alloy-consensus 1.0.24",
  "alloy-eips 1.0.24",
@@ -9556,7 +9557,7 @@ dependencies = [
 [[package]]
 name = "reth-scroll-txpool"
 version = "1.6.0"
-source = "git+https://github.com/scroll-tech/reth.git?branch=feat-forward-sequencer-no-blocking#886f8eab8e1b82fef982b62e06283d5b76450cae"
+source = "git+https://github.com/scroll-tech/reth.git#b364426fe29db2fbfe83ce4a6740296707409ff3"
 dependencies = [
  "alloy-consensus 1.0.24",
  "alloy-eips 1.0.24",
@@ -9579,7 +9580,7 @@ dependencies = [
 [[package]]
 name = "reth-stages"
 version = "1.6.0"
-source = "git+https://github.com/scroll-tech/reth.git?branch=feat-forward-sequencer-no-blocking#886f8eab8e1b82fef982b62e06283d5b76450cae"
+source = "git+https://github.com/scroll-tech/reth.git#b364426fe29db2fbfe83ce4a6740296707409ff3"
 dependencies = [
  "alloy-consensus 1.0.24",
  "alloy-eips 1.0.24",
@@ -9629,7 +9630,7 @@ dependencies = [
 [[package]]
 name = "reth-stages-api"
 version = "1.6.0"
-source = "git+https://github.com/scroll-tech/reth.git?branch=feat-forward-sequencer-no-blocking#886f8eab8e1b82fef982b62e06283d5b76450cae"
+source = "git+https://github.com/scroll-tech/reth.git#b364426fe29db2fbfe83ce4a6740296707409ff3"
 dependencies = [
  "alloy-eips 1.0.24",
  "alloy-primitives",
@@ -9656,7 +9657,7 @@ dependencies = [
 [[package]]
 name = "reth-stages-types"
 version = "1.6.0"
-source = "git+https://github.com/scroll-tech/reth.git?branch=feat-forward-sequencer-no-blocking#886f8eab8e1b82fef982b62e06283d5b76450cae"
+source = "git+https://github.com/scroll-tech/reth.git#b364426fe29db2fbfe83ce4a6740296707409ff3"
 dependencies = [
  "alloy-primitives",
  "arbitrary",
@@ -9670,7 +9671,7 @@ dependencies = [
 [[package]]
 name = "reth-static-file"
 version = "1.6.0"
-source = "git+https://github.com/scroll-tech/reth.git?branch=feat-forward-sequencer-no-blocking#886f8eab8e1b82fef982b62e06283d5b76450cae"
+source = "git+https://github.com/scroll-tech/reth.git#b364426fe29db2fbfe83ce4a6740296707409ff3"
 dependencies = [
  "alloy-primitives",
  "parking_lot 0.12.4",
@@ -9690,7 +9691,7 @@ dependencies = [
 [[package]]
 name = "reth-static-file-types"
 version = "1.6.0"
-source = "git+https://github.com/scroll-tech/reth.git?branch=feat-forward-sequencer-no-blocking#886f8eab8e1b82fef982b62e06283d5b76450cae"
+source = "git+https://github.com/scroll-tech/reth.git#b364426fe29db2fbfe83ce4a6740296707409ff3"
 dependencies = [
  "alloy-primitives",
  "clap",
@@ -9702,7 +9703,7 @@ dependencies = [
 [[package]]
 name = "reth-storage-api"
 version = "1.6.0"
-source = "git+https://github.com/scroll-tech/reth.git?branch=feat-forward-sequencer-no-blocking#886f8eab8e1b82fef982b62e06283d5b76450cae"
+source = "git+https://github.com/scroll-tech/reth.git#b364426fe29db2fbfe83ce4a6740296707409ff3"
 dependencies = [
  "alloy-consensus 1.0.24",
  "alloy-eips 1.0.24",
@@ -9726,7 +9727,7 @@ dependencies = [
 [[package]]
 name = "reth-storage-errors"
 version = "1.6.0"
-source = "git+https://github.com/scroll-tech/reth.git?branch=feat-forward-sequencer-no-blocking#886f8eab8e1b82fef982b62e06283d5b76450cae"
+source = "git+https://github.com/scroll-tech/reth.git#b364426fe29db2fbfe83ce4a6740296707409ff3"
 dependencies = [
  "alloy-eips 1.0.24",
  "alloy-primitives",
@@ -9742,7 +9743,7 @@ dependencies = [
 [[package]]
 name = "reth-tasks"
 version = "1.6.0"
-source = "git+https://github.com/scroll-tech/reth.git?branch=feat-forward-sequencer-no-blocking#886f8eab8e1b82fef982b62e06283d5b76450cae"
+source = "git+https://github.com/scroll-tech/reth.git#b364426fe29db2fbfe83ce4a6740296707409ff3"
 dependencies = [
  "auto_impl",
  "dyn-clone",
@@ -9760,7 +9761,7 @@ dependencies = [
 [[package]]
 name = "reth-testing-utils"
 version = "1.6.0"
-source = "git+https://github.com/scroll-tech/reth.git?branch=feat-forward-sequencer-no-blocking#886f8eab8e1b82fef982b62e06283d5b76450cae"
+source = "git+https://github.com/scroll-tech/reth.git#b364426fe29db2fbfe83ce4a6740296707409ff3"
 dependencies = [
  "alloy-consensus 1.0.24",
  "alloy-eips 1.0.24",
@@ -9776,7 +9777,7 @@ dependencies = [
 [[package]]
 name = "reth-tokio-util"
 version = "1.6.0"
-source = "git+https://github.com/scroll-tech/reth.git?branch=feat-forward-sequencer-no-blocking#886f8eab8e1b82fef982b62e06283d5b76450cae"
+source = "git+https://github.com/scroll-tech/reth.git#b364426fe29db2fbfe83ce4a6740296707409ff3"
 dependencies = [
  "tokio",
  "tokio-stream",
@@ -9786,7 +9787,7 @@ dependencies = [
 [[package]]
 name = "reth-tracing"
 version = "1.6.0"
-source = "git+https://github.com/scroll-tech/reth.git?branch=feat-forward-sequencer-no-blocking#886f8eab8e1b82fef982b62e06283d5b76450cae"
+source = "git+https://github.com/scroll-tech/reth.git#b364426fe29db2fbfe83ce4a6740296707409ff3"
 dependencies = [
  "clap",
  "eyre",
@@ -9801,7 +9802,7 @@ dependencies = [
 [[package]]
 name = "reth-transaction-pool"
 version = "1.6.0"
-source = "git+https://github.com/scroll-tech/reth.git?branch=feat-forward-sequencer-no-blocking#886f8eab8e1b82fef982b62e06283d5b76450cae"
+source = "git+https://github.com/scroll-tech/reth.git#b364426fe29db2fbfe83ce4a6740296707409ff3"
 dependencies = [
  "alloy-consensus 1.0.24",
  "alloy-eips 1.0.24",
@@ -9840,7 +9841,7 @@ dependencies = [
 [[package]]
 name = "reth-trie"
 version = "1.6.0"
-source = "git+https://github.com/scroll-tech/reth.git?branch=feat-forward-sequencer-no-blocking#886f8eab8e1b82fef982b62e06283d5b76450cae"
+source = "git+https://github.com/scroll-tech/reth.git#b364426fe29db2fbfe83ce4a6740296707409ff3"
 dependencies = [
  "alloy-consensus 1.0.24",
  "alloy-eips 1.0.24",
@@ -9865,7 +9866,7 @@ dependencies = [
 [[package]]
 name = "reth-trie-common"
 version = "1.6.0"
-source = "git+https://github.com/scroll-tech/reth.git?branch=feat-forward-sequencer-no-blocking#886f8eab8e1b82fef982b62e06283d5b76450cae"
+source = "git+https://github.com/scroll-tech/reth.git#b364426fe29db2fbfe83ce4a6740296707409ff3"
 dependencies = [
  "alloy-consensus 1.0.24",
  "alloy-primitives",
@@ -9890,7 +9891,7 @@ dependencies = [
 [[package]]
 name = "reth-trie-db"
 version = "1.6.0"
-source = "git+https://github.com/scroll-tech/reth.git?branch=feat-forward-sequencer-no-blocking#886f8eab8e1b82fef982b62e06283d5b76450cae"
+source = "git+https://github.com/scroll-tech/reth.git#b364426fe29db2fbfe83ce4a6740296707409ff3"
 dependencies = [
  "alloy-primitives",
  "reth-db-api",
@@ -9903,7 +9904,7 @@ dependencies = [
 [[package]]
 name = "reth-trie-parallel"
 version = "1.6.0"
-source = "git+https://github.com/scroll-tech/reth.git?branch=feat-forward-sequencer-no-blocking#886f8eab8e1b82fef982b62e06283d5b76450cae"
+source = "git+https://github.com/scroll-tech/reth.git#b364426fe29db2fbfe83ce4a6740296707409ff3"
 dependencies = [
  "alloy-primitives",
  "alloy-rlp",
@@ -9928,7 +9929,7 @@ dependencies = [
 [[package]]
 name = "reth-trie-sparse"
 version = "1.6.0"
-source = "git+https://github.com/scroll-tech/reth.git?branch=feat-forward-sequencer-no-blocking#886f8eab8e1b82fef982b62e06283d5b76450cae"
+source = "git+https://github.com/scroll-tech/reth.git#b364426fe29db2fbfe83ce4a6740296707409ff3"
 dependencies = [
  "alloy-primitives",
  "alloy-rlp",
@@ -9946,7 +9947,7 @@ dependencies = [
 [[package]]
 name = "reth-trie-sparse-parallel"
 version = "1.6.0"
-source = "git+https://github.com/scroll-tech/reth.git?branch=feat-forward-sequencer-no-blocking#886f8eab8e1b82fef982b62e06283d5b76450cae"
+source = "git+https://github.com/scroll-tech/reth.git#b364426fe29db2fbfe83ce4a6740296707409ff3"
 dependencies = [
  "alloy-primitives",
  "alloy-rlp",
@@ -9962,7 +9963,7 @@ dependencies = [
 [[package]]
 name = "reth-zstd-compressors"
 version = "1.6.0"
-source = "git+https://github.com/scroll-tech/reth.git?branch=feat-forward-sequencer-no-blocking#886f8eab8e1b82fef982b62e06283d5b76450cae"
+source = "git+https://github.com/scroll-tech/reth.git#b364426fe29db2fbfe83ce4a6740296707409ff3"
 dependencies = [
  "zstd",
 ]
@@ -10862,9 +10863,9 @@ dependencies = [
 
 [[package]]
 name = "rustversion"
-version = "1.0.21"
+version = "1.0.22"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8a0d197bd2c9dc6e53b84da9556a69ba4cdfab8619eb41a8bd1cc2027a0f6b1d"
+checksum = "b39cdef0fa800fc44525c84ccb54a029961a8215f9619753635a9c0d2538d46d"
 
 [[package]]
 name = "rusty-fork"
@@ -10952,7 +10953,7 @@ checksum = "94143f37725109f92c262ed2cf5e59bce7498c01bcc1502d7b9afe439a4e9f49"
 [[package]]
 name = "scroll-alloy-consensus"
 version = "1.6.0"
-source = "git+https://github.com/scroll-tech/reth.git?branch=feat-forward-sequencer-no-blocking#886f8eab8e1b82fef982b62e06283d5b76450cae"
+source = "git+https://github.com/scroll-tech/reth.git#b364426fe29db2fbfe83ce4a6740296707409ff3"
 dependencies = [
  "alloy-consensus 1.0.24",
  "alloy-eips 1.0.24",
@@ -10971,7 +10972,7 @@ dependencies = [
 [[package]]
 name = "scroll-alloy-evm"
 version = "1.6.0"
-source = "git+https://github.com/scroll-tech/reth.git?branch=feat-forward-sequencer-no-blocking#886f8eab8e1b82fef982b62e06283d5b76450cae"
+source = "git+https://github.com/scroll-tech/reth.git#b364426fe29db2fbfe83ce4a6740296707409ff3"
 dependencies = [
  "alloy-consensus 1.0.24",
  "alloy-eips 1.0.24",
@@ -10989,7 +10990,7 @@ dependencies = [
 [[package]]
 name = "scroll-alloy-hardforks"
 version = "1.6.0"
-source = "git+https://github.com/scroll-tech/reth.git?branch=feat-forward-sequencer-no-blocking#886f8eab8e1b82fef982b62e06283d5b76450cae"
+source = "git+https://github.com/scroll-tech/reth.git#b364426fe29db2fbfe83ce4a6740296707409ff3"
 dependencies = [
  "alloy-hardforks",
  "auto_impl",
@@ -10999,7 +11000,7 @@ dependencies = [
 [[package]]
 name = "scroll-alloy-network"
 version = "1.6.0"
-source = "git+https://github.com/scroll-tech/reth.git?branch=feat-forward-sequencer-no-blocking#886f8eab8e1b82fef982b62e06283d5b76450cae"
+source = "git+https://github.com/scroll-tech/reth.git#b364426fe29db2fbfe83ce4a6740296707409ff3"
 dependencies = [
  "alloy-consensus 1.0.24",
  "alloy-network",
@@ -11014,7 +11015,7 @@ dependencies = [
 [[package]]
 name = "scroll-alloy-provider"
 version = "1.6.0"
-source = "git+https://github.com/scroll-tech/reth.git?branch=feat-forward-sequencer-no-blocking#886f8eab8e1b82fef982b62e06283d5b76450cae"
+source = "git+https://github.com/scroll-tech/reth.git#b364426fe29db2fbfe83ce4a6740296707409ff3"
 dependencies = [
  "alloy-primitives",
  "alloy-provider",
@@ -11039,7 +11040,7 @@ dependencies = [
 [[package]]
 name = "scroll-alloy-rpc-types"
 version = "1.6.0"
-source = "git+https://github.com/scroll-tech/reth.git?branch=feat-forward-sequencer-no-blocking#886f8eab8e1b82fef982b62e06283d5b76450cae"
+source = "git+https://github.com/scroll-tech/reth.git#b364426fe29db2fbfe83ce4a6740296707409ff3"
 dependencies = [
  "alloy-consensus 1.0.24",
  "alloy-eips 1.0.24",
@@ -11056,7 +11057,7 @@ dependencies = [
 [[package]]
 name = "scroll-alloy-rpc-types-engine"
 version = "1.6.0"
-source = "git+https://github.com/scroll-tech/reth.git?branch=feat-forward-sequencer-no-blocking#886f8eab8e1b82fef982b62e06283d5b76450cae"
+source = "git+https://github.com/scroll-tech/reth.git#b364426fe29db2fbfe83ce4a6740296707409ff3"
 dependencies = [
  "alloy-primitives",
  "alloy-rpc-types-engine 1.0.24",
@@ -13331,11 +13332,11 @@ dependencies = [
 
 [[package]]
 name = "whoami"
-version = "1.6.0"
+version = "1.6.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6994d13118ab492c3c80c1f81928718159254c53c472bf9ce36f8dae4add02a7"
+checksum = "5d4a4db5077702ca3015d3d02d74974948aba2ad9e12ab7df718ee64ccd7e97d"
 dependencies = [
- "redox_syscall 0.5.17",
+ "libredox",
  "wasite",
 ]
 
