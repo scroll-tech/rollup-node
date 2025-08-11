@@ -99,9 +99,9 @@ impl<
         l2_client: P,
         optimistic_sync_threshold: u64,
         chain_buffer_size: usize,
-    ) -> Self {
-        let chain = init_chain_from_db(&database, &l2_client, chain_buffer_size).await;
-        Self {
+    ) -> Result<Self, ChainOrchestratorError> {
+        let chain = init_chain_from_db(&database, &l2_client, chain_buffer_size).await?;
+        Ok(Self {
             network_client: Arc::new(block_client),
             l2_client: Arc::new(l2_client),
             chain: Arc::new(Mutex::new(chain)),
@@ -121,7 +121,7 @@ impl<
             chain_buffer_size,
             l1_synced: false,
             waker: AtomicWaker::new(),
-        }
+        })
     }
 
     /// Wraps a pending chain orchestrator future, metering the completion of it.
@@ -237,10 +237,11 @@ impl<
             let mut optimistic_headers = Chain::new(chain_buffer_size);
             optimistic_headers.push_front(received_block.header.clone());
             while optimistic_headers.len() < chain_buffer_size &&
-                optimistic_headers.first().unwrap().number != 0
+                optimistic_headers.first().expect("chain can not be empty").number != 0
             {
-                tracing::trace!(target: "scroll::chain_orchestrator", number = ?(optimistic_headers.first().unwrap().number - 1), "fetching block");
-                let parent_hash = optimistic_headers.first().unwrap().parent_hash;
+                tracing::trace!(target: "scroll::chain_orchestrator", number = ?(optimistic_headers.first().expect("chain can not be empty").number - 1), "fetching block");
+                let parent_hash =
+                    optimistic_headers.first().expect("chain can not be empty").parent_hash;
                 let header = network_client
                     .get_header(BlockHashOrNumber::Hash(parent_hash))
                     .await?
@@ -289,8 +290,8 @@ impl<
             // If we are in optimistic mode and the received chain can not be reconciled with the
             // in-memory chain we break. We will reconcile after optimistic sync has completed.
             if *optimistic_mode.lock().await &&
-                received_chain_headers.last().unwrap().number <
-                    current_chain_headers.front().unwrap().number
+                received_chain_headers.last().expect("chain can not be empty").number <
+                    current_chain_headers.front().expect("chain can not be empty").number
             {
                 return Ok(ChainOrchestratorEvent::InsufficientDataForReceivedBlock(
                     received_block.hash_slow(),
@@ -300,41 +301,56 @@ impl<
             // If the received header tail has a block number that is less than the current header
             // tail then we should fetch more headers for the current chain to aid
             // reconciliation.
-            if received_chain_headers.last().unwrap().number <
+            if received_chain_headers.last().expect("chain can not be empty").number <
                 current_chain_headers.front().expect("chain can not be empty").number
             {
                 for _ in 0..BATCH_FETCH_SIZE {
-                    if current_chain_headers.front().unwrap().number.saturating_sub(1) <=
+                    if current_chain_headers
+                        .front()
+                        .expect("chain can not be empty")
+                        .number
+                        .saturating_sub(1) <=
                         latest_safe_block.number
                     {
                         tracing::info!(target: "scroll::chain_orchestrator", hash = %latest_safe_block.hash, number = %latest_safe_block.number, "reached safe block number for current chain - terminating fetching.");
                         break;
                     }
-                    tracing::trace!(target: "scroll::chain_orchestrator", number = ?(current_chain_headers.front().unwrap().number - 1), "fetching block for current chain");
+                    tracing::trace!(target: "scroll::chain_orchestrator", number = ?(current_chain_headers.front().expect("chain can not be empty").number - 1), "fetching block for current chain");
                     if let Some(block) = l2_client
-                        .get_block_by_hash(current_chain_headers.front().unwrap().parent_hash)
+                        .get_block_by_hash(
+                            current_chain_headers
+                                .front()
+                                .expect("chain can not be empty")
+                                .parent_hash,
+                        )
                         .await?
                     {
                         let header = block.into_consensus_header();
                         current_chain_headers.push_front(header.clone());
                     } else {
                         return Err(ChainOrchestratorError::MissingBlockHeader {
-                            hash: current_chain_headers.front().unwrap().parent_hash,
+                            hash: current_chain_headers
+                                .front()
+                                .expect("chain can not be empty")
+                                .parent_hash,
                         });
                     }
                 }
             }
 
             // We search the in-memory chain to see if we can reconcile the block import.
-            if let Some(pos) = current_chain_headers
-                .iter()
-                .rposition(|h| h.hash_slow() == received_chain_headers.last().unwrap().parent_hash)
-            {
+            if let Some(pos) = current_chain_headers.iter().rposition(|h| {
+                h.hash_slow() ==
+                    received_chain_headers.last().expect("chain can not be empty").parent_hash
+            }) {
                 // If the received fork is older than the current chain, we return an event
                 // indicating that we have received an old fork.
                 if (pos < current_chain_headers.len() - 1) &&
-                    current_chain_headers.get(pos + 1).unwrap().timestamp >
-                        received_chain_headers.last().unwrap().timestamp
+                    current_chain_headers.get(pos + 1).expect("chain can not be empty").timestamp >
+                        received_chain_headers
+                            .last()
+                            .expect("chain can not be empty")
+                            .timestamp
                 {
                     return Ok(ChainOrchestratorEvent::OldForkReceived {
                         headers: received_chain_headers,
@@ -347,14 +363,16 @@ impl<
 
             // If the current header block number is less than the latest safe block number then
             // we should error.
-            if received_chain_headers.last().unwrap().number <= latest_safe_block.number {
+            if received_chain_headers.last().expect("chain can not be empty").number <=
+                latest_safe_block.number
+            {
                 return Err(ChainOrchestratorError::L2SafeBlockReorgDetected);
             }
 
-            tracing::trace!(target: "scroll::chain_orchestrator", number = ?(received_chain_headers.last().unwrap().number - 1), "fetching block");
+            tracing::trace!(target: "scroll::chain_orchestrator", number = ?(received_chain_headers.last().expect("chain can not be empty").number - 1), "fetching block");
             if let Some(header) = network_client
                 .get_header(BlockHashOrNumber::Hash(
-                    received_chain_headers.last().unwrap().parent_hash,
+                    received_chain_headers.last().expect("chain can not be empty").parent_hash,
                 ))
                 .await?
                 .into_data()
@@ -362,7 +380,10 @@ impl<
                 received_chain_headers.push(header.clone());
             } else {
                 return Err(ChainOrchestratorError::MissingBlockHeader {
-                    hash: received_chain_headers.last().unwrap().parent_hash,
+                    hash: received_chain_headers
+                        .last()
+                        .expect("chain can not be empty")
+                        .parent_hash,
                 });
             }
         };
@@ -727,16 +748,15 @@ async fn init_chain_from_db<P: Provider<Scroll> + 'static>(
     database: &Arc<Database>,
     l2_client: &P,
     chain_buffer_size: usize,
-) -> BoundedVec<Header> {
+) -> Result<BoundedVec<Header>, ChainOrchestratorError> {
     let blocks = {
         let mut blocks = Vec::with_capacity(chain_buffer_size);
-        let mut blocks_stream = database.get_l2_blocks().await.unwrap().take(chain_buffer_size);
-        while let Some(block_info) = blocks_stream.try_next().await.unwrap() {
+        let mut blocks_stream = database.get_l2_blocks().await?.take(chain_buffer_size);
+        while let Some(block_info) = blocks_stream.try_next().await? {
             let header = l2_client
                 .get_block_by_hash(block_info.hash)
-                .await
-                .unwrap()
-                .unwrap()
+                .await?
+                .ok_or(ChainOrchestratorError::L2BlockNotFoundInL2Client(block_info.number))?
                 .header
                 .into_consensus();
             blocks.push(header);
@@ -746,7 +766,7 @@ async fn init_chain_from_db<P: Provider<Scroll> + 'static>(
     };
     let mut chain: Chain = Chain::new(chain_buffer_size);
     chain.extend(blocks);
-    chain
+    Ok(chain)
 }
 
 impl<
@@ -838,7 +858,7 @@ async fn consolidate_chain<P: Provider<Scroll> + 'static>(
         if in_mem_safe_hash != safe_head.hash {
             // If we did not consolidate back to the safe head, we return an error.
             *current_chain.lock().await =
-                init_chain_from_db(&database, &l2_client, chain_buffer_size).await;
+                init_chain_from_db(&database, &l2_client, chain_buffer_size).await?;
 
             return Err(ChainOrchestratorError::ChainInconsistency);
         }
@@ -868,7 +888,7 @@ async fn consolidate_chain<P: Provider<Scroll> + 'static>(
         // should return an error.
         if blocks_to_consolidate.front().unwrap().header.hash_slow() != safe_head.hash {
             *current_chain.lock().await =
-                init_chain_from_db(&database, &l2_client, chain_buffer_size).await;
+                init_chain_from_db(&database, &l2_client, chain_buffer_size).await?;
             return Err(ChainOrchestratorError::ChainInconsistency);
         }
     }
@@ -1139,7 +1159,8 @@ mod test {
                 TEST_OPTIMISTIC_SYNC_THRESHOLD,
                 TEST_CHAIN_BUFFER_SIZE,
             )
-            .await,
+            .await
+            .unwrap(),
             db,
         )
     }

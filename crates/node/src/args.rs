@@ -321,7 +321,7 @@ impl ScrollRollupNodeConfig {
             self.chain_orchestrator_args.optimistic_sync_trigger,
             self.chain_orchestrator_args.chain_buffer_size,
         )
-        .await;
+        .await?;
 
         // Spawn the rollup node manager
         let (rnm, handle) = RollupNodeManager::new(

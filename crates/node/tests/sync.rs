@@ -208,7 +208,7 @@ async fn test_should_consolidate_after_optimistic_sync() -> eyre::Result<()> {
         consensus_args: ConsensusArgs::noop(),
     };
 
-    // Create the chain spec for scroll dev with Euclid v2 activated and a test genesis.
+    // Create the chain spec for scroll dev with Feynman activated and a test genesis.
     let chain_spec = (*SCROLL_DEV).clone();
 
     // Create a sequencer node and an unsynced node.
@@ -457,7 +457,7 @@ async fn test_consolidation() -> eyre::Result<()> {
         consensus_args: ConsensusArgs::noop(),
     };
 
-    // Create the chain spec for scroll dev with Euclid v2 activated and a test genesis.
+    // Create the chain spec for scroll dev with Feynman activated and a test genesis.
     let chain_spec = (*SCROLL_DEV).clone();
 
     // Create a sequencer node and an unsynced node.
@@ -630,7 +630,7 @@ async fn test_chain_orchestrator_shallow_reorg_with_gap() -> eyre::Result<()> {
         consensus_args: ConsensusArgs::noop(),
     };
 
-    // Create the chain spec for scroll dev with Euclid v2 activated and a test genesis.
+    // Create the chain spec for scroll dev with Feynman activated and a test genesis.
     let chain_spec = (*SCROLL_DEV).clone();
 
     // Create a sequencer node and an unsynced node.

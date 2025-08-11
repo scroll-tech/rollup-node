@@ -11,7 +11,10 @@ pub enum ChainOrchestratorError {
     DatabaseError(#[from] DatabaseError),
     /// An error occurred while trying to fetch the L2 block from the database.
     #[error("L2 block not found - block number: {0}")]
-    L2BlockNotFound(u64),
+    L2BlockNotFoundInDatabase(u64),
+    /// An error occurred while trying to fetch the L2 block from the L2 client.
+    #[error("L2 block not found in L2 client - block number: {0}")]
+    L2BlockNotFoundInL2Client(u64),
     /// A fork was received from the peer that is associated with a reorg of the safe chain.
     #[error("L2 safe block reorg detected")]
     L2SafeBlockReorgDetected,
