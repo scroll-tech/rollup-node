@@ -179,7 +179,7 @@ pub trait DatabaseOperations: DatabaseConnectionProvider {
             .exec(self.get_connection())
             .await;
 
-        if let Err(DbErr::RecordNotInserted) = result {
+        if matches!(result, Err(DbErr::RecordNotInserted)) {
             tracing::error!(target: "scroll::db", queue_index = l1_index, "L1 message already exists");
             Ok(())
         } else {
