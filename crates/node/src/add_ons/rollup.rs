@@ -6,7 +6,7 @@ use reth_network_api::FullNetwork;
 use reth_node_api::{FullNodeTypes, NodeTypes};
 use reth_node_builder::{rpc::RpcHandle, AddOnsContext, FullNodeComponents};
 use reth_rpc_eth_api::EthApiTypes;
-use reth_scroll_chainspec::ScrollChainSpec;
+use reth_scroll_chainspec::{ChainConfig, ScrollChainConfig, ScrollChainSpec};
 use reth_scroll_node::ScrollNetworkPrimitives;
 use rollup_node_manager::RollupManagerHandle;
 use rollup_node_watcher::L1Notification;
@@ -52,18 +52,13 @@ impl RollupManagerAddOn {
         rpc: RpcHandle<N, EthApi>,
     ) -> eyre::Result<(RollupManagerHandle, Option<Sender<Arc<L1Notification>>>)>
     where
-        <<N as FullNodeTypes>::Types as NodeTypes>::ChainSpec: ScrollHardforks + IsDevChain,
+        <<N as FullNodeTypes>::Types as NodeTypes>::ChainSpec:
+            ChainConfig<Config = ScrollChainConfig> + ScrollHardforks + IsDevChain,
         N::Network: NetworkProtocols + FullNetwork<Primitives = ScrollNetworkPrimitives>,
     {
         let (rnm, handle, l1_notification_tx) = self
             .config
-            .build(
-                ctx.node.network().clone(),
-                self.scroll_wire_event,
-                rpc.rpc_server_handles,
-                ctx.config.chain.clone(),
-                ctx.config.datadir().db(),
-            )
+            .build((&ctx).into(), self.scroll_wire_event, rpc.rpc_server_handles)
             .await?;
         ctx.node
             .task_executor()

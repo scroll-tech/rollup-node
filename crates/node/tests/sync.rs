@@ -195,7 +195,6 @@ async fn test_should_consolidate_after_optimistic_sync() -> eyre::Result<()> {
         sequencer_args: SequencerArgs {
             sequencer_enabled: true,
             block_time: 0,
-            max_l1_messages_per_block: 4,
             l1_message_inclusion_mode: L1MessageInclusionMode::BlockDepth(0),
             ..SequencerArgs::default()
         },
@@ -444,7 +443,6 @@ async fn test_consolidation() -> eyre::Result<()> {
         sequencer_args: SequencerArgs {
             sequencer_enabled: true,
             block_time: 0,
-            max_l1_messages_per_block: 4,
             l1_message_inclusion_mode: L1MessageInclusionMode::BlockDepth(0),
             ..SequencerArgs::default()
         },
@@ -617,7 +615,6 @@ async fn test_chain_orchestrator_shallow_reorg_with_gap() -> eyre::Result<()> {
         sequencer_args: SequencerArgs {
             sequencer_enabled: true,
             block_time: 0,
-            max_l1_messages_per_block: 4,
             l1_message_inclusion_mode: L1MessageInclusionMode::BlockDepth(0),
             ..SequencerArgs::default()
         },

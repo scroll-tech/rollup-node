@@ -13,13 +13,14 @@ use reth_scroll_chainspec::SCROLL_DEV;
 use reth_scroll_node::ScrollNetworkPrimitives;
 use reth_tokio_util::EventStream;
 use rollup_node::{
+    constants::SCROLL_GAS_LIMIT,
     test_utils::{
         default_sequencer_test_scroll_rollup_node_config, default_test_scroll_rollup_node_config,
         generate_tx, setup_engine,
     },
     BeaconProviderArgs, ChainOrchestratorArgs, ConsensusAlgorithm, ConsensusArgs, DatabaseArgs,
     EngineDriverArgs, GasPriceOracleArgs, L1ProviderArgs, NetworkArgs as ScrollNetworkArgs,
-    ScrollRollupNodeConfig, SequencerArgs,
+    RollupNodeContext, ScrollRollupNodeConfig, SequencerArgs,
 };
 use rollup_node_chain_orchestrator::ChainOrchestratorEvent;
 use rollup_node_manager::{RollupManagerCommand, RollupManagerEvent, RollupManagerHandle};
@@ -50,7 +51,6 @@ async fn can_bridge_l1_messages() -> eyre::Result<()> {
         sequencer_args: SequencerArgs {
             sequencer_enabled: true,
             block_time: 0,
-            max_l1_messages_per_block: 4,
             l1_message_inclusion_mode: L1MessageInclusionMode::BlockDepth(0),
             ..SequencerArgs::default()
         },
@@ -146,7 +146,6 @@ async fn can_sequence_and_gossip_blocks() {
         sequencer_args: SequencerArgs {
             sequencer_enabled: true,
             block_time: 0,
-            max_l1_messages_per_block: 4,
             l1_message_inclusion_mode: L1MessageInclusionMode::BlockDepth(0),
             payload_building_duration: 1000,
             ..SequencerArgs::default()
@@ -587,11 +586,14 @@ async fn graceful_shutdown_consolidates_most_recent_batch_on_startup() -> eyre::
     let (rnm, handle, l1_notification_tx) = config
         .clone()
         .build(
-            node.inner.network.clone(),
+            RollupNodeContext::new(
+                node.inner.network.clone(),
+                chain_spec.clone(),
+                path.clone(),
+                SCROLL_GAS_LIMIT,
+            ),
             events,
             node.inner.add_ons_handle.rpc_handle.rpc_server_handles.clone(),
-            chain_spec.clone(),
-            path.clone(),
         )
         .await?;
 
@@ -694,11 +696,14 @@ async fn graceful_shutdown_consolidates_most_recent_batch_on_startup() -> eyre::
     let (rnm, handle, l1_notification_tx) = config
         .clone()
         .build(
-            node.inner.network.clone(),
+            RollupNodeContext::new(
+                node.inner.network.clone(),
+                chain_spec,
+                path.clone(),
+                SCROLL_GAS_LIMIT,
+            ),
             events,
             node.inner.add_ons_handle.rpc_handle.rpc_server_handles.clone(),
-            chain_spec,
-            path.clone(),
         )
         .await?;
     let l1_notification_tx = l1_notification_tx.unwrap();
@@ -876,7 +881,6 @@ async fn can_handle_reorgs_while_sequencing() -> eyre::Result<()> {
             .expect("valid url that will not be used as test batches use calldata"),
     );
     config.engine_driver_args.sync_at_startup = false;
-    config.sequencer_args.max_l1_messages_per_block = 1;
     let (mut nodes, _tasks, _) = setup_engine(config, 1, chain_spec.clone(), false, false).await?;
     let node = nodes.pop().unwrap();
 
