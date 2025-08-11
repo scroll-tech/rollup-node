@@ -21,6 +21,9 @@ pub enum L1ProviderError {
     /// Error at the beacon provider.
     #[error("Beacon provider error: {0}")]
     BeaconProvider(#[from] reqwest::Error),
+    /// Error at the s3 provider.
+    #[error("S3 provider error: {0}")]
+    S3Provider(reqwest::Error),
     /// Invalid timestamp for slot.
     #[error("invalid block timestamp: genesis {0}, provided {1}")]
     InvalidBlockTimestamp(u64, u64),
