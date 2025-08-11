@@ -175,28 +175,16 @@ pub trait DatabaseOperations: DatabaseConnectionProvider {
 
         let l1_message: models::l1_message::ActiveModel = l1_message.into();
         let result = models::l1_message::Entity::insert(l1_message)
-            .on_conflict(
-                OnConflict::column(models::l1_message::Column::QueueIndex)
-                    .do_nothing_on([models::l1_message::Column::QueueIndex])
-                    .to_owned(),
-            )
+            .on_conflict_do_nothing()
             .exec(self.get_connection())
             .await;
 
-        if let Err(err) = result {
-            match err {
-                DbErr::RecordNotInserted => {
-                    tracing::info!(
-                        "L1 message with queue_index {} already exists: {}",
-                        l1_index,
-                        err
-                    );
-                }
-                _ => return Err(err.into()),
-            }
+        if let Err(DbErr::RecordNotInserted) = result {
+            tracing::error!(target: "scroll::db", queue_index = l1_index, "L1 message already exists");
+            Ok(())
+        } else {
+            Ok(result.map(|_| ())?)
         }
-
-        Ok(())
     }
 
     /// Delete all [`L1MessageEnvelope`]s with a block number greater than the provided block
