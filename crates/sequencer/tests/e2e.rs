@@ -450,7 +450,6 @@ async fn can_sequence_blocks_with_private_key_file() -> eyre::Result<()> {
         sequencer_args: SequencerArgs {
             sequencer_enabled: true,
             block_time: 0,
-            max_l1_messages_per_block: 4,
             l1_message_inclusion_mode: L1MessageInclusionMode::BlockDepth(0),
             payload_building_duration: 1000,
             ..SequencerArgs::default()
@@ -541,7 +540,6 @@ async fn can_sequence_blocks_with_hex_key_file_without_prefix() -> eyre::Result<
         sequencer_args: SequencerArgs {
             sequencer_enabled: true,
             block_time: 0,
-            max_l1_messages_per_block: 4,
             l1_message_inclusion_mode: L1MessageInclusionMode::BlockDepth(0),
             payload_building_duration: 1000,
             ..SequencerArgs::default()
