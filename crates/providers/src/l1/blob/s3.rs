@@ -1,5 +1,5 @@
-use crate::{l1::blob::BLOB_SIZE, BlobProvider, L1ProviderError};
-use reqwest::{Client, Url};
+use crate::{BlobProvider, L1ProviderError};
+use reqwest::Client;
 use std::sync::Arc;
 
 use alloy_eips::eip4844::Blob;
@@ -9,15 +9,20 @@ use alloy_primitives::B256;
 #[derive(Debug, Clone)]
 pub struct S3BlobProvider {
     /// The base URL for the S3 service.
-    pub base_url: Url,
+    pub base_url: String,
     /// HTTP client for making requests.
     pub client: Client,
 }
 
 impl S3BlobProvider {
     /// Creates a new [`S3BlobProvider`] from the provided url.
-    pub fn new_http(url: reqwest::Url) -> Self {
-        Self { base_url: url, client: reqwest::Client::new() }
+    pub fn new_http(base: reqwest::Url) -> Self {
+        // If base ends with a slash, remove it
+        let mut base = base.to_string();
+        if base.ends_with('/') {
+            base.remove(base.len() - 1);
+        }
+        Self { base_url: base, client: reqwest::Client::new() }
     }
 }
 
@@ -29,20 +34,15 @@ impl BlobProvider for S3BlobProvider {
         _block_timestamp: u64,
         hash: B256,
     ) -> Result<Option<Arc<Blob>>, L1ProviderError> {
-        let url = format!("{}{}", self.base_url, hash);
+        let url = format!("{}/{}", self.base_url, hash);
         let response = self.client.get(&url).send().await.map_err(L1ProviderError::S3Provider)?;
 
         if response.status().is_success() {
             let blob_data = response.bytes().await.map_err(L1ProviderError::S3Provider)?;
 
-            // Parse the blob data
-            if blob_data.len() == BLOB_SIZE {
-                let blob = Blob::try_from(blob_data.as_ref())
-                    .map_err(|_| L1ProviderError::Other("Invalid blob data"))?;
-                Ok(Some(Arc::new(blob)))
-            } else {
-                Ok(None)
-            }
+            let blob = Blob::try_from(blob_data.as_ref())
+                .map_err(|_| L1ProviderError::Other("Invalid blob data"))?;
+            Ok(Some(Arc::new(blob)))
         } else if response.status() == 404 {
             Ok(None)
         } else {

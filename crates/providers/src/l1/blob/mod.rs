@@ -18,9 +18,6 @@ use std::sync::Arc;
 use alloy_eips::eip4844::Blob;
 use alloy_primitives::B256;
 use eyre::OptionExt;
-
-const BLOB_SIZE: usize = 131072;
-
 /// An instance of the trait can be used to fetch L1 blob data.
 #[async_trait::async_trait]
 #[auto_impl::auto_impl(Arc, &)]
