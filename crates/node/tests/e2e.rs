@@ -807,6 +807,7 @@ async fn can_handle_batch_revert() -> eyre::Result<()> {
     Ok(())
 }
 
+#[allow(clippy::large_stack_frames)]
 #[tokio::test]
 async fn can_handle_reorgs_while_sequencing() -> eyre::Result<()> {
     reth_tracing::init_test_tracing();
