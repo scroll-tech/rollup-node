@@ -303,6 +303,46 @@ mod test {
             .await
             .unwrap()
             .unwrap();
+
+        assert_eq!(l1_message_2, l1_message_2_from_db);
+    }
+
+    #[tokio::test]
+    async fn test_database_duplicate_l1_index() {
+        // Setup the test database.
+        let db = setup_test_db().await;
+
+        // Generate unstructured bytes.
+        let mut bytes = [0u8; 2048];
+        rand::rng().fill(bytes.as_mut_slice());
+        let mut u = Unstructured::new(&bytes);
+
+        // Generate 2 random L1Messages.
+        let mut l1_message_1 = L1MessageEnvelope::arbitrary(&mut u).unwrap();
+        let original_l1_message_1 = l1_message_1.clone();
+        let l1_message_2 = L1MessageEnvelope::arbitrary(&mut u).unwrap();
+
+        // Insert the L1Messages into the database in a transaction.
+        let tx = db.tx().await.unwrap();
+        tx.insert_l1_message(l1_message_1.clone()).await.unwrap();
+        tx.insert_l1_message(l1_message_2.clone()).await.unwrap();
+        // Modify l1_block_number of l1_message_1 and attempt to insert again
+        l1_message_1.l1_block_number = 1000;
+        tx.insert_l1_message(l1_message_1.clone()).await.unwrap();
+        tx.commit().await.unwrap();
+
+        // Check that the L1Messages are in the database.
+        let l1_message_1_from_db = db
+            .get_l1_message_by_index(l1_message_1.transaction.queue_index)
+            .await
+            .unwrap()
+            .unwrap();
+        assert_eq!(original_l1_message_1, l1_message_1_from_db);
+        let l1_message_2_from_db = db
+            .get_l1_message_by_index(l1_message_2.transaction.queue_index)
+            .await
+            .unwrap()
+            .unwrap();
         assert_eq!(l1_message_2, l1_message_2_from_db);
     }
 
