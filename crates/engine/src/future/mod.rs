@@ -10,7 +10,7 @@ use reth_scroll_engine_primitives::try_into_block;
 use reth_scroll_primitives::ScrollBlock;
 use rollup_node_primitives::{
     BatchInfo, BlockInfo, L2BlockInfoWithL1Messages, MeteredFuture,
-    ScrollPayloadAttributesWithBatchInfo,
+    ScrollPayloadAttributesWithBatchInfo, WithBlockNumber,
 };
 use scroll_alloy_hardforks::ScrollHardforks;
 use scroll_alloy_network::Scroll;
@@ -92,8 +92,8 @@ pub(crate) type BuildNewPayloadFuture =
 /// An enum that represents the different types of futures that can be executed on the engine API.
 /// It can be a block import job, an L1 consolidation job, or a new payload processing.
 pub(crate) enum EngineFuture {
-    BlockImport(BlockImportFuture),
-    L1Consolidation(L1ConsolidationFuture),
+    BlockImport(WithBlockNumber<BlockImportFuture>),
+    L1Consolidation(WithBlockNumber<L1ConsolidationFuture>),
     NewPayload(NewPayloadFuture),
 }
 
@@ -107,7 +107,10 @@ impl EngineFuture {
     where
         EC: ScrollEngineApi + Unpin + Send + Sync + 'static,
     {
-        Self::BlockImport(Box::pin(handle_execution_payload(client, block_with_peer, fcs)))
+        Self::BlockImport(WithBlockNumber::new(
+            block_with_peer.block.header.number,
+            Box::pin(handle_execution_payload(client, block_with_peer, fcs)),
+        ))
     }
 
     /// Creates a new [`EngineFuture::L1Consolidation`] future from the provided parameters.
@@ -115,18 +118,21 @@ impl EngineFuture {
         client: Arc<EC>,
         execution_payload_provider: P,
         fcs: ForkchoiceState,
-        payload_attributes: ScrollPayloadAttributesWithBatchInfo,
+        payload_attributes: WithBlockNumber<ScrollPayloadAttributesWithBatchInfo>,
     ) -> Self
     where
         EC: ScrollEngineApi + Unpin + Send + Sync + 'static,
         P: Provider<Scroll> + Unpin + Send + Sync + 'static,
     {
-        Self::L1Consolidation(Box::pin(handle_payload_attributes(
-            client,
-            execution_payload_provider,
-            fcs,
-            payload_attributes,
-        )))
+        Self::L1Consolidation(WithBlockNumber::new(
+            payload_attributes.number,
+            Box::pin(handle_payload_attributes(
+                client,
+                execution_payload_provider,
+                fcs,
+                payload_attributes,
+            )),
+        ))
     }
 
     /// Creates a new [`EngineFuture::NewPayload`] future from the provided parameters.
@@ -150,8 +156,8 @@ impl Future for EngineFuture {
     fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<EngineDriverFutureResult> {
         let this = self.get_mut();
         match this {
-            Self::BlockImport(fut) => fut.as_mut().poll(cx).map(Into::into),
-            Self::L1Consolidation(fut) => fut.as_mut().poll(cx).map(Into::into),
+            Self::BlockImport(fut) => fut.inner.as_mut().poll(cx).map(Into::into),
+            Self::L1Consolidation(fut) => fut.inner.as_mut().poll(cx).map(Into::into),
             Self::NewPayload(fut) => fut.as_mut().poll(cx).map(Into::into),
         }
     }
@@ -239,7 +245,7 @@ async fn handle_payload_attributes<EC, P>(
     client: Arc<EC>,
     provider: P,
     fcs: ForkchoiceState,
-    payload_attributes_with_batch_info: ScrollPayloadAttributesWithBatchInfo,
+    payload_attributes_with_batch_info: WithBlockNumber<ScrollPayloadAttributesWithBatchInfo>,
 ) -> Result<ConsolidationOutcome, EngineDriverError>
 where
     EC: ScrollEngineApi + Unpin + Send + Sync + 'static,
@@ -248,7 +254,7 @@ where
     tracing::trace!(target: "scroll::engine::future", ?fcs, ?payload_attributes_with_batch_info, "handling payload attributes");
 
     let ScrollPayloadAttributesWithBatchInfo { mut payload_attributes, batch_info } =
-        payload_attributes_with_batch_info.clone();
+        payload_attributes_with_batch_info.inner.clone();
 
     let maybe_execution_payload = provider
         .get_block((fcs.safe_block_info().number + 1).into())
