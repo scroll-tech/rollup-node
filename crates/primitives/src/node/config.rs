@@ -2,6 +2,7 @@ use alloy_chains::NamedChain;
 use alloy_primitives::{address, Address};
 use reth_chainspec::EthChainSpec;
 use reth_node_core::primitives::BlockHeader;
+use reth_scroll_chainspec::{ChainConfig, ScrollChainConfig};
 
 /// The address of the Scroll Rollup contract on Mainnet.
 pub const MAINNET_ROLLUP_CONTRACT_ADDRESS: Address =
@@ -88,71 +89,35 @@ impl NodeConfig {
     /// supporting both named and custom chains.
     pub fn from_chainspec<CS>(chain_spec: &CS) -> eyre::Result<Self>
     where
-        CS: EthChainSpec<Header: BlockHeader> + Clone,
+        CS: EthChainSpec<Header: BlockHeader> + ChainConfig<Config = ScrollChainConfig> + Clone,
     {
         // Try to get configuration from named chain first
         if let Some(named_chain) = chain_spec.chain().named() {
             return Ok(Self::from_named_chain(named_chain));
         }
 
-        // For custom chains, extract scroll-specific configuration from genesis
-        let genesis = chain_spec.genesis();
-        let genesis_config = &genesis.config;
+        // If not a named chain, extract the configuration from the chain spec
+        let config = chain_spec.chain_config();
 
-        // Extract scroll configuration from extra_fields
-        let scroll_config = genesis_config
+        let genesis = chain_spec.genesis();
+        let l1_message_queue_v2_deployment_block = genesis
+            .config
             .extra_fields
             .get("scroll")
-            .ok_or_else(|| eyre::eyre!("Missing 'scroll' configuration in genesis"))?;
-
-        let l1_config = scroll_config
-            .get("l1Config")
-            .ok_or_else(|| eyre::eyre!("Missing 'l1Config' in scroll configuration"))?;
-
-        // Extract system contract configuration
-        let system_contract = genesis_config
-            .extra_fields
-            .get("systemContract")
-            .ok_or_else(|| eyre::eyre!("Missing 'systemContract' configuration in genesis"))?;
-
-        // Parse addresses and values from JSON
-        let scroll_chain_address = l1_config
-            .get("scrollChainAddress")
-            .and_then(|v| v.as_str())
-            .and_then(|s| s.parse().ok())
-            .ok_or_else(|| eyre::eyre!("Invalid or missing 'scrollChainAddress'"))?;
-
-        let l1_message_queue_address = l1_config
-            .get("l1MessageQueueAddress")
-            .and_then(|v| v.as_str())
-            .and_then(|s| s.parse().ok())
-            .ok_or_else(|| eyre::eyre!("Invalid or missing 'l1MessageQueueAddress'"))?;
-
-        let l1_message_queue_v2_address = l1_config
-            .get("l1MessageQueueV2Address")
-            .and_then(|v| v.as_str())
-            .and_then(|s| s.parse().ok())
-            .ok_or_else(|| eyre::eyre!("Invalid or missing 'l1MessageQueueV2Address'"))?;
-
-        let l1_message_queue_v2_deployment_block = l1_config
-            .get("l1MessageQueueV2DeploymentBlock")
+            .and_then(|scroll| scroll.get("l1Config"))
+            .and_then(|l1_config| l1_config.get("l1MessageQueueV2DeploymentBlock"))
             .and_then(|v| v.as_u64())
             .ok_or_else(|| eyre::eyre!("Invalid or missing 'l1MessageQueueV2DeploymentBlock'"))?;
 
-        let system_contract_address = system_contract
-            .get("system_contract_address")
-            .and_then(|v| v.as_str())
-            .and_then(|s| s.parse().ok())
-            .ok_or_else(|| eyre::eyre!("Invalid or missing 'system_contract_address'"))?;
-
-        let address_book = ScrollAddressBook {
-            rollup_node_contract_address: scroll_chain_address,
-            v1_message_queue_address: l1_message_queue_address,
-            v2_message_queue_address: l1_message_queue_v2_address,
-            system_contract_address,
-        };
-
-        Ok(Self { address_book, start_l1_block: l1_message_queue_v2_deployment_block })
+        Ok(Self {
+            address_book: ScrollAddressBook {
+                rollup_node_contract_address: config.l1_config.scroll_chain_address,
+                v1_message_queue_address: config.l1_config.l1_message_queue_address,
+                v2_message_queue_address: config.l1_config.l1_message_queue_v2_address,
+                system_contract_address: config.l1_config.l2_system_config_address,
+            },
+            start_l1_block: l1_message_queue_v2_deployment_block,
+        })
     }
 
     /// Returns the node configuration for Mainnet.

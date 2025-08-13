@@ -10468,6 +10468,7 @@ dependencies = [
  "reth-chainspec",
  "reth-node-core",
  "reth-primitives-traits",
+ "reth-scroll-chainspec",
  "reth-scroll-primitives",
  "scroll-alloy-consensus",
  "scroll-alloy-rpc-types-engine",
