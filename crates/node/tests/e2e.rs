@@ -946,7 +946,8 @@ async fn can_handle_reorgs_while_sequencing() -> eyre::Result<()> {
     node0_rnm_handle.build_block().await;
     wait_for_event_predicate_5s(&mut node0_rnm_events, |e| {
         if let RollupManagerEvent::BlockImported(block) = e {
-            block.body.transactions.len() == 1 &&
+            block.header.number == 11 &&
+                block.body.transactions.len() == 1 &&
                 block.body.transactions.iter().any(|tx| tx.is_l1_message())
         } else {
             false
@@ -981,13 +982,13 @@ async fn can_handle_reorgs_while_sequencing() -> eyre::Result<()> {
     println!("Latest block on node0: {:?}", latestBlock);
     // return Ok(());
 
-    // Since the L1 reorg reverted the L1 message included in block 10, the sequencer
+    // Since the L1 reorg reverted the L1 message included in block 11, the sequencer
     // should produce a new block at height 10.
     node0_rnm_handle.build_block().await;
-    wait_for_block_sequenced_5s(&mut node0_rnm_events, 10).await?;
+    wait_for_block_sequenced_5s(&mut node0_rnm_events, 11).await?;
 
     // Assert that the follower node has received the new block from the sequencer node.
-    wait_for_block_imported_5s(&mut node1_rnm_events, 10).await?;
+    wait_for_block_imported_5s(&mut node1_rnm_events, 11).await?;
 
     Ok(())
 }
