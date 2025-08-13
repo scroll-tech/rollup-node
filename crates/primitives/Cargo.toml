@@ -47,6 +47,7 @@ std = [
     "alloy-consensus/std",
     "alloy-chains/std",
     "reth-chainspec/std",
+    "reth-scroll-chainspec/std",
 ]
 arbitrary = [
     "std",
