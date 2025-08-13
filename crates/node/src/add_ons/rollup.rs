@@ -50,7 +50,7 @@ impl RollupManagerAddOn {
         self,
         ctx: AddOnsContext<'_, N>,
         rpc: RpcHandle<N, EthApi>,
-    ) -> eyre::Result<(RollupManagerHandle, Option<Sender<Arc<L1Notification>>>)>
+    ) -> eyre::Result<(RollupManagerHandle<N::Network>, Option<Sender<Arc<L1Notification>>>)>
     where
         <<N as FullNodeTypes>::Types as NodeTypes>::ChainSpec:
             ChainConfig<Config = ScrollChainConfig> + ScrollHardforks + IsDevChain,

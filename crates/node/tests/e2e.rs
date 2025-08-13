@@ -6,11 +6,12 @@ use alloy_signer::Signer;
 use alloy_signer_local::PrivateKeySigner;
 use futures::StreamExt;
 use reth_chainspec::EthChainSpec;
-use reth_network::{NetworkConfigBuilder, PeersInfo};
+use reth_network::{NetworkConfigBuilder, Peers, PeersInfo};
 use reth_network_api::block::EthWireProvider;
 use reth_rpc_api::EthApiServer;
 use reth_scroll_chainspec::SCROLL_DEV;
 use reth_scroll_node::ScrollNetworkPrimitives;
+use reth_scroll_primitives::ScrollBlock;
 use reth_tokio_util::EventStream;
 use rollup_node::{
     constants::SCROLL_GAS_LIMIT,
@@ -22,7 +23,7 @@ use rollup_node::{
     GasPriceOracleArgs, L1ProviderArgs, NetworkArgs as ScrollNetworkArgs, RollupNodeContext,
     ScrollRollupNodeConfig, SequencerArgs,
 };
-use rollup_node_manager::{RollupManagerCommand, RollupManagerEvent, RollupManagerHandle};
+use rollup_node_manager::{RollupManagerCommand, RollupManagerEvent};
 use rollup_node_primitives::{sig_encode_hash, BatchCommitData, ConsensusUpdate};
 use rollup_node_providers::BlobSource;
 use rollup_node_sequencer::L1MessageInclusionMode;
@@ -30,8 +31,11 @@ use rollup_node_watcher::L1Notification;
 use scroll_alloy_consensus::TxL1Message;
 use scroll_network::{NewBlockWithPeer, SCROLL_MAINNET};
 use scroll_wire::{ScrollWireConfig, ScrollWireProtocolHandler};
-use std::{path::PathBuf, sync::Arc};
-use tokio::sync::{oneshot, Mutex};
+use std::{path::PathBuf, sync::Arc, time::Duration};
+use tokio::{
+    sync::{oneshot, Mutex},
+    time,
+};
 use tracing::trace;
 
 #[tokio::test]
@@ -63,7 +67,7 @@ async fn can_bridge_l1_messages() -> eyre::Result<()> {
     let (mut nodes, _tasks, _wallet) = setup_engine(node_args, 1, chain_spec, false, false).await?;
     let node = nodes.pop().unwrap();
 
-    let rnm_handle: RollupManagerHandle = node.inner.add_ons_handle.rollup_manager_handle.clone();
+    let rnm_handle = node.inner.add_ons_handle.rollup_manager_handle.clone();
     let mut rnm_events = rnm_handle.get_event_listener().await?;
     let l1_watcher_tx = node.inner.add_ons_handle.l1_watcher_tx.clone().unwrap();
 
@@ -165,6 +169,93 @@ async fn can_sequence_and_gossip_blocks() {
     // assert that the block was successfully imported by the follower node
     wait_n_events(&mut follower_events, |e| matches!(e, RollupManagerEvent::BlockImported(_)), 1)
         .await;
+}
+
+#[tokio::test]
+async fn can_penalize_peer_for_invalid_block() {
+    reth_tracing::init_test_tracing();
+
+    // create 2 nodes
+    let chain_spec = (*SCROLL_DEV).clone();
+    let rollup_manager_args = ScrollRollupNodeConfig {
+        test: true,
+        network_args: ScrollNetworkArgs {
+            enable_eth_scroll_wire_bridge: true,
+            enable_scroll_wire: true,
+            sequencer_url: None,
+        },
+        database_args: DatabaseArgs { path: Some(PathBuf::from("sqlite::memory:")) },
+        l1_provider_args: L1ProviderArgs::default(),
+        engine_driver_args: EngineDriverArgs::default(),
+        sequencer_args: SequencerArgs {
+            sequencer_enabled: true,
+            block_time: 0,
+            l1_message_inclusion_mode: L1MessageInclusionMode::BlockDepth(0),
+            payload_building_duration: 1000,
+            ..SequencerArgs::default()
+        },
+        beacon_provider_args: BeaconProviderArgs {
+            blob_source: BlobSource::Mock,
+            ..Default::default()
+        },
+        signer_args: Default::default(),
+        gas_price_oracle_args: GasPriceOracleArgs::default(),
+        consensus_args: ConsensusArgs::noop(),
+    };
+
+    let (nodes, _tasks, _) =
+        setup_engine(rollup_manager_args, 2, chain_spec, false, false).await.unwrap();
+
+    let node0_rmn_handle = nodes[0].inner.add_ons_handle.rollup_manager_handle.clone();
+    let node0_network_handle = node0_rmn_handle.get_network_handle().await.unwrap();
+    let node0_id = node0_network_handle.inner().peer_id();
+
+    let node1_rnm_handle = nodes[1].inner.add_ons_handle.rollup_manager_handle.clone();
+    let node1_network_handle = node1_rnm_handle.get_network_handle().await.unwrap();
+
+    // get initial reputation of node0 from pov of node1
+    let initial_reputation =
+        node1_network_handle.inner().reputation_by_id(*node0_id).await.unwrap().unwrap();
+    assert_eq!(initial_reputation, 0);
+
+    // create invalid block
+    let block = ScrollBlock::default();
+
+    // send invalid block from node0 to node1. We don't care about the signature here since we use a
+    // NoopConsensus in the test.
+    node0_network_handle.announce_block(block, Signature::new(U256::from(1), U256::from(1), false));
+
+    eventually(
+        Duration::from_secs(5),
+        Duration::from_millis(10),
+        "Peer0 reputation should be lower after sending invalid block",
+        || async {
+            // check that the node0 is penalized on node1
+            let slashed_reputation =
+                node1_network_handle.inner().reputation_by_id(*node0_id).await.unwrap().unwrap();
+            slashed_reputation < initial_reputation
+        },
+    )
+    .await;
+}
+
+/// Helper function to wait until a predicate is true or a timeout occurs.
+pub async fn eventually<F, Fut>(timeout: Duration, tick: Duration, message: &str, mut predicate: F)
+where
+    F: FnMut() -> Fut,
+    Fut: std::future::Future<Output = bool>,
+{
+    let mut interval = time::interval(tick);
+    let start = time::Instant::now();
+    loop {
+        if predicate().await {
+            return;
+        }
+
+        assert!(start.elapsed() <= timeout, "Timeout while waiting for condition: {message}");
+
+        interval.tick().await;
+    }
 }
 
 #[allow(clippy::large_stack_frames)]
