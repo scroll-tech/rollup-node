@@ -2,6 +2,7 @@
 
 use alloy_eips::BlockNumberOrTag;
 use alloy_primitives::{address, b256, Address, Bytes, Signature, B256, U256};
+use alloy_rpc_types_eth::Block;
 use alloy_signer::Signer;
 use alloy_signer_local::PrivateKeySigner;
 use eyre::Ok;
@@ -10,7 +11,7 @@ use reth_chainspec::EthChainSpec;
 use reth_e2e_test_utils::{NodeHelperType, TmpDB};
 use reth_network::{NetworkConfigBuilder, Peers, PeersInfo};
 use reth_network_api::block::EthWireProvider;
-use reth_node_api::{Block, NodeTypesWithDBAdapter};
+use reth_node_api::NodeTypesWithDBAdapter;
 use reth_primitives_traits::Transaction;
 use reth_provider::providers::BlockchainProvider;
 use reth_revm::context::block;
@@ -35,6 +36,7 @@ use rollup_node_providers::BlobSource;
 use rollup_node_sequencer::L1MessageInclusionMode;
 use rollup_node_watcher::L1Notification;
 use scroll_alloy_consensus::TxL1Message;
+use scroll_alloy_rpc_types::Transaction as ScrollAlloyTransaction;
 use scroll_network::{NewBlockWithPeer, SCROLL_MAINNET};
 use scroll_wire::{ScrollWireConfig, ScrollWireProtocolHandler};
 use std::{path::PathBuf, sync::Arc, time::Duration};
@@ -887,7 +889,7 @@ async fn can_handle_batch_revert() -> eyre::Result<()> {
 
 #[allow(clippy::large_stack_frames)]
 #[tokio::test]
-async fn can_handle_reorgs_while_sequencing() -> eyre::Result<()> {
+async fn can_handle_l1_message_reorg() -> eyre::Result<()> {
     reth_tracing::init_test_tracing();
     color_eyre::install()?;
     let chain_spec = (*SCROLL_DEV).clone();
@@ -937,7 +939,6 @@ async fn can_handle_reorgs_while_sequencing() -> eyre::Result<()> {
     node0_l1_watcher_tx.send(Arc::new(L1Notification::NewBlock(10))).await?;
 
     // Send L1 the L1 message to follower node.
-    // TODO: maybe let node reject block first? -> do in different test.
     node1_l1_watcher_tx.send(Arc::new(l1_message_notification)).await?;
     wait_for_event_5s(&mut node1_rnm_events, RollupManagerEvent::L1MessageIndexed(0)).await?;
     node1_l1_watcher_tx.send(Arc::new(L1Notification::NewBlock(10))).await?;
@@ -955,8 +956,7 @@ async fn can_handle_reorgs_while_sequencing() -> eyre::Result<()> {
     })
     .await?;
 
-    let l2_reorged_height = 15;
-    for i in 12..=l2_reorged_height {
+    for i in 12..=15 {
         node0_rnm_handle.build_block().await;
         wait_for_block_sequenced_5s(&mut node0_rnm_events, i).await?;
     }
@@ -964,31 +964,32 @@ async fn can_handle_reorgs_while_sequencing() -> eyre::Result<()> {
     // Assert that the follower node has received the latest block from the sequencer node.
     wait_for_block_imported_5s(&mut node1_rnm_events, 15).await?;
 
+    assert_eq!(latest_block(&node0).await?.header.number, 15);
+    assert_eq!(latest_block(&node1).await?.header.number, 15);
+
     // Issue and wait for the reorg.
     node0_l1_watcher_tx.send(Arc::new(L1Notification::Reorg(9))).await?;
     wait_for_event_5s(&mut node0_rnm_events, RollupManagerEvent::Reorg(9)).await?;
     node1_l1_watcher_tx.send(Arc::new(L1Notification::Reorg(9))).await?;
     wait_for_event_5s(&mut node1_rnm_events, RollupManagerEvent::Reorg(9)).await?;
 
-    // TODO: verify latest block and that reorg on L2 happened correctly.
-    let latestBlock = node0
-        .rpc
-        .inner
-        .eth_api()
-        .block_by_number(BlockNumberOrTag::Latest, false)
-        .await?
-        .expect("head block must exist");
-
-    println!("Latest block on node0: {:?}", latestBlock);
-    // return Ok(());
+    // TODO: this can only become true if we do https://github.com/scroll-tech/rollup-node/issues/254
+    // assert_eq!(latest_block(&node0).await?.header.number, 10);
+    // assert_eq!(latest_block(&node1).await?.header.number, 10);
 
     // Since the L1 reorg reverted the L1 message included in block 11, the sequencer
-    // should produce a new block at height 10.
+    // should produce a new block at height 11.
     node0_rnm_handle.build_block().await;
     wait_for_block_sequenced_5s(&mut node0_rnm_events, 11).await?;
 
     // Assert that the follower node has received the new block from the sequencer node.
     wait_for_block_imported_5s(&mut node1_rnm_events, 11).await?;
+
+    // TODO: why is this not known in the engine without the sleep?
+    tokio::time::sleep(tokio::time::Duration::from_secs(1)).await;
+
+    assert_eq!(latest_block(&node0).await?.header.number, 11);
+    assert_eq!(latest_block(&node1).await?.header.number, 11);
 
     Ok(())
 }
@@ -1134,19 +1135,21 @@ pub fn read_to_bytes<P: AsRef<std::path::Path>>(path: P) -> eyre::Result<Bytes> 
     Ok(Bytes::from_str(&std::fs::read_to_string(path)?)?)
 }
 
-// async fn latest_block(
-//     node: NodeHelperType<
-//         ScrollRollupNode,
-//         BlockchainProvider<NodeTypesWithDBAdapter<ScrollRollupNode, TmpDB>>,
-//     >,
-// ) -> eyre::Result<Block<Transaction>> {
-//     node.rpc
-//         .inner
-//         .eth_api()
-//         .block_by_number(BlockNumberOrTag::Latest, false)
-//         .await?
-//         .ok_or_else(|| eyre::eyre!("Latest block not found"))
-// }
+async fn latest_block(
+    node: &NodeHelperType<
+        ScrollRollupNode,
+        BlockchainProvider<NodeTypesWithDBAdapter<ScrollRollupNode, TmpDB>>,
+    >,
+) -> eyre::Result<Block<ScrollAlloyTransaction>> {
+    eyre::Ok(
+        node.rpc
+            .inner
+            .eth_api()
+            .block_by_number(BlockNumberOrTag::Latest, false)
+            .await?
+            .expect("latest block must exist"),
+    )
+}
 
 async fn wait_for_block_sequenced(
     events: &mut EventStream<RollupManagerEvent>,
@@ -1230,7 +1233,7 @@ async fn wait_for_event_predicate(
                         return Ok(());
                     }
                     Some(e) => {
-                        println!("Ignoring event: {:?}", e);
+                        tracing::debug!(target: "TODO:nodeX", "ignoring event {:?}", e);
                         continue
                     }, // Ignore other events
                     None => return Err(eyre::eyre!("Event stream ended unexpectedly")),

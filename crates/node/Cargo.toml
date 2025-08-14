@@ -75,6 +75,7 @@ reth-provider = { workspace = true, optional = true }
 reth-rpc-server-types = { workspace = true, optional = true }
 scroll-alloy-rpc-types-engine = { workspace = true, optional = true }
 scroll-derivation-pipeline = { workspace = true, optional = true }
+scroll-alloy-rpc-types = { git = "https://github.com/scroll-tech/reth.git", default-features = false }
 
 scroll-db.workspace = true
 scroll-engine.workspace = true
@@ -105,6 +106,7 @@ rollup-node = { workspace = true, features = ["test-utils"] }
 scroll-alloy-rpc-types-engine.workspace = true
 serde_json = { version = "1.0.94", default-features = false, features = ["alloc"] }
 color-eyre = "0.6"
+alloy-rpc-types-eth = { workspace = true }
 
 [features]
 test-utils = [
