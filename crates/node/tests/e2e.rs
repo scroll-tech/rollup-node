@@ -2,12 +2,17 @@
 
 use alloy_eips::BlockNumberOrTag;
 use alloy_primitives::{address, b256, Address, Bytes, Signature, B256, U256};
+use alloy_rpc_types_eth::Block;
 use alloy_signer::Signer;
 use alloy_signer_local::PrivateKeySigner;
+use eyre::Ok;
 use futures::StreamExt;
 use reth_chainspec::EthChainSpec;
+use reth_e2e_test_utils::{NodeHelperType, TmpDB};
 use reth_network::{NetworkConfigBuilder, Peers, PeersInfo};
 use reth_network_api::block::EthWireProvider;
+use reth_node_api::NodeTypesWithDBAdapter;
+use reth_provider::providers::BlockchainProvider;
 use reth_rpc_api::EthApiServer;
 use reth_scroll_chainspec::SCROLL_DEV;
 use reth_scroll_node::ScrollNetworkPrimitives;
@@ -21,7 +26,7 @@ use rollup_node::{
     },
     BeaconProviderArgs, ConsensusAlgorithm, ConsensusArgs, DatabaseArgs, EngineDriverArgs,
     GasPriceOracleArgs, L1ProviderArgs, NetworkArgs as ScrollNetworkArgs, RollupNodeContext,
-    ScrollRollupNodeConfig, SequencerArgs,
+    ScrollRollupNode, ScrollRollupNodeConfig, SequencerArgs,
 };
 use rollup_node_manager::{RollupManagerCommand, RollupManagerEvent};
 use rollup_node_primitives::{sig_encode_hash, BatchCommitData, ConsensusUpdate};
@@ -29,6 +34,7 @@ use rollup_node_providers::BlobSource;
 use rollup_node_sequencer::L1MessageInclusionMode;
 use rollup_node_watcher::L1Notification;
 use scroll_alloy_consensus::TxL1Message;
+use scroll_alloy_rpc_types::Transaction as ScrollAlloyTransaction;
 use scroll_network::{NewBlockWithPeer, SCROLL_MAINNET};
 use scroll_wire::{ScrollWireConfig, ScrollWireProtocolHandler};
 use std::{path::PathBuf, sync::Arc, time::Duration};
@@ -237,25 +243,6 @@ async fn can_penalize_peer_for_invalid_block() {
         },
     )
     .await;
-}
-
-/// Helper function to wait until a predicate is true or a timeout occurs.
-pub async fn eventually<F, Fut>(timeout: Duration, tick: Duration, message: &str, mut predicate: F)
-where
-    F: FnMut() -> Fut,
-    Fut: std::future::Future<Output = bool>,
-{
-    let mut interval = time::interval(tick);
-    let start = time::Instant::now();
-    loop {
-        if predicate().await {
-            return;
-        }
-
-        assert!(start.elapsed() <= timeout, "Timeout while waiting for condition: {message}");
-
-        interval.tick().await;
-    }
 }
 
 #[allow(clippy::large_stack_frames)]
@@ -900,97 +887,103 @@ async fn can_handle_batch_revert() -> eyre::Result<()> {
 
 #[allow(clippy::large_stack_frames)]
 #[tokio::test]
-async fn can_handle_reorgs_while_sequencing() -> eyre::Result<()> {
+async fn can_handle_l1_message_reorg() -> eyre::Result<()> {
     reth_tracing::init_test_tracing();
+    color_eyre::install()?;
     let chain_spec = (*SCROLL_DEV).clone();
 
-    // Launch a node
-    let mut config = default_test_scroll_rollup_node_config();
-    config.sequencer_args.block_time = 0;
-    let (mut nodes, _tasks, _) = setup_engine(config, 1, chain_spec.clone(), false, false).await?;
-    let node = nodes.pop().unwrap();
+    // Launch 2 nodes: node0=sequencer and node1=follower.
+    let config = default_sequencer_test_scroll_rollup_node_config();
+    let (mut nodes, _tasks, _) = setup_engine(config, 2, chain_spec.clone(), false, false).await?;
+    let node0 = nodes.remove(0);
+    let node1 = nodes.remove(0);
 
-    // Instantiate the rollup node manager.
-    let mut config = default_sequencer_test_scroll_rollup_node_config();
-    let path = node.inner.config.datadir().db().join("scroll.db?mode=rwc");
-    let path = PathBuf::from("sqlite://".to_string() + &*path.to_string_lossy());
-    config.database_args.path = Some(path.clone());
-    config.beacon_provider_args.url = Some(
-        "http://dummy:8545"
-            .parse()
-            .expect("valid url that will not be used as test batches use calldata"),
-    );
-    config.engine_driver_args.sync_at_startup = false;
-    let (nodes, _tasks, _) = setup_engine(config, 1, chain_spec, false, false).await?;
-    let node = nodes.first().unwrap();
-    let l1_watcher_tx = node.inner.add_ons_handle.l1_watcher_tx.as_ref().unwrap();
-    let mut rnm_events =
-        node.inner.add_ons_handle.rollup_manager_handle.get_event_listener().await?;
-    let sequencer_rnm_handle = nodes[0].inner.add_ons_handle.rollup_manager_handle.clone();
+    // Get handles
+    let node0_rnm_handle = node0.inner.add_ons_handle.rollup_manager_handle.clone();
+    let mut node0_rnm_events = node0_rnm_handle.get_event_listener().await?;
+    let node0_l1_watcher_tx = node0.inner.add_ons_handle.l1_watcher_tx.as_ref().unwrap();
 
-    // Send an L1 message.
-    let message = TxL1Message {
-        queue_index: 0,
-        gas_limit: 21000,
-        to: Default::default(),
-        value: Default::default(),
-        sender: address!("f39Fd6e51aad88F6F4ce6aB8827279cffFb92266"),
-        input: Default::default(),
-    };
+    let node1_rnm_handle = node1.inner.add_ons_handle.rollup_manager_handle.clone();
+    let mut node1_rnm_events = node1_rnm_handle.get_event_listener().await?;
+    let node1_l1_watcher_tx = node1.inner.add_ons_handle.l1_watcher_tx.as_ref().unwrap();
 
     // Let the sequencer build 10 blocks before performing the reorg process.
-    let mut i = 0;
-    loop {
-        sequencer_rnm_handle.build_block().await;
-        if let Some(RollupManagerEvent::BlockSequenced(_)) = rnm_events.next().await {
-            if i == 10 {
-                break
-            }
-            i += 1;
-        }
+    for i in 1..=10 {
+        node0_rnm_handle.build_block().await;
+        wait_for_block_sequenced_5s(&mut node0_rnm_events, i).await?;
     }
+
+    // Assert that the follower node has received all 10 blocks from the sequencer node.
+    wait_for_block_imported_5s(&mut node1_rnm_events, 10).await?;
 
     // Send a L1 message and wait for it to be indexed.
-    l1_watcher_tx
-        .send(Arc::new(L1Notification::L1Message { message, block_number: 10, block_timestamp: 0 }))
-        .await?;
-    loop {
-        if let Some(RollupManagerEvent::L1MessageIndexed(index)) = rnm_events.next().await {
-            assert_eq!(index, 0);
-            break
-        }
-    }
-    l1_watcher_tx.send(Arc::new(L1Notification::NewBlock(10))).await?;
+    let l1_message_notification = L1Notification::L1Message {
+        message: TxL1Message {
+            queue_index: 0,
+            gas_limit: 21000,
+            to: Default::default(),
+            value: Default::default(),
+            sender: address!("f39Fd6e51aad88F6F4ce6aB8827279cffFb92266"),
+            input: Default::default(),
+        },
+        block_number: 10,
+        block_timestamp: 0,
+    };
 
-    // Wait for block that contains the L1 message.
-    sequencer_rnm_handle.build_block().await;
-    let l2_reorged_height;
-    loop {
-        if let Some(RollupManagerEvent::BlockSequenced(block)) = rnm_events.next().await {
-            if block.body.transactions.iter().any(|tx| tx.is_l1_message()) {
-                l2_reorged_height = block.header.number;
-                break
-            }
+    // Send the L1 message to the sequencer node.
+    node0_l1_watcher_tx.send(Arc::new(l1_message_notification.clone())).await?;
+    wait_for_event_5s(&mut node0_rnm_events, RollupManagerEvent::L1MessageIndexed(0)).await?;
+    node0_l1_watcher_tx.send(Arc::new(L1Notification::NewBlock(10))).await?;
+
+    // Send L1 the L1 message to follower node.
+    node1_l1_watcher_tx.send(Arc::new(l1_message_notification)).await?;
+    wait_for_event_5s(&mut node1_rnm_events, RollupManagerEvent::L1MessageIndexed(0)).await?;
+    node1_l1_watcher_tx.send(Arc::new(L1Notification::NewBlock(10))).await?;
+
+    // Build block that contains the L1 message.
+    node0_rnm_handle.build_block().await;
+    wait_for_event_predicate_5s(&mut node0_rnm_events, |e| {
+        if let RollupManagerEvent::BlockImported(block) = e {
+            block.header.number == 11 &&
+                block.body.transactions.len() == 1 &&
+                block.body.transactions.iter().any(|tx| tx.is_l1_message())
+        } else {
+            false
         }
+    })
+    .await?;
+
+    for i in 12..=15 {
+        node0_rnm_handle.build_block().await;
+        wait_for_block_sequenced_5s(&mut node0_rnm_events, i).await?;
     }
+
+    // Assert that the follower node has received the latest block from the sequencer node.
+    wait_for_block_imported_5s(&mut node1_rnm_events, 15).await?;
+
+    assert_eq!(latest_block(&node0).await?.header.number, 15);
+    assert_eq!(latest_block(&node1).await?.header.number, 15);
 
     // Issue and wait for the reorg.
-    l1_watcher_tx.send(Arc::new(L1Notification::Reorg(9))).await?;
-    loop {
-        if let Some(RollupManagerEvent::Reorg(height)) = rnm_events.next().await {
-            assert_eq!(height, 9);
-            break
-        }
-    }
+    node0_l1_watcher_tx.send(Arc::new(L1Notification::Reorg(9))).await?;
+    wait_for_event_5s(&mut node0_rnm_events, RollupManagerEvent::Reorg(9)).await?;
+    node1_l1_watcher_tx.send(Arc::new(L1Notification::Reorg(9))).await?;
+    wait_for_event_5s(&mut node1_rnm_events, RollupManagerEvent::Reorg(9)).await?;
 
-    // Get the next sequenced L2 block.
-    sequencer_rnm_handle.build_block().await;
-    loop {
-        if let Some(RollupManagerEvent::BlockSequenced(block)) = rnm_events.next().await {
-            assert_eq!(block.number, l2_reorged_height);
-            break
-        }
-    }
+    // TODO: this can only become true if we do https://github.com/scroll-tech/rollup-node/issues/254
+    // assert_eq!(latest_block(&node0).await?.header.number, 10);
+    // assert_eq!(latest_block(&node1).await?.header.number, 10);
+
+    // Since the L1 reorg reverted the L1 message included in block 11, the sequencer
+    // should produce a new block at height 11.
+    node0_rnm_handle.build_block().await;
+    wait_for_block_imported_5s(&mut node0_rnm_events, 11).await?;
+
+    // Assert that the follower node has received the new block from the sequencer node.
+    wait_for_block_imported_5s(&mut node1_rnm_events, 11).await?;
+
+    assert_eq!(latest_block(&node0).await?.header.number, 11);
+    assert_eq!(latest_block(&node1).await?.header.number, 11);
 
     Ok(())
 }
@@ -1002,16 +995,12 @@ async fn can_gossip_over_eth_wire() -> eyre::Result<()> {
     // Create the chain spec for scroll dev with Feynman activated and a test genesis.
     let chain_spec = (*SCROLL_DEV).clone();
 
+    let mut config = default_sequencer_test_scroll_rollup_node_config();
+    config.sequencer_args.block_time = 40;
+
     // Setup the rollup node manager.
-    let (mut nodes, _tasks, _) = setup_engine(
-        default_sequencer_test_scroll_rollup_node_config(),
-        2,
-        chain_spec.clone(),
-        false,
-        false,
-    )
-    .await
-    .unwrap();
+    let (mut nodes, _tasks, _) =
+        setup_engine(config, 2, chain_spec.clone(), false, false).await.unwrap();
     let _sequencer = nodes.pop().unwrap();
     let follower = nodes.pop().unwrap();
 
@@ -1046,12 +1035,14 @@ async fn signer_rotation() -> eyre::Result<()> {
     sequencer_1_config.consensus_args.algorithm = ConsensusAlgorithm::SystemContract;
     sequencer_1_config.consensus_args.authorized_signer = Some(signer_1_address);
     sequencer_1_config.signer_args.private_key = Some(signer_1);
+    sequencer_1_config.sequencer_args.block_time = 40;
 
     let mut sequencer_2_config = default_sequencer_test_scroll_rollup_node_config();
     sequencer_2_config.test = false;
     sequencer_2_config.consensus_args.algorithm = ConsensusAlgorithm::SystemContract;
     sequencer_2_config.consensus_args.authorized_signer = Some(signer_1_address);
     sequencer_2_config.signer_args.private_key = Some(signer_2);
+    sequencer_2_config.sequencer_args.block_time = 40;
 
     // Setup two sequencer nodes.
     let (mut nodes, _tasks, _) =
@@ -1136,12 +1127,141 @@ pub fn read_to_bytes<P: AsRef<std::path::Path>>(path: P) -> eyre::Result<Bytes> 
     Ok(Bytes::from_str(&std::fs::read_to_string(path)?)?)
 }
 
+async fn latest_block(
+    node: &NodeHelperType<
+        ScrollRollupNode,
+        BlockchainProvider<NodeTypesWithDBAdapter<ScrollRollupNode, TmpDB>>,
+    >,
+) -> eyre::Result<Block<ScrollAlloyTransaction>> {
+    node.rpc
+        .inner
+        .eth_api()
+        .block_by_number(BlockNumberOrTag::Latest, false)
+        .await?
+        .ok_or_else(|| eyre::eyre!("Latest block not found"))
+}
+
+async fn wait_for_block_sequenced(
+    events: &mut EventStream<RollupManagerEvent>,
+    block_number: u64,
+    timeout: Duration,
+) -> eyre::Result<ScrollBlock> {
+    let mut block = None;
+
+    wait_for_event_predicate(
+        events,
+        |e| {
+            if let RollupManagerEvent::BlockSequenced(b) = e {
+                if b.header.number == block_number {
+                    block = Some(b);
+                    return true;
+                }
+            }
+
+            false
+        },
+        timeout,
+    )
+    .await?;
+
+    block.ok_or_else(|| eyre::eyre!("Block with number {block_number} was not sequenced"))
+}
+
+async fn wait_for_block_sequenced_5s(
+    events: &mut EventStream<RollupManagerEvent>,
+    block_number: u64,
+) -> eyre::Result<ScrollBlock> {
+    wait_for_block_sequenced(events, block_number, Duration::from_secs(5)).await
+}
+
+async fn wait_for_block_imported(
+    events: &mut EventStream<RollupManagerEvent>,
+    block_number: u64,
+    timeout: Duration,
+) -> eyre::Result<ScrollBlock> {
+    let mut block = None;
+
+    wait_for_event_predicate(
+        events,
+        |e| {
+            if let RollupManagerEvent::BlockImported(b) = e {
+                if b.header.number == block_number {
+                    block = Some(b);
+                    return true;
+                }
+            }
+
+            false
+        },
+        timeout,
+    )
+    .await?;
+
+    block.ok_or_else(|| eyre::eyre!("Block with number {block_number} was not imported"))
+}
+
+async fn wait_for_block_imported_5s(
+    events: &mut EventStream<RollupManagerEvent>,
+    block_number: u64,
+) -> eyre::Result<ScrollBlock> {
+    wait_for_block_imported(events, block_number, Duration::from_secs(5)).await
+}
+
+async fn wait_for_event_predicate(
+    event_stream: &mut EventStream<RollupManagerEvent>,
+    mut predicate: impl FnMut(RollupManagerEvent) -> bool,
+    timeout: Duration,
+) -> eyre::Result<()> {
+    let sleep = tokio::time::sleep(timeout);
+    tokio::pin!(sleep);
+
+    loop {
+        tokio::select! {
+            maybe_event = event_stream.next() => {
+                match maybe_event {
+                    Some(e) if predicate(e.clone()) => {
+                        return Ok(());
+                    }
+                    Some(e) => {
+                        tracing::debug!(target: "TODO:nodeX", "ignoring event {:?}", e);
+                    }, // Ignore other events
+                    None => return Err(eyre::eyre!("Event stream ended unexpectedly")),
+                }
+            }
+            _ = &mut sleep => return Err(eyre::eyre!("Timeout while waiting for event")),
+        }
+    }
+}
+
+async fn wait_for_event_predicate_5s(
+    event_stream: &mut EventStream<RollupManagerEvent>,
+    predicate: impl FnMut(RollupManagerEvent) -> bool,
+) -> eyre::Result<()> {
+    wait_for_event_predicate(event_stream, predicate, Duration::from_secs(5)).await
+}
+
+async fn wait_for_event(
+    event_stream: &mut EventStream<RollupManagerEvent>,
+    event: RollupManagerEvent,
+    timeout: Duration,
+) -> eyre::Result<()> {
+    wait_for_event_predicate(event_stream, |e| e == event, timeout).await
+}
+
+async fn wait_for_event_5s(
+    event_stream: &mut EventStream<RollupManagerEvent>,
+    event: RollupManagerEvent,
+) -> eyre::Result<()> {
+    wait_for_event(event_stream, event, Duration::from_secs(5)).await
+}
+
 /// Waits for n events to be emitted.
 async fn wait_n_events(
     events: &mut EventStream<RollupManagerEvent>,
-    matches: impl Fn(RollupManagerEvent) -> bool,
+    mut matches: impl FnMut(RollupManagerEvent) -> bool,
     mut n: u64,
 ) {
+    // TODO: refactor using `wait_for_event_predicate`
     while let Some(event) = events.next().await {
         if matches(event) {
             n -= 1;
@@ -1149,5 +1269,24 @@ async fn wait_n_events(
         if n == 0 {
             break
         }
+    }
+}
+
+/// Helper function to wait until a predicate is true or a timeout occurs.
+pub async fn eventually<F, Fut>(timeout: Duration, tick: Duration, message: &str, mut predicate: F)
+where
+    F: FnMut() -> Fut,
+    Fut: std::future::Future<Output = bool>,
+{
+    let mut interval = time::interval(tick);
+    let start = time::Instant::now();
+    loop {
+        if predicate().await {
+            return;
+        }
+
+        assert!(start.elapsed() <= timeout, "Timeout while waiting for condition: {message}");
+
+        interval.tick().await;
     }
 }
