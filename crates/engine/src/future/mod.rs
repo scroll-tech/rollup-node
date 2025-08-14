@@ -42,7 +42,7 @@ type BlockImportFuture = Pin<
 >;
 
 /// An enum that represents the different outcomes of an L1 consolidation job.
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ConsolidationOutcome {
     /// Represents a successful consolidation outcome with the consolidated block info and batch
     /// info.

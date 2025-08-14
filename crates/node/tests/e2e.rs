@@ -12,9 +12,7 @@ use reth_e2e_test_utils::{NodeHelperType, TmpDB};
 use reth_network::{NetworkConfigBuilder, Peers, PeersInfo};
 use reth_network_api::block::EthWireProvider;
 use reth_node_api::NodeTypesWithDBAdapter;
-use reth_primitives_traits::Transaction;
 use reth_provider::providers::BlockchainProvider;
-use reth_revm::context::block;
 use reth_rpc_api::EthApiServer;
 use reth_scroll_chainspec::SCROLL_DEV;
 use reth_scroll_node::ScrollNetworkPrimitives;
@@ -1141,14 +1139,12 @@ async fn latest_block(
         BlockchainProvider<NodeTypesWithDBAdapter<ScrollRollupNode, TmpDB>>,
     >,
 ) -> eyre::Result<Block<ScrollAlloyTransaction>> {
-    eyre::Ok(
-        node.rpc
-            .inner
-            .eth_api()
-            .block_by_number(BlockNumberOrTag::Latest, false)
-            .await?
-            .expect("latest block must exist"),
-    )
+    node.rpc
+        .inner
+        .eth_api()
+        .block_by_number(BlockNumberOrTag::Latest, false)
+        .await?
+        .ok_or_else(|| eyre::eyre!("Latest block not found"))
 }
 
 async fn wait_for_block_sequenced(
@@ -1163,18 +1159,18 @@ async fn wait_for_block_sequenced(
         |e| {
             if let RollupManagerEvent::BlockSequenced(b) = e {
                 if b.header.number == block_number {
-                    block = Some(b.clone());
+                    block = Some(b);
                     return true;
                 }
             }
 
-            return false;
+            false
         },
         timeout,
     )
     .await?;
 
-    block.ok_or(eyre::eyre!("Block with number {block_number} was not sequenced"))
+    block.ok_or_else(|| eyre::eyre!("Block with number {block_number} was not sequenced"))
 }
 
 async fn wait_for_block_sequenced_5s(
@@ -1196,18 +1192,18 @@ async fn wait_for_block_imported(
         |e| {
             if let RollupManagerEvent::BlockImported(b) = e {
                 if b.header.number == block_number {
-                    block = Some(b.clone());
+                    block = Some(b);
                     return true;
                 }
             }
 
-            return false;
+            false
         },
         timeout,
     )
     .await?;
 
-    block.ok_or(eyre::eyre!("Block with number {block_number} was not imported"))
+    block.ok_or_else(|| eyre::eyre!("Block with number {block_number} was not imported"))
 }
 
 async fn wait_for_block_imported_5s(
@@ -1234,7 +1230,6 @@ async fn wait_for_event_predicate(
                     }
                     Some(e) => {
                         tracing::debug!(target: "TODO:nodeX", "ignoring event {:?}", e);
-                        continue
                     }, // Ignore other events
                     None => return Err(eyre::eyre!("Event stream ended unexpectedly")),
                 }
