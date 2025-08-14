@@ -1056,6 +1056,7 @@ async fn can_handle_batch_revert() -> eyre::Result<()> {
     Ok(())
 }
 
+#[allow(clippy::large_stack_frames)]
 #[tokio::test]
 async fn can_handle_reorgs_while_sequencing() -> eyre::Result<()> {
     reth_tracing::init_test_tracing();
@@ -1078,31 +1079,12 @@ async fn can_handle_reorgs_while_sequencing() -> eyre::Result<()> {
             .expect("valid url that will not be used as test batches use calldata"),
     );
     config.engine_driver_args.sync_at_startup = false;
-
-    let (_, events) = ScrollWireProtocolHandler::new(ScrollWireConfig::new(true));
-    let (rnm, handle, l1_watcher_tx) = config
-        .clone()
-        .build(
-            RollupNodeContext::new(
-                node.inner.network.clone(),
-                chain_spec.clone(),
-                path.clone(),
-                SCROLL_GAS_LIMIT,
-            ),
-            events,
-            node.inner.add_ons_handle.rpc_handle.rpc_server_handles.clone(),
-        )
-        .await?;
-    let l1_watcher_tx = l1_watcher_tx.unwrap();
-
-    // Spawn a task that constantly polls the rnm to make progress.
-    tokio::spawn(async {
-        let _ = rnm.await;
-    });
-
-    // Request an event stream from the rollup node manager and manually poll rnm to process the
-    // event stream request from the handle.
-    let mut rnm_events = handle.get_event_listener().await?;
+    let (nodes, _tasks, _) = setup_engine(config, 1, chain_spec, false, false).await?;
+    let node = nodes.first().unwrap();
+    let l1_watcher_tx = node.inner.add_ons_handle.l1_watcher_tx.as_ref().unwrap();
+    let mut rnm_events =
+        node.inner.add_ons_handle.rollup_manager_handle.get_event_listener().await?;
+    let sequencer_rnm_handle = nodes[0].inner.add_ons_handle.rollup_manager_handle.clone();
 
     // Send an L1 message.
     let message = TxL1Message {
@@ -1117,7 +1099,7 @@ async fn can_handle_reorgs_while_sequencing() -> eyre::Result<()> {
     // Let the sequencer build 10 blocks before performing the reorg process.
     let mut i = 0;
     loop {
-        handle.build_block().await;
+        sequencer_rnm_handle.build_block().await;
         if let Some(RollupManagerEvent::BlockSequenced(_)) = rnm_events.next().await {
             if i == 10 {
                 break
@@ -1139,7 +1121,7 @@ async fn can_handle_reorgs_while_sequencing() -> eyre::Result<()> {
     l1_watcher_tx.send(Arc::new(L1Notification::NewBlock(10))).await?;
 
     // Wait for block that contains the L1 message.
-    handle.build_block().await;
+    sequencer_rnm_handle.build_block().await;
     let l2_reorged_height;
     loop {
         if let Some(RollupManagerEvent::BlockSequenced(block)) = rnm_events.next().await {
@@ -1160,7 +1142,7 @@ async fn can_handle_reorgs_while_sequencing() -> eyre::Result<()> {
     }
 
     // Get the next sequenced L2 block.
-    handle.build_block().await;
+    sequencer_rnm_handle.build_block().await;
     loop {
         if let Some(RollupManagerEvent::BlockSequenced(block)) = rnm_events.next().await {
             assert_eq!(block.number, l2_reorged_height);
