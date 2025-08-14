@@ -893,8 +893,7 @@ async fn can_handle_l1_message_reorg() -> eyre::Result<()> {
     let chain_spec = (*SCROLL_DEV).clone();
 
     // Launch 2 nodes: node0=sequencer and node1=follower.
-    let mut config = default_sequencer_test_scroll_rollup_node_config();
-    config.sequencer_args.block_time = 0;
+    let config = default_sequencer_test_scroll_rollup_node_config();
     let (mut nodes, _tasks, _) = setup_engine(config, 2, chain_spec.clone(), false, false).await?;
     let node0 = nodes.remove(0);
     let node1 = nodes.remove(0);
@@ -999,16 +998,12 @@ async fn can_gossip_over_eth_wire() -> eyre::Result<()> {
     // Create the chain spec for scroll dev with Feynman activated and a test genesis.
     let chain_spec = (*SCROLL_DEV).clone();
 
+    let mut config = default_sequencer_test_scroll_rollup_node_config();
+    config.sequencer_args.block_time = 40;
+
     // Setup the rollup node manager.
-    let (mut nodes, _tasks, _) = setup_engine(
-        default_sequencer_test_scroll_rollup_node_config(),
-        2,
-        chain_spec.clone(),
-        false,
-        false,
-    )
-    .await
-    .unwrap();
+    let (mut nodes, _tasks, _) =
+        setup_engine(config, 2, chain_spec.clone(), false, false).await.unwrap();
     let _sequencer = nodes.pop().unwrap();
     let follower = nodes.pop().unwrap();
 
@@ -1043,12 +1038,14 @@ async fn signer_rotation() -> eyre::Result<()> {
     sequencer_1_config.consensus_args.algorithm = ConsensusAlgorithm::SystemContract;
     sequencer_1_config.consensus_args.authorized_signer = Some(signer_1_address);
     sequencer_1_config.signer_args.private_key = Some(signer_1);
+    sequencer_1_config.sequencer_args.block_time = 40;
 
     let mut sequencer_2_config = default_sequencer_test_scroll_rollup_node_config();
     sequencer_2_config.test = false;
     sequencer_2_config.consensus_args.algorithm = ConsensusAlgorithm::SystemContract;
     sequencer_2_config.consensus_args.authorized_signer = Some(signer_1_address);
     sequencer_2_config.signer_args.private_key = Some(signer_2);
+    sequencer_2_config.sequencer_args.block_time = 40;
 
     // Setup two sequencer nodes.
     let (mut nodes, _tasks, _) =
