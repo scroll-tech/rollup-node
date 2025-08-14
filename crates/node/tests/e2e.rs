@@ -989,6 +989,114 @@ async fn can_handle_l1_message_reorg() -> eyre::Result<()> {
 }
 
 #[tokio::test]
+async fn follows_most_recent_chain() -> eyre::Result<()> {
+    reth_tracing::init_test_tracing();
+    color_eyre::install()?;
+    let chain_spec = (*SCROLL_DEV).clone();
+
+    // Launch 2 nodes: node0=sequencer and node1=follower.
+    let config = default_sequencer_test_scroll_rollup_node_config();
+    let (mut nodes, _tasks, _) = setup_engine(config, 2, chain_spec.clone(), false, false).await?;
+    let node0 = nodes.remove(0);
+    let node1 = nodes.remove(0);
+
+    // Get handles
+    let node0_rnm_handle = node0.inner.add_ons_handle.rollup_manager_handle.clone();
+    let mut node0_rnm_events = node0_rnm_handle.get_event_listener().await?;
+    let node0_l1_watcher_tx = node0.inner.add_ons_handle.l1_watcher_tx.as_ref().unwrap();
+
+    let node1_rnm_handle = node1.inner.add_ons_handle.rollup_manager_handle.clone();
+    let mut node1_rnm_events = node1_rnm_handle.get_event_listener().await?;
+    let node1_l1_watcher_tx = node1.inner.add_ons_handle.l1_watcher_tx.as_ref().unwrap();
+
+    // Let the sequencer build 10 blocks before performing the reorg process.
+    for i in 1..=10 {
+        node0_rnm_handle.build_block().await;
+        wait_for_block_sequenced_5s(&mut node0_rnm_events, i).await?;
+    }
+
+    // Assert that the follower node has received all 10 blocks from the sequencer node.
+    wait_for_block_imported_5s(&mut node1_rnm_events, 10).await?;
+
+    // Send a L1 message and wait for it to be indexed.
+    let l1_message_notification = L1Notification::L1Message {
+        message: TxL1Message {
+            queue_index: 0,
+            gas_limit: 21000,
+            to: Default::default(),
+            value: Default::default(),
+            sender: address!("f39Fd6e51aad88F6F4ce6aB8827279cffFb92266"),
+            input: Default::default(),
+        },
+        block_number: 10,
+        block_timestamp: 0,
+    };
+
+    // Send the L1 message to the sequencer node.
+    node0_l1_watcher_tx.send(Arc::new(l1_message_notification.clone())).await?;
+    wait_for_event_5s(&mut node0_rnm_events, RollupManagerEvent::L1MessageIndexed(0)).await?;
+    node0_l1_watcher_tx.send(Arc::new(L1Notification::NewBlock(10))).await?;
+
+    // Send L1 the L1 message to follower node.
+    node1_l1_watcher_tx.send(Arc::new(l1_message_notification)).await?;
+    wait_for_event_5s(&mut node1_rnm_events, RollupManagerEvent::L1MessageIndexed(0)).await?;
+    node1_l1_watcher_tx.send(Arc::new(L1Notification::NewBlock(10))).await?;
+
+    // Build block that contains the L1 message.
+    node0_rnm_handle.build_block().await;
+    wait_for_event_predicate_5s(&mut node0_rnm_events, |e| {
+        if let RollupManagerEvent::BlockImported(block) = e {
+            block.header.number == 11 &&
+                block.body.transactions.len() == 1 &&
+                block.body.transactions.iter().any(|tx| tx.is_l1_message())
+        } else {
+            false
+        }
+    })
+    .await?;
+
+    for i in 12..=15 {
+        node0_rnm_handle.build_block().await;
+        wait_for_block_sequenced_5s(&mut node0_rnm_events, i).await?;
+    }
+
+    // Assert that the follower node has received the latest block from the sequencer node.
+    wait_for_block_imported_5s(&mut node1_rnm_events, 15).await?;
+
+    // Assert that both nodes have the same latest block.
+    assert_eq!(latest_block(&node0).await?.header.number, 15);
+    assert_eq!(latest_block(&node1).await?.header.number, 15);
+
+    // Assert that both nodes have the same block 11.
+    let block11_hash_before_reorg = block_by_number(&node0, 11).await?.hash();
+    assert_eq!(block11_hash_before_reorg, block_by_number(&node1, 11).await?.hash());
+
+    // Issue and wait for reorg. Issue reorg only on sequencer -> follower is not aware of L1 reorg.
+    node0_l1_watcher_tx.send(Arc::new(L1Notification::Reorg(9))).await?;
+    wait_for_event_5s(&mut node0_rnm_events, RollupManagerEvent::Reorg(9)).await?;
+
+    // Since the L1 reorg reverted the L1 message included in block 11, the sequencer
+    // should produce a new block at height 11.
+    node0_rnm_handle.build_block().await;
+    wait_for_block_imported_5s(&mut node0_rnm_events, 11).await?;
+
+    // Assert that the follower node has received the new block from the sequencer node.
+    wait_for_block_imported_5s(&mut node1_rnm_events, 11).await?;
+
+    // Assert that both nodes have the same latest block.
+    assert_eq!(latest_block(&node0).await?.header.number, 11);
+    assert_eq!(latest_block(&node1).await?.header.number, 11);
+
+    // Assert that both nodes have the same block 11 and it is different from the previous block 11.
+    // -> a reorg happened
+    let block11_hash_after_reorg = block_by_number(&node0, 11).await?.hash();
+    assert_eq!(block11_hash_after_reorg, block_by_number(&node1, 11).await?.hash());
+    assert_ne!(block11_hash_before_reorg, block11_hash_after_reorg);
+
+    Ok(())
+}
+
+#[tokio::test]
 async fn can_gossip_over_eth_wire() -> eyre::Result<()> {
     reth_tracing::init_test_tracing();
 
@@ -1127,18 +1235,38 @@ pub fn read_to_bytes<P: AsRef<std::path::Path>>(path: P) -> eyre::Result<Bytes> 
     Ok(Bytes::from_str(&std::fs::read_to_string(path)?)?)
 }
 
+async fn block(
+    node: &NodeHelperType<
+        ScrollRollupNode,
+        BlockchainProvider<NodeTypesWithDBAdapter<ScrollRollupNode, TmpDB>>,
+    >,
+    block_number_or_tag: BlockNumberOrTag,
+) -> eyre::Result<Block<ScrollAlloyTransaction>> {
+    node.rpc
+        .inner
+        .eth_api()
+        .block_by_number(block_number_or_tag, false)
+        .await?
+        .ok_or_else(|| eyre::eyre!("Block not found"))
+}
+
 async fn latest_block(
     node: &NodeHelperType<
         ScrollRollupNode,
         BlockchainProvider<NodeTypesWithDBAdapter<ScrollRollupNode, TmpDB>>,
     >,
 ) -> eyre::Result<Block<ScrollAlloyTransaction>> {
-    node.rpc
-        .inner
-        .eth_api()
-        .block_by_number(BlockNumberOrTag::Latest, false)
-        .await?
-        .ok_or_else(|| eyre::eyre!("Latest block not found"))
+    block(node, BlockNumberOrTag::Latest).await
+}
+
+async fn block_by_number(
+    node: &NodeHelperType<
+        ScrollRollupNode,
+        BlockchainProvider<NodeTypesWithDBAdapter<ScrollRollupNode, TmpDB>>,
+    >,
+    block_number: u64,
+) -> eyre::Result<Block<ScrollAlloyTransaction>> {
+    block(node, BlockNumberOrTag::Number(block_number)).await
 }
 
 async fn wait_for_block_sequenced(
