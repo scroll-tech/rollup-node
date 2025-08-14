@@ -977,13 +977,10 @@ async fn can_handle_l1_message_reorg() -> eyre::Result<()> {
     // Since the L1 reorg reverted the L1 message included in block 11, the sequencer
     // should produce a new block at height 11.
     node0_rnm_handle.build_block().await;
-    wait_for_block_sequenced_5s(&mut node0_rnm_events, 11).await?;
+    wait_for_block_imported_5s(&mut node0_rnm_events, 11).await?;
 
     // Assert that the follower node has received the new block from the sequencer node.
     wait_for_block_imported_5s(&mut node1_rnm_events, 11).await?;
-
-    // TODO: why is this not known in the engine without the sleep?
-    tokio::time::sleep(tokio::time::Duration::from_secs(1)).await;
 
     assert_eq!(latest_block(&node0).await?.header.number, 11);
     assert_eq!(latest_block(&node1).await?.header.number, 11);
