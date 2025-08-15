@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -e
 
-geth init --datadir=/l2geth /l2geth-genesis-dev.json
+geth init --datadir=/l2geth /l2geth-genesis-e2e.json
 
 # Create config.toml with static nodes instead of bootnodes
 echo '[Node.P2P]' > /l2geth/config.toml
