@@ -1,6 +1,7 @@
 use crate::{
     add_ons::IsDevChain,
     constants::{self},
+    context::RollupNodeContext,
 };
 use std::{fs, path::PathBuf, sync::Arc, time::Duration};
 
@@ -17,7 +18,7 @@ use reth_network::NetworkProtocols;
 use reth_network_api::FullNetwork;
 use reth_node_builder::rpc::RethRpcServerHandles;
 use reth_node_core::primitives::BlockHeader;
-use reth_scroll_chainspec::SCROLL_FEE_VAULT_ADDRESS;
+use reth_scroll_chainspec::{ChainConfig, ScrollChainConfig, SCROLL_FEE_VAULT_ADDRESS};
 use reth_scroll_node::ScrollNetworkPrimitives;
 use rollup_node_manager::{
     Consensus, NoopConsensus, RollupManagerHandle, RollupNodeManager, SystemContractConsensus,
@@ -109,22 +110,11 @@ impl ScrollRollupNodeConfig {
 
 impl ScrollRollupNodeConfig {
     /// Consumes the [`ScrollRollupNodeConfig`] and builds a [`RollupNodeManager`].
-    pub async fn build<
-        N: FullNetwork<Primitives = ScrollNetworkPrimitives> + NetworkProtocols,
-        CS: ScrollHardforks
-            + EthChainSpec<Header: BlockHeader>
-            + IsDevChain
-            + Clone
-            + Send
-            + Sync
-            + 'static,
-    >(
+    pub async fn build<N, CS>(
         self,
-        network: N,
+        ctx: RollupNodeContext<N, CS>,
         events: UnboundedReceiver<ScrollWireEvent>,
         rpc_server_handles: RethRpcServerHandles,
-        chain_spec: CS,
-        db_path: PathBuf,
     ) -> eyre::Result<(
         RollupNodeManager<
             N,
@@ -134,15 +124,27 @@ impl ScrollRollupNodeConfig {
             impl L1MessageProvider,
             impl ScrollHardforks + EthChainSpec<Header: BlockHeader> + IsDevChain + Clone + 'static,
         >,
-        RollupManagerHandle,
+        RollupManagerHandle<N>,
         Option<Sender<Arc<L1Notification>>>,
-    )> {
+    )>
+    where
+        N: FullNetwork<Primitives = ScrollNetworkPrimitives> + NetworkProtocols,
+        CS: EthChainSpec<Header: BlockHeader>
+            + ChainConfig<Config = ScrollChainConfig>
+            + ScrollHardforks
+            + IsDevChain
+            + 'static,
+    {
         tracing::info!(target: "rollup_node::args",
             "Building rollup node with config:\n{:#?}",
             self
         );
         // Instantiate the network manager
+        let network = ctx.network;
         let scroll_network_manager = ScrollNetworkManager::from_parts(network.clone(), events);
+
+        // Get the chain spec.
+        let chain_spec = ctx.chain_spec;
 
         // Get the rollup node config.
         let named_chain = chain_spec.chain().named().expect("expected named chain");
@@ -173,6 +175,7 @@ impl ScrollRollupNodeConfig {
             .expect("failed to create payload provider");
 
         // Instantiate the database
+        let db_path = ctx.datadir;
         let database_path = if let Some(database_path) = self.database_args.path {
             database_path.to_string_lossy().to_string()
         } else {
@@ -268,12 +271,14 @@ impl ScrollRollupNodeConfig {
         let l1_provider = FullL1Provider::new(blob_provider, l1_messages_provider.clone()).await;
 
         // Construct the Sequencer.
+        let chain_config = chain_spec.chain_config();
         let (sequencer, block_time) = if self.sequencer_args.sequencer_enabled {
             let args = &self.sequencer_args;
             let sequencer = Sequencer::new(
                 Arc::new(l1_messages_provider),
                 args.fee_recipient,
-                args.max_l1_messages_per_block,
+                ctx.block_gas_limit,
+                chain_config.l1_config.num_l1_messages_per_block,
                 0,
                 self.sequencer_args.l1_message_inclusion_mode,
             );
@@ -479,9 +484,6 @@ pub struct SequencerArgs {
     /// The payload building duration for the sequencer (milliseconds)
     #[arg(long = "sequencer.payload-building-duration", id = "sequencer_payload_building_duration", value_name = "SEQUENCER_PAYLOAD_BUILDING_DURATION", default_value_t = constants::DEFAULT_PAYLOAD_BUILDING_DURATION)]
     pub payload_building_duration: u64,
-    /// The max L1 messages per block for the sequencer.
-    #[arg(long = "sequencer.max-l1-messages-per-block", id = "sequencer_max_l1_messages_per_block", value_name = "SEQUENCER_MAX_L1_MESSAGES_PER_BLOCK", default_value_t = constants::DEFAULT_MAX_L1_MESSAGES_PER_BLOCK)]
-    pub max_l1_messages_per_block: u64,
     /// The fee recipient for the sequencer.
     #[arg(long = "sequencer.fee-recipient", id = "sequencer_fee_recipient", value_name = "SEQUENCER_FEE_RECIPIENT", default_value_t = SCROLL_FEE_VAULT_ADDRESS)]
     pub fee_recipient: Address,
