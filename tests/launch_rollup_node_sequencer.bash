@@ -12,7 +12,7 @@ exec rollup-node node --chain /l2reth/l2reth-genesis-e2e.json --datadir=/l2reth 
   --sequencer.block-time 250 \
   --sequencer.payload-building-duration 230 \
   --txpool.pending-max-count=1000 \
-  --builder.gaslimit=20000000 \
+  --builder.gaslimit=30000000 \
   --rpc.max-connections=5000 \
   --engine.sync-at-startup false \
   --consensus.authorized-signer 0xb674Ff99cca262c99D3eAb5B32796a99188543dA
