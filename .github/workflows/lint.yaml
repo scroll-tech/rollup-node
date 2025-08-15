@@ -128,11 +128,11 @@ jobs:
           - type: wasm
             target: wasm32-unknown-unknown
             exclude: |
-              scroll-engine,scroll-wire,rollup-node,scroll-network,rollup-node-manager,rollup-node-watcher,scroll-db,scroll-migration,rollup-node-indexer,scroll-codec,scroll-derivation-pipeline,rollup-node-providers,rollup-node-sequencer,rollup-node-signer,tests
+              scroll-engine,scroll-wire,rollup-node,scroll-network,rollup-node-manager,rollup-node-watcher,scroll-db,scroll-migration,rollup-node-indexer,scroll-codec,scroll-derivation-pipeline,rollup-node-providers,rollup-node-sequencer,rollup-node-signer,tests,rollup-node-primitives
           - type: riscv
             target: riscv32imac-unknown-none-elf
             exclude: |
-              scroll-engine,scroll-wire,rollup-node,scroll-network,rollup-node-manager,rollup-node-watcher,scroll-db,scroll-migration,rollup-node-indexer,scroll-codec,scroll-derivation-pipeline,rollup-node-providers,rollup-node-sequencer,rollup-node-signer,tests
+              scroll-engine,scroll-wire,rollup-node,scroll-network,rollup-node-manager,rollup-node-watcher,scroll-db,scroll-migration,rollup-node-indexer,scroll-codec,scroll-derivation-pipeline,rollup-node-providers,rollup-node-sequencer,rollup-node-signer,tests,rollup-node-primitives
     steps:
       - uses: actions/checkout@v5
       - uses: rui314/setup-mold@v1
