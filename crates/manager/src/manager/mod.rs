@@ -7,6 +7,7 @@ use alloy_primitives::Signature;
 use alloy_provider::Provider;
 use futures::StreamExt;
 use reth_chainspec::EthChainSpec;
+use reth_network::cache::LruCache;
 use reth_network_api::{block::NewBlockWithPeer as RethNewBlockWithPeer, FullNetwork};
 use reth_scroll_node::ScrollNetworkPrimitives;
 use reth_scroll_primitives::ScrollBlock;
@@ -23,6 +24,7 @@ use scroll_engine::{EngineDriver, EngineDriverEvent, ForkchoiceState};
 use scroll_network::{
     BlockImportOutcome, NetworkManagerEvent, NewBlockWithPeer, ScrollNetworkManager,
 };
+use scroll_wire::LRU_CACHE_SIZE;
 use std::{
     fmt::{self, Debug, Formatter},
     future::Future,
@@ -189,7 +191,7 @@ where
     /// Returns a new event listener for the rollup node manager.
     pub fn event_listener(&mut self) -> EventStream<RollupManagerEvent> {
         if let Some(event_sender) = &self.event_sender {
-            return event_sender.new_listener()
+            return event_sender.new_listener();
         };
 
         let event_sender = EventSender::new(EVENT_CHANNEL_SIZE);
@@ -363,6 +365,21 @@ where
             .checked_sub(ECDSA_SIGNATURE_LEN)
             .and_then(|i| Signature::from_raw(&extra_data[i..]).ok())
         {
+            let block_hash = block.hash_slow();
+            if self.network.blocks_seen.contains(&(block_hash, signature)) {
+                return;
+            } else {
+                // Update the state of the peer cache i.e. peer has seen this block.
+                self.network
+                    .scroll_wire
+                    .state_mut()
+                    .entry(peer_id)
+                    .or_insert_with(|| LruCache::new(LRU_CACHE_SIZE))
+                    .insert(block_hash);
+                // Update the state of the block cache i.e. we have seen this block.
+                self.network.blocks_seen.insert((block_hash, signature));
+            }
+
             trace!(target: "scroll::bridge::import", peer_id = %peer_id, block = ?block.hash_slow(), "Received new block from eth-wire protocol");
             NewBlockWithPeer { peer_id, block, signature }
         } else {

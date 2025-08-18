@@ -4,7 +4,7 @@ use super::{
     BlockImportOutcome, BlockValidation, NetworkHandleMessage, NetworkManagerEvent,
     NewBlockWithPeer, ScrollNetworkHandle,
 };
-use alloy_primitives::{FixedBytes, U128};
+use alloy_primitives::{FixedBytes, Signature, B256, U128};
 use futures::{FutureExt, Stream, StreamExt};
 use reth_eth_wire_types::NewBlock as EthWireNewBlock;
 use reth_network::{
@@ -42,7 +42,9 @@ pub struct ScrollNetworkManager<N> {
     /// [`NetworkHandleMessage`]s.
     from_handle_rx: UnboundedReceiverStream<NetworkHandleMessage>,
     /// The scroll wire protocol manager.
-    scroll_wire: ScrollWireManager,
+    pub scroll_wire: ScrollWireManager,
+    /// The LRU cache used to track already seen (block,signature) pair.
+    pub blocks_seen: LruCache<(B256, Signature)>,
 }
 
 impl ScrollNetworkManager<RethNetworkHandle<ScrollNetworkPrimitives>> {
@@ -71,10 +73,12 @@ impl ScrollNetworkManager<RethNetworkHandle<ScrollNetworkPrimitives>> {
         // Create the scroll-wire protocol manager.
         let scroll_wire = ScrollWireManager::new(events);
 
+        let blocks_seen = LruCache::new(LRU_CACHE_SIZE);
+
         // Spawn the inner network manager.
         tokio::spawn(inner_network_manager);
 
-        Self { handle, from_handle_rx: from_handle_rx.into(), scroll_wire }
+        Self { handle, from_handle_rx: from_handle_rx.into(), scroll_wire, blocks_seen }
     }
 }
 
@@ -92,7 +96,9 @@ impl<N: FullNetwork<Primitives = ScrollNetworkPrimitives>> ScrollNetworkManager<
 
         let handle = ScrollNetworkHandle::new(to_manager_tx, inner_network_handle);
 
-        Self { handle, from_handle_rx: from_handle_rx.into(), scroll_wire }
+        let blocks_seen = LruCache::new(LRU_CACHE_SIZE);
+
+        Self { handle, from_handle_rx: from_handle_rx.into(), scroll_wire, blocks_seen }
     }
 
     /// Returns a new [`ScrollNetworkHandle`] instance.
@@ -134,11 +140,29 @@ impl<N: FullNetwork<Primitives = ScrollNetworkPrimitives>> ScrollNetworkManager<
     }
 
     /// Handler for received events from the [`ScrollWireManager`].
-    fn on_scroll_wire_event(&mut self, event: ScrollWireEvent) -> NetworkManagerEvent {
+    fn on_scroll_wire_event(&mut self, event: ScrollWireEvent) -> Option<NetworkManagerEvent> {
         match event {
             ScrollWireEvent::NewBlock { peer_id, block, signature } => {
-                trace!(target: "scroll::network::manager", peer_id = ?peer_id, block = ?block.hash_slow(), signature = ?signature, "Received new block");
-                NetworkManagerEvent::NewBlock(NewBlockWithPeer { peer_id, block, signature })
+                let block_hash = block.hash_slow();
+                trace!(target: "scroll::network::manager", peer_id = ?peer_id, block = ?block_hash, signature = ?signature, "Received new block");
+                if self.blocks_seen.contains(&(block_hash, signature)) {
+                    return None;
+                } else {
+                    // Update the state of the peer cache i.e. peer has seen this block.
+                    self.scroll_wire
+                        .state_mut()
+                        .entry(peer_id)
+                        .or_insert_with(|| LruCache::new(LRU_CACHE_SIZE))
+                        .insert(block_hash);
+                    // Update the state of the block cache i.e. we have seen this block.
+                    self.blocks_seen.insert((block.hash_slow(), signature));
+                    
+                    Some(NetworkManagerEvent::NewBlock(NewBlockWithPeer {
+                        peer_id,
+                        block,
+                        signature,
+                    }))
+                }
             }
             // Only `NewBlock` events are expected from the scroll-wire protocol.
             _ => {
@@ -168,10 +192,11 @@ impl<N: FullNetwork<Primitives = ScrollNetworkPrimitives>> ScrollNetworkManager<
     fn on_block_import_result(&mut self, outcome: BlockImportOutcome) {
         let BlockImportOutcome { peer, result } = outcome;
         match result {
-            Ok(BlockValidation::ValidBlock { new_block: msg }) |
-            Ok(BlockValidation::ValidHeader { new_block: msg }) => {
+            Ok(BlockValidation::ValidBlock { new_block: msg })
+            | Ok(BlockValidation::ValidHeader { new_block: msg }) => {
                 trace!(target: "scroll::network::manager", peer_id = ?peer, block = ?msg.block, "Block import successful - announcing block to network");
                 let hash = msg.block.hash_slow();
+                // Update the state of the peer cache i.e. peer has seen this block.
                 self.scroll_wire
                     .state_mut()
                     .entry(peer)
@@ -217,7 +242,9 @@ impl<N: FullNetwork<Primitives = ScrollNetworkPrimitives>> Stream for ScrollNetw
 
         // Next we handle the scroll-wire events.
         if let Poll::Ready(event) = this.scroll_wire.poll_unpin(cx) {
-            return Poll::Ready(Some(this.on_scroll_wire_event(event)));
+            if let Some(event) = this.on_scroll_wire_event(event) {
+                return Poll::Ready(Some(event));
+            }
         }
 
         Poll::Pending
