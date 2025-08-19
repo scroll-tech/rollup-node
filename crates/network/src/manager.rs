@@ -119,7 +119,7 @@ impl<N: FullNetwork<Primitives = ScrollNetworkPrimitives>> ScrollNetworkManager<
             .collect();
 
         let eth_wire_new_block = {
-            let td = U128::from_limbs([0, block.block.header.number]);
+            let td = U128::from(block.block.header.number);
             let mut eth_wire_block = block.block.clone();
             eth_wire_block.header.extra_data = block.signature.clone().into();
             EthWireNewBlock { block: eth_wire_block, td }
