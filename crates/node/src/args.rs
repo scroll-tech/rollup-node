@@ -3,6 +3,7 @@ use crate::{
     constants::{self},
     context::RollupNodeContext,
 };
+use scroll_migration::MigratorTrait;
 use std::{fs, path::PathBuf, sync::Arc, time::Duration};
 
 use alloy_primitives::{hex, Address};
@@ -146,9 +147,8 @@ impl ScrollRollupNodeConfig {
         // Get the chain spec.
         let chain_spec = ctx.chain_spec;
 
-        // Get the rollup node config.
-        let named_chain = chain_spec.chain().named().expect("expected named chain");
-        let node_config = Arc::new(NodeConfig::from_named_chain(named_chain));
+        // Build NodeConfig directly from the chainspec.
+        let node_config = Arc::new(NodeConfig::from_chainspec(&chain_spec)?);
 
         // Create the engine api client.
         let engine_api = ScrollAuthApiEngineClient::new(rpc_server_handles.auth.http_client());
@@ -187,10 +187,16 @@ impl ScrollRollupNodeConfig {
         let db = Database::new(&database_path).await?;
 
         // Run the database migrations
-        named_chain
-            .migrate(db.get_connection(), self.test)
-            .await
-            .expect("failed to perform migration");
+        if let Some(named) = chain_spec.chain().named() {
+            named
+                .migrate(db.get_connection(), self.test)
+                .await
+                .expect("failed to perform migration");
+        } else {
+            scroll_migration::Migrator::<()>::up(db.get_connection(), None)
+                .await
+                .expect("failed to perform migration (custom chain)");
+        }
 
         // Wrap the database in an Arc
         let db = Arc::new(db);
