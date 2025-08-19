@@ -6,7 +6,7 @@ use alloy_signer::Signer;
 use alloy_signer_local::PrivateKeySigner;
 use futures::StreamExt;
 use reth_chainspec::EthChainSpec;
-use reth_network::{NetworkConfigBuilder, Peers, PeersInfo};
+use reth_network::{NetworkConfigBuilder, NetworkEventListenerProvider, Peers, PeersInfo};
 use reth_network_api::block::EthWireProvider;
 use reth_rpc_api::EthApiServer;
 use reth_scroll_chainspec::SCROLL_DEV;
@@ -503,6 +503,9 @@ async fn can_bridge_blocks() {
     bridge_node.network.add_peer(scroll_network_handle.local_node_record()).await;
     bridge_node.network.next_session_established().await;
 
+    let genesis_hash = bridge_node.inner.chain_spec().genesis_hash();
+    println!("genesis hash: {genesis_hash:?}");
+
     // Create a standard NetworkManager to send blocks to the bridge node.
     let network_config = NetworkConfigBuilder::<ScrollNetworkPrimitives>::with_rng_secret_key()
         .disable_discovery()
@@ -515,6 +518,7 @@ async fn can_bridge_blocks() {
         .await
         .expect("Failed to instantiate NetworkManager");
     let network_handle = network.handle().clone();
+    let mut network_events = network_handle.event_listener();
 
     // Spawn the standard NetworkManager.
     tasks.executor().spawn(network);
@@ -522,6 +526,7 @@ async fn can_bridge_blocks() {
     // Connect the standard NetworkManager to the bridge node.
     bridge_node.network.add_peer(network_handle.local_node_record()).await;
     bridge_node.network.next_session_established().await;
+    let _ = network_events.next().await;
 
     // Send a block from the standard NetworkManager to the bridge node.
     let mut block_1: reth_scroll_primitives::ScrollBlock =
