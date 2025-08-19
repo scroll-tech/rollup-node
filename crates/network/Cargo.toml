@@ -8,6 +8,7 @@ exclude.workspace = true
 
 [dependencies]
 # alloy
+alloy-chains.workspace = true
 alloy-primitives = { workspace = true, features = ["map-foldhash"] }
 
 # reth

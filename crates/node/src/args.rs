@@ -139,9 +139,6 @@ impl ScrollRollupNodeConfig {
             "Building rollup node with config:\n{:#?}",
             self
         );
-        // Instantiate the network manager
-        let network = ctx.network;
-        let scroll_network_manager = ScrollNetworkManager::from_parts(network.clone(), events);
 
         // Get the chain spec.
         let chain_spec = ctx.chain_spec;
@@ -149,6 +146,11 @@ impl ScrollRollupNodeConfig {
         // Get the rollup node config.
         let named_chain = chain_spec.chain().named().expect("expected named chain");
         let node_config = Arc::new(NodeConfig::from_named_chain(named_chain));
+
+        // Instantiate the network manager
+        let network = ctx.network;
+        let scroll_network_manager =
+            ScrollNetworkManager::from_parts(network.clone(), events, named_chain);
 
         // Create the engine api client.
         let engine_api = ScrollAuthApiEngineClient::new(rpc_server_handles.auth.http_client());

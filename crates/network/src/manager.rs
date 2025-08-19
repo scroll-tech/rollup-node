@@ -4,6 +4,7 @@ use super::{
     BlockImportOutcome, BlockValidation, NetworkHandleMessage, NetworkManagerEvent,
     NewBlockWithPeer, ScrollNetworkHandle,
 };
+use alloy_chains::NamedChain;
 use alloy_primitives::{FixedBytes, U128};
 use futures::{FutureExt, Stream, StreamExt};
 use reth_eth_wire_types::NewBlock as EthWireNewBlock;
@@ -26,6 +27,14 @@ use tokio::sync::mpsc::{self, UnboundedReceiver};
 use tokio_stream::wrappers::UnboundedReceiverStream;
 use tracing::trace;
 
+/// The constant value that must be added to the block number to get the total difficulty for Scroll
+/// mainnet.
+const SCROLL_MAINNET_TD_CONSTANT: U128 = U128::from_limbs([14906960, 0]);
+
+/// The constant value that must be added to the block number to get the total difficulty for Scroll
+/// Sepolia.
+const SCROLL_SEPOLIA_TD_CONSTANT: U128 = U128::from_limbs([8484488, 0]);
+
 /// [`ScrollNetworkManager`] manages the state of the scroll p2p network.
 ///
 /// This manager drives the state of the entire network forward and includes the following
@@ -43,6 +52,8 @@ pub struct ScrollNetworkManager<N> {
     from_handle_rx: UnboundedReceiverStream<NetworkHandleMessage>,
     /// The scroll wire protocol manager.
     scroll_wire: ScrollWireManager,
+    /// The constant value that must be added to the block number to get the total difficulty.
+    td_constant: U128,
 }
 
 impl ScrollNetworkManager<RethNetworkHandle<ScrollNetworkPrimitives>> {
@@ -51,6 +62,7 @@ impl ScrollNetworkManager<RethNetworkHandle<ScrollNetworkPrimitives>> {
     pub async fn new<C: BlockNumReaderT + 'static>(
         mut network_config: RethNetworkConfig<C, ScrollNetworkPrimitives>,
         scroll_wire_config: ScrollWireConfig,
+        chain: NamedChain,
     ) -> Self {
         // Create the scroll-wire protocol handler.
         let (scroll_wire_handler, events) = ScrollWireProtocolHandler::new(scroll_wire_config);
@@ -74,7 +86,12 @@ impl ScrollNetworkManager<RethNetworkHandle<ScrollNetworkPrimitives>> {
         // Spawn the inner network manager.
         tokio::spawn(inner_network_manager);
 
-        Self { handle, from_handle_rx: from_handle_rx.into(), scroll_wire }
+        Self {
+            handle,
+            from_handle_rx: from_handle_rx.into(),
+            scroll_wire,
+            td_constant: td_constant(chain),
+        }
     }
 }
 
@@ -83,7 +100,11 @@ impl<N: FullNetwork<Primitives = ScrollNetworkPrimitives>> ScrollNetworkManager<
     ///
     /// This is used when the scroll-wire [`ScrollWireProtocolHandler`] and the inner network
     /// manager [`RethNetworkManager`] are instantiated externally.
-    pub fn from_parts(inner_network_handle: N, events: UnboundedReceiver<ScrollWireEvent>) -> Self {
+    pub fn from_parts(
+        inner_network_handle: N,
+        events: UnboundedReceiver<ScrollWireEvent>,
+        chain: NamedChain,
+    ) -> Self {
         // Create the channel for sending messages to the network manager from the network handle.
         let (to_manager_tx, from_handle_rx) = mpsc::unbounded_channel();
 
@@ -92,7 +113,12 @@ impl<N: FullNetwork<Primitives = ScrollNetworkPrimitives>> ScrollNetworkManager<
 
         let handle = ScrollNetworkHandle::new(to_manager_tx, inner_network_handle);
 
-        Self { handle, from_handle_rx: from_handle_rx.into(), scroll_wire }
+        Self {
+            handle,
+            from_handle_rx: from_handle_rx.into(),
+            scroll_wire,
+            td_constant: td_constant(chain),
+        }
     }
 
     /// Returns a new [`ScrollNetworkHandle`] instance.
@@ -119,7 +145,7 @@ impl<N: FullNetwork<Primitives = ScrollNetworkPrimitives>> ScrollNetworkManager<
             .collect();
 
         let eth_wire_new_block = {
-            let td = U128::from_limbs([0, block.block.header.number]);
+            let td = compute_td(self.td_constant, block.block.header.number);
             let mut eth_wire_block = block.block.clone();
             eth_wire_block.header.extra_data = block.signature.clone().into();
             EthWireNewBlock { block: eth_wire_block, td }
@@ -222,4 +248,30 @@ impl<N: FullNetwork<Primitives = ScrollNetworkPrimitives>> Stream for ScrollNetw
 
         Poll::Pending
     }
+}
+
+/// Returns the total difficulty constant for the given chain.
+fn td_constant(chain: NamedChain) -> U128 {
+    match chain {
+        NamedChain::Scroll => SCROLL_MAINNET_TD_CONSTANT,
+        NamedChain::ScrollSepolia => SCROLL_SEPOLIA_TD_CONSTANT,
+        _ => U128::ZERO, // Default to zero for other chains
+    }
+}
+
+/// Compute totally difficulty for a given block number.
+fn compute_td(td_constant: U128, block_number: u64) -> U128 {
+    td_constant.saturating_add(U128::from(block_number))
+}
+
+#[test]
+fn test_compute_td_mainnet() {
+    let td = compute_td(SCROLL_MAINNET_TD_CONSTANT, 1000);
+    assert_eq!(td, U128::from(14906960 + 1000));
+}
+
+#[test]
+fn test_compute_td_sepolia() {
+    let td = compute_td(SCROLL_SEPOLIA_TD_CONSTANT, 1000);
+    assert_eq!(td, U128::from(8484488 + 1000));
 }

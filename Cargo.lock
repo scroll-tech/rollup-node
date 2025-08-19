@@ -10319,6 +10319,7 @@ dependencies = [
 name = "rollup-node"
 version = "0.0.1"
 dependencies = [
+ "alloy-chains",
  "alloy-eips 1.0.24",
  "alloy-primitives",
  "alloy-provider",
@@ -11198,6 +11199,7 @@ dependencies = [
 name = "scroll-network"
 version = "0.0.1"
 dependencies = [
+ "alloy-chains",
  "alloy-primitives",
  "futures",
  "parking_lot 0.12.4",
