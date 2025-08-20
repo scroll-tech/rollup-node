@@ -5,7 +5,8 @@ use crate::{
 };
 use std::{fs, path::PathBuf, sync::Arc, time::Duration};
 
-use alloy_primitives::{hex, Address};
+use alloy_chains::NamedChain;
+use alloy_primitives::{hex, Address, U128};
 use alloy_provider::{Provider, ProviderBuilder};
 use alloy_rpc_client::RpcClient;
 use alloy_signer::Signer;
@@ -128,7 +129,7 @@ impl ScrollRollupNodeConfig {
             impl L1MessageProvider,
             impl ScrollHardforks + EthChainSpec<Header: BlockHeader> + IsDevChain + Clone + 'static,
         >,
-        RollupManagerHandle,
+        RollupManagerHandle<N>,
         Option<Sender<Arc<L1Notification>>>,
     )>
     where
@@ -215,6 +216,7 @@ impl ScrollRollupNodeConfig {
             ctx.network.clone(),
             events,
             eth_wire_listener,
+            td_constant(named_chain),
         );
 
         // On startup we replay the latest batch of blocks from the database as such we set the safe
@@ -640,6 +642,15 @@ pub struct GasPriceOracleArgs {
     #[arg(long, default_value_t = 100)]
     #[arg(long = "gpo.default-suggest-priority-fee", id = "default_suggest_priority_fee", value_name = "DEFAULT_SUGGEST_PRIORITY_FEE", default_value_t = constants::DEFAULT_SUGGEST_PRIORITY_FEE)]
     pub default_suggested_priority_fee: u64,
+}
+
+/// Returns the total difficulty constant for the given chain.
+const fn td_constant(chain: NamedChain) -> U128 {
+    match chain {
+        NamedChain::Scroll => constants::SCROLL_MAINNET_TD_CONSTANT,
+        NamedChain::ScrollSepolia => constants::SCROLL_SEPOLIA_TD_CONSTANT,
+        _ => U128::ZERO, // Default to zero for other chains
+    }
 }
 
 #[cfg(test)]

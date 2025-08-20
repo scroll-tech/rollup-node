@@ -77,7 +77,7 @@ pub struct RollupNodeManager<
     CS,
 > {
     /// The handle receiver used to receive commands.
-    handle_rx: Receiver<RollupManagerCommand>,
+    handle_rx: Receiver<RollupManagerCommand<N>>,
     /// The chain spec used by the rollup node.
     chain_spec: Arc<CS>,
     /// The network manager that manages the scroll p2p network.
@@ -161,7 +161,7 @@ where
         signer: Option<SignerHandle>,
         block_time: Option<u64>,
         chain_orchestrator: ChainOrchestrator<CS, <N as BlockDownloaderProvider>::Client, P>,
-    ) -> (Self, RollupManagerHandle) {
+    ) -> (Self, RollupManagerHandle<N>) {
         let (handle_tx, handle_rx) = mpsc::channel(EVENT_CHANNEL_SIZE);
         let derivation_pipeline = DerivationPipeline::new(l1_provider, database);
         let rnm = Self {
@@ -478,6 +478,11 @@ where
                 RollupManagerCommand::UpdateFcsHead(head) => {
                     trace!(target: "scroll::node::manager", ?head, "Updating FCS head block info");
                     this.engine.set_head_block_info(head);
+                }
+                RollupManagerCommand::NetworkHandle(tx) => {
+                    let network_handle = this.network.handle();
+                    tx.send(network_handle.clone())
+                        .expect("Failed to send network handle to handle");
                 }
             }
         }

@@ -55,6 +55,8 @@ pub struct ScrollNetworkManager<N, CS> {
     eth_wire_listener: Option<EventStream<RethNewBlockWithPeer<ScrollBlock>>>,
     /// The scroll wire protocol manager.
     scroll_wire: ScrollWireManager,
+    /// The constant value that must be added to the block number to get the total difficulty.
+    td_constant: U128,
 }
 
 impl<CS: ScrollHardforks + EthChainSpec + Send + Sync + 'static>
@@ -67,6 +69,7 @@ impl<CS: ScrollHardforks + EthChainSpec + Send + Sync + 'static>
         mut network_config: RethNetworkConfig<C, ScrollNetworkPrimitives>,
         scroll_wire_config: ScrollWireConfig,
         eth_wire_listener: Option<EventStream<RethNewBlockWithPeer<ScrollBlock>>>,
+        td_constant: U128,
     ) -> Self {
         // Create the scroll-wire protocol handler.
         let (scroll_wire_handler, events) = ScrollWireProtocolHandler::new(scroll_wire_config);
@@ -96,6 +99,7 @@ impl<CS: ScrollHardforks + EthChainSpec + Send + Sync + 'static>
             from_handle_rx: from_handle_rx.into(),
             scroll_wire,
             eth_wire_listener,
+            td_constant,
         }
     }
 }
@@ -114,6 +118,7 @@ impl<
         inner_network_handle: N,
         events: UnboundedReceiver<ScrollWireEvent>,
         eth_wire_listener: Option<EventStream<RethNewBlockWithPeer<ScrollBlock>>>,
+        td_constant: U128,
     ) -> Self {
         // Create the channel for sending messages to the network manager from the network handle.
         let (to_manager_tx, from_handle_rx) = mpsc::unbounded_channel();
@@ -129,6 +134,7 @@ impl<
             from_handle_rx: from_handle_rx.into(),
             scroll_wire,
             eth_wire_listener,
+            td_constant,
         }
     }
 
@@ -156,7 +162,7 @@ impl<
             .collect();
 
         let eth_wire_new_block = {
-            let td = U128::from_limbs([0, block.block.header.number]);
+            let td = compute_td(self.td_constant, block.block.header.number);
             let mut eth_wire_block = block.block.clone();
             eth_wire_block.header.extra_data = block.signature.clone().into();
             EthWireNewBlock { block: eth_wire_block, td }
@@ -314,4 +320,9 @@ impl<
 
         Poll::Pending
     }
+}
+
+/// Compute totally difficulty for a given block number.
+fn compute_td(td_constant: U128, block_number: u64) -> U128 {
+    td_constant.saturating_add(U128::from(block_number))
 }

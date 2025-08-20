@@ -1,18 +1,23 @@
 use super::{RollupManagerEvent, RollupManagerStatus};
 
+use reth_network_api::FullNetwork;
+use reth_scroll_node::ScrollNetworkPrimitives;
 use reth_tokio_util::EventStream;
 use rollup_node_primitives::BlockInfo;
+use scroll_network::ScrollNetworkHandle;
 use tokio::sync::oneshot;
 
 /// The commands that can be sent to the rollup manager.
 #[derive(Debug)]
-pub enum RollupManagerCommand {
+pub enum RollupManagerCommand<N: FullNetwork<Primitives = ScrollNetworkPrimitives>> {
     /// Command to build a new block.
     BuildBlock,
     /// Returns an event stream for rollup manager events.
     EventListener(oneshot::Sender<EventStream<RollupManagerEvent>>),
     /// Report the current status of the manager via the oneshot channel.
     Status(oneshot::Sender<RollupManagerStatus>),
+    /// Returns the network handle.
+    NetworkHandle(oneshot::Sender<ScrollNetworkHandle<N>>),
     /// Update the head of the fcs in the engine driver.
     UpdateFcsHead(BlockInfo),
 }
