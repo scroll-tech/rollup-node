@@ -5,7 +5,8 @@ use crate::{
 };
 use std::{fs, path::PathBuf, sync::Arc, time::Duration};
 
-use alloy_primitives::{hex, Address};
+use alloy_chains::NamedChain;
+use alloy_primitives::{hex, Address, U128};
 use alloy_provider::{Provider, ProviderBuilder};
 use alloy_rpc_client::RpcClient;
 use alloy_signer::Signer;
@@ -139,9 +140,6 @@ impl ScrollRollupNodeConfig {
             "Building rollup node with config:\n{:#?}",
             self
         );
-        // Instantiate the network manager
-        let network = ctx.network;
-        let scroll_network_manager = ScrollNetworkManager::from_parts(network.clone(), events);
 
         // Get the chain spec.
         let chain_spec = ctx.chain_spec;
@@ -149,6 +147,11 @@ impl ScrollRollupNodeConfig {
         // Get the rollup node config.
         let named_chain = chain_spec.chain().named().expect("expected named chain");
         let node_config = Arc::new(NodeConfig::from_named_chain(named_chain));
+
+        // Instantiate the network manager
+        let network = ctx.network;
+        let scroll_network_manager =
+            ScrollNetworkManager::from_parts(network.clone(), events, td_constant(named_chain));
 
         // Create the engine api client.
         let engine_api = ScrollAuthApiEngineClient::new(rpc_server_handles.auth.http_client());
@@ -594,6 +597,15 @@ pub struct GasPriceOracleArgs {
     #[arg(long, default_value_t = 100)]
     #[arg(long = "gpo.default-suggest-priority-fee", id = "default_suggest_priority_fee", value_name = "DEFAULT_SUGGEST_PRIORITY_FEE", default_value_t = constants::DEFAULT_SUGGEST_PRIORITY_FEE)]
     pub default_suggested_priority_fee: u64,
+}
+
+/// Returns the total difficulty constant for the given chain.
+const fn td_constant(chain: NamedChain) -> U128 {
+    match chain {
+        NamedChain::Scroll => constants::SCROLL_MAINNET_TD_CONSTANT,
+        NamedChain::ScrollSepolia => constants::SCROLL_SEPOLIA_TD_CONSTANT,
+        _ => U128::ZERO, // Default to zero for other chains
+    }
 }
 
 #[cfg(test)]

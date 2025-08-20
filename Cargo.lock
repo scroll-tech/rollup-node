@@ -10331,6 +10331,7 @@ dependencies = [
 name = "rollup-node"
 version = "0.0.1"
 dependencies = [
+ "alloy-chains",
  "alloy-eips 1.0.24",
  "alloy-primitives",
  "alloy-provider",
