@@ -12,7 +12,9 @@ pub trait MigrationInfo {
     fn genesis_hash() -> B256;
 }
 
-impl MigrationInfo for () {
+pub struct ScrollDevMigrationInfo;
+
+impl MigrationInfo for ScrollDevMigrationInfo {
     fn data_source() -> Option<DataSource> {
         None
     }
@@ -22,7 +24,6 @@ impl MigrationInfo for () {
     }
 
     fn genesis_hash() -> B256 {
-        // Todo: Update
         b256!("0xc77ee681dac901672fee660088df30ef11789ec89837123cdc89690ef1fef766")
     }
 }

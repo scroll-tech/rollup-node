@@ -127,7 +127,7 @@ impl<
             .field("engine", &self.engine)
             .field("derivation_pipeline", &self.derivation_pipeline)
             .field("l1_notification_rx", &self.l1_notification_rx)
-            .field("indexer", &self.chain)
+            .field("chain_orchestrator", &self.chain)
             .field("consensus", &self.consensus)
             .field("eth_wire_block_rx", &"eth_wire_block_rx")
             .field("event_sender", &self.event_sender)
@@ -229,7 +229,7 @@ where
         }
     }
 
-    /// Handles an indexer event.
+    /// Handles a chain orchestrator event.
     fn handle_chain_orchestrator_event(&mut self, event: ChainOrchestratorEvent) {
         trace!(target: "scroll::node::manager", ?event, "Received chain orchestrator event");
 
@@ -311,6 +311,33 @@ where
 
                 // Issue the new block info to the engine driver for processing.
                 self.engine.handle_optimistic_sync(block_info)
+            }
+            _ => {}
+        }
+    }
+
+    /// Handles a chain orchestrator error.
+    fn handle_chain_orchestrator_error(&self, err: &ChainOrchestratorError) {
+        error!(
+            target: "scroll::node::manager",
+            ?err,
+            "Error occurred in the chain orchestrator"
+        );
+        match err {
+            ChainOrchestratorError::L1MessageMismatch { expected, actual } => {
+                if let Some(event_sender) = self.event_sender.as_ref() {
+                    event_sender.notify(RollupManagerEvent::L1MessageConsolidationError {
+                        expected: *expected,
+                        actual: *actual,
+                    });
+                }
+            }
+            ChainOrchestratorError::DatabaseError(DatabaseError::L1MessageNotFound(start)) => {
+                if let Some(event_sender) = self.event_sender.as_ref() {
+                    event_sender.notify(RollupManagerEvent::L1MessageMissingInDatabase {
+                        start: start.clone(),
+                    });
+                }
             }
             _ => {}
         }
@@ -480,41 +507,12 @@ where
             }
         );
 
-        // Drain all Indexer events.
+        // Drain all chain orchestrator events.
         while let Poll::Ready(Some(result)) = this.chain.poll_next_unpin(cx) {
             match result {
                 Ok(event) => this.handle_chain_orchestrator_event(event),
                 Err(err) => {
-                    match &err {
-                        ChainOrchestratorError::L1MessageMismatch { expected, actual } => {
-                            if let Some(event_sender) = this.event_sender.as_ref() {
-                                event_sender.notify(
-                                    RollupManagerEvent::L1MessageConsolidationError {
-                                        expected: *expected,
-                                        actual: *actual,
-                                    },
-                                );
-                            }
-                        }
-                        ChainOrchestratorError::DatabaseError(
-                            DatabaseError::L1MessageNotFound(start),
-                        ) => {
-                            if let Some(event_sender) = this.event_sender.as_ref() {
-                                event_sender.notify(
-                                    RollupManagerEvent::L1MessageMissingInDatabase {
-                                        start: start.clone(),
-                                    },
-                                );
-                            }
-                        }
-                        _ => {}
-                    }
-
-                    error!(
-                        target: "scroll::node::manager",
-                        ?err,
-                        "Error occurred in the chain orchestrator"
-                    );
+                    this.handle_chain_orchestrator_error(&err);
                 }
             }
         }

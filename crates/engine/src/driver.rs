@@ -123,7 +123,7 @@ where
 
     /// Handles a block import request by adding it to the queue and waking up the driver.
     pub fn handle_chain_import(&mut self, chain_import: ChainImport) {
-        tracing::trace!(target: "scroll::engine", head = %chain_import.chain.last().unwrap().hash_slow(), "new block import request received");
+        tracing::trace!(target: "scroll::engine", head = %chain_import.chain.last().unwrap().hash_slow(), "new chain import request received");
 
         self.chain_imports.push_back(chain_import);
         self.waker.wake();

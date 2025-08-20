@@ -298,6 +298,14 @@ impl<
                 ));
             }
 
+            // If the current header block number is less than the latest safe block number then
+            // we should error.
+            if received_chain_headers.last().expect("chain can not be empty").number <=
+                latest_safe_block.number
+            {
+                return Err(ChainOrchestratorError::L2SafeBlockReorgDetected);
+            }
+
             // If the received header tail has a block number that is less than the current header
             // tail then we should fetch more headers for the current chain to aid
             // reconciliation.
@@ -359,14 +367,6 @@ impl<
                     });
                 }
                 break pos;
-            }
-
-            // If the current header block number is less than the latest safe block number then
-            // we should error.
-            if received_chain_headers.last().expect("chain can not be empty").number <=
-                latest_safe_block.number
-            {
-                return Err(ChainOrchestratorError::L2SafeBlockReorgDetected);
             }
 
             tracing::trace!(target: "scroll::chain_orchestrator", number = ?(received_chain_headers.last().expect("chain can not be empty").number - 1), "fetching block");
@@ -722,7 +722,7 @@ impl<
     }
 
     /// Returns the highest finalized block for the provided batch hash. Will return [`None`] if the
-    /// block number has already been seen by the indexer.
+    /// block number has already been seen by the chain orchestrator.
     async fn fetch_highest_finalized_block(
         database: Arc<Database>,
         batch_hash: B256,
@@ -730,7 +730,7 @@ impl<
     ) -> Result<Option<BlockInfo>, ChainOrchestratorError> {
         let finalized_block = database.get_highest_block_for_batch_hash(batch_hash).await?;
 
-        // only return the block if the indexer hasn't seen it.
+        // only return the block if the chain orchestrator hasn't seen it.
         // in which case also update the `l2_finalized_block_number` value.
         Ok(finalized_block.filter(|info| {
             let current_l2_block_number = l2_block_number.load(Ordering::Relaxed);
@@ -1167,8 +1167,8 @@ mod test {
 
     #[tokio::test]
     async fn test_handle_commit_batch() {
-        // Instantiate indexer and db
-        let (mut indexer, db) = setup_test_chain_orchestrator().await;
+        // Instantiate chain orchestrator and db
+        let (mut chain_orchestrator, db) = setup_test_chain_orchestrator().await;
 
         // Generate unstructured bytes.
         let mut bytes = [0u8; 1024];
@@ -1176,9 +1176,10 @@ mod test {
         let mut u = Unstructured::new(&bytes);
 
         let batch_commit = BatchCommitData::arbitrary(&mut u).unwrap();
-        indexer.handle_l1_notification(L1Notification::BatchCommit(batch_commit.clone()));
+        chain_orchestrator
+            .handle_l1_notification(L1Notification::BatchCommit(batch_commit.clone()));
 
-        let event = indexer.next().await.unwrap().unwrap();
+        let event = chain_orchestrator.next().await.unwrap().unwrap();
 
         // Verify the event structure
         match event {
@@ -1196,7 +1197,7 @@ mod test {
 
     #[tokio::test]
     async fn test_handle_batch_commit_with_revert() {
-        // Instantiate indexer and db
+        // Instantiate chain orchestrator and db
         let (mut chain_orchestrator, db) = setup_test_chain_orchestrator().await;
 
         // Generate unstructured bytes.
@@ -1317,8 +1318,8 @@ mod test {
 
     #[tokio::test]
     async fn test_handle_l1_message() {
-        // Instantiate indexer and db
-        let (mut indexer, db) = setup_test_chain_orchestrator().await;
+        // Instantiate chain orchestrator and db
+        let (mut chain_orchestrator, db) = setup_test_chain_orchestrator().await;
 
         // Generate unstructured bytes.
         let mut bytes = [0u8; 1024];
@@ -1330,13 +1331,13 @@ mod test {
             ..Arbitrary::arbitrary(&mut u).unwrap()
         };
         let block_number = u64::arbitrary(&mut u).unwrap();
-        indexer.handle_l1_notification(L1Notification::L1Message {
+        chain_orchestrator.handle_l1_notification(L1Notification::L1Message {
             message: message.clone(),
             block_number,
             block_timestamp: 0,
         });
 
-        let _ = indexer.next().await;
+        let _ = chain_orchestrator.next().await;
 
         let l1_message_result =
             db.get_l1_message_by_index(message.queue_index).await.unwrap().unwrap();
@@ -1347,16 +1348,16 @@ mod test {
 
     #[tokio::test]
     async fn test_l1_message_hash_queue() {
-        // Instantiate indexer and db
-        let (mut indexer, db) = setup_test_chain_orchestrator().await;
+        // Instantiate chain orchestrator and db
+        let (mut chain_orchestrator, db) = setup_test_chain_orchestrator().await;
 
         // insert the previous L1 message in database.
-        indexer.handle_l1_notification(L1Notification::L1Message {
+        chain_orchestrator.handle_l1_notification(L1Notification::L1Message {
             message: TxL1Message { queue_index: 1062109, ..Default::default() },
             block_number: 1475588,
             block_timestamp: 1745305199,
         });
-        let _ = indexer.next().await.unwrap().unwrap();
+        let _ = chain_orchestrator.next().await.unwrap().unwrap();
 
         // <https://sepolia.scrollscan.com/tx/0xd80cd61ac5d8665919da19128cc8c16d3647e1e2e278b931769e986d01c6b910>
         let message = TxL1Message {
@@ -1367,13 +1368,13 @@ mod test {
             sender: address!("61d8d3E7F7c656493d1d76aAA1a836CEdfCBc27b"),
             input: bytes!("8ef1332e000000000000000000000000323522a8de3cddeddbb67094eecaebc2436d6996000000000000000000000000323522a8de3cddeddbb67094eecaebc2436d699600000000000000000000000000000000000000000000000000038d7ea4c6800000000000000000000000000000000000000000000000000000000000001034de00000000000000000000000000000000000000000000000000000000000000a00000000000000000000000000000000000000000000000000000000000000000"),
         };
-        indexer.handle_l1_notification(L1Notification::L1Message {
+        chain_orchestrator.handle_l1_notification(L1Notification::L1Message {
             message: message.clone(),
             block_number: 14755883,
             block_timestamp: 1745305200,
         });
 
-        let _ = indexer.next().await.unwrap().unwrap();
+        let _ = chain_orchestrator.next().await.unwrap().unwrap();
 
         let l1_message_result =
             db.get_l1_message_by_index(message.queue_index).await.unwrap().unwrap();
@@ -1386,8 +1387,8 @@ mod test {
 
     #[tokio::test]
     async fn test_handle_reorg() {
-        // Instantiate indexer and db
-        let (mut indexer, db) = setup_test_chain_orchestrator().await;
+        // Instantiate chain orchestrator and db
+        let (mut chain_orchestrator, db) = setup_test_chain_orchestrator().await;
 
         // Generate unstructured bytes.
         let mut bytes = [0u8; 1024];
@@ -1411,9 +1412,12 @@ mod test {
         let batch_commit_block_30 = batch_commit_block_30;
 
         // Index batch inputs
-        indexer.handle_l1_notification(L1Notification::BatchCommit(batch_commit_block_1.clone()));
-        indexer.handle_l1_notification(L1Notification::BatchCommit(batch_commit_block_20.clone()));
-        indexer.handle_l1_notification(L1Notification::BatchCommit(batch_commit_block_30.clone()));
+        chain_orchestrator
+            .handle_l1_notification(L1Notification::BatchCommit(batch_commit_block_1.clone()));
+        chain_orchestrator
+            .handle_l1_notification(L1Notification::BatchCommit(batch_commit_block_20.clone()));
+        chain_orchestrator
+            .handle_l1_notification(L1Notification::BatchCommit(batch_commit_block_30.clone()));
 
         // Generate 3 random L1 messages and set their block numbers
         let l1_message_block_1 = L1MessageEnvelope {
@@ -1436,27 +1440,27 @@ mod test {
         };
 
         // Index L1 messages
-        indexer.handle_l1_notification(L1Notification::L1Message {
+        chain_orchestrator.handle_l1_notification(L1Notification::L1Message {
             message: l1_message_block_1.clone().transaction,
             block_number: l1_message_block_1.clone().l1_block_number,
             block_timestamp: 0,
         });
-        indexer.handle_l1_notification(L1Notification::L1Message {
+        chain_orchestrator.handle_l1_notification(L1Notification::L1Message {
             message: l1_message_block_20.clone().transaction,
             block_number: l1_message_block_20.clone().l1_block_number,
             block_timestamp: 0,
         });
-        indexer.handle_l1_notification(L1Notification::L1Message {
+        chain_orchestrator.handle_l1_notification(L1Notification::L1Message {
             message: l1_message_block_30.clone().transaction,
             block_number: l1_message_block_30.clone().l1_block_number,
             block_timestamp: 0,
         });
 
         // Reorg at block 20
-        indexer.handle_l1_notification(L1Notification::Reorg(20));
+        chain_orchestrator.handle_l1_notification(L1Notification::Reorg(20));
 
         for _ in 0..7 {
-            indexer.next().await.unwrap().unwrap();
+            chain_orchestrator.next().await.unwrap().unwrap();
         }
 
         // Check that the batch input at block 30 is deleted
@@ -1485,8 +1489,8 @@ mod test {
     #[ignore]
     #[tokio::test]
     async fn test_handle_reorg_executed_l1_messages() {
-        // Instantiate indexer and db
-        let (mut indexer, _database) = setup_test_chain_orchestrator().await;
+        // Instantiate chain orchestrator and db
+        let (mut chain_orchestrator, _database) = setup_test_chain_orchestrator().await;
 
         // Generate unstructured bytes.
         let mut bytes = [0u8; 8192];
@@ -1503,10 +1507,12 @@ mod test {
         };
 
         // Index batch inputs
-        indexer.handle_l1_notification(L1Notification::BatchCommit(batch_commit_block_1.clone()));
-        indexer.handle_l1_notification(L1Notification::BatchCommit(batch_commit_block_10.clone()));
+        chain_orchestrator
+            .handle_l1_notification(L1Notification::BatchCommit(batch_commit_block_1.clone()));
+        chain_orchestrator
+            .handle_l1_notification(L1Notification::BatchCommit(batch_commit_block_10.clone()));
         for _ in 0..2 {
-            let _event = indexer.next().await.unwrap().unwrap();
+            let _event = chain_orchestrator.next().await.unwrap().unwrap();
         }
 
         let batch_1 = BatchInfo::new(batch_commit_block_1.index, batch_commit_block_1.hash);
@@ -1527,12 +1533,12 @@ mod test {
                     ..Arbitrary::arbitrary(&mut u).unwrap()
                 },
             };
-            indexer.handle_l1_notification(L1Notification::L1Message {
+            chain_orchestrator.handle_l1_notification(L1Notification::L1Message {
                 message: l1_message.transaction.clone(),
                 block_number: l1_message.l1_block_number,
                 block_timestamp: 0,
             });
-            indexer.next().await.unwrap().unwrap();
+            chain_orchestrator.next().await.unwrap().unwrap();
             l1_messages.push(l1_message);
         }
 
@@ -1555,19 +1561,20 @@ mod test {
                 None
             };
             if let Some(batch_info) = batch_info {
-                indexer.persist_l1_consolidated_blocks(vec![l2_block.clone()], batch_info);
+                chain_orchestrator
+                    .persist_l1_consolidated_blocks(vec![l2_block.clone()], batch_info);
             } else {
-                indexer.consolidate_validated_l2_blocks(vec![l2_block.clone()]);
+                chain_orchestrator.consolidate_validated_l2_blocks(vec![l2_block.clone()]);
             }
 
-            indexer.next().await.unwrap().unwrap();
+            chain_orchestrator.next().await.unwrap().unwrap();
             blocks.push(l2_block);
         }
 
         // First we assert that we dont reorg the L2 or message queue hash for a higher block
         // than any of the L1 messages.
-        indexer.handle_l1_notification(L1Notification::Reorg(17));
-        let event = indexer.next().await.unwrap().unwrap();
+        chain_orchestrator.handle_l1_notification(L1Notification::Reorg(17));
+        let event = chain_orchestrator.next().await.unwrap().unwrap();
         assert_eq!(
             event,
             ChainOrchestratorEvent::ChainUnwound {
@@ -1580,8 +1587,8 @@ mod test {
 
         // Reorg at block 7 which is one of the messages that has not been executed yet. No reorg
         // but we should ensure the L1 messages have been deleted.
-        indexer.handle_l1_notification(L1Notification::Reorg(7));
-        let event = indexer.next().await.unwrap().unwrap();
+        chain_orchestrator.handle_l1_notification(L1Notification::Reorg(7));
+        let event = chain_orchestrator.next().await.unwrap().unwrap();
 
         assert_eq!(
             event,
@@ -1594,8 +1601,8 @@ mod test {
         );
 
         // Now reorg at block 5 which contains L1 messages that have been executed .
-        indexer.handle_l1_notification(L1Notification::Reorg(3));
-        let event = indexer.next().await.unwrap().unwrap();
+        chain_orchestrator.handle_l1_notification(L1Notification::Reorg(3));
+        let event = chain_orchestrator.next().await.unwrap().unwrap();
 
         assert_eq!(
             event,
@@ -1603,7 +1610,10 @@ mod test {
                 l1_block_number: 3,
                 queue_index: Some(4),
                 l2_head_block_info: Some(blocks[3].block_info),
-                l2_safe_block_info: Some(BlockInfo::new(0, indexer.chain_spec.genesis_hash())),
+                l2_safe_block_info: Some(BlockInfo::new(
+                    0,
+                    chain_orchestrator.chain_spec.genesis_hash()
+                )),
             }
         );
     }

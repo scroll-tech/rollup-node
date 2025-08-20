@@ -534,7 +534,8 @@ pub trait DatabaseOperations: DatabaseConnectionProvider {
             .map(|model| model.block_info()))
     }
 
-    /// Unwinds the indexer by deleting all indexed data greater than the provided L1 block number.
+    /// Unwinds the chain orchestrator by deleting all indexed data greater than the provided L1
+    /// block number.
     async fn unwind(
         &self,
         genesis_hash: B256,

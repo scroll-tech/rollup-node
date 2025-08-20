@@ -137,7 +137,6 @@ async fn can_sequence_and_gossip_blocks() {
             enable_eth_scroll_wire_bridge: true,
             enable_scroll_wire: true,
             sequencer_url: None,
-            eth_wire_gossip: false,
         },
         database_args: DatabaseArgs { path: Some(PathBuf::from("sqlite::memory:")) },
         l1_provider_args: L1ProviderArgs::default(),
@@ -493,7 +492,6 @@ async fn can_bridge_blocks() {
         network_config,
         scroll_wire_config,
         None,
-        false,
     )
     .await;
     let scroll_network_handle = scroll_network.handle();
@@ -968,8 +966,7 @@ async fn can_gossip_over_eth_wire() -> eyre::Result<()> {
     let chain_spec = (*SCROLL_DEV).clone();
 
     // Setup the rollup node manager.
-    let mut config = default_sequencer_test_scroll_rollup_node_config();
-    config.network_args.eth_wire_gossip = true;
+    let config = default_sequencer_test_scroll_rollup_node_config();
     let (mut nodes, _tasks, _) =
         setup_engine(config, 2, chain_spec.clone(), false, false).await.unwrap();
     let _sequencer = nodes.pop().unwrap();

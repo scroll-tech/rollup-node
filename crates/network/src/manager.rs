@@ -55,8 +55,6 @@ pub struct ScrollNetworkManager<N, CS> {
     eth_wire_listener: Option<EventStream<RethNewBlockWithPeer<ScrollBlock>>>,
     /// The scroll wire protocol manager.
     scroll_wire: ScrollWireManager,
-    /// Should blocks be announced over the eth-wire protocol.
-    eth_wire_gossip: bool,
 }
 
 impl<CS: ScrollHardforks + EthChainSpec + Send + Sync + 'static>
@@ -69,7 +67,6 @@ impl<CS: ScrollHardforks + EthChainSpec + Send + Sync + 'static>
         mut network_config: RethNetworkConfig<C, ScrollNetworkPrimitives>,
         scroll_wire_config: ScrollWireConfig,
         eth_wire_listener: Option<EventStream<RethNewBlockWithPeer<ScrollBlock>>>,
-        eth_wire_gossip: bool,
     ) -> Self {
         // Create the scroll-wire protocol handler.
         let (scroll_wire_handler, events) = ScrollWireProtocolHandler::new(scroll_wire_config);
@@ -99,7 +96,6 @@ impl<CS: ScrollHardforks + EthChainSpec + Send + Sync + 'static>
             from_handle_rx: from_handle_rx.into(),
             scroll_wire,
             eth_wire_listener,
-            eth_wire_gossip,
         }
     }
 }
@@ -118,7 +114,6 @@ impl<
         inner_network_handle: N,
         events: UnboundedReceiver<ScrollWireEvent>,
         eth_wire_listener: Option<EventStream<RethNewBlockWithPeer<ScrollBlock>>>,
-        eth_wire_gossip: bool,
     ) -> Self {
         // Create the channel for sending messages to the network manager from the network handle.
         let (to_manager_tx, from_handle_rx) = mpsc::unbounded_channel();
@@ -134,7 +129,6 @@ impl<
             from_handle_rx: from_handle_rx.into(),
             scroll_wire,
             eth_wire_listener,
-            eth_wire_gossip,
         }
     }
 
@@ -161,15 +155,13 @@ impl<
             .filter_map(|(peer_id, blocks)| (!blocks.contains(&hash)).then_some(*peer_id))
             .collect();
 
-        if self.eth_wire_gossip {
-            let eth_wire_new_block = {
-                let td = U128::from_limbs([0, block.block.header.number]);
-                let mut eth_wire_block = block.block.clone();
-                eth_wire_block.header.extra_data = block.signature.clone().into();
-                EthWireNewBlock { block: eth_wire_block, td }
-            };
-            self.inner_network_handle().eth_wire_announce_block(eth_wire_new_block, hash);
-        }
+        let eth_wire_new_block = {
+            let td = U128::from_limbs([0, block.block.header.number]);
+            let mut eth_wire_block = block.block.clone();
+            eth_wire_block.header.extra_data = block.signature.clone().into();
+            EthWireNewBlock { block: eth_wire_block, td }
+        };
+        self.inner_network_handle().eth_wire_announce_block(eth_wire_new_block, hash);
 
         // Announce block to the filtered set of peers
         for peer_id in peers {
@@ -272,7 +264,9 @@ impl<
         {
             Some(NetworkManagerEvent::NewBlock(NewBlockWithPeer { peer_id, block, signature }))
         } else {
-            tracing::warn!(target: "scroll::bridge::import", peer_id = %peer_id, "Failed to extract signature from block extra data");
+            tracing::warn!(target: "scroll::bridge::import", peer_id = %peer_id, "Failed to extract signature from block extra data, penalizing peer");
+            self.inner_network_handle()
+                .reputation_change(peer_id, reth_network_api::ReputationChangeKind::BadBlock);
             None
         }
     }
