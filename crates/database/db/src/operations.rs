@@ -1,7 +1,7 @@
 use super::{models, DatabaseError};
 use crate::DatabaseConnectionProvider;
 
-use alloy_primitives::B256;
+use alloy_primitives::{B256, Signature};
 use futures::{Stream, StreamExt};
 use rollup_node_primitives::{
     BatchCommitData, BatchInfo, BlockInfo, L1MessageEnvelope, L2BlockInfoWithL1Messages, Metadata,
@@ -509,6 +509,43 @@ pub trait DatabaseOperations: DatabaseConnectionProvider {
 
         // commit the transaction
         Ok(UnwindResult { l1_block_number, queue_index, l2_head_block_info, l2_safe_block_info })
+    }
+
+    /// Store a block signature in the database.
+    async fn insert_signature(&self, block_hash: B256, signature: Signature) -> Result<(), DatabaseError> {
+        tracing::trace!(target: "scroll::db", block_hash = ?block_hash, "Storing block signature in database.");
+        
+        let block_signature: models::block_signature::ActiveModel = (block_hash, signature).into();
+
+        models::block_signature::Entity::insert(block_signature)
+            .on_conflict(
+                OnConflict::column(models::block_signature::Column::BlockHash)
+                    .update_column(models::block_signature::Column::Signature)
+                    .to_owned(),
+            )
+            .exec(self.get_connection())
+            .await
+            .map(|_| ())?;
+
+        Ok(())
+    }
+
+    /// Get a block signature from the database by block hash.
+    async fn get_block_signature(&self, block_hash: B256) -> Result<Option<Signature>, DatabaseError> {
+        tracing::trace!(target: "scroll::db", block_hash = ?block_hash, "Retrieving block signature from database.");
+
+        let block_signature = models::block_signature::Entity::find_by_id(block_hash.to_vec())
+            .one(self.get_connection())
+            .await?;
+
+        match block_signature {
+            Some(model) => {
+                let signature = model.get_signature()
+                    .map_err(|e| DatabaseError::ParseSignatureError(format!("Failed to parse signature: {}", e)))?;
+                Ok(Some(signature))
+            }
+            None => Ok(None),
+        }
     }
 }
 

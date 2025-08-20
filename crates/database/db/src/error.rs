@@ -16,4 +16,7 @@ pub enum DatabaseError {
     /// The L1 message was not found in database.
     #[error("L1 message at index [{0}] not found in database")]
     L1MessageNotFound(u64),
+    /// A generic error occurred.
+    #[error("parse signature error: {0}")]
+    ParseSignatureError(String),
 }
