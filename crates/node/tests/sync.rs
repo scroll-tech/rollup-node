@@ -642,9 +642,7 @@ async fn test_chain_orchestrator_shallow_reorg_with_gap() -> eyre::Result<()> {
     let mut follower_events = follower.inner.rollup_manager_handle.get_event_listener().await?;
 
     // Connect the nodes together.
-    sequencer.network.add_peer(follower.network.record()).await;
-    follower.network.next_session_established().await;
-    sequencer.network.next_session_established().await;
+    sequencer.connect(&mut follower).await;
 
     // initially the sequencer should build 100 empty blocks and the follower should follow them
     let mut reorg_block_info = BlockInfo::default();

@@ -24,7 +24,7 @@ impl MigrationInfo for ScrollDevMigrationInfo {
     }
 
     fn genesis_hash() -> B256 {
-        b256!("0xc77ee681dac901672fee660088df30ef11789ec89837123cdc89690ef1fef766")
+        b256!("0x14844a4fc967096c628e90df3bb0c3e98941bdd31d1982c2f3e70ed17250d98b")
     }
 }
 

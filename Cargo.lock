@@ -10408,8 +10408,8 @@ dependencies = [
 name = "rollup-node-chain-orchestrator"
 version = "0.0.1"
 dependencies = [
- "alloy-consensus 1.0.23",
- "alloy-eips 1.0.23",
+ "alloy-consensus 1.0.24",
+ "alloy-eips 1.0.24",
  "alloy-json-rpc",
  "alloy-primitives",
  "alloy-provider",

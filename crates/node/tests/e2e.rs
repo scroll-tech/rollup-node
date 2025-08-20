@@ -24,7 +24,7 @@ use rollup_node::{
     RollupNodeContext, ScrollRollupNodeConfig, SequencerArgs,
 };
 use rollup_node_chain_orchestrator::ChainOrchestratorEvent;
-use rollup_node_manager::{RollupManagerCommand, RollupManagerEvent, RollupManagerHandle};
+use rollup_node_manager::{RollupManagerCommand, RollupManagerEvent};
 use rollup_node_primitives::{sig_encode_hash, BatchCommitData, ConsensusUpdate};
 use rollup_node_providers::BlobSource;
 use rollup_node_sequencer::L1MessageInclusionMode;
@@ -257,6 +257,7 @@ async fn can_penalize_peer_for_invalid_block() {
         signer_args: Default::default(),
         gas_price_oracle_args: GasPriceOracleArgs::default(),
         consensus_args: ConsensusArgs::noop(),
+        chain_orchestrator_args: ChainOrchestratorArgs::default(),
     };
 
     let (nodes, _tasks, _) =
@@ -275,7 +276,10 @@ async fn can_penalize_peer_for_invalid_block() {
     assert_eq!(initial_reputation, 0);
 
     // create invalid block
-    let block = ScrollBlock::default();
+    let mut block = ScrollBlock::default();
+    block.header.number = 1;
+    block.header.parent_hash =
+        b256!("0x14844a4fc967096c628e90df3bb0c3e98941bdd31d1982c2f3e70ed17250d98b");
 
     // send invalid block from node0 to node1. We don't care about the signature here since we use a
     // NoopConsensus in the test.
@@ -1023,7 +1027,7 @@ async fn can_handle_reorgs_while_sequencing() -> eyre::Result<()> {
     l1_watcher_tx.send(Arc::new(L1Notification::NewBlock(10))).await?;
 
     // Wait for block that contains the L1 message.
-    sequencer_rnm_handle.build_block().await;
+    handle.build_block().await;
     let l2_reorged_height;
     loop {
         if let Some(RollupManagerEvent::BlockSequenced(block)) = rnm_events.next().await {
@@ -1045,7 +1049,7 @@ async fn can_handle_reorgs_while_sequencing() -> eyre::Result<()> {
     }
 
     // Get the next sequenced L2 block.
-    sequencer_rnm_handle.build_block().await;
+    handle.build_block().await;
     loop {
         if let Some(RollupManagerEvent::BlockSequenced(block)) = rnm_events.next().await {
             assert_eq!(block.number, l2_reorged_height);
