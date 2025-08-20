@@ -15,6 +15,7 @@ workspace = true
 
 [dependencies]
 # alloy
+alloy-chains.workspace = true
 alloy-primitives.workspace = true
 alloy-provider.workspace = true
 alloy-rpc-client.workspace = true

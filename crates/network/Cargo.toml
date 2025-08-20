@@ -8,7 +8,6 @@ exclude.workspace = true
 
 [dependencies]
 # alloy
-alloy-chains.workspace = true
 alloy-primitives = { workspace = true, features = ["map-foldhash"] }
 
 # reth
@@ -46,5 +45,4 @@ serde = [
     "scroll-wire/serde",
     "reth-primitives-traits/serde",
     "reth-storage-api/serde",
-    "alloy-chains/serde",
 ]

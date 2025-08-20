@@ -498,7 +498,7 @@ async fn can_bridge_blocks() {
     let mut scroll_network = scroll_network::ScrollNetworkManager::new(
         network_config,
         scroll_wire_config,
-        alloy_chains::NamedChain::Dev,
+        Default::default(),
     )
     .await;
     let scroll_network_handle = scroll_network.handle();
