@@ -19,7 +19,7 @@ services:
       - scroll-network
 
   rollup-node:
-    image: scrolltech/rollup-node:v0.0.1-rc20
+    image: rollup-node
     container_name: rollup-node
     entrypoint: ["bash", "/launch_rollup_node.bash"]
     env_file:
