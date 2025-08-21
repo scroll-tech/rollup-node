@@ -185,7 +185,7 @@ where
         let this = self.get_mut();
 
         // report queue size metrics if the interval has elapsed.
-        while let std::task::Poll::Ready(_) = this.queue_metrics_interval.poll_tick(cx) {
+        while this.queue_metrics_interval.poll_tick(cx).is_ready() {
             this.emit_queue_gauges();
         }
 
