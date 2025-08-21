@@ -3,6 +3,7 @@
 //! responsible for handling events from these components and coordinating their actions.
 
 use super::Consensus;
+use crate::poll_nested_stream_with_budget;
 use alloy_primitives::Signature;
 use alloy_provider::Provider;
 use futures::StreamExt;
@@ -40,6 +41,9 @@ use tracing::{error, trace, warn};
 use rollup_node_providers::{L1MessageProvider, L1Provider};
 use scroll_db::Database;
 use scroll_derivation_pipeline::DerivationPipeline;
+
+mod budget;
+use budget::L1_NOTIFICATION_CHANNEL_BUDGET;
 
 mod command;
 pub use command::RollupManagerCommand;
@@ -473,14 +477,19 @@ where
             }
         );
 
+        let mut maybe_more_l1_rx_events = false;
         proceed_if!(
             en_synced,
-            // Drain all L1 notifications.
-            while let Some(Poll::Ready(Some(event))) =
-                this.l1_notification_rx.as_mut().map(|rx| rx.poll_next_unpin(cx))
-            {
-                this.handle_l1_notification((*event).clone());
-            }
+            maybe_more_l1_rx_events = poll_nested_stream_with_budget!(
+                "l1_notification_rx",
+                "L1Notification channel",
+                L1_NOTIFICATION_CHANNEL_BUDGET,
+                this.l1_notification_rx
+                    .as_mut()
+                    .map(|rx| rx.poll_next_unpin(cx))
+                    .unwrap_or(Poll::Ready(None)),
+                |event: Arc<L1Notification>| this.handle_l1_notification((*event).clone()),
+            )
         );
 
         // Drain all Indexer events.
@@ -549,6 +558,10 @@ where
         // Handle network manager events.
         while let Poll::Ready(Some(event)) = this.network.poll_next_unpin(cx) {
             this.handle_network_manager_event(event);
+        }
+
+        if maybe_more_l1_rx_events {
+            cx.waker().wake_by_ref();
         }
 
         Poll::Pending
