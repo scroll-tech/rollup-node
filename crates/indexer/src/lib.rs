@@ -107,19 +107,6 @@ impl<ChainSpec: ScrollHardforks + EthChainSpec + Send + Sync + 'static> Indexer<
         }
     }
 
-    // /// Wraps a pending indexer future, metering the completion of it.
-    // async fn handle_metered(
-    //     &self,
-    //     item: IndexerItem,
-    //     indexer_fut: impl Future<Output = Result<IndexerEvent, IndexerError>> + Sync + Send +
-    // 'static, ) -> Result<IndexerEvent, IndexerError> {
-    //     let metric = self.metrics.get(&item).expect("metric exists").clone();
-    //     let now = Instant::now();
-    //     let res = indexer_fut.await;
-    //     metric.task_duration.record(now.elapsed().as_secs_f64());
-    //     res
-    // }
-
     /// Handles an L2 block.
     async fn handle_block(
         &self,
