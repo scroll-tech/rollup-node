@@ -4,7 +4,7 @@ use scroll_engine::ConsolidationOutcome;
 use scroll_network::NewBlockWithPeer;
 
 /// An event that can be emitted by the rollup node manager.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum RollupManagerEvent {
     /// A new block has been received from the network.
     NewBlockReceived(NewBlockWithPeer),
