@@ -9,4 +9,7 @@ pub enum IndexerError {
     /// An error occurred while trying to fetch the L2 block from the database.
     #[error("L2 block not found - block number: {0}")]
     L2BlockNotFound(u64),
+    /// The Indexer command channel was closed.
+    #[error("Indexer command channel closed")]
+    CommandChannelClosed,
 }

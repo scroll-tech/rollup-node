@@ -3,6 +3,7 @@
 //! responsible for handling events from these components and coordinating their actions.
 
 use super::Consensus;
+use crate::poll_nested_stream_with_budget;
 use alloy_primitives::Signature;
 use alloy_provider::Provider;
 use futures::StreamExt;
@@ -12,7 +13,7 @@ use reth_scroll_node::ScrollNetworkPrimitives;
 use reth_scroll_primitives::ScrollBlock;
 use reth_tasks::shutdown::GracefulShutdown;
 use reth_tokio_util::{EventSender, EventStream};
-use rollup_node_indexer::{Indexer, IndexerEvent};
+use rollup_node_indexer::{Indexer, IndexerEvent, IndexerHandle};
 use rollup_node_sequencer::Sequencer;
 use rollup_node_signer::{SignerEvent, SignerHandle};
 use rollup_node_watcher::L1Notification;
@@ -40,6 +41,9 @@ use tracing::{error, trace, warn};
 use rollup_node_providers::{L1MessageProvider, L1Provider};
 use scroll_db::{Database, DatabaseOperations};
 use scroll_derivation_pipeline::DerivationPipeline;
+
+mod budget;
+use budget::L1_NOTIFICATION_CHANNEL_BUDGET;
 
 mod command;
 pub use command::RollupManagerCommand;
@@ -90,7 +94,7 @@ pub struct RollupNodeManager<
     /// A receiver for [`L1Notification`]s from the [`rollup_node_watcher::L1Watcher`].
     l1_notification_rx: Option<ReceiverStream<Arc<L1Notification>>>,
     /// An indexer used to index data for the rollup node.
-    indexer: Indexer<CS>,
+    indexer: IndexerHandle,
     /// The consensus algorithm used by the rollup node.
     consensus: Box<dyn Consensus>,
     /// The receiver for new blocks received from the network (used to bridge from eth-wire).
@@ -168,7 +172,7 @@ where
         block_time: Option<u64>,
     ) -> (Self, RollupManagerHandle<N>) {
         let (handle_tx, handle_rx) = mpsc::channel(EVENT_CHANNEL_SIZE);
-        let indexer = Indexer::new(database.clone(), chain_spec.clone());
+        let indexer = Indexer::spawn(database.clone(), chain_spec.clone());
         let derivation_pipeline = DerivationPipeline::new(l1_provider, database.clone());
         let rnm = Self {
             handle_rx,
@@ -321,7 +325,9 @@ where
                     if let Some(event_sender) = self.event_sender.as_ref() {
                         event_sender.notify(RollupManagerEvent::BlockImported(block.clone()));
                     }
-                    self.indexer.handle_block((&block).into(), None);
+                    let _ = self.indexer.handle_block((&block).into(), None).inspect_err(|err| {
+                        error!(target: "scroll::node::manager", ?err, "Failed to handle block import in indexer");
+                    });
                 }
                 self.network.handle().block_import_outcome(outcome);
             }
@@ -334,13 +340,17 @@ where
                     event_sender.notify(RollupManagerEvent::BlockSequenced(payload.clone()));
                 }
 
-                self.indexer.handle_block((&payload).into(), None);
+                let _ = self.indexer.handle_block((&payload).into(), None).inspect_err(|err| {
+                    error!(target: "scroll::node::manager", ?err, "Failed to handle new payload in indexer");
+                });
             }
             EngineDriverEvent::L1BlockConsolidated(consolidation_outcome) => {
-                self.indexer.handle_block(
+                let _ = self.indexer.handle_block(
                     consolidation_outcome.block_info().clone(),
                     Some(*consolidation_outcome.batch_info()),
-                );
+                ).inspect_err(|err| {
+                    error!(target: "scroll::node::manager", ?err, "Failed to handle L1 block consolidation in indexer");
+                });
 
                 if let Some(event_sender) = self.event_sender.as_ref() {
                     event_sender.notify(RollupManagerEvent::L1DerivedBlockConsolidated(
@@ -395,7 +405,11 @@ where
                     sequencer.handle_new_l1_block(new_block)
                 }
             }
-            _ => self.indexer.handle_l1_notification(notification),
+            _ => {
+                let _ = self.indexer.handle_l1_notification(notification).inspect_err(|err| {
+                    error!(target: "scroll::node::manager", ?err, "Failed to handle L1 notification")
+                });
+            }
         }
     }
 
@@ -486,14 +500,19 @@ where
             }
         );
 
+        let mut maybe_more_l1_rx_events = false;
         proceed_if!(
             en_synced,
-            // Drain all L1 notifications.
-            while let Some(Poll::Ready(Some(event))) =
-                this.l1_notification_rx.as_mut().map(|rx| rx.poll_next_unpin(cx))
-            {
-                this.handle_l1_notification((*event).clone());
-            }
+            maybe_more_l1_rx_events = poll_nested_stream_with_budget!(
+                "l1_notification_rx",
+                "L1Notification channel",
+                L1_NOTIFICATION_CHANNEL_BUDGET,
+                this.l1_notification_rx
+                    .as_mut()
+                    .map(|rx| rx.poll_next_unpin(cx))
+                    .unwrap_or(Poll::Ready(None)),
+                |event: Arc<L1Notification>| this.handle_l1_notification((*event).clone()),
+            )
         );
 
         // Drain all Indexer events.
@@ -574,6 +593,10 @@ where
         // Handle network manager events.
         while let Poll::Ready(Some(event)) = this.network.poll_next_unpin(cx) {
             this.handle_network_manager_event(event);
+        }
+
+        if maybe_more_l1_rx_events {
+            cx.waker().wake_by_ref();
         }
 
         Poll::Pending
