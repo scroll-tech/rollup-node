@@ -30,6 +30,7 @@ async-trait = { workspace = true, optional = true }
 futures.workspace = true
 metrics.workspace = true
 metrics-derive.workspace = true
+tokio.workspace = true
 thiserror.workspace = true
 tracing.workspace = true
 
