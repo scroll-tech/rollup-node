@@ -14,7 +14,6 @@ use reth_scroll_node::{
     ScrollConsensusBuilder, ScrollExecutorBuilder, ScrollNetworkBuilder, ScrollNode,
     ScrollPayloadBuilderBuilder, ScrollPoolBuilder,
 };
-use scroll_db::Database;
 use scroll_wire::{ScrollWireConfig, ScrollWireEvent, ScrollWireProtocolHandler};
 use std::sync::Arc;
 use tokio::sync::{mpsc::UnboundedReceiver, Mutex};
@@ -72,7 +71,7 @@ where
             .network(
                 ScrollNetworkBuilder::new()
                     .with_sub_protocol(scroll_wire_handler.into_rlpx_sub_protocol())
-                    .with_database(Database::new(db))
+                    .with_database_path(self.config.database_args.path.clone()),
             )
     }
 

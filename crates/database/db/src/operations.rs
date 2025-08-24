@@ -1,7 +1,7 @@
 use super::{models, DatabaseError};
 use crate::DatabaseConnectionProvider;
 
-use alloy_primitives::{B256, Signature};
+use alloy_primitives::{Signature, B256};
 use futures::{Stream, StreamExt};
 use rollup_node_primitives::{
     BatchCommitData, BatchInfo, BlockInfo, L1MessageEnvelope, L2BlockInfoWithL1Messages, Metadata,
@@ -512,9 +512,13 @@ pub trait DatabaseOperations: DatabaseConnectionProvider {
     }
 
     /// Store a block signature in the database.
-    async fn insert_signature(&self, block_hash: B256, signature: Signature) -> Result<(), DatabaseError> {
+    async fn insert_signature(
+        &self,
+        block_hash: B256,
+        signature: Signature,
+    ) -> Result<(), DatabaseError> {
         tracing::trace!(target: "scroll::db", block_hash = ?block_hash, "Storing block signature in database.");
-        
+
         let block_signature: models::block_signature::ActiveModel = (block_hash, signature).into();
 
         models::block_signature::Entity::insert(block_signature)
@@ -531,7 +535,10 @@ pub trait DatabaseOperations: DatabaseConnectionProvider {
     }
 
     /// Get a block signature from the database by block hash.
-    async fn get_block_signature(&self, block_hash: B256) -> Result<Option<Signature>, DatabaseError> {
+    async fn get_block_signature(
+        &self,
+        block_hash: B256,
+    ) -> Result<Option<Signature>, DatabaseError> {
         tracing::trace!(target: "scroll::db", block_hash = ?block_hash, "Retrieving block signature from database.");
 
         let block_signature = models::block_signature::Entity::find_by_id(block_hash.to_vec())
@@ -540,15 +547,14 @@ pub trait DatabaseOperations: DatabaseConnectionProvider {
 
         match block_signature {
             Some(model) => {
-                let signature = model.get_signature()
-                    .map_err(|e| DatabaseError::ParseSignatureError(format!("Failed to parse signature: {}", e)))?;
+                let signature = model.get_signature().map_err(|e| {
+                    DatabaseError::ParseSignatureError(format!("Failed to parse signature: {}", e))
+                })?;
                 Ok(Some(signature))
             }
             None => Ok(None),
         }
     }
-
-    
 }
 
 /// The result of [`DatabaseOperations::unwind`].

@@ -3716,9 +3716,9 @@ checksum = "00b0228411908ca8685dba7fc2cdd70ec9990a6e753e89b6ac91a84c40fbaf4b"
 
 [[package]]
 name = "form_urlencoded"
-version = "1.2.1"
+version = "1.2.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e13624c2627564efccf4934284bdd98cbaa14e79b0b5a141218e507b3a823456"
+checksum = "cb4cb245038516f5f85277875cdaa4f7d2c9a0fa0468de06ed190163b1581fcf"
 dependencies = [
  "percent-encoding",
 ]
@@ -3862,9 +3862,9 @@ checksum = "42012b0f064e01aa58b545fe3727f90f7dd4020f4a3ea735b50344965f5a57e9"
 
 [[package]]
 name = "generator"
-version = "0.8.5"
+version = "0.8.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d18470a76cb7f8ff746cf1f7470914f900252ec36bbc40b569d74b1258446827"
+checksum = "605183a538e3e2a9c1038635cc5c2d194e2ee8fd0d1b66b8349fad7dbacce5a2"
 dependencies = [
  "cc",
  "cfg-if",
@@ -3996,12 +3996,12 @@ dependencies = [
 
 [[package]]
 name = "gmp-mpfr-sys"
-version = "1.6.5"
+version = "1.6.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c66d61197a68f6323b9afa616cf83d55d69191e1bf364d4eb7d35ae18defe776"
+checksum = "a636fb6a653382a379ee1e5593dacdc628667994167024c143214cafd40c1a86"
 dependencies = [
  "libc",
- "windows-sys 0.59.0",
+ "windows-sys 0.60.2",
 ]
 
 [[package]]
@@ -4582,9 +4582,9 @@ checksum = "b9e0384b61958566e926dc50660321d12159025e767c18e043daf26b70104c39"
 
 [[package]]
 name = "idna"
-version = "1.0.3"
+version = "1.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "686f825264d630750a544639377bae737628043f20d38bbc029e8f29ea968a7e"
+checksum = "3b0875f23caa03898994f6ddc501886a45c7d3d62d04d2d90788d47be1b1e4de"
 dependencies = [
  "idna_adapter",
  "smallvec",
@@ -6252,9 +6252,9 @@ dependencies = [
 
 [[package]]
 name = "percent-encoding"
-version = "2.3.1"
+version = "2.3.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e3148f5046208a5d56bcfc03053e3ca6334e51da8dfb19b6cdc8b306fae3283e"
+checksum = "9b4f627cb1b25917193a259e49bdad08f671f8d9708acfd5fe0a8c1455d87220"
 
 [[package]]
 name = "pest"
@@ -7113,7 +7113,7 @@ checksum = "95325155c684b1c89f7765e30bc1c42e4a6da51ca513615660cb8a62ef9a88e3"
 [[package]]
 name = "reth-basic-payload-builder"
 version = "1.6.0"
-source = "git+https://github.com/scroll-tech/reth.git?branch=morty/fix-eth66-serve-signature#e10ce206f7ed46695e973fcb04a0c511f3f4d2c6"
+source = "git+https://github.com/scroll-tech/reth.git?branch=morty/fix-eth66-serve-signature#28acc6c481137df75b821054c955e894449035a4"
 dependencies = [
  "alloy-consensus 1.0.25",
  "alloy-eips 1.0.25",
@@ -7126,7 +7126,7 @@ dependencies = [
  "reth-payload-builder",
  "reth-payload-builder-primitives",
  "reth-payload-primitives",
- "reth-primitives-traits 1.6.0 (git+https://github.com/scroll-tech/reth.git?branch=morty/fix-eth66-serve-signature)",
+ "reth-primitives-traits",
  "reth-revm",
  "reth-storage-api",
  "reth-tasks",
@@ -7137,7 +7137,7 @@ dependencies = [
 [[package]]
 name = "reth-chain-state"
 version = "1.6.0"
-source = "git+https://github.com/scroll-tech/reth.git?branch=morty/fix-eth66-serve-signature#e10ce206f7ed46695e973fcb04a0c511f3f4d2c6"
+source = "git+https://github.com/scroll-tech/reth.git?branch=morty/fix-eth66-serve-signature#28acc6c481137df75b821054c955e894449035a4"
 dependencies = [
  "alloy-consensus 1.0.25",
  "alloy-eips 1.0.25",
@@ -7154,7 +7154,7 @@ dependencies = [
  "reth-ethereum-primitives",
  "reth-execution-types",
  "reth-metrics",
- "reth-primitives-traits 1.6.0 (git+https://github.com/scroll-tech/reth.git?branch=morty/fix-eth66-serve-signature)",
+ "reth-primitives-traits",
  "reth-storage-api",
  "reth-trie",
  "revm-database",
@@ -7168,7 +7168,7 @@ dependencies = [
 [[package]]
 name = "reth-chainspec"
 version = "1.6.0"
-source = "git+https://github.com/scroll-tech/reth.git?branch=morty/fix-eth66-serve-signature#e10ce206f7ed46695e973fcb04a0c511f3f4d2c6"
+source = "git+https://github.com/scroll-tech/reth.git?branch=morty/fix-eth66-serve-signature#28acc6c481137df75b821054c955e894449035a4"
 dependencies = [
  "alloy-chains",
  "alloy-consensus 1.0.25",
@@ -7181,14 +7181,14 @@ dependencies = [
  "derive_more",
  "reth-ethereum-forks",
  "reth-network-peers",
- "reth-primitives-traits 1.6.0 (git+https://github.com/scroll-tech/reth.git?branch=morty/fix-eth66-serve-signature)",
+ "reth-primitives-traits",
  "serde_json",
 ]
 
 [[package]]
 name = "reth-cli"
 version = "1.6.0"
-source = "git+https://github.com/scroll-tech/reth.git?branch=morty/fix-eth66-serve-signature#e10ce206f7ed46695e973fcb04a0c511f3f4d2c6"
+source = "git+https://github.com/scroll-tech/reth.git?branch=morty/fix-eth66-serve-signature#28acc6c481137df75b821054c955e894449035a4"
 dependencies = [
  "alloy-genesis",
  "clap",
@@ -7202,7 +7202,7 @@ dependencies = [
 [[package]]
 name = "reth-cli-commands"
 version = "1.6.0"
-source = "git+https://github.com/scroll-tech/reth.git?branch=morty/fix-eth66-serve-signature#e10ce206f7ed46695e973fcb04a0c511f3f4d2c6"
+source = "git+https://github.com/scroll-tech/reth.git?branch=morty/fix-eth66-serve-signature#28acc6c481137df75b821054c955e894449035a4"
 dependencies = [
  "ahash 0.8.12",
  "alloy-chains",
@@ -7226,7 +7226,7 @@ dependencies = [
  "reth-cli",
  "reth-cli-runner",
  "reth-cli-util",
- "reth-codecs 1.6.0 (git+https://github.com/scroll-tech/reth.git?branch=morty/fix-eth66-serve-signature)",
+ "reth-codecs",
  "reth-config",
  "reth-consensus",
  "reth-db",
@@ -7253,7 +7253,7 @@ dependencies = [
  "reth-node-core",
  "reth-node-events",
  "reth-node-metrics",
- "reth-primitives-traits 1.6.0 (git+https://github.com/scroll-tech/reth.git?branch=morty/fix-eth66-serve-signature)",
+ "reth-primitives-traits",
  "reth-provider",
  "reth-prune",
  "reth-revm",
@@ -7275,7 +7275,7 @@ dependencies = [
 [[package]]
 name = "reth-cli-runner"
 version = "1.6.0"
-source = "git+https://github.com/scroll-tech/reth.git?branch=morty/fix-eth66-serve-signature#e10ce206f7ed46695e973fcb04a0c511f3f4d2c6"
+source = "git+https://github.com/scroll-tech/reth.git?branch=morty/fix-eth66-serve-signature#28acc6c481137df75b821054c955e894449035a4"
 dependencies = [
  "reth-tasks",
  "tokio",
@@ -7285,7 +7285,7 @@ dependencies = [
 [[package]]
 name = "reth-cli-util"
 version = "1.6.0"
-source = "git+https://github.com/scroll-tech/reth.git?branch=morty/fix-eth66-serve-signature#e10ce206f7ed46695e973fcb04a0c511f3f4d2c6"
+source = "git+https://github.com/scroll-tech/reth.git?branch=morty/fix-eth66-serve-signature#28acc6c481137df75b821054c955e894449035a4"
 dependencies = [
  "alloy-eips 1.0.25",
  "alloy-primitives",
@@ -7302,7 +7302,7 @@ dependencies = [
 [[package]]
 name = "reth-codecs"
 version = "1.6.0"
-source = "git+https://github.com/scroll-tech/reth.git?branch=morty/fix-eth66-serve-signature#e10ce206f7ed46695e973fcb04a0c511f3f4d2c6"
+source = "git+https://github.com/scroll-tech/reth.git?branch=morty/fix-eth66-serve-signature#28acc6c481137df75b821054c955e894449035a4"
 dependencies = [
  "alloy-consensus 1.0.25",
  "alloy-eips 1.0.25",
@@ -7313,45 +7313,16 @@ dependencies = [
  "bytes",
  "modular-bitfield",
  "op-alloy-consensus",
- "reth-codecs-derive 1.6.0 (git+https://github.com/scroll-tech/reth.git?branch=morty/fix-eth66-serve-signature)",
- "reth-zstd-compressors 1.6.0 (git+https://github.com/scroll-tech/reth.git?branch=morty/fix-eth66-serve-signature)",
+ "reth-codecs-derive",
+ "reth-zstd-compressors",
  "serde",
  "visibility",
 ]
 
 [[package]]
-name = "reth-codecs"
-version = "1.6.0"
-source = "git+https://github.com/scroll-tech/reth.git#d485f4718a0c93f3fc1ec453b8ddde6ce1ebe397"
-dependencies = [
- "alloy-consensus 1.0.25",
- "alloy-eips 1.0.25",
- "alloy-genesis",
- "alloy-primitives",
- "alloy-trie 0.9.1",
- "bytes",
- "modular-bitfield",
- "op-alloy-consensus",
- "reth-codecs-derive 1.6.0 (git+https://github.com/scroll-tech/reth.git)",
- "reth-zstd-compressors 1.6.0 (git+https://github.com/scroll-tech/reth.git)",
- "serde",
-]
-
-[[package]]
 name = "reth-codecs-derive"
 version = "1.6.0"
-source = "git+https://github.com/scroll-tech/reth.git?branch=morty/fix-eth66-serve-signature#e10ce206f7ed46695e973fcb04a0c511f3f4d2c6"
-dependencies = [
- "convert_case",
- "proc-macro2",
- "quote",
- "syn 2.0.106",
-]
-
-[[package]]
-name = "reth-codecs-derive"
-version = "1.6.0"
-source = "git+https://github.com/scroll-tech/reth.git#d485f4718a0c93f3fc1ec453b8ddde6ce1ebe397"
+source = "git+https://github.com/scroll-tech/reth.git?branch=morty/fix-eth66-serve-signature#28acc6c481137df75b821054c955e894449035a4"
 dependencies = [
  "convert_case",
  "proc-macro2",
@@ -7362,7 +7333,7 @@ dependencies = [
 [[package]]
 name = "reth-config"
 version = "1.6.0"
-source = "git+https://github.com/scroll-tech/reth.git?branch=morty/fix-eth66-serve-signature#e10ce206f7ed46695e973fcb04a0c511f3f4d2c6"
+source = "git+https://github.com/scroll-tech/reth.git?branch=morty/fix-eth66-serve-signature#28acc6c481137df75b821054c955e894449035a4"
 dependencies = [
  "eyre",
  "humantime-serde",
@@ -7377,32 +7348,32 @@ dependencies = [
 [[package]]
 name = "reth-consensus"
 version = "1.6.0"
-source = "git+https://github.com/scroll-tech/reth.git?branch=morty/fix-eth66-serve-signature#e10ce206f7ed46695e973fcb04a0c511f3f4d2c6"
+source = "git+https://github.com/scroll-tech/reth.git?branch=morty/fix-eth66-serve-signature#28acc6c481137df75b821054c955e894449035a4"
 dependencies = [
  "alloy-consensus 1.0.25",
  "alloy-primitives",
  "auto_impl",
  "reth-execution-types",
- "reth-primitives-traits 1.6.0 (git+https://github.com/scroll-tech/reth.git?branch=morty/fix-eth66-serve-signature)",
+ "reth-primitives-traits",
  "thiserror 2.0.16",
 ]
 
 [[package]]
 name = "reth-consensus-common"
 version = "1.6.0"
-source = "git+https://github.com/scroll-tech/reth.git?branch=morty/fix-eth66-serve-signature#e10ce206f7ed46695e973fcb04a0c511f3f4d2c6"
+source = "git+https://github.com/scroll-tech/reth.git?branch=morty/fix-eth66-serve-signature#28acc6c481137df75b821054c955e894449035a4"
 dependencies = [
  "alloy-consensus 1.0.25",
  "alloy-eips 1.0.25",
  "reth-chainspec",
  "reth-consensus",
- "reth-primitives-traits 1.6.0 (git+https://github.com/scroll-tech/reth.git?branch=morty/fix-eth66-serve-signature)",
+ "reth-primitives-traits",
 ]
 
 [[package]]
 name = "reth-consensus-debug-client"
 version = "1.6.0"
-source = "git+https://github.com/scroll-tech/reth.git?branch=morty/fix-eth66-serve-signature#e10ce206f7ed46695e973fcb04a0c511f3f4d2c6"
+source = "git+https://github.com/scroll-tech/reth.git?branch=morty/fix-eth66-serve-signature#28acc6c481137df75b821054c955e894449035a4"
 dependencies = [
  "alloy-consensus 1.0.25",
  "alloy-eips 1.0.25",
@@ -7416,7 +7387,7 @@ dependencies = [
  "futures",
  "reqwest",
  "reth-node-api",
- "reth-primitives-traits 1.6.0 (git+https://github.com/scroll-tech/reth.git?branch=morty/fix-eth66-serve-signature)",
+ "reth-primitives-traits",
  "reth-tracing",
  "ringbuffer",
  "serde",
@@ -7427,7 +7398,7 @@ dependencies = [
 [[package]]
 name = "reth-db"
 version = "1.6.0"
-source = "git+https://github.com/scroll-tech/reth.git?branch=morty/fix-eth66-serve-signature#e10ce206f7ed46695e973fcb04a0c511f3f4d2c6"
+source = "git+https://github.com/scroll-tech/reth.git?branch=morty/fix-eth66-serve-signature#28acc6c481137df75b821054c955e894449035a4"
 dependencies = [
  "alloy-primitives",
  "derive_more",
@@ -7453,7 +7424,7 @@ dependencies = [
 [[package]]
 name = "reth-db-api"
 version = "1.6.0"
-source = "git+https://github.com/scroll-tech/reth.git?branch=morty/fix-eth66-serve-signature#e10ce206f7ed46695e973fcb04a0c511f3f4d2c6"
+source = "git+https://github.com/scroll-tech/reth.git?branch=morty/fix-eth66-serve-signature#28acc6c481137df75b821054c955e894449035a4"
 dependencies = [
  "alloy-consensus 1.0.25",
  "alloy-genesis",
@@ -7465,13 +7436,13 @@ dependencies = [
  "modular-bitfield",
  "parity-scale-codec",
  "proptest",
- "reth-codecs 1.6.0 (git+https://github.com/scroll-tech/reth.git?branch=morty/fix-eth66-serve-signature)",
+ "reth-codecs",
  "reth-db-models",
  "reth-ethereum-primitives",
  "reth-optimism-primitives",
- "reth-primitives-traits 1.6.0 (git+https://github.com/scroll-tech/reth.git?branch=morty/fix-eth66-serve-signature)",
+ "reth-primitives-traits",
  "reth-prune-types",
- "reth-scroll-primitives 1.6.0 (git+https://github.com/scroll-tech/reth.git?branch=morty/fix-eth66-serve-signature)",
+ "reth-scroll-primitives",
  "reth-stages-types",
  "reth-storage-errors",
  "reth-trie-common",
@@ -7482,7 +7453,7 @@ dependencies = [
 [[package]]
 name = "reth-db-common"
 version = "1.6.0"
-source = "git+https://github.com/scroll-tech/reth.git?branch=morty/fix-eth66-serve-signature#e10ce206f7ed46695e973fcb04a0c511f3f4d2c6"
+source = "git+https://github.com/scroll-tech/reth.git?branch=morty/fix-eth66-serve-signature#28acc6c481137df75b821054c955e894449035a4"
 dependencies = [
  "alloy-consensus 1.0.25",
  "alloy-genesis",
@@ -7490,14 +7461,14 @@ dependencies = [
  "boyer-moore-magiclen",
  "eyre",
  "reth-chainspec",
- "reth-codecs 1.6.0 (git+https://github.com/scroll-tech/reth.git?branch=morty/fix-eth66-serve-signature)",
+ "reth-codecs",
  "reth-config",
  "reth-db-api",
  "reth-etl",
  "reth-execution-errors",
  "reth-fs-util",
  "reth-node-types",
- "reth-primitives-traits 1.6.0 (git+https://github.com/scroll-tech/reth.git?branch=morty/fix-eth66-serve-signature)",
+ "reth-primitives-traits",
  "reth-provider",
  "reth-stages-types",
  "reth-static-file-types",
@@ -7512,22 +7483,22 @@ dependencies = [
 [[package]]
 name = "reth-db-models"
 version = "1.6.0"
-source = "git+https://github.com/scroll-tech/reth.git?branch=morty/fix-eth66-serve-signature#e10ce206f7ed46695e973fcb04a0c511f3f4d2c6"
+source = "git+https://github.com/scroll-tech/reth.git?branch=morty/fix-eth66-serve-signature#28acc6c481137df75b821054c955e894449035a4"
 dependencies = [
  "alloy-eips 1.0.25",
  "alloy-primitives",
  "arbitrary",
  "bytes",
  "modular-bitfield",
- "reth-codecs 1.6.0 (git+https://github.com/scroll-tech/reth.git?branch=morty/fix-eth66-serve-signature)",
- "reth-primitives-traits 1.6.0 (git+https://github.com/scroll-tech/reth.git?branch=morty/fix-eth66-serve-signature)",
+ "reth-codecs",
+ "reth-primitives-traits",
  "serde",
 ]
 
 [[package]]
 name = "reth-discv4"
 version = "1.6.0"
-source = "git+https://github.com/scroll-tech/reth.git?branch=morty/fix-eth66-serve-signature#e10ce206f7ed46695e973fcb04a0c511f3f4d2c6"
+source = "git+https://github.com/scroll-tech/reth.git?branch=morty/fix-eth66-serve-signature#28acc6c481137df75b821054c955e894449035a4"
 dependencies = [
  "alloy-primitives",
  "alloy-rlp",
@@ -7553,7 +7524,7 @@ dependencies = [
 [[package]]
 name = "reth-discv5"
 version = "1.6.0"
-source = "git+https://github.com/scroll-tech/reth.git?branch=morty/fix-eth66-serve-signature#e10ce206f7ed46695e973fcb04a0c511f3f4d2c6"
+source = "git+https://github.com/scroll-tech/reth.git?branch=morty/fix-eth66-serve-signature#28acc6c481137df75b821054c955e894449035a4"
 dependencies = [
  "alloy-primitives",
  "alloy-rlp",
@@ -7577,7 +7548,7 @@ dependencies = [
 [[package]]
 name = "reth-dns-discovery"
 version = "1.6.0"
-source = "git+https://github.com/scroll-tech/reth.git?branch=morty/fix-eth66-serve-signature#e10ce206f7ed46695e973fcb04a0c511f3f4d2c6"
+source = "git+https://github.com/scroll-tech/reth.git?branch=morty/fix-eth66-serve-signature#28acc6c481137df75b821054c955e894449035a4"
 dependencies = [
  "alloy-primitives",
  "data-encoding",
@@ -7601,7 +7572,7 @@ dependencies = [
 [[package]]
 name = "reth-downloaders"
 version = "1.6.0"
-source = "git+https://github.com/scroll-tech/reth.git?branch=morty/fix-eth66-serve-signature#e10ce206f7ed46695e973fcb04a0c511f3f4d2c6"
+source = "git+https://github.com/scroll-tech/reth.git?branch=morty/fix-eth66-serve-signature#28acc6c481137df75b821054c955e894449035a4"
 dependencies = [
  "alloy-consensus 1.0.25",
  "alloy-eips 1.0.25",
@@ -7621,7 +7592,7 @@ dependencies = [
  "reth-metrics",
  "reth-network-p2p",
  "reth-network-peers",
- "reth-primitives-traits 1.6.0 (git+https://github.com/scroll-tech/reth.git?branch=morty/fix-eth66-serve-signature)",
+ "reth-primitives-traits",
  "reth-storage-api",
  "reth-tasks",
  "reth-testing-utils",
@@ -7636,7 +7607,7 @@ dependencies = [
 [[package]]
 name = "reth-e2e-test-utils"
 version = "1.6.0"
-source = "git+https://github.com/scroll-tech/reth.git?branch=morty/fix-eth66-serve-signature#e10ce206f7ed46695e973fcb04a0c511f3f4d2c6"
+source = "git+https://github.com/scroll-tech/reth.git?branch=morty/fix-eth66-serve-signature#28acc6c481137df75b821054c955e894449035a4"
 dependencies = [
  "alloy-consensus 1.0.25",
  "alloy-eips 1.0.25",
@@ -7674,7 +7645,7 @@ dependencies = [
  "reth-payload-builder-primitives",
  "reth-payload-primitives",
  "reth-primitives",
- "reth-primitives-traits 1.6.0 (git+https://github.com/scroll-tech/reth.git?branch=morty/fix-eth66-serve-signature)",
+ "reth-primitives-traits",
  "reth-provider",
  "reth-prune-types",
  "reth-rpc-api",
@@ -7699,7 +7670,7 @@ dependencies = [
 [[package]]
 name = "reth-ecies"
 version = "1.6.0"
-source = "git+https://github.com/scroll-tech/reth.git?branch=morty/fix-eth66-serve-signature#e10ce206f7ed46695e973fcb04a0c511f3f4d2c6"
+source = "git+https://github.com/scroll-tech/reth.git?branch=morty/fix-eth66-serve-signature#28acc6c481137df75b821054c955e894449035a4"
 dependencies = [
  "aes",
  "alloy-primitives",
@@ -7730,7 +7701,7 @@ dependencies = [
 [[package]]
 name = "reth-engine-local"
 version = "1.6.0"
-source = "git+https://github.com/scroll-tech/reth.git?branch=morty/fix-eth66-serve-signature#e10ce206f7ed46695e973fcb04a0c511f3f4d2c6"
+source = "git+https://github.com/scroll-tech/reth.git?branch=morty/fix-eth66-serve-signature#28acc6c481137df75b821054c955e894449035a4"
 dependencies = [
  "alloy-consensus 1.0.25",
  "alloy-primitives",
@@ -7744,7 +7715,7 @@ dependencies = [
  "reth-payload-primitives",
  "reth-provider",
  "reth-transaction-pool",
- "scroll-alloy-rpc-types-engine 1.6.0 (git+https://github.com/scroll-tech/reth.git?branch=morty/fix-eth66-serve-signature)",
+ "scroll-alloy-rpc-types-engine",
  "tokio",
  "tokio-stream",
  "tracing",
@@ -7753,7 +7724,7 @@ dependencies = [
 [[package]]
 name = "reth-engine-primitives"
 version = "1.6.0"
-source = "git+https://github.com/scroll-tech/reth.git?branch=morty/fix-eth66-serve-signature#e10ce206f7ed46695e973fcb04a0c511f3f4d2c6"
+source = "git+https://github.com/scroll-tech/reth.git?branch=morty/fix-eth66-serve-signature#28acc6c481137df75b821054c955e894449035a4"
 dependencies = [
  "alloy-consensus 1.0.25",
  "alloy-eips 1.0.25",
@@ -7768,7 +7739,7 @@ dependencies = [
  "reth-execution-types",
  "reth-payload-builder-primitives",
  "reth-payload-primitives",
- "reth-primitives-traits 1.6.0 (git+https://github.com/scroll-tech/reth.git?branch=morty/fix-eth66-serve-signature)",
+ "reth-primitives-traits",
  "reth-trie-common",
  "serde",
  "thiserror 2.0.16",
@@ -7778,7 +7749,7 @@ dependencies = [
 [[package]]
 name = "reth-engine-service"
 version = "1.6.0"
-source = "git+https://github.com/scroll-tech/reth.git?branch=morty/fix-eth66-serve-signature#e10ce206f7ed46695e973fcb04a0c511f3f4d2c6"
+source = "git+https://github.com/scroll-tech/reth.git?branch=morty/fix-eth66-serve-signature#28acc6c481137df75b821054c955e894449035a4"
 dependencies = [
  "futures",
  "pin-project",
@@ -7801,7 +7772,7 @@ dependencies = [
 [[package]]
 name = "reth-engine-tree"
 version = "1.6.0"
-source = "git+https://github.com/scroll-tech/reth.git?branch=morty/fix-eth66-serve-signature#e10ce206f7ed46695e973fcb04a0c511f3f4d2c6"
+source = "git+https://github.com/scroll-tech/reth.git?branch=morty/fix-eth66-serve-signature#28acc6c481137df75b821054c955e894449035a4"
 dependencies = [
  "alloy-consensus 1.0.25",
  "alloy-eips 1.0.25",
@@ -7827,7 +7798,7 @@ dependencies = [
  "reth-network-p2p",
  "reth-payload-builder",
  "reth-payload-primitives",
- "reth-primitives-traits 1.6.0 (git+https://github.com/scroll-tech/reth.git?branch=morty/fix-eth66-serve-signature)",
+ "reth-primitives-traits",
  "reth-provider",
  "reth-prune",
  "reth-prune-types",
@@ -7853,7 +7824,7 @@ dependencies = [
 [[package]]
 name = "reth-engine-util"
 version = "1.6.0"
-source = "git+https://github.com/scroll-tech/reth.git?branch=morty/fix-eth66-serve-signature#e10ce206f7ed46695e973fcb04a0c511f3f4d2c6"
+source = "git+https://github.com/scroll-tech/reth.git?branch=morty/fix-eth66-serve-signature#28acc6c481137df75b821054c955e894449035a4"
 dependencies = [
  "alloy-consensus 1.0.25",
  "alloy-rpc-types-engine 1.0.25",
@@ -7868,7 +7839,7 @@ dependencies = [
  "reth-evm",
  "reth-fs-util",
  "reth-payload-primitives",
- "reth-primitives-traits 1.6.0 (git+https://github.com/scroll-tech/reth.git?branch=morty/fix-eth66-serve-signature)",
+ "reth-primitives-traits",
  "reth-revm",
  "reth-storage-api",
  "serde",
@@ -7881,7 +7852,7 @@ dependencies = [
 [[package]]
 name = "reth-era"
 version = "1.6.0"
-source = "git+https://github.com/scroll-tech/reth.git?branch=morty/fix-eth66-serve-signature#e10ce206f7ed46695e973fcb04a0c511f3f4d2c6"
+source = "git+https://github.com/scroll-tech/reth.git?branch=morty/fix-eth66-serve-signature#28acc6c481137df75b821054c955e894449035a4"
 dependencies = [
  "alloy-consensus 1.0.25",
  "alloy-eips 1.0.25",
@@ -7897,7 +7868,7 @@ dependencies = [
 [[package]]
 name = "reth-era-downloader"
 version = "1.6.0"
-source = "git+https://github.com/scroll-tech/reth.git?branch=morty/fix-eth66-serve-signature#e10ce206f7ed46695e973fcb04a0c511f3f4d2c6"
+source = "git+https://github.com/scroll-tech/reth.git?branch=morty/fix-eth66-serve-signature#28acc6c481137df75b821054c955e894449035a4"
 dependencies = [
  "alloy-primitives",
  "bytes",
@@ -7912,7 +7883,7 @@ dependencies = [
 [[package]]
 name = "reth-era-utils"
 version = "1.6.0"
-source = "git+https://github.com/scroll-tech/reth.git?branch=morty/fix-eth66-serve-signature#e10ce206f7ed46695e973fcb04a0c511f3f4d2c6"
+source = "git+https://github.com/scroll-tech/reth.git?branch=morty/fix-eth66-serve-signature#28acc6c481137df75b821054c955e894449035a4"
 dependencies = [
  "alloy-consensus 1.0.25",
  "alloy-primitives",
@@ -7925,7 +7896,7 @@ dependencies = [
  "reth-ethereum-primitives",
  "reth-etl",
  "reth-fs-util",
- "reth-primitives-traits 1.6.0 (git+https://github.com/scroll-tech/reth.git?branch=morty/fix-eth66-serve-signature)",
+ "reth-primitives-traits",
  "reth-provider",
  "reth-stages-types",
  "reth-storage-api",
@@ -7936,7 +7907,7 @@ dependencies = [
 [[package]]
 name = "reth-errors"
 version = "1.6.0"
-source = "git+https://github.com/scroll-tech/reth.git?branch=morty/fix-eth66-serve-signature#e10ce206f7ed46695e973fcb04a0c511f3f4d2c6"
+source = "git+https://github.com/scroll-tech/reth.git?branch=morty/fix-eth66-serve-signature#28acc6c481137df75b821054c955e894449035a4"
 dependencies = [
  "reth-consensus",
  "reth-execution-errors",
@@ -7947,7 +7918,7 @@ dependencies = [
 [[package]]
 name = "reth-eth-wire"
 version = "1.6.0"
-source = "git+https://github.com/scroll-tech/reth.git?branch=morty/fix-eth66-serve-signature#e10ce206f7ed46695e973fcb04a0c511f3f4d2c6"
+source = "git+https://github.com/scroll-tech/reth.git?branch=morty/fix-eth66-serve-signature#28acc6c481137df75b821054c955e894449035a4"
 dependencies = [
  "alloy-chains",
  "alloy-primitives",
@@ -7956,13 +7927,13 @@ dependencies = [
  "derive_more",
  "futures",
  "pin-project",
- "reth-codecs 1.6.0 (git+https://github.com/scroll-tech/reth.git?branch=morty/fix-eth66-serve-signature)",
+ "reth-codecs",
  "reth-ecies",
  "reth-eth-wire-types",
  "reth-ethereum-forks",
  "reth-metrics",
  "reth-network-peers",
- "reth-primitives-traits 1.6.0 (git+https://github.com/scroll-tech/reth.git?branch=morty/fix-eth66-serve-signature)",
+ "reth-primitives-traits",
  "serde",
  "snap",
  "thiserror 2.0.16",
@@ -7975,7 +7946,7 @@ dependencies = [
 [[package]]
 name = "reth-eth-wire-types"
 version = "1.6.0"
-source = "git+https://github.com/scroll-tech/reth.git?branch=morty/fix-eth66-serve-signature#e10ce206f7ed46695e973fcb04a0c511f3f4d2c6"
+source = "git+https://github.com/scroll-tech/reth.git?branch=morty/fix-eth66-serve-signature#28acc6c481137df75b821054c955e894449035a4"
 dependencies = [
  "alloy-chains",
  "alloy-consensus 1.0.25",
@@ -7986,9 +7957,9 @@ dependencies = [
  "bytes",
  "derive_more",
  "reth-chainspec",
- "reth-codecs-derive 1.6.0 (git+https://github.com/scroll-tech/reth.git?branch=morty/fix-eth66-serve-signature)",
+ "reth-codecs-derive",
  "reth-ethereum-primitives",
- "reth-primitives-traits 1.6.0 (git+https://github.com/scroll-tech/reth.git?branch=morty/fix-eth66-serve-signature)",
+ "reth-primitives-traits",
  "serde",
  "thiserror 2.0.16",
 ]
@@ -7996,7 +7967,7 @@ dependencies = [
 [[package]]
 name = "reth-ethereum-consensus"
 version = "1.6.0"
-source = "git+https://github.com/scroll-tech/reth.git?branch=morty/fix-eth66-serve-signature#e10ce206f7ed46695e973fcb04a0c511f3f4d2c6"
+source = "git+https://github.com/scroll-tech/reth.git?branch=morty/fix-eth66-serve-signature#28acc6c481137df75b821054c955e894449035a4"
 dependencies = [
  "alloy-consensus 1.0.25",
  "alloy-eips 1.0.25",
@@ -8005,14 +7976,14 @@ dependencies = [
  "reth-consensus",
  "reth-consensus-common",
  "reth-execution-types",
- "reth-primitives-traits 1.6.0 (git+https://github.com/scroll-tech/reth.git?branch=morty/fix-eth66-serve-signature)",
+ "reth-primitives-traits",
  "tracing",
 ]
 
 [[package]]
 name = "reth-ethereum-engine-primitives"
 version = "1.6.0"
-source = "git+https://github.com/scroll-tech/reth.git?branch=morty/fix-eth66-serve-signature#e10ce206f7ed46695e973fcb04a0c511f3f4d2c6"
+source = "git+https://github.com/scroll-tech/reth.git?branch=morty/fix-eth66-serve-signature#28acc6c481137df75b821054c955e894449035a4"
 dependencies = [
  "alloy-eips 1.0.25",
  "alloy-primitives",
@@ -8021,7 +7992,7 @@ dependencies = [
  "reth-engine-primitives",
  "reth-ethereum-primitives",
  "reth-payload-primitives",
- "reth-primitives-traits 1.6.0 (git+https://github.com/scroll-tech/reth.git?branch=morty/fix-eth66-serve-signature)",
+ "reth-primitives-traits",
  "serde",
  "sha2 0.10.9",
  "thiserror 2.0.16",
@@ -8030,7 +8001,7 @@ dependencies = [
 [[package]]
 name = "reth-ethereum-forks"
 version = "1.6.0"
-source = "git+https://github.com/scroll-tech/reth.git?branch=morty/fix-eth66-serve-signature#e10ce206f7ed46695e973fcb04a0c511f3f4d2c6"
+source = "git+https://github.com/scroll-tech/reth.git?branch=morty/fix-eth66-serve-signature#28acc6c481137df75b821054c955e894449035a4"
 dependencies = [
  "alloy-eip2124",
  "alloy-hardforks",
@@ -8044,7 +8015,7 @@ dependencies = [
 [[package]]
 name = "reth-ethereum-payload-builder"
 version = "1.6.0"
-source = "git+https://github.com/scroll-tech/reth.git?branch=morty/fix-eth66-serve-signature#e10ce206f7ed46695e973fcb04a0c511f3f4d2c6"
+source = "git+https://github.com/scroll-tech/reth.git?branch=morty/fix-eth66-serve-signature#28acc6c481137df75b821054c955e894449035a4"
 dependencies = [
  "alloy-consensus 1.0.25",
  "alloy-eips 1.0.25",
@@ -8060,7 +8031,7 @@ dependencies = [
  "reth-payload-builder-primitives",
  "reth-payload-primitives",
  "reth-payload-validator",
- "reth-primitives-traits 1.6.0 (git+https://github.com/scroll-tech/reth.git?branch=morty/fix-eth66-serve-signature)",
+ "reth-primitives-traits",
  "reth-revm",
  "reth-storage-api",
  "reth-transaction-pool",
@@ -8071,7 +8042,7 @@ dependencies = [
 [[package]]
 name = "reth-ethereum-primitives"
 version = "1.6.0"
-source = "git+https://github.com/scroll-tech/reth.git?branch=morty/fix-eth66-serve-signature#e10ce206f7ed46695e973fcb04a0c511f3f4d2c6"
+source = "git+https://github.com/scroll-tech/reth.git?branch=morty/fix-eth66-serve-signature#28acc6c481137df75b821054c955e894449035a4"
 dependencies = [
  "alloy-consensus 1.0.25",
  "alloy-eips 1.0.25",
@@ -8079,9 +8050,9 @@ dependencies = [
  "alloy-rlp",
  "arbitrary",
  "modular-bitfield",
- "reth-codecs 1.6.0 (git+https://github.com/scroll-tech/reth.git?branch=morty/fix-eth66-serve-signature)",
- "reth-primitives-traits 1.6.0 (git+https://github.com/scroll-tech/reth.git?branch=morty/fix-eth66-serve-signature)",
- "reth-zstd-compressors 1.6.0 (git+https://github.com/scroll-tech/reth.git?branch=morty/fix-eth66-serve-signature)",
+ "reth-codecs",
+ "reth-primitives-traits",
+ "reth-zstd-compressors",
  "serde",
  "serde_with",
 ]
@@ -8089,7 +8060,7 @@ dependencies = [
 [[package]]
 name = "reth-etl"
 version = "1.6.0"
-source = "git+https://github.com/scroll-tech/reth.git?branch=morty/fix-eth66-serve-signature#e10ce206f7ed46695e973fcb04a0c511f3f4d2c6"
+source = "git+https://github.com/scroll-tech/reth.git?branch=morty/fix-eth66-serve-signature#28acc6c481137df75b821054c955e894449035a4"
 dependencies = [
  "rayon",
  "reth-db-api",
@@ -8099,7 +8070,7 @@ dependencies = [
 [[package]]
 name = "reth-evm"
 version = "1.6.0"
-source = "git+https://github.com/scroll-tech/reth.git?branch=morty/fix-eth66-serve-signature#e10ce206f7ed46695e973fcb04a0c511f3f4d2c6"
+source = "git+https://github.com/scroll-tech/reth.git?branch=morty/fix-eth66-serve-signature#28acc6c481137df75b821054c955e894449035a4"
 dependencies = [
  "alloy-consensus 1.0.25",
  "alloy-eips 1.0.25",
@@ -8112,7 +8083,7 @@ dependencies = [
  "reth-execution-errors",
  "reth-execution-types",
  "reth-metrics",
- "reth-primitives-traits 1.6.0 (git+https://github.com/scroll-tech/reth.git?branch=morty/fix-eth66-serve-signature)",
+ "reth-primitives-traits",
  "reth-storage-api",
  "reth-storage-errors",
  "reth-trie-common",
@@ -8123,7 +8094,7 @@ dependencies = [
 [[package]]
 name = "reth-evm-ethereum"
 version = "1.6.0"
-source = "git+https://github.com/scroll-tech/reth.git?branch=morty/fix-eth66-serve-signature#e10ce206f7ed46695e973fcb04a0c511f3f4d2c6"
+source = "git+https://github.com/scroll-tech/reth.git?branch=morty/fix-eth66-serve-signature#28acc6c481137df75b821054c955e894449035a4"
 dependencies = [
  "alloy-consensus 1.0.25",
  "alloy-eips 1.0.25",
@@ -8135,7 +8106,7 @@ dependencies = [
  "reth-ethereum-primitives",
  "reth-evm",
  "reth-execution-types",
- "reth-primitives-traits 1.6.0 (git+https://github.com/scroll-tech/reth.git?branch=morty/fix-eth66-serve-signature)",
+ "reth-primitives-traits",
  "reth-storage-errors",
  "revm",
 ]
@@ -8143,7 +8114,7 @@ dependencies = [
 [[package]]
 name = "reth-execution-errors"
 version = "1.6.0"
-source = "git+https://github.com/scroll-tech/reth.git?branch=morty/fix-eth66-serve-signature#e10ce206f7ed46695e973fcb04a0c511f3f4d2c6"
+source = "git+https://github.com/scroll-tech/reth.git?branch=morty/fix-eth66-serve-signature#28acc6c481137df75b821054c955e894449035a4"
 dependencies = [
  "alloy-evm",
  "alloy-primitives",
@@ -8156,7 +8127,7 @@ dependencies = [
 [[package]]
 name = "reth-execution-types"
 version = "1.6.0"
-source = "git+https://github.com/scroll-tech/reth.git?branch=morty/fix-eth66-serve-signature#e10ce206f7ed46695e973fcb04a0c511f3f4d2c6"
+source = "git+https://github.com/scroll-tech/reth.git?branch=morty/fix-eth66-serve-signature#28acc6c481137df75b821054c955e894449035a4"
 dependencies = [
  "alloy-consensus 1.0.25",
  "alloy-eips 1.0.25",
@@ -8164,7 +8135,7 @@ dependencies = [
  "alloy-primitives",
  "derive_more",
  "reth-ethereum-primitives",
- "reth-primitives-traits 1.6.0 (git+https://github.com/scroll-tech/reth.git?branch=morty/fix-eth66-serve-signature)",
+ "reth-primitives-traits",
  "reth-trie-common",
  "revm",
  "serde",
@@ -8174,7 +8145,7 @@ dependencies = [
 [[package]]
 name = "reth-exex"
 version = "1.6.0"
-source = "git+https://github.com/scroll-tech/reth.git?branch=morty/fix-eth66-serve-signature#e10ce206f7ed46695e973fcb04a0c511f3f4d2c6"
+source = "git+https://github.com/scroll-tech/reth.git?branch=morty/fix-eth66-serve-signature#28acc6c481137df75b821054c955e894449035a4"
 dependencies = [
  "alloy-consensus 1.0.25",
  "alloy-eips 1.0.25",
@@ -8195,7 +8166,7 @@ dependencies = [
  "reth-node-api",
  "reth-node-core",
  "reth-payload-builder",
- "reth-primitives-traits 1.6.0 (git+https://github.com/scroll-tech/reth.git?branch=morty/fix-eth66-serve-signature)",
+ "reth-primitives-traits",
  "reth-provider",
  "reth-prune-types",
  "reth-revm",
@@ -8212,13 +8183,13 @@ dependencies = [
 [[package]]
 name = "reth-exex-types"
 version = "1.6.0"
-source = "git+https://github.com/scroll-tech/reth.git?branch=morty/fix-eth66-serve-signature#e10ce206f7ed46695e973fcb04a0c511f3f4d2c6"
+source = "git+https://github.com/scroll-tech/reth.git?branch=morty/fix-eth66-serve-signature#28acc6c481137df75b821054c955e894449035a4"
 dependencies = [
  "alloy-eips 1.0.25",
  "alloy-primitives",
  "reth-chain-state",
  "reth-execution-types",
- "reth-primitives-traits 1.6.0 (git+https://github.com/scroll-tech/reth.git?branch=morty/fix-eth66-serve-signature)",
+ "reth-primitives-traits",
  "serde",
  "serde_with",
 ]
@@ -8226,7 +8197,7 @@ dependencies = [
 [[package]]
 name = "reth-fs-util"
 version = "1.6.0"
-source = "git+https://github.com/scroll-tech/reth.git?branch=morty/fix-eth66-serve-signature#e10ce206f7ed46695e973fcb04a0c511f3f4d2c6"
+source = "git+https://github.com/scroll-tech/reth.git?branch=morty/fix-eth66-serve-signature#28acc6c481137df75b821054c955e894449035a4"
 dependencies = [
  "serde",
  "serde_json",
@@ -8236,7 +8207,7 @@ dependencies = [
 [[package]]
 name = "reth-invalid-block-hooks"
 version = "1.6.0"
-source = "git+https://github.com/scroll-tech/reth.git?branch=morty/fix-eth66-serve-signature#e10ce206f7ed46695e973fcb04a0c511f3f4d2c6"
+source = "git+https://github.com/scroll-tech/reth.git?branch=morty/fix-eth66-serve-signature#28acc6c481137df75b821054c955e894449035a4"
 dependencies = [
  "alloy-consensus 1.0.25",
  "alloy-primitives",
@@ -8249,7 +8220,7 @@ dependencies = [
  "reth-chainspec",
  "reth-engine-primitives",
  "reth-evm",
- "reth-primitives-traits 1.6.0 (git+https://github.com/scroll-tech/reth.git?branch=morty/fix-eth66-serve-signature)",
+ "reth-primitives-traits",
  "reth-provider",
  "reth-revm",
  "reth-rpc-api",
@@ -8264,7 +8235,7 @@ dependencies = [
 [[package]]
 name = "reth-ipc"
 version = "1.6.0"
-source = "git+https://github.com/scroll-tech/reth.git?branch=morty/fix-eth66-serve-signature#e10ce206f7ed46695e973fcb04a0c511f3f4d2c6"
+source = "git+https://github.com/scroll-tech/reth.git?branch=morty/fix-eth66-serve-signature#28acc6c481137df75b821054c955e894449035a4"
 dependencies = [
  "bytes",
  "futures",
@@ -8284,7 +8255,7 @@ dependencies = [
 [[package]]
 name = "reth-libmdbx"
 version = "1.6.0"
-source = "git+https://github.com/scroll-tech/reth.git?branch=morty/fix-eth66-serve-signature#e10ce206f7ed46695e973fcb04a0c511f3f4d2c6"
+source = "git+https://github.com/scroll-tech/reth.git?branch=morty/fix-eth66-serve-signature#28acc6c481137df75b821054c955e894449035a4"
 dependencies = [
  "bitflags 2.9.2",
  "byteorder",
@@ -8301,7 +8272,7 @@ dependencies = [
 [[package]]
 name = "reth-mdbx-sys"
 version = "1.6.0"
-source = "git+https://github.com/scroll-tech/reth.git?branch=morty/fix-eth66-serve-signature#e10ce206f7ed46695e973fcb04a0c511f3f4d2c6"
+source = "git+https://github.com/scroll-tech/reth.git?branch=morty/fix-eth66-serve-signature#28acc6c481137df75b821054c955e894449035a4"
 dependencies = [
  "bindgen 0.70.1",
  "cc",
@@ -8310,7 +8281,7 @@ dependencies = [
 [[package]]
 name = "reth-metrics"
 version = "1.6.0"
-source = "git+https://github.com/scroll-tech/reth.git?branch=morty/fix-eth66-serve-signature#e10ce206f7ed46695e973fcb04a0c511f3f4d2c6"
+source = "git+https://github.com/scroll-tech/reth.git?branch=morty/fix-eth66-serve-signature#28acc6c481137df75b821054c955e894449035a4"
 dependencies = [
  "futures",
  "metrics",
@@ -8322,7 +8293,7 @@ dependencies = [
 [[package]]
 name = "reth-net-banlist"
 version = "1.6.0"
-source = "git+https://github.com/scroll-tech/reth.git?branch=morty/fix-eth66-serve-signature#e10ce206f7ed46695e973fcb04a0c511f3f4d2c6"
+source = "git+https://github.com/scroll-tech/reth.git?branch=morty/fix-eth66-serve-signature#28acc6c481137df75b821054c955e894449035a4"
 dependencies = [
  "alloy-primitives",
 ]
@@ -8330,7 +8301,7 @@ dependencies = [
 [[package]]
 name = "reth-net-nat"
 version = "1.6.0"
-source = "git+https://github.com/scroll-tech/reth.git?branch=morty/fix-eth66-serve-signature#e10ce206f7ed46695e973fcb04a0c511f3f4d2c6"
+source = "git+https://github.com/scroll-tech/reth.git?branch=morty/fix-eth66-serve-signature#28acc6c481137df75b821054c955e894449035a4"
 dependencies = [
  "futures-util",
  "if-addrs",
@@ -8344,7 +8315,7 @@ dependencies = [
 [[package]]
 name = "reth-network"
 version = "1.6.0"
-source = "git+https://github.com/scroll-tech/reth.git?branch=morty/fix-eth66-serve-signature#e10ce206f7ed46695e973fcb04a0c511f3f4d2c6"
+source = "git+https://github.com/scroll-tech/reth.git?branch=morty/fix-eth66-serve-signature#28acc6c481137df75b821054c955e894449035a4"
 dependencies = [
  "alloy-consensus 1.0.25",
  "alloy-eips 1.0.25",
@@ -8379,7 +8350,7 @@ dependencies = [
  "reth-network-p2p",
  "reth-network-peers",
  "reth-network-types",
- "reth-primitives-traits 1.6.0 (git+https://github.com/scroll-tech/reth.git?branch=morty/fix-eth66-serve-signature)",
+ "reth-primitives-traits",
  "reth-storage-api",
  "reth-tasks",
  "reth-tokio-util",
@@ -8399,7 +8370,7 @@ dependencies = [
 [[package]]
 name = "reth-network-api"
 version = "1.6.0"
-source = "git+https://github.com/scroll-tech/reth.git?branch=morty/fix-eth66-serve-signature#e10ce206f7ed46695e973fcb04a0c511f3f4d2c6"
+source = "git+https://github.com/scroll-tech/reth.git?branch=morty/fix-eth66-serve-signature#28acc6c481137df75b821054c955e894449035a4"
 dependencies = [
  "alloy-consensus 1.0.25",
  "alloy-primitives",
@@ -8414,7 +8385,7 @@ dependencies = [
  "reth-network-p2p",
  "reth-network-peers",
  "reth-network-types",
- "reth-primitives-traits 1.6.0 (git+https://github.com/scroll-tech/reth.git?branch=morty/fix-eth66-serve-signature)",
+ "reth-primitives-traits",
  "reth-tokio-util",
  "serde",
  "thiserror 2.0.16",
@@ -8425,7 +8396,7 @@ dependencies = [
 [[package]]
 name = "reth-network-p2p"
 version = "1.6.0"
-source = "git+https://github.com/scroll-tech/reth.git?branch=morty/fix-eth66-serve-signature#e10ce206f7ed46695e973fcb04a0c511f3f4d2c6"
+source = "git+https://github.com/scroll-tech/reth.git?branch=morty/fix-eth66-serve-signature#28acc6c481137df75b821054c955e894449035a4"
 dependencies = [
  "alloy-consensus 1.0.25",
  "alloy-eips 1.0.25",
@@ -8439,7 +8410,7 @@ dependencies = [
  "reth-ethereum-primitives",
  "reth-network-peers",
  "reth-network-types",
- "reth-primitives-traits 1.6.0 (git+https://github.com/scroll-tech/reth.git?branch=morty/fix-eth66-serve-signature)",
+ "reth-primitives-traits",
  "reth-storage-errors",
  "tokio",
  "tracing",
@@ -8448,7 +8419,7 @@ dependencies = [
 [[package]]
 name = "reth-network-peers"
 version = "1.6.0"
-source = "git+https://github.com/scroll-tech/reth.git?branch=morty/fix-eth66-serve-signature#e10ce206f7ed46695e973fcb04a0c511f3f4d2c6"
+source = "git+https://github.com/scroll-tech/reth.git?branch=morty/fix-eth66-serve-signature#28acc6c481137df75b821054c955e894449035a4"
 dependencies = [
  "alloy-primitives",
  "alloy-rlp",
@@ -8463,7 +8434,7 @@ dependencies = [
 [[package]]
 name = "reth-network-types"
 version = "1.6.0"
-source = "git+https://github.com/scroll-tech/reth.git?branch=morty/fix-eth66-serve-signature#e10ce206f7ed46695e973fcb04a0c511f3f4d2c6"
+source = "git+https://github.com/scroll-tech/reth.git?branch=morty/fix-eth66-serve-signature#28acc6c481137df75b821054c955e894449035a4"
 dependencies = [
  "alloy-eip2124",
  "humantime-serde",
@@ -8477,7 +8448,7 @@ dependencies = [
 [[package]]
 name = "reth-nippy-jar"
 version = "1.6.0"
-source = "git+https://github.com/scroll-tech/reth.git?branch=morty/fix-eth66-serve-signature#e10ce206f7ed46695e973fcb04a0c511f3f4d2c6"
+source = "git+https://github.com/scroll-tech/reth.git?branch=morty/fix-eth66-serve-signature#28acc6c481137df75b821054c955e894449035a4"
 dependencies = [
  "anyhow",
  "bincode",
@@ -8494,7 +8465,7 @@ dependencies = [
 [[package]]
 name = "reth-node-api"
 version = "1.6.0"
-source = "git+https://github.com/scroll-tech/reth.git?branch=morty/fix-eth66-serve-signature#e10ce206f7ed46695e973fcb04a0c511f3f4d2c6"
+source = "git+https://github.com/scroll-tech/reth.git?branch=morty/fix-eth66-serve-signature#28acc6c481137df75b821054c955e894449035a4"
 dependencies = [
  "alloy-rpc-types-engine 1.0.25",
  "eyre",
@@ -8518,7 +8489,7 @@ dependencies = [
 [[package]]
 name = "reth-node-builder"
 version = "1.6.0"
-source = "git+https://github.com/scroll-tech/reth.git?branch=morty/fix-eth66-serve-signature#e10ce206f7ed46695e973fcb04a0c511f3f4d2c6"
+source = "git+https://github.com/scroll-tech/reth.git?branch=morty/fix-eth66-serve-signature#28acc6c481137df75b821054c955e894449035a4"
 dependencies = [
  "alloy-consensus 1.0.25",
  "alloy-eips 1.0.25",
@@ -8561,7 +8532,7 @@ dependencies = [
  "reth-node-events",
  "reth-node-metrics",
  "reth-payload-builder",
- "reth-primitives-traits 1.6.0 (git+https://github.com/scroll-tech/reth.git?branch=morty/fix-eth66-serve-signature)",
+ "reth-primitives-traits",
  "reth-provider",
  "reth-prune",
  "reth-rpc",
@@ -8586,7 +8557,7 @@ dependencies = [
 [[package]]
 name = "reth-node-core"
 version = "1.6.0"
-source = "git+https://github.com/scroll-tech/reth.git?branch=morty/fix-eth66-serve-signature#e10ce206f7ed46695e973fcb04a0c511f3f4d2c6"
+source = "git+https://github.com/scroll-tech/reth.git?branch=morty/fix-eth66-serve-signature#28acc6c481137df75b821054c955e894449035a4"
 dependencies = [
  "alloy-consensus 1.0.25",
  "alloy-eips 1.0.25",
@@ -8613,7 +8584,7 @@ dependencies = [
  "reth-network",
  "reth-network-p2p",
  "reth-network-peers",
- "reth-primitives-traits 1.6.0 (git+https://github.com/scroll-tech/reth.git?branch=morty/fix-eth66-serve-signature)",
+ "reth-primitives-traits",
  "reth-prune-types",
  "reth-rpc-convert",
  "reth-rpc-eth-types",
@@ -8638,7 +8609,7 @@ dependencies = [
 [[package]]
 name = "reth-node-ethereum"
 version = "1.6.0"
-source = "git+https://github.com/scroll-tech/reth.git?branch=morty/fix-eth66-serve-signature#e10ce206f7ed46695e973fcb04a0c511f3f4d2c6"
+source = "git+https://github.com/scroll-tech/reth.git?branch=morty/fix-eth66-serve-signature#28acc6c481137df75b821054c955e894449035a4"
 dependencies = [
  "alloy-eips 1.0.25",
  "alloy-network",
@@ -8658,7 +8629,7 @@ dependencies = [
  "reth-node-api",
  "reth-node-builder",
  "reth-payload-primitives",
- "reth-primitives-traits 1.6.0 (git+https://github.com/scroll-tech/reth.git?branch=morty/fix-eth66-serve-signature)",
+ "reth-primitives-traits",
  "reth-provider",
  "reth-revm",
  "reth-rpc",
@@ -8676,7 +8647,7 @@ dependencies = [
 [[package]]
 name = "reth-node-ethstats"
 version = "1.6.0"
-source = "git+https://github.com/scroll-tech/reth.git?branch=morty/fix-eth66-serve-signature#e10ce206f7ed46695e973fcb04a0c511f3f4d2c6"
+source = "git+https://github.com/scroll-tech/reth.git?branch=morty/fix-eth66-serve-signature#28acc6c481137df75b821054c955e894449035a4"
 dependencies = [
  "alloy-consensus 1.0.25",
  "alloy-primitives",
@@ -8684,7 +8655,7 @@ dependencies = [
  "futures-util",
  "reth-chain-state",
  "reth-network-api",
- "reth-primitives-traits 1.6.0 (git+https://github.com/scroll-tech/reth.git?branch=morty/fix-eth66-serve-signature)",
+ "reth-primitives-traits",
  "reth-storage-api",
  "reth-transaction-pool",
  "serde",
@@ -8700,7 +8671,7 @@ dependencies = [
 [[package]]
 name = "reth-node-events"
 version = "1.6.0"
-source = "git+https://github.com/scroll-tech/reth.git?branch=morty/fix-eth66-serve-signature#e10ce206f7ed46695e973fcb04a0c511f3f4d2c6"
+source = "git+https://github.com/scroll-tech/reth.git?branch=morty/fix-eth66-serve-signature#28acc6c481137df75b821054c955e894449035a4"
 dependencies = [
  "alloy-consensus 1.0.25",
  "alloy-eips 1.0.25",
@@ -8712,7 +8683,7 @@ dependencies = [
  "pin-project",
  "reth-engine-primitives",
  "reth-network-api",
- "reth-primitives-traits 1.6.0 (git+https://github.com/scroll-tech/reth.git?branch=morty/fix-eth66-serve-signature)",
+ "reth-primitives-traits",
  "reth-prune-types",
  "reth-stages",
  "reth-static-file-types",
@@ -8724,7 +8695,7 @@ dependencies = [
 [[package]]
 name = "reth-node-metrics"
 version = "1.6.0"
-source = "git+https://github.com/scroll-tech/reth.git?branch=morty/fix-eth66-serve-signature#e10ce206f7ed46695e973fcb04a0c511f3f4d2c6"
+source = "git+https://github.com/scroll-tech/reth.git?branch=morty/fix-eth66-serve-signature#28acc6c481137df75b821054c955e894449035a4"
 dependencies = [
  "eyre",
  "http 1.3.1",
@@ -8744,20 +8715,20 @@ dependencies = [
 [[package]]
 name = "reth-node-types"
 version = "1.6.0"
-source = "git+https://github.com/scroll-tech/reth.git?branch=morty/fix-eth66-serve-signature#e10ce206f7ed46695e973fcb04a0c511f3f4d2c6"
+source = "git+https://github.com/scroll-tech/reth.git?branch=morty/fix-eth66-serve-signature#28acc6c481137df75b821054c955e894449035a4"
 dependencies = [
  "reth-chainspec",
  "reth-db-api",
  "reth-engine-primitives",
  "reth-payload-primitives",
- "reth-primitives-traits 1.6.0 (git+https://github.com/scroll-tech/reth.git?branch=morty/fix-eth66-serve-signature)",
+ "reth-primitives-traits",
  "reth-trie-db",
 ]
 
 [[package]]
 name = "reth-optimism-primitives"
 version = "1.6.0"
-source = "git+https://github.com/scroll-tech/reth.git?branch=morty/fix-eth66-serve-signature#e10ce206f7ed46695e973fcb04a0c511f3f4d2c6"
+source = "git+https://github.com/scroll-tech/reth.git?branch=morty/fix-eth66-serve-signature#28acc6c481137df75b821054c955e894449035a4"
 dependencies = [
  "alloy-consensus 1.0.25",
  "alloy-eips 1.0.25",
@@ -8766,9 +8737,9 @@ dependencies = [
  "arbitrary",
  "bytes",
  "op-alloy-consensus",
- "reth-codecs 1.6.0 (git+https://github.com/scroll-tech/reth.git?branch=morty/fix-eth66-serve-signature)",
- "reth-primitives-traits 1.6.0 (git+https://github.com/scroll-tech/reth.git?branch=morty/fix-eth66-serve-signature)",
- "reth-zstd-compressors 1.6.0 (git+https://github.com/scroll-tech/reth.git?branch=morty/fix-eth66-serve-signature)",
+ "reth-codecs",
+ "reth-primitives-traits",
+ "reth-zstd-compressors",
  "serde",
  "serde_with",
 ]
@@ -8776,7 +8747,7 @@ dependencies = [
 [[package]]
 name = "reth-payload-builder"
 version = "1.6.0"
-source = "git+https://github.com/scroll-tech/reth.git?branch=morty/fix-eth66-serve-signature#e10ce206f7ed46695e973fcb04a0c511f3f4d2c6"
+source = "git+https://github.com/scroll-tech/reth.git?branch=morty/fix-eth66-serve-signature#28acc6c481137df75b821054c955e894449035a4"
 dependencies = [
  "alloy-consensus 1.0.25",
  "alloy-primitives",
@@ -8788,7 +8759,7 @@ dependencies = [
  "reth-metrics",
  "reth-payload-builder-primitives",
  "reth-payload-primitives",
- "reth-primitives-traits 1.6.0 (git+https://github.com/scroll-tech/reth.git?branch=morty/fix-eth66-serve-signature)",
+ "reth-primitives-traits",
  "tokio",
  "tokio-stream",
  "tracing",
@@ -8797,7 +8768,7 @@ dependencies = [
 [[package]]
 name = "reth-payload-builder-primitives"
 version = "1.6.0"
-source = "git+https://github.com/scroll-tech/reth.git?branch=morty/fix-eth66-serve-signature#e10ce206f7ed46695e973fcb04a0c511f3f4d2c6"
+source = "git+https://github.com/scroll-tech/reth.git?branch=morty/fix-eth66-serve-signature#28acc6c481137df75b821054c955e894449035a4"
 dependencies = [
  "pin-project",
  "reth-payload-primitives",
@@ -8809,7 +8780,7 @@ dependencies = [
 [[package]]
 name = "reth-payload-primitives"
 version = "1.6.0"
-source = "git+https://github.com/scroll-tech/reth.git?branch=morty/fix-eth66-serve-signature#e10ce206f7ed46695e973fcb04a0c511f3f4d2c6"
+source = "git+https://github.com/scroll-tech/reth.git?branch=morty/fix-eth66-serve-signature#28acc6c481137df75b821054c955e894449035a4"
 dependencies = [
  "alloy-eips 1.0.25",
  "alloy-primitives",
@@ -8819,8 +8790,8 @@ dependencies = [
  "reth-chain-state",
  "reth-chainspec",
  "reth-errors",
- "reth-primitives-traits 1.6.0 (git+https://github.com/scroll-tech/reth.git?branch=morty/fix-eth66-serve-signature)",
- "scroll-alloy-rpc-types-engine 1.6.0 (git+https://github.com/scroll-tech/reth.git?branch=morty/fix-eth66-serve-signature)",
+ "reth-primitives-traits",
+ "scroll-alloy-rpc-types-engine",
  "serde",
  "thiserror 2.0.16",
  "tokio",
@@ -8829,7 +8800,7 @@ dependencies = [
 [[package]]
 name = "reth-payload-util"
 version = "1.6.0"
-source = "git+https://github.com/scroll-tech/reth.git?branch=morty/fix-eth66-serve-signature#e10ce206f7ed46695e973fcb04a0c511f3f4d2c6"
+source = "git+https://github.com/scroll-tech/reth.git?branch=morty/fix-eth66-serve-signature#28acc6c481137df75b821054c955e894449035a4"
 dependencies = [
  "alloy-consensus 1.0.25",
  "alloy-primitives",
@@ -8839,31 +8810,31 @@ dependencies = [
 [[package]]
 name = "reth-payload-validator"
 version = "1.6.0"
-source = "git+https://github.com/scroll-tech/reth.git?branch=morty/fix-eth66-serve-signature#e10ce206f7ed46695e973fcb04a0c511f3f4d2c6"
+source = "git+https://github.com/scroll-tech/reth.git?branch=morty/fix-eth66-serve-signature#28acc6c481137df75b821054c955e894449035a4"
 dependencies = [
  "alloy-consensus 1.0.25",
  "alloy-rpc-types-engine 1.0.25",
- "reth-primitives-traits 1.6.0 (git+https://github.com/scroll-tech/reth.git?branch=morty/fix-eth66-serve-signature)",
+ "reth-primitives-traits",
 ]
 
 [[package]]
 name = "reth-primitives"
 version = "1.6.0"
-source = "git+https://github.com/scroll-tech/reth.git?branch=morty/fix-eth66-serve-signature#e10ce206f7ed46695e973fcb04a0c511f3f4d2c6"
+source = "git+https://github.com/scroll-tech/reth.git?branch=morty/fix-eth66-serve-signature#28acc6c481137df75b821054c955e894449035a4"
 dependencies = [
  "alloy-consensus 1.0.25",
  "c-kzg",
  "once_cell",
  "reth-ethereum-forks",
  "reth-ethereum-primitives",
- "reth-primitives-traits 1.6.0 (git+https://github.com/scroll-tech/reth.git?branch=morty/fix-eth66-serve-signature)",
+ "reth-primitives-traits",
  "reth-static-file-types",
 ]
 
 [[package]]
 name = "reth-primitives-traits"
 version = "1.6.0"
-source = "git+https://github.com/scroll-tech/reth.git?branch=morty/fix-eth66-serve-signature#e10ce206f7ed46695e973fcb04a0c511f3f4d2c6"
+source = "git+https://github.com/scroll-tech/reth.git?branch=morty/fix-eth66-serve-signature#28acc6c481137df75b821054c955e894449035a4"
 dependencies = [
  "alloy-consensus 1.0.25",
  "alloy-eips 1.0.25",
@@ -8883,38 +8854,11 @@ dependencies = [
  "proptest",
  "proptest-arbitrary-interop",
  "rayon",
- "reth-codecs 1.6.0 (git+https://github.com/scroll-tech/reth.git?branch=morty/fix-eth66-serve-signature)",
+ "reth-codecs",
  "revm-bytecode",
  "revm-primitives",
  "revm-state",
- "scroll-alloy-consensus 1.6.0 (git+https://github.com/scroll-tech/reth.git?branch=morty/fix-eth66-serve-signature)",
- "secp256k1 0.30.0",
- "serde",
- "serde_with",
- "thiserror 2.0.16",
-]
-
-[[package]]
-name = "reth-primitives-traits"
-version = "1.6.0"
-source = "git+https://github.com/scroll-tech/reth.git#d485f4718a0c93f3fc1ec453b8ddde6ce1ebe397"
-dependencies = [
- "alloy-consensus 1.0.25",
- "alloy-eips 1.0.25",
- "alloy-genesis",
- "alloy-primitives",
- "alloy-rlp",
- "alloy-rpc-types-eth",
- "alloy-trie 0.9.1",
- "auto_impl",
- "bytes",
- "derive_more",
- "once_cell",
- "op-alloy-consensus",
- "revm-bytecode",
- "revm-primitives",
- "revm-state",
- "scroll-alloy-consensus 1.6.0 (git+https://github.com/scroll-tech/reth.git)",
+ "scroll-alloy-consensus",
  "secp256k1 0.30.0",
  "serde",
  "serde_with",
@@ -8924,7 +8868,7 @@ dependencies = [
 [[package]]
 name = "reth-provider"
 version = "1.6.0"
-source = "git+https://github.com/scroll-tech/reth.git?branch=morty/fix-eth66-serve-signature#e10ce206f7ed46695e973fcb04a0c511f3f4d2c6"
+source = "git+https://github.com/scroll-tech/reth.git?branch=morty/fix-eth66-serve-signature#28acc6c481137df75b821054c955e894449035a4"
 dependencies = [
  "alloy-consensus 1.0.25",
  "alloy-eips 1.0.25",
@@ -8939,7 +8883,7 @@ dependencies = [
  "rayon",
  "reth-chain-state",
  "reth-chainspec",
- "reth-codecs 1.6.0 (git+https://github.com/scroll-tech/reth.git?branch=morty/fix-eth66-serve-signature)",
+ "reth-codecs",
  "reth-db",
  "reth-db-api",
  "reth-errors",
@@ -8951,7 +8895,7 @@ dependencies = [
  "reth-metrics",
  "reth-nippy-jar",
  "reth-node-types",
- "reth-primitives-traits 1.6.0 (git+https://github.com/scroll-tech/reth.git?branch=morty/fix-eth66-serve-signature)",
+ "reth-primitives-traits",
  "reth-prune-types",
  "reth-stages-types",
  "reth-static-file-types",
@@ -8969,7 +8913,7 @@ dependencies = [
 [[package]]
 name = "reth-prune"
 version = "1.6.0"
-source = "git+https://github.com/scroll-tech/reth.git?branch=morty/fix-eth66-serve-signature#e10ce206f7ed46695e973fcb04a0c511f3f4d2c6"
+source = "git+https://github.com/scroll-tech/reth.git?branch=morty/fix-eth66-serve-signature#28acc6c481137df75b821054c955e894449035a4"
 dependencies = [
  "alloy-consensus 1.0.25",
  "alloy-eips 1.0.25",
@@ -8983,7 +8927,7 @@ dependencies = [
  "reth-errors",
  "reth-exex-types",
  "reth-metrics",
- "reth-primitives-traits 1.6.0 (git+https://github.com/scroll-tech/reth.git?branch=morty/fix-eth66-serve-signature)",
+ "reth-primitives-traits",
  "reth-provider",
  "reth-prune-types",
  "reth-static-file-types",
@@ -8997,13 +8941,13 @@ dependencies = [
 [[package]]
 name = "reth-prune-types"
 version = "1.6.0"
-source = "git+https://github.com/scroll-tech/reth.git?branch=morty/fix-eth66-serve-signature#e10ce206f7ed46695e973fcb04a0c511f3f4d2c6"
+source = "git+https://github.com/scroll-tech/reth.git?branch=morty/fix-eth66-serve-signature#28acc6c481137df75b821054c955e894449035a4"
 dependencies = [
  "alloy-primitives",
  "arbitrary",
  "derive_more",
  "modular-bitfield",
- "reth-codecs 1.6.0 (git+https://github.com/scroll-tech/reth.git?branch=morty/fix-eth66-serve-signature)",
+ "reth-codecs",
  "serde",
  "thiserror 2.0.16",
 ]
@@ -9011,10 +8955,10 @@ dependencies = [
 [[package]]
 name = "reth-revm"
 version = "1.6.0"
-source = "git+https://github.com/scroll-tech/reth.git?branch=morty/fix-eth66-serve-signature#e10ce206f7ed46695e973fcb04a0c511f3f4d2c6"
+source = "git+https://github.com/scroll-tech/reth.git?branch=morty/fix-eth66-serve-signature#28acc6c481137df75b821054c955e894449035a4"
 dependencies = [
  "alloy-primitives",
- "reth-primitives-traits 1.6.0 (git+https://github.com/scroll-tech/reth.git?branch=morty/fix-eth66-serve-signature)",
+ "reth-primitives-traits",
  "reth-storage-api",
  "reth-storage-errors",
  "reth-trie",
@@ -9024,7 +8968,7 @@ dependencies = [
 [[package]]
 name = "reth-rpc"
 version = "1.6.0"
-source = "git+https://github.com/scroll-tech/reth.git?branch=morty/fix-eth66-serve-signature#e10ce206f7ed46695e973fcb04a0c511f3f4d2c6"
+source = "git+https://github.com/scroll-tech/reth.git?branch=morty/fix-eth66-serve-signature#28acc6c481137df75b821054c955e894449035a4"
 dependencies = [
  "alloy-consensus 1.0.25",
  "alloy-dyn-abi",
@@ -9071,7 +9015,7 @@ dependencies = [
  "reth-network-peers",
  "reth-network-types",
  "reth-node-api",
- "reth-primitives-traits 1.6.0 (git+https://github.com/scroll-tech/reth.git?branch=morty/fix-eth66-serve-signature)",
+ "reth-primitives-traits",
  "reth-revm",
  "reth-rpc-api",
  "reth-rpc-convert",
@@ -9101,7 +9045,7 @@ dependencies = [
 [[package]]
 name = "reth-rpc-api"
 version = "1.6.0"
-source = "git+https://github.com/scroll-tech/reth.git?branch=morty/fix-eth66-serve-signature#e10ce206f7ed46695e973fcb04a0c511f3f4d2c6"
+source = "git+https://github.com/scroll-tech/reth.git?branch=morty/fix-eth66-serve-signature#28acc6c481137df75b821054c955e894449035a4"
 dependencies = [
  "alloy-eips 1.0.25",
  "alloy-genesis",
@@ -9129,7 +9073,7 @@ dependencies = [
 [[package]]
 name = "reth-rpc-builder"
 version = "1.6.0"
-source = "git+https://github.com/scroll-tech/reth.git?branch=morty/fix-eth66-serve-signature#e10ce206f7ed46695e973fcb04a0c511f3f4d2c6"
+source = "git+https://github.com/scroll-tech/reth.git?branch=morty/fix-eth66-serve-signature#28acc6c481137df75b821054c955e894449035a4"
 dependencies = [
  "alloy-network",
  "alloy-provider",
@@ -9145,7 +9089,7 @@ dependencies = [
  "reth-metrics",
  "reth-network-api",
  "reth-node-core",
- "reth-primitives-traits 1.6.0 (git+https://github.com/scroll-tech/reth.git?branch=morty/fix-eth66-serve-signature)",
+ "reth-primitives-traits",
  "reth-rpc",
  "reth-rpc-api",
  "reth-rpc-eth-api",
@@ -9167,7 +9111,7 @@ dependencies = [
 [[package]]
 name = "reth-rpc-convert"
 version = "1.6.0"
-source = "git+https://github.com/scroll-tech/reth.git?branch=morty/fix-eth66-serve-signature#e10ce206f7ed46695e973fcb04a0c511f3f4d2c6"
+source = "git+https://github.com/scroll-tech/reth.git?branch=morty/fix-eth66-serve-signature#28acc6c481137df75b821054c955e894449035a4"
 dependencies = [
  "alloy-consensus 1.0.25",
  "alloy-json-rpc",
@@ -9178,12 +9122,12 @@ dependencies = [
  "jsonrpsee-types",
  "reth-ethereum-primitives",
  "reth-evm",
- "reth-primitives-traits 1.6.0 (git+https://github.com/scroll-tech/reth.git?branch=morty/fix-eth66-serve-signature)",
- "reth-scroll-primitives 1.6.0 (git+https://github.com/scroll-tech/reth.git?branch=morty/fix-eth66-serve-signature)",
+ "reth-primitives-traits",
+ "reth-scroll-primitives",
  "reth-storage-api",
  "revm-context",
  "revm-scroll",
- "scroll-alloy-consensus 1.6.0 (git+https://github.com/scroll-tech/reth.git?branch=morty/fix-eth66-serve-signature)",
+ "scroll-alloy-consensus",
  "scroll-alloy-evm",
  "scroll-alloy-rpc-types",
  "thiserror 2.0.16",
@@ -9192,7 +9136,7 @@ dependencies = [
 [[package]]
 name = "reth-rpc-engine-api"
 version = "1.6.0"
-source = "git+https://github.com/scroll-tech/reth.git?branch=morty/fix-eth66-serve-signature#e10ce206f7ed46695e973fcb04a0c511f3f4d2c6"
+source = "git+https://github.com/scroll-tech/reth.git?branch=morty/fix-eth66-serve-signature#28acc6c481137df75b821054c955e894449035a4"
 dependencies = [
  "alloy-eips 1.0.25",
  "alloy-primitives",
@@ -9208,7 +9152,7 @@ dependencies = [
  "reth-payload-builder",
  "reth-payload-builder-primitives",
  "reth-payload-primitives",
- "reth-primitives-traits 1.6.0 (git+https://github.com/scroll-tech/reth.git?branch=morty/fix-eth66-serve-signature)",
+ "reth-primitives-traits",
  "reth-rpc-api",
  "reth-storage-api",
  "reth-tasks",
@@ -9222,7 +9166,7 @@ dependencies = [
 [[package]]
 name = "reth-rpc-eth-api"
 version = "1.6.0"
-source = "git+https://github.com/scroll-tech/reth.git?branch=morty/fix-eth66-serve-signature#e10ce206f7ed46695e973fcb04a0c511f3f4d2c6"
+source = "git+https://github.com/scroll-tech/reth.git?branch=morty/fix-eth66-serve-signature#28acc6c481137df75b821054c955e894449035a4"
 dependencies = [
  "alloy-consensus 1.0.25",
  "alloy-dyn-abi",
@@ -9248,7 +9192,7 @@ dependencies = [
  "reth-evm",
  "reth-network-api",
  "reth-node-api",
- "reth-primitives-traits 1.6.0 (git+https://github.com/scroll-tech/reth.git?branch=morty/fix-eth66-serve-signature)",
+ "reth-primitives-traits",
  "reth-revm",
  "reth-rpc-convert",
  "reth-rpc-eth-types",
@@ -9267,7 +9211,7 @@ dependencies = [
 [[package]]
 name = "reth-rpc-eth-types"
 version = "1.6.0"
-source = "git+https://github.com/scroll-tech/reth.git?branch=morty/fix-eth66-serve-signature#e10ce206f7ed46695e973fcb04a0c511f3f4d2c6"
+source = "git+https://github.com/scroll-tech/reth.git?branch=morty/fix-eth66-serve-signature#28acc6c481137df75b821054c955e894449035a4"
 dependencies = [
  "alloy-consensus 1.0.25",
  "alloy-eips 1.0.25",
@@ -9290,7 +9234,7 @@ dependencies = [
  "reth-evm",
  "reth-execution-types",
  "reth-metrics",
- "reth-primitives-traits 1.6.0 (git+https://github.com/scroll-tech/reth.git?branch=morty/fix-eth66-serve-signature)",
+ "reth-primitives-traits",
  "reth-revm",
  "reth-rpc-convert",
  "reth-rpc-server-types",
@@ -9311,7 +9255,7 @@ dependencies = [
 [[package]]
 name = "reth-rpc-layer"
 version = "1.6.0"
-source = "git+https://github.com/scroll-tech/reth.git?branch=morty/fix-eth66-serve-signature#e10ce206f7ed46695e973fcb04a0c511f3f4d2c6"
+source = "git+https://github.com/scroll-tech/reth.git?branch=morty/fix-eth66-serve-signature#28acc6c481137df75b821054c955e894449035a4"
 dependencies = [
  "alloy-rpc-types-engine 1.0.25",
  "http 1.3.1",
@@ -9325,7 +9269,7 @@ dependencies = [
 [[package]]
 name = "reth-rpc-server-types"
 version = "1.6.0"
-source = "git+https://github.com/scroll-tech/reth.git?branch=morty/fix-eth66-serve-signature#e10ce206f7ed46695e973fcb04a0c511f3f4d2c6"
+source = "git+https://github.com/scroll-tech/reth.git?branch=morty/fix-eth66-serve-signature#28acc6c481137df75b821054c955e894449035a4"
 dependencies = [
  "alloy-eips 1.0.25",
  "alloy-primitives",
@@ -9341,7 +9285,7 @@ dependencies = [
 [[package]]
 name = "reth-scroll-chainspec"
 version = "1.6.0"
-source = "git+https://github.com/scroll-tech/reth.git?branch=morty/fix-eth66-serve-signature#e10ce206f7ed46695e973fcb04a0c511f3f4d2c6"
+source = "git+https://github.com/scroll-tech/reth.git?branch=morty/fix-eth66-serve-signature#28acc6c481137df75b821054c955e894449035a4"
 dependencies = [
  "alloy-chains",
  "alloy-consensus 1.0.25",
@@ -9355,7 +9299,7 @@ dependencies = [
  "reth-chainspec",
  "reth-ethereum-forks",
  "reth-network-peers",
- "reth-primitives-traits 1.6.0 (git+https://github.com/scroll-tech/reth.git?branch=morty/fix-eth66-serve-signature)",
+ "reth-primitives-traits",
  "reth-scroll-forks",
  "reth-trie-common",
  "scroll-alloy-hardforks",
@@ -9366,7 +9310,7 @@ dependencies = [
 [[package]]
 name = "reth-scroll-cli"
 version = "1.6.0"
-source = "git+https://github.com/scroll-tech/reth.git?branch=morty/fix-eth66-serve-signature#e10ce206f7ed46695e973fcb04a0c511f3f4d2c6"
+source = "git+https://github.com/scroll-tech/reth.git?branch=morty/fix-eth66-serve-signature#28acc6c481137df75b821054c955e894449035a4"
 dependencies = [
  "clap",
  "eyre",
@@ -9382,7 +9326,7 @@ dependencies = [
  "reth-scroll-consensus",
  "reth-scroll-evm",
  "reth-scroll-node",
- "reth-scroll-primitives 1.6.0 (git+https://github.com/scroll-tech/reth.git?branch=morty/fix-eth66-serve-signature)",
+ "reth-scroll-primitives",
  "reth-tracing",
  "tracing",
 ]
@@ -9390,7 +9334,7 @@ dependencies = [
 [[package]]
 name = "reth-scroll-consensus"
 version = "1.6.0"
-source = "git+https://github.com/scroll-tech/reth.git?branch=morty/fix-eth66-serve-signature#e10ce206f7ed46695e973fcb04a0c511f3f4d2c6"
+source = "git+https://github.com/scroll-tech/reth.git?branch=morty/fix-eth66-serve-signature#28acc6c481137df75b821054c955e894449035a4"
 dependencies = [
  "alloy-consensus 1.0.25",
  "alloy-primitives",
@@ -9399,9 +9343,9 @@ dependencies = [
  "reth-consensus-common",
  "reth-ethereum-consensus",
  "reth-execution-types",
- "reth-primitives-traits 1.6.0 (git+https://github.com/scroll-tech/reth.git?branch=morty/fix-eth66-serve-signature)",
- "reth-scroll-primitives 1.6.0 (git+https://github.com/scroll-tech/reth.git?branch=morty/fix-eth66-serve-signature)",
- "scroll-alloy-consensus 1.6.0 (git+https://github.com/scroll-tech/reth.git?branch=morty/fix-eth66-serve-signature)",
+ "reth-primitives-traits",
+ "reth-scroll-primitives",
+ "scroll-alloy-consensus",
  "scroll-alloy-hardforks",
  "thiserror 2.0.16",
  "tracing",
@@ -9410,7 +9354,7 @@ dependencies = [
 [[package]]
 name = "reth-scroll-engine-primitives"
 version = "1.6.0"
-source = "git+https://github.com/scroll-tech/reth.git?branch=morty/fix-eth66-serve-signature#e10ce206f7ed46695e973fcb04a0c511f3f4d2c6"
+source = "git+https://github.com/scroll-tech/reth.git?branch=morty/fix-eth66-serve-signature#28acc6c481137df75b821054c955e894449035a4"
 dependencies = [
  "alloy-consensus 1.0.25",
  "alloy-eips 1.0.25",
@@ -9423,11 +9367,11 @@ dependencies = [
  "reth-payload-builder",
  "reth-payload-primitives",
  "reth-primitives",
- "reth-primitives-traits 1.6.0 (git+https://github.com/scroll-tech/reth.git?branch=morty/fix-eth66-serve-signature)",
+ "reth-primitives-traits",
  "reth-scroll-chainspec",
- "reth-scroll-primitives 1.6.0 (git+https://github.com/scroll-tech/reth.git?branch=morty/fix-eth66-serve-signature)",
+ "reth-scroll-primitives",
  "scroll-alloy-hardforks",
- "scroll-alloy-rpc-types-engine 1.6.0 (git+https://github.com/scroll-tech/reth.git?branch=morty/fix-eth66-serve-signature)",
+ "scroll-alloy-rpc-types-engine",
  "serde",
  "sha2 0.10.9",
 ]
@@ -9435,7 +9379,7 @@ dependencies = [
 [[package]]
 name = "reth-scroll-evm"
 version = "1.6.0"
-source = "git+https://github.com/scroll-tech/reth.git?branch=morty/fix-eth66-serve-signature#e10ce206f7ed46695e973fcb04a0c511f3f4d2c6"
+source = "git+https://github.com/scroll-tech/reth.git?branch=morty/fix-eth66-serve-signature#28acc6c481137df75b821054c955e894449035a4"
 dependencies = [
  "alloy-consensus 1.0.25",
  "alloy-eips 1.0.25",
@@ -9447,15 +9391,15 @@ dependencies = [
  "reth-evm",
  "reth-execution-types",
  "reth-primitives",
- "reth-primitives-traits 1.6.0 (git+https://github.com/scroll-tech/reth.git?branch=morty/fix-eth66-serve-signature)",
+ "reth-primitives-traits",
  "reth-scroll-chainspec",
  "reth-scroll-forks",
- "reth-scroll-primitives 1.6.0 (git+https://github.com/scroll-tech/reth.git?branch=morty/fix-eth66-serve-signature)",
+ "reth-scroll-primitives",
  "reth-storage-api",
  "revm",
  "revm-primitives",
  "revm-scroll",
- "scroll-alloy-consensus 1.6.0 (git+https://github.com/scroll-tech/reth.git?branch=morty/fix-eth66-serve-signature)",
+ "scroll-alloy-consensus",
  "scroll-alloy-evm",
  "scroll-alloy-hardforks",
  "thiserror 2.0.16",
@@ -9465,7 +9409,7 @@ dependencies = [
 [[package]]
 name = "reth-scroll-forks"
 version = "1.6.0"
-source = "git+https://github.com/scroll-tech/reth.git?branch=morty/fix-eth66-serve-signature#e10ce206f7ed46695e973fcb04a0c511f3f4d2c6"
+source = "git+https://github.com/scroll-tech/reth.git?branch=morty/fix-eth66-serve-signature#28acc6c481137df75b821054c955e894449035a4"
 dependencies = [
  "alloy-chains",
  "alloy-primitives",
@@ -9479,7 +9423,7 @@ dependencies = [
 [[package]]
 name = "reth-scroll-node"
 version = "1.6.0"
-source = "git+https://github.com/scroll-tech/reth.git?branch=morty/fix-eth66-serve-signature#e10ce206f7ed46695e973fcb04a0c511f3f4d2c6"
+source = "git+https://github.com/scroll-tech/reth.git?branch=morty/fix-eth66-serve-signature#28acc6c481137df75b821054c955e894449035a4"
 dependencies = [
  "alloy-consensus 1.0.25",
  "alloy-genesis",
@@ -9501,7 +9445,7 @@ dependencies = [
  "reth-node-types",
  "reth-payload-builder",
  "reth-primitives",
- "reth-primitives-traits 1.6.0 (git+https://github.com/scroll-tech/reth.git?branch=morty/fix-eth66-serve-signature)",
+ "reth-primitives-traits",
  "reth-provider",
  "reth-rpc-eth-types",
  "reth-rpc-server-types",
@@ -9510,7 +9454,7 @@ dependencies = [
  "reth-scroll-engine-primitives",
  "reth-scroll-evm",
  "reth-scroll-payload",
- "reth-scroll-primitives 1.6.0 (git+https://github.com/scroll-tech/reth.git?branch=morty/fix-eth66-serve-signature)",
+ "reth-scroll-primitives",
  "reth-scroll-rpc",
  "reth-scroll-txpool",
  "reth-tasks",
@@ -9518,11 +9462,11 @@ dependencies = [
  "reth-transaction-pool",
  "reth-trie-db",
  "revm",
- "scroll-alloy-consensus 1.6.0 (git+https://github.com/scroll-tech/reth.git?branch=morty/fix-eth66-serve-signature)",
+ "scroll-alloy-consensus",
  "scroll-alloy-evm",
  "scroll-alloy-hardforks",
  "scroll-alloy-network",
- "scroll-alloy-rpc-types-engine 1.6.0 (git+https://github.com/scroll-tech/reth.git?branch=morty/fix-eth66-serve-signature)",
+ "scroll-alloy-rpc-types-engine",
  "scroll-db 0.0.1 (git+https://github.com/scroll-tech/rollup-node.git?branch=morty/fix-eth66-serve-signature)",
  "serde_json",
  "tokio",
@@ -9532,7 +9476,7 @@ dependencies = [
 [[package]]
 name = "reth-scroll-payload"
 version = "1.6.0"
-source = "git+https://github.com/scroll-tech/reth.git?branch=morty/fix-eth66-serve-signature#e10ce206f7ed46695e973fcb04a0c511f3f4d2c6"
+source = "git+https://github.com/scroll-tech/reth.git?branch=morty/fix-eth66-serve-signature#28acc6c481137df75b821054c955e894449035a4"
 dependencies = [
  "alloy-consensus 1.0.25",
  "alloy-primitives",
@@ -9546,12 +9490,12 @@ dependencies = [
  "reth-payload-builder",
  "reth-payload-primitives",
  "reth-payload-util",
- "reth-primitives-traits 1.6.0 (git+https://github.com/scroll-tech/reth.git?branch=morty/fix-eth66-serve-signature)",
+ "reth-primitives-traits",
  "reth-revm",
  "reth-scroll-chainspec",
  "reth-scroll-engine-primitives",
  "reth-scroll-evm",
- "reth-scroll-primitives 1.6.0 (git+https://github.com/scroll-tech/reth.git?branch=morty/fix-eth66-serve-signature)",
+ "reth-scroll-primitives",
  "reth-storage-api",
  "reth-transaction-pool",
  "revm",
@@ -9563,7 +9507,7 @@ dependencies = [
 [[package]]
 name = "reth-scroll-primitives"
 version = "1.6.0"
-source = "git+https://github.com/scroll-tech/reth.git?branch=morty/fix-eth66-serve-signature#e10ce206f7ed46695e973fcb04a0c511f3f4d2c6"
+source = "git+https://github.com/scroll-tech/reth.git?branch=morty/fix-eth66-serve-signature#28acc6c481137df75b821054c955e894449035a4"
 dependencies = [
  "alloy-consensus 1.0.25",
  "alloy-eips 1.0.25",
@@ -9573,35 +9517,17 @@ dependencies = [
  "bytes",
  "modular-bitfield",
  "once_cell",
- "reth-codecs 1.6.0 (git+https://github.com/scroll-tech/reth.git?branch=morty/fix-eth66-serve-signature)",
- "reth-primitives-traits 1.6.0 (git+https://github.com/scroll-tech/reth.git?branch=morty/fix-eth66-serve-signature)",
- "reth-zstd-compressors 1.6.0 (git+https://github.com/scroll-tech/reth.git?branch=morty/fix-eth66-serve-signature)",
- "scroll-alloy-consensus 1.6.0 (git+https://github.com/scroll-tech/reth.git?branch=morty/fix-eth66-serve-signature)",
- "serde",
-]
-
-[[package]]
-name = "reth-scroll-primitives"
-version = "1.6.0"
-source = "git+https://github.com/scroll-tech/reth.git#d485f4718a0c93f3fc1ec453b8ddde6ce1ebe397"
-dependencies = [
- "alloy-consensus 1.0.25",
- "alloy-eips 1.0.25",
- "alloy-primitives",
- "alloy-rlp",
- "bytes",
- "once_cell",
- "reth-codecs 1.6.0 (git+https://github.com/scroll-tech/reth.git)",
- "reth-primitives-traits 1.6.0 (git+https://github.com/scroll-tech/reth.git)",
- "reth-zstd-compressors 1.6.0 (git+https://github.com/scroll-tech/reth.git)",
- "scroll-alloy-consensus 1.6.0 (git+https://github.com/scroll-tech/reth.git)",
+ "reth-codecs",
+ "reth-primitives-traits",
+ "reth-zstd-compressors",
+ "scroll-alloy-consensus",
  "serde",
 ]
 
 [[package]]
 name = "reth-scroll-rpc"
 version = "1.6.0"
-source = "git+https://github.com/scroll-tech/reth.git?branch=morty/fix-eth66-serve-signature#e10ce206f7ed46695e973fcb04a0c511f3f4d2c6"
+source = "git+https://github.com/scroll-tech/reth.git?branch=morty/fix-eth66-serve-signature#28acc6c481137df75b821054c955e894449035a4"
 dependencies = [
  "alloy-consensus 1.0.25",
  "alloy-eips 1.0.25",
@@ -9618,7 +9544,7 @@ dependencies = [
  "reth-evm",
  "reth-node-api",
  "reth-node-builder",
- "reth-primitives-traits 1.6.0 (git+https://github.com/scroll-tech/reth.git?branch=morty/fix-eth66-serve-signature)",
+ "reth-primitives-traits",
  "reth-provider",
  "reth-rpc",
  "reth-rpc-convert",
@@ -9626,11 +9552,11 @@ dependencies = [
  "reth-rpc-eth-types",
  "reth-scroll-chainspec",
  "reth-scroll-evm",
- "reth-scroll-primitives 1.6.0 (git+https://github.com/scroll-tech/reth.git?branch=morty/fix-eth66-serve-signature)",
+ "reth-scroll-primitives",
  "reth-tasks",
  "reth-transaction-pool",
  "revm",
- "scroll-alloy-consensus 1.6.0 (git+https://github.com/scroll-tech/reth.git?branch=morty/fix-eth66-serve-signature)",
+ "scroll-alloy-consensus",
  "scroll-alloy-hardforks",
  "scroll-alloy-network",
  "scroll-alloy-rpc-types",
@@ -9642,7 +9568,7 @@ dependencies = [
 [[package]]
 name = "reth-scroll-txpool"
 version = "1.6.0"
-source = "git+https://github.com/scroll-tech/reth.git?branch=morty/fix-eth66-serve-signature#e10ce206f7ed46695e973fcb04a0c511f3f4d2c6"
+source = "git+https://github.com/scroll-tech/reth.git?branch=morty/fix-eth66-serve-signature#28acc6c481137df75b821054c955e894449035a4"
 dependencies = [
  "alloy-consensus 1.0.25",
  "alloy-eips 1.0.25",
@@ -9651,22 +9577,22 @@ dependencies = [
  "derive_more",
  "parking_lot 0.12.4",
  "reth-chainspec",
- "reth-primitives-traits 1.6.0 (git+https://github.com/scroll-tech/reth.git?branch=morty/fix-eth66-serve-signature)",
+ "reth-primitives-traits",
  "reth-revm",
  "reth-scroll-consensus",
  "reth-scroll-evm",
  "reth-scroll-forks",
- "reth-scroll-primitives 1.6.0 (git+https://github.com/scroll-tech/reth.git?branch=morty/fix-eth66-serve-signature)",
+ "reth-scroll-primitives",
  "reth-storage-api",
  "reth-transaction-pool",
  "revm-scroll",
- "scroll-alloy-consensus 1.6.0 (git+https://github.com/scroll-tech/reth.git?branch=morty/fix-eth66-serve-signature)",
+ "scroll-alloy-consensus",
 ]
 
 [[package]]
 name = "reth-stages"
 version = "1.6.0"
-source = "git+https://github.com/scroll-tech/reth.git?branch=morty/fix-eth66-serve-signature#e10ce206f7ed46695e973fcb04a0c511f3f4d2c6"
+source = "git+https://github.com/scroll-tech/reth.git?branch=morty/fix-eth66-serve-signature#28acc6c481137df75b821054c955e894449035a4"
 dependencies = [
  "alloy-consensus 1.0.25",
  "alloy-eips 1.0.25",
@@ -9680,7 +9606,7 @@ dependencies = [
  "rayon",
  "reqwest",
  "reth-chainspec",
- "reth-codecs 1.6.0 (git+https://github.com/scroll-tech/reth.git?branch=morty/fix-eth66-serve-signature)",
+ "reth-codecs",
  "reth-config",
  "reth-consensus",
  "reth-db",
@@ -9695,7 +9621,7 @@ dependencies = [
  "reth-exex",
  "reth-fs-util",
  "reth-network-p2p",
- "reth-primitives-traits 1.6.0 (git+https://github.com/scroll-tech/reth.git?branch=morty/fix-eth66-serve-signature)",
+ "reth-primitives-traits",
  "reth-provider",
  "reth-prune",
  "reth-prune-types",
@@ -9716,7 +9642,7 @@ dependencies = [
 [[package]]
 name = "reth-stages-api"
 version = "1.6.0"
-source = "git+https://github.com/scroll-tech/reth.git?branch=morty/fix-eth66-serve-signature#e10ce206f7ed46695e973fcb04a0c511f3f4d2c6"
+source = "git+https://github.com/scroll-tech/reth.git?branch=morty/fix-eth66-serve-signature#28acc6c481137df75b821054c955e894449035a4"
 dependencies = [
  "alloy-eips 1.0.25",
  "alloy-primitives",
@@ -9728,7 +9654,7 @@ dependencies = [
  "reth-errors",
  "reth-metrics",
  "reth-network-p2p",
- "reth-primitives-traits 1.6.0 (git+https://github.com/scroll-tech/reth.git?branch=morty/fix-eth66-serve-signature)",
+ "reth-primitives-traits",
  "reth-provider",
  "reth-prune",
  "reth-stages-types",
@@ -9743,13 +9669,13 @@ dependencies = [
 [[package]]
 name = "reth-stages-types"
 version = "1.6.0"
-source = "git+https://github.com/scroll-tech/reth.git?branch=morty/fix-eth66-serve-signature#e10ce206f7ed46695e973fcb04a0c511f3f4d2c6"
+source = "git+https://github.com/scroll-tech/reth.git?branch=morty/fix-eth66-serve-signature#28acc6c481137df75b821054c955e894449035a4"
 dependencies = [
  "alloy-primitives",
  "arbitrary",
  "bytes",
  "modular-bitfield",
- "reth-codecs 1.6.0 (git+https://github.com/scroll-tech/reth.git?branch=morty/fix-eth66-serve-signature)",
+ "reth-codecs",
  "reth-trie-common",
  "serde",
 ]
@@ -9757,14 +9683,14 @@ dependencies = [
 [[package]]
 name = "reth-static-file"
 version = "1.6.0"
-source = "git+https://github.com/scroll-tech/reth.git?branch=morty/fix-eth66-serve-signature#e10ce206f7ed46695e973fcb04a0c511f3f4d2c6"
+source = "git+https://github.com/scroll-tech/reth.git?branch=morty/fix-eth66-serve-signature#28acc6c481137df75b821054c955e894449035a4"
 dependencies = [
  "alloy-primitives",
  "parking_lot 0.12.4",
  "rayon",
- "reth-codecs 1.6.0 (git+https://github.com/scroll-tech/reth.git?branch=morty/fix-eth66-serve-signature)",
+ "reth-codecs",
  "reth-db-api",
- "reth-primitives-traits 1.6.0 (git+https://github.com/scroll-tech/reth.git?branch=morty/fix-eth66-serve-signature)",
+ "reth-primitives-traits",
  "reth-provider",
  "reth-prune-types",
  "reth-stages-types",
@@ -9777,7 +9703,7 @@ dependencies = [
 [[package]]
 name = "reth-static-file-types"
 version = "1.6.0"
-source = "git+https://github.com/scroll-tech/reth.git?branch=morty/fix-eth66-serve-signature#e10ce206f7ed46695e973fcb04a0c511f3f4d2c6"
+source = "git+https://github.com/scroll-tech/reth.git?branch=morty/fix-eth66-serve-signature#28acc6c481137df75b821054c955e894449035a4"
 dependencies = [
  "alloy-primitives",
  "clap",
@@ -9789,7 +9715,7 @@ dependencies = [
 [[package]]
 name = "reth-storage-api"
 version = "1.6.0"
-source = "git+https://github.com/scroll-tech/reth.git?branch=morty/fix-eth66-serve-signature#e10ce206f7ed46695e973fcb04a0c511f3f4d2c6"
+source = "git+https://github.com/scroll-tech/reth.git?branch=morty/fix-eth66-serve-signature#28acc6c481137df75b821054c955e894449035a4"
 dependencies = [
  "alloy-consensus 1.0.25",
  "alloy-eips 1.0.25",
@@ -9801,7 +9727,7 @@ dependencies = [
  "reth-db-models",
  "reth-ethereum-primitives",
  "reth-execution-types",
- "reth-primitives-traits 1.6.0 (git+https://github.com/scroll-tech/reth.git?branch=morty/fix-eth66-serve-signature)",
+ "reth-primitives-traits",
  "reth-prune-types",
  "reth-stages-types",
  "reth-storage-errors",
@@ -9813,13 +9739,13 @@ dependencies = [
 [[package]]
 name = "reth-storage-errors"
 version = "1.6.0"
-source = "git+https://github.com/scroll-tech/reth.git?branch=morty/fix-eth66-serve-signature#e10ce206f7ed46695e973fcb04a0c511f3f4d2c6"
+source = "git+https://github.com/scroll-tech/reth.git?branch=morty/fix-eth66-serve-signature#28acc6c481137df75b821054c955e894449035a4"
 dependencies = [
  "alloy-eips 1.0.25",
  "alloy-primitives",
  "alloy-rlp",
  "derive_more",
- "reth-primitives-traits 1.6.0 (git+https://github.com/scroll-tech/reth.git?branch=morty/fix-eth66-serve-signature)",
+ "reth-primitives-traits",
  "reth-prune-types",
  "reth-static-file-types",
  "revm-database-interface",
@@ -9829,7 +9755,7 @@ dependencies = [
 [[package]]
 name = "reth-tasks"
 version = "1.6.0"
-source = "git+https://github.com/scroll-tech/reth.git?branch=morty/fix-eth66-serve-signature#e10ce206f7ed46695e973fcb04a0c511f3f4d2c6"
+source = "git+https://github.com/scroll-tech/reth.git?branch=morty/fix-eth66-serve-signature#28acc6c481137df75b821054c955e894449035a4"
 dependencies = [
  "auto_impl",
  "dyn-clone",
@@ -9847,7 +9773,7 @@ dependencies = [
 [[package]]
 name = "reth-testing-utils"
 version = "1.6.0"
-source = "git+https://github.com/scroll-tech/reth.git?branch=morty/fix-eth66-serve-signature#e10ce206f7ed46695e973fcb04a0c511f3f4d2c6"
+source = "git+https://github.com/scroll-tech/reth.git?branch=morty/fix-eth66-serve-signature#28acc6c481137df75b821054c955e894449035a4"
 dependencies = [
  "alloy-consensus 1.0.25",
  "alloy-eips 1.0.25",
@@ -9856,14 +9782,14 @@ dependencies = [
  "rand 0.8.5",
  "rand 0.9.2",
  "reth-ethereum-primitives",
- "reth-primitives-traits 1.6.0 (git+https://github.com/scroll-tech/reth.git?branch=morty/fix-eth66-serve-signature)",
+ "reth-primitives-traits",
  "secp256k1 0.30.0",
 ]
 
 [[package]]
 name = "reth-tokio-util"
 version = "1.6.0"
-source = "git+https://github.com/scroll-tech/reth.git?branch=morty/fix-eth66-serve-signature#e10ce206f7ed46695e973fcb04a0c511f3f4d2c6"
+source = "git+https://github.com/scroll-tech/reth.git?branch=morty/fix-eth66-serve-signature#28acc6c481137df75b821054c955e894449035a4"
 dependencies = [
  "tokio",
  "tokio-stream",
@@ -9873,7 +9799,7 @@ dependencies = [
 [[package]]
 name = "reth-tracing"
 version = "1.6.0"
-source = "git+https://github.com/scroll-tech/reth.git?branch=morty/fix-eth66-serve-signature#e10ce206f7ed46695e973fcb04a0c511f3f4d2c6"
+source = "git+https://github.com/scroll-tech/reth.git?branch=morty/fix-eth66-serve-signature#28acc6c481137df75b821054c955e894449035a4"
 dependencies = [
  "clap",
  "eyre",
@@ -9888,7 +9814,7 @@ dependencies = [
 [[package]]
 name = "reth-transaction-pool"
 version = "1.6.0"
-source = "git+https://github.com/scroll-tech/reth.git?branch=morty/fix-eth66-serve-signature#e10ce206f7ed46695e973fcb04a0c511f3f4d2c6"
+source = "git+https://github.com/scroll-tech/reth.git?branch=morty/fix-eth66-serve-signature#28acc6c481137df75b821054c955e894449035a4"
 dependencies = [
  "alloy-consensus 1.0.25",
  "alloy-eips 1.0.25",
@@ -9909,7 +9835,7 @@ dependencies = [
  "reth-execution-types",
  "reth-fs-util",
  "reth-metrics",
- "reth-primitives-traits 1.6.0 (git+https://github.com/scroll-tech/reth.git?branch=morty/fix-eth66-serve-signature)",
+ "reth-primitives-traits",
  "reth-storage-api",
  "reth-tasks",
  "revm-interpreter",
@@ -9928,7 +9854,7 @@ dependencies = [
 [[package]]
 name = "reth-trie"
 version = "1.6.0"
-source = "git+https://github.com/scroll-tech/reth.git?branch=morty/fix-eth66-serve-signature#e10ce206f7ed46695e973fcb04a0c511f3f4d2c6"
+source = "git+https://github.com/scroll-tech/reth.git?branch=morty/fix-eth66-serve-signature#28acc6c481137df75b821054c955e894449035a4"
 dependencies = [
  "alloy-consensus 1.0.25",
  "alloy-eips 1.0.25",
@@ -9940,7 +9866,7 @@ dependencies = [
  "metrics",
  "reth-execution-errors",
  "reth-metrics",
- "reth-primitives-traits 1.6.0 (git+https://github.com/scroll-tech/reth.git?branch=morty/fix-eth66-serve-signature)",
+ "reth-primitives-traits",
  "reth-stages-types",
  "reth-storage-errors",
  "reth-trie-common",
@@ -9953,7 +9879,7 @@ dependencies = [
 [[package]]
 name = "reth-trie-common"
 version = "1.6.0"
-source = "git+https://github.com/scroll-tech/reth.git?branch=morty/fix-eth66-serve-signature#e10ce206f7ed46695e973fcb04a0c511f3f4d2c6"
+source = "git+https://github.com/scroll-tech/reth.git?branch=morty/fix-eth66-serve-signature#28acc6c481137df75b821054c955e894449035a4"
 dependencies = [
  "alloy-consensus 1.0.25",
  "alloy-primitives",
@@ -9968,8 +9894,8 @@ dependencies = [
  "itertools 0.14.0",
  "nybbles 0.4.3",
  "plain_hasher",
- "reth-codecs 1.6.0 (git+https://github.com/scroll-tech/reth.git?branch=morty/fix-eth66-serve-signature)",
- "reth-primitives-traits 1.6.0 (git+https://github.com/scroll-tech/reth.git?branch=morty/fix-eth66-serve-signature)",
+ "reth-codecs",
+ "reth-primitives-traits",
  "revm-database",
  "serde",
  "serde_with",
@@ -9978,12 +9904,12 @@ dependencies = [
 [[package]]
 name = "reth-trie-db"
 version = "1.6.0"
-source = "git+https://github.com/scroll-tech/reth.git?branch=morty/fix-eth66-serve-signature#e10ce206f7ed46695e973fcb04a0c511f3f4d2c6"
+source = "git+https://github.com/scroll-tech/reth.git?branch=morty/fix-eth66-serve-signature#28acc6c481137df75b821054c955e894449035a4"
 dependencies = [
  "alloy-primitives",
  "reth-db-api",
  "reth-execution-errors",
- "reth-primitives-traits 1.6.0 (git+https://github.com/scroll-tech/reth.git?branch=morty/fix-eth66-serve-signature)",
+ "reth-primitives-traits",
  "reth-trie",
  "tracing",
 ]
@@ -9991,7 +9917,7 @@ dependencies = [
 [[package]]
 name = "reth-trie-parallel"
 version = "1.6.0"
-source = "git+https://github.com/scroll-tech/reth.git?branch=morty/fix-eth66-serve-signature#e10ce206f7ed46695e973fcb04a0c511f3f4d2c6"
+source = "git+https://github.com/scroll-tech/reth.git?branch=morty/fix-eth66-serve-signature#28acc6c481137df75b821054c955e894449035a4"
 dependencies = [
  "alloy-primitives",
  "alloy-rlp",
@@ -10016,7 +9942,7 @@ dependencies = [
 [[package]]
 name = "reth-trie-sparse"
 version = "1.6.0"
-source = "git+https://github.com/scroll-tech/reth.git?branch=morty/fix-eth66-serve-signature#e10ce206f7ed46695e973fcb04a0c511f3f4d2c6"
+source = "git+https://github.com/scroll-tech/reth.git?branch=morty/fix-eth66-serve-signature#28acc6c481137df75b821054c955e894449035a4"
 dependencies = [
  "alloy-primitives",
  "alloy-rlp",
@@ -10026,7 +9952,7 @@ dependencies = [
  "rayon",
  "reth-execution-errors",
  "reth-metrics",
- "reth-primitives-traits 1.6.0 (git+https://github.com/scroll-tech/reth.git?branch=morty/fix-eth66-serve-signature)",
+ "reth-primitives-traits",
  "reth-trie-common",
  "smallvec",
  "tracing",
@@ -10035,7 +9961,7 @@ dependencies = [
 [[package]]
 name = "reth-trie-sparse-parallel"
 version = "1.6.0"
-source = "git+https://github.com/scroll-tech/reth.git?branch=morty/fix-eth66-serve-signature#e10ce206f7ed46695e973fcb04a0c511f3f4d2c6"
+source = "git+https://github.com/scroll-tech/reth.git?branch=morty/fix-eth66-serve-signature#28acc6c481137df75b821054c955e894449035a4"
 dependencies = [
  "alloy-primitives",
  "alloy-rlp",
@@ -10053,15 +9979,7 @@ dependencies = [
 [[package]]
 name = "reth-zstd-compressors"
 version = "1.6.0"
-source = "git+https://github.com/scroll-tech/reth.git?branch=morty/fix-eth66-serve-signature#e10ce206f7ed46695e973fcb04a0c511f3f4d2c6"
-dependencies = [
- "zstd",
-]
-
-[[package]]
-name = "reth-zstd-compressors"
-version = "1.6.0"
-source = "git+https://github.com/scroll-tech/reth.git#d485f4718a0c93f3fc1ec453b8ddde6ce1ebe397"
+source = "git+https://github.com/scroll-tech/reth.git?branch=morty/fix-eth66-serve-signature#28acc6c481137df75b821054c955e894449035a4"
 dependencies = [
  "zstd",
 ]
@@ -10446,7 +10364,7 @@ dependencies = [
  "reth-node-builder",
  "reth-node-core",
  "reth-node-types",
- "reth-primitives-traits 1.6.0 (git+https://github.com/scroll-tech/reth.git?branch=morty/fix-eth66-serve-signature)",
+ "reth-primitives-traits",
  "reth-provider",
  "reth-revm",
  "reth-rpc-api",
@@ -10458,7 +10376,7 @@ dependencies = [
  "reth-scroll-engine-primitives",
  "reth-scroll-evm",
  "reth-scroll-node",
- "reth-scroll-primitives 1.6.0 (git+https://github.com/scroll-tech/reth.git?branch=morty/fix-eth66-serve-signature)",
+ "reth-scroll-primitives",
  "reth-scroll-rpc",
  "reth-tasks",
  "reth-tokio-util",
@@ -10472,12 +10390,12 @@ dependencies = [
  "rollup-node-sequencer",
  "rollup-node-signer",
  "rollup-node-watcher",
- "scroll-alloy-consensus 1.6.0 (git+https://github.com/scroll-tech/reth.git?branch=morty/fix-eth66-serve-signature)",
+ "scroll-alloy-consensus",
  "scroll-alloy-evm",
  "scroll-alloy-hardforks",
  "scroll-alloy-network",
  "scroll-alloy-provider",
- "scroll-alloy-rpc-types-engine 1.6.0 (git+https://github.com/scroll-tech/reth.git?branch=morty/fix-eth66-serve-signature)",
+ "scroll-alloy-rpc-types-engine",
  "scroll-db 0.0.1",
  "scroll-derivation-pipeline",
  "scroll-engine",
@@ -10504,7 +10422,7 @@ dependencies = [
  "reth-scroll-forks",
  "rollup-node-primitives 0.0.1",
  "rollup-node-watcher",
- "scroll-alloy-consensus 1.6.0 (git+https://github.com/scroll-tech/reth.git?branch=morty/fix-eth66-serve-signature)",
+ "scroll-alloy-consensus",
  "scroll-alloy-hardforks",
  "scroll-db 0.0.1",
  "strum 0.27.2",
@@ -10526,9 +10444,9 @@ dependencies = [
  "reth-chainspec",
  "reth-network",
  "reth-network-api",
- "reth-primitives-traits 1.6.0 (git+https://github.com/scroll-tech/reth.git?branch=morty/fix-eth66-serve-signature)",
+ "reth-primitives-traits",
  "reth-scroll-node",
- "reth-scroll-primitives 1.6.0 (git+https://github.com/scroll-tech/reth.git?branch=morty/fix-eth66-serve-signature)",
+ "reth-scroll-primitives",
  "reth-tasks",
  "reth-tokio-util",
  "rollup-node-indexer",
@@ -10537,11 +10455,11 @@ dependencies = [
  "rollup-node-sequencer",
  "rollup-node-signer",
  "rollup-node-watcher",
- "scroll-alloy-consensus 1.6.0 (git+https://github.com/scroll-tech/reth.git?branch=morty/fix-eth66-serve-signature)",
+ "scroll-alloy-consensus",
  "scroll-alloy-hardforks",
  "scroll-alloy-network",
  "scroll-alloy-provider",
- "scroll-alloy-rpc-types-engine 1.6.0 (git+https://github.com/scroll-tech/reth.git?branch=morty/fix-eth66-serve-signature)",
+ "scroll-alloy-rpc-types-engine",
  "scroll-db 0.0.1",
  "scroll-derivation-pipeline",
  "scroll-engine",
@@ -10563,16 +10481,16 @@ dependencies = [
  "alloy-rpc-types-engine 1.0.25",
  "arbitrary",
  "derive_more",
- "reth-primitives-traits 1.6.0 (git+https://github.com/scroll-tech/reth.git?branch=morty/fix-eth66-serve-signature)",
- "reth-scroll-primitives 1.6.0 (git+https://github.com/scroll-tech/reth.git?branch=morty/fix-eth66-serve-signature)",
- "scroll-alloy-consensus 1.6.0 (git+https://github.com/scroll-tech/reth.git?branch=morty/fix-eth66-serve-signature)",
- "scroll-alloy-rpc-types-engine 1.6.0 (git+https://github.com/scroll-tech/reth.git?branch=morty/fix-eth66-serve-signature)",
+ "reth-primitives-traits",
+ "reth-scroll-primitives",
+ "scroll-alloy-consensus",
+ "scroll-alloy-rpc-types-engine",
 ]
 
 [[package]]
 name = "rollup-node-primitives"
 version = "0.0.1"
-source = "git+https://github.com/scroll-tech/rollup-node.git?branch=morty/fix-eth66-serve-signature#daecde2ab8bb775e846aa68a55a7805fcaa13359"
+source = "git+https://github.com/scroll-tech/rollup-node.git?branch=morty/fix-eth66-serve-signature#f3dd12fbed3e18248d156aeaa54652d6a69357ca"
 dependencies = [
  "alloy-chains",
  "alloy-consensus 1.0.25",
@@ -10580,10 +10498,10 @@ dependencies = [
  "alloy-primitives",
  "alloy-rpc-types-engine 1.0.25",
  "derive_more",
- "reth-primitives-traits 1.6.0 (git+https://github.com/scroll-tech/reth.git)",
- "reth-scroll-primitives 1.6.0 (git+https://github.com/scroll-tech/reth.git)",
- "scroll-alloy-consensus 1.6.0 (git+https://github.com/scroll-tech/reth.git)",
- "scroll-alloy-rpc-types-engine 1.6.0 (git+https://github.com/scroll-tech/reth.git)",
+ "reth-primitives-traits",
+ "reth-scroll-primitives",
+ "scroll-alloy-consensus",
+ "scroll-alloy-rpc-types-engine",
 ]
 
 [[package]]
@@ -10604,9 +10522,9 @@ dependencies = [
  "lru 0.13.0",
  "reqwest",
  "rollup-node-primitives 0.0.1",
- "scroll-alloy-consensus 1.6.0 (git+https://github.com/scroll-tech/reth.git?branch=morty/fix-eth66-serve-signature)",
+ "scroll-alloy-consensus",
  "scroll-alloy-network",
- "scroll-alloy-rpc-types-engine 1.6.0 (git+https://github.com/scroll-tech/reth.git?branch=morty/fix-eth66-serve-signature)",
+ "scroll-alloy-rpc-types-engine",
  "scroll-db 0.0.1",
  "serde",
  "thiserror 2.0.16",
@@ -10637,9 +10555,9 @@ dependencies = [
  "rollup-node-providers",
  "rollup-node-sequencer",
  "rollup-node-signer",
- "scroll-alloy-consensus 1.6.0 (git+https://github.com/scroll-tech/reth.git?branch=morty/fix-eth66-serve-signature)",
+ "scroll-alloy-consensus",
  "scroll-alloy-provider",
- "scroll-alloy-rpc-types-engine 1.6.0 (git+https://github.com/scroll-tech/reth.git?branch=morty/fix-eth66-serve-signature)",
+ "scroll-alloy-rpc-types-engine",
  "scroll-db 0.0.1",
  "scroll-engine",
  "tempfile",
@@ -10658,7 +10576,7 @@ dependencies = [
  "futures",
  "metrics",
  "metrics-derive",
- "reth-scroll-primitives 1.6.0 (git+https://github.com/scroll-tech/reth.git?branch=morty/fix-eth66-serve-signature)",
+ "reth-scroll-primitives",
  "reth-tracing",
  "rollup-node-primitives 0.0.1",
  "thiserror 2.0.16",
@@ -10691,7 +10609,7 @@ dependencies = [
  "reth-tracing",
  "rollup-node-primitives 0.0.1",
  "rollup-node-providers",
- "scroll-alloy-consensus 1.6.0 (git+https://github.com/scroll-tech/reth.git?branch=morty/fix-eth66-serve-signature)",
+ "scroll-alloy-consensus",
  "scroll-l1",
  "thiserror 2.0.16",
  "tokio",
@@ -11069,7 +10987,7 @@ checksum = "94143f37725109f92c262ed2cf5e59bce7498c01bcc1502d7b9afe439a4e9f49"
 [[package]]
 name = "scroll-alloy-consensus"
 version = "1.6.0"
-source = "git+https://github.com/scroll-tech/reth.git?branch=morty/fix-eth66-serve-signature#e10ce206f7ed46695e973fcb04a0c511f3f4d2c6"
+source = "git+https://github.com/scroll-tech/reth.git?branch=morty/fix-eth66-serve-signature#28acc6c481137df75b821054c955e894449035a4"
 dependencies = [
  "alloy-consensus 1.0.25",
  "alloy-eips 1.0.25",
@@ -11079,24 +10997,8 @@ dependencies = [
  "arbitrary",
  "derive_more",
  "modular-bitfield",
- "reth-codecs 1.6.0 (git+https://github.com/scroll-tech/reth.git?branch=morty/fix-eth66-serve-signature)",
- "reth-codecs-derive 1.6.0 (git+https://github.com/scroll-tech/reth.git?branch=morty/fix-eth66-serve-signature)",
- "serde",
- "serde_with",
-]
-
-[[package]]
-name = "scroll-alloy-consensus"
-version = "1.6.0"
-source = "git+https://github.com/scroll-tech/reth.git#d485f4718a0c93f3fc1ec453b8ddde6ce1ebe397"
-dependencies = [
- "alloy-consensus 1.0.25",
- "alloy-eips 1.0.25",
- "alloy-primitives",
- "alloy-rlp",
- "alloy-serde 1.0.25",
- "derive_more",
- "reth-codecs 1.6.0 (git+https://github.com/scroll-tech/reth.git)",
+ "reth-codecs",
+ "reth-codecs-derive",
  "serde",
  "serde_with",
 ]
@@ -11104,7 +11006,7 @@ dependencies = [
 [[package]]
 name = "scroll-alloy-evm"
 version = "1.6.0"
-source = "git+https://github.com/scroll-tech/reth.git?branch=morty/fix-eth66-serve-signature#e10ce206f7ed46695e973fcb04a0c511f3f4d2c6"
+source = "git+https://github.com/scroll-tech/reth.git?branch=morty/fix-eth66-serve-signature#28acc6c481137df75b821054c955e894449035a4"
 dependencies = [
  "alloy-consensus 1.0.25",
  "alloy-eips 1.0.25",
@@ -11114,7 +11016,7 @@ dependencies = [
  "encoder-standard",
  "revm",
  "revm-scroll",
- "scroll-alloy-consensus 1.6.0 (git+https://github.com/scroll-tech/reth.git?branch=morty/fix-eth66-serve-signature)",
+ "scroll-alloy-consensus",
  "scroll-alloy-hardforks",
  "serde",
 ]
@@ -11122,7 +11024,7 @@ dependencies = [
 [[package]]
 name = "scroll-alloy-hardforks"
 version = "1.6.0"
-source = "git+https://github.com/scroll-tech/reth.git?branch=morty/fix-eth66-serve-signature#e10ce206f7ed46695e973fcb04a0c511f3f4d2c6"
+source = "git+https://github.com/scroll-tech/reth.git?branch=morty/fix-eth66-serve-signature#28acc6c481137df75b821054c955e894449035a4"
 dependencies = [
  "alloy-hardforks",
  "auto_impl",
@@ -11132,7 +11034,7 @@ dependencies = [
 [[package]]
 name = "scroll-alloy-network"
 version = "1.6.0"
-source = "git+https://github.com/scroll-tech/reth.git?branch=morty/fix-eth66-serve-signature#e10ce206f7ed46695e973fcb04a0c511f3f4d2c6"
+source = "git+https://github.com/scroll-tech/reth.git?branch=morty/fix-eth66-serve-signature#28acc6c481137df75b821054c955e894449035a4"
 dependencies = [
  "alloy-consensus 1.0.25",
  "alloy-network",
@@ -11140,14 +11042,14 @@ dependencies = [
  "alloy-provider",
  "alloy-rpc-types-eth",
  "alloy-signer",
- "scroll-alloy-consensus 1.6.0 (git+https://github.com/scroll-tech/reth.git?branch=morty/fix-eth66-serve-signature)",
+ "scroll-alloy-consensus",
  "scroll-alloy-rpc-types",
 ]
 
 [[package]]
 name = "scroll-alloy-provider"
 version = "1.6.0"
-source = "git+https://github.com/scroll-tech/reth.git?branch=morty/fix-eth66-serve-signature#e10ce206f7ed46695e973fcb04a0c511f3f4d2c6"
+source = "git+https://github.com/scroll-tech/reth.git?branch=morty/fix-eth66-serve-signature#28acc6c481137df75b821054c955e894449035a4"
 dependencies = [
  "alloy-primitives",
  "alloy-provider",
@@ -11164,7 +11066,7 @@ dependencies = [
  "reth-rpc-api",
  "reth-scroll-engine-primitives",
  "scroll-alloy-network",
- "scroll-alloy-rpc-types-engine 1.6.0 (git+https://github.com/scroll-tech/reth.git?branch=morty/fix-eth66-serve-signature)",
+ "scroll-alloy-rpc-types-engine",
  "thiserror 2.0.16",
  "tower",
 ]
@@ -11172,7 +11074,7 @@ dependencies = [
 [[package]]
 name = "scroll-alloy-rpc-types"
 version = "1.6.0"
-source = "git+https://github.com/scroll-tech/reth.git?branch=morty/fix-eth66-serve-signature#e10ce206f7ed46695e973fcb04a0c511f3f4d2c6"
+source = "git+https://github.com/scroll-tech/reth.git?branch=morty/fix-eth66-serve-signature#28acc6c481137df75b821054c955e894449035a4"
 dependencies = [
  "alloy-consensus 1.0.25",
  "alloy-eips 1.0.25",
@@ -11181,7 +11083,7 @@ dependencies = [
  "alloy-rpc-types-eth",
  "alloy-serde 1.0.25",
  "derive_more",
- "scroll-alloy-consensus 1.6.0 (git+https://github.com/scroll-tech/reth.git?branch=morty/fix-eth66-serve-signature)",
+ "scroll-alloy-consensus",
  "serde",
  "serde_json",
 ]
@@ -11189,21 +11091,11 @@ dependencies = [
 [[package]]
 name = "scroll-alloy-rpc-types-engine"
 version = "1.6.0"
-source = "git+https://github.com/scroll-tech/reth.git?branch=morty/fix-eth66-serve-signature#e10ce206f7ed46695e973fcb04a0c511f3f4d2c6"
+source = "git+https://github.com/scroll-tech/reth.git?branch=morty/fix-eth66-serve-signature#28acc6c481137df75b821054c955e894449035a4"
 dependencies = [
  "alloy-primitives",
  "alloy-rpc-types-engine 1.0.25",
  "arbitrary",
- "serde",
-]
-
-[[package]]
-name = "scroll-alloy-rpc-types-engine"
-version = "1.6.0"
-source = "git+https://github.com/scroll-tech/reth.git#d485f4718a0c93f3fc1ec453b8ddde6ce1ebe397"
-dependencies = [
- "alloy-primitives",
- "alloy-rpc-types-engine 1.0.25",
  "serde",
 ]
 
@@ -11217,7 +11109,7 @@ dependencies = [
  "alloy-sol-types",
  "derive_more",
  "eyre",
- "scroll-alloy-consensus 1.6.0 (git+https://github.com/scroll-tech/reth.git?branch=morty/fix-eth66-serve-signature)",
+ "scroll-alloy-consensus",
  "scroll-l1",
  "serde_json",
  "thiserror 2.0.16",
@@ -11236,8 +11128,8 @@ dependencies = [
  "futures",
  "rand 0.9.2",
  "rollup-node-primitives 0.0.1",
- "scroll-alloy-consensus 1.6.0 (git+https://github.com/scroll-tech/reth.git?branch=morty/fix-eth66-serve-signature)",
- "scroll-alloy-rpc-types-engine 1.6.0 (git+https://github.com/scroll-tech/reth.git?branch=morty/fix-eth66-serve-signature)",
+ "scroll-alloy-consensus",
+ "scroll-alloy-rpc-types-engine",
  "scroll-migration",
  "sea-orm",
  "thiserror 2.0.16",
@@ -11248,7 +11140,7 @@ dependencies = [
 [[package]]
 name = "scroll-db"
 version = "0.0.1"
-source = "git+https://github.com/scroll-tech/rollup-node.git?branch=morty/fix-eth66-serve-signature#daecde2ab8bb775e846aa68a55a7805fcaa13359"
+source = "git+https://github.com/scroll-tech/rollup-node.git?branch=morty/fix-eth66-serve-signature#f3dd12fbed3e18248d156aeaa54652d6a69357ca"
 dependencies = [
  "alloy-eips 1.0.25",
  "alloy-primitives",
@@ -11256,8 +11148,8 @@ dependencies = [
  "auto_impl",
  "futures",
  "rollup-node-primitives 0.0.1 (git+https://github.com/scroll-tech/rollup-node.git?branch=morty/fix-eth66-serve-signature)",
- "scroll-alloy-consensus 1.6.0 (git+https://github.com/scroll-tech/reth.git)",
- "scroll-alloy-rpc-types-engine 1.6.0 (git+https://github.com/scroll-tech/reth.git)",
+ "scroll-alloy-consensus",
+ "scroll-alloy-rpc-types-engine",
  "sea-orm",
  "thiserror 2.0.16",
  "tokio",
@@ -11279,8 +11171,8 @@ dependencies = [
  "metrics-derive",
  "rollup-node-primitives 0.0.1",
  "rollup-node-providers",
- "scroll-alloy-consensus 1.6.0 (git+https://github.com/scroll-tech/reth.git?branch=morty/fix-eth66-serve-signature)",
- "scroll-alloy-rpc-types-engine 1.6.0 (git+https://github.com/scroll-tech/reth.git?branch=morty/fix-eth66-serve-signature)",
+ "scroll-alloy-consensus",
+ "scroll-alloy-rpc-types-engine",
  "scroll-codec",
  "scroll-db 0.0.1",
  "thiserror 2.0.16",
@@ -11307,18 +11199,18 @@ dependencies = [
  "reth-chainspec",
  "reth-network-api",
  "reth-payload-primitives",
- "reth-primitives-traits 1.6.0 (git+https://github.com/scroll-tech/reth.git?branch=morty/fix-eth66-serve-signature)",
+ "reth-primitives-traits",
  "reth-scroll-chainspec",
  "reth-scroll-engine-primitives",
- "reth-scroll-primitives 1.6.0 (git+https://github.com/scroll-tech/reth.git?branch=morty/fix-eth66-serve-signature)",
+ "reth-scroll-primitives",
  "reth-testing-utils",
  "rollup-node-primitives 0.0.1",
  "rollup-node-providers",
- "scroll-alloy-consensus 1.6.0 (git+https://github.com/scroll-tech/reth.git?branch=morty/fix-eth66-serve-signature)",
+ "scroll-alloy-consensus",
  "scroll-alloy-hardforks",
  "scroll-alloy-network",
  "scroll-alloy-provider",
- "scroll-alloy-rpc-types-engine 1.6.0 (git+https://github.com/scroll-tech/reth.git?branch=morty/fix-eth66-serve-signature)",
+ "scroll-alloy-rpc-types-engine",
  "scroll-engine",
  "scroll-network",
  "thiserror 2.0.16",
@@ -11334,7 +11226,7 @@ dependencies = [
  "alloy-sol-types",
  "arbitrary",
  "derive_more",
- "scroll-alloy-consensus 1.6.0 (git+https://github.com/scroll-tech/reth.git?branch=morty/fix-eth66-serve-signature)",
+ "scroll-alloy-consensus",
 ]
 
 [[package]]
@@ -11367,10 +11259,10 @@ dependencies = [
  "reth-network-api",
  "reth-network-peers",
  "reth-network-types",
- "reth-primitives-traits 1.6.0 (git+https://github.com/scroll-tech/reth.git?branch=morty/fix-eth66-serve-signature)",
+ "reth-primitives-traits",
  "reth-scroll-chainspec",
  "reth-scroll-node",
- "reth-scroll-primitives 1.6.0 (git+https://github.com/scroll-tech/reth.git?branch=morty/fix-eth66-serve-signature)",
+ "reth-scroll-primitives",
  "reth-storage-api",
  "scroll-wire",
  "thiserror 2.0.16",
@@ -11389,7 +11281,7 @@ dependencies = [
  "reth-eth-wire",
  "reth-network",
  "reth-network-api",
- "reth-scroll-primitives 1.6.0 (git+https://github.com/scroll-tech/reth.git?branch=morty/fix-eth66-serve-signature)",
+ "reth-scroll-primitives",
  "tokio",
  "tokio-stream",
  "tracing",
@@ -13139,9 +13031,9 @@ checksum = "8ecb6da28b8a351d773b68d5825ac39017e680750f980f3a1a85cd8dd28a47c1"
 
 [[package]]
 name = "url"
-version = "2.5.4"
+version = "2.5.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "32f8b686cadd1473f4bd0117a5d28d36b1ade384ea9b5069a1c40aefed7fda60"
+checksum = "ec961601b32b6f5d14ae8dabd35ff2ff2e2c6cb4c0e6641845ff105abe96d958"
 dependencies = [
  "form_urlencoded",
  "idna",

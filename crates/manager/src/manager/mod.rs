@@ -38,7 +38,7 @@ use tokio_stream::wrappers::ReceiverStream;
 use tracing::{error, trace, warn};
 
 use rollup_node_providers::{L1MessageProvider, L1Provider};
-use scroll_db::Database;
+use scroll_db::{Database, DatabaseOperations};
 use scroll_derivation_pipeline::DerivationPipeline;
 
 mod command;
@@ -103,6 +103,8 @@ pub struct RollupNodeManager<
     signer: Option<SignerHandle>,
     /// The trigger for the block building process.
     block_building_trigger: Option<Interval>,
+    /// A connection to the database.
+    database: Arc<Database>,
 }
 
 /// The current status of the rollup manager.
@@ -167,7 +169,7 @@ where
     ) -> (Self, RollupManagerHandle<N>) {
         let (handle_tx, handle_rx) = mpsc::channel(EVENT_CHANNEL_SIZE);
         let indexer = Indexer::new(database.clone(), chain_spec.clone());
-        let derivation_pipeline = DerivationPipeline::new(l1_provider, database);
+        let derivation_pipeline = DerivationPipeline::new(l1_provider, database.clone());
         let rnm = Self {
             handle_rx,
             chain_spec,
@@ -182,6 +184,7 @@ where
             sequencer,
             signer,
             block_building_trigger: block_time.map(delayed_interval),
+            database,
         };
         (rnm, RollupManagerHandle::new(handle_tx))
     }
@@ -221,7 +224,17 @@ where
                 result: Err(err.into()),
             });
         } else {
-            self.engine.handle_block_import(block_with_peer);
+            self.engine.handle_block_import(block_with_peer.clone());
+
+            // TODO: remove this once we deprecate l2geth.
+            // Store the block signature in the database
+            tokio::task::block_in_place(|| {
+                tokio::runtime::Handle::current().block_on(async move {
+                    if let Err(err) = self.database.insert_signature(block_with_peer.block.hash_slow(), block_with_peer.signature).await {
+                        error!(target: "scroll::node::manager", ?err, "Failed to store block signature");
+                    }
+                })
+            });
         }
     }
 
@@ -506,6 +519,18 @@ where
                             SignerEvent::SignedBlock { block: block.clone(), signature },
                         ));
                     }
+
+                    // TODO: remove this once we deprecate l2geth.
+                    // Store the block signature in the database
+                    let database = this.database.clone();
+                    let block_hash = block.hash_slow();
+                    tokio::task::block_in_place(|| {
+                        tokio::runtime::Handle::current().block_on(async move {
+                            if let Err(err) = database.insert_signature(block_hash, signature).await {
+                                error!(target: "scroll::node::manager", ?err, "Failed to store block signature");
+                            }
+                        })
+                    });
 
                     this.network.handle().announce_block(block, signature);
                 }

@@ -2,7 +2,7 @@ use alloy_primitives::{Signature, B256};
 use sea_orm::{entity::prelude::*, ActiveValue};
 
 /// A database model that represents a block signature.
-#[derive(Clone, Debug, PartialEq, DeriveEntityModel)]
+#[derive(Clone, Debug, PartialEq, Eq, DeriveEntityModel)]
 #[sea_orm(table_name = "block_signature")]
 pub struct Model {
     /// The block hash as a primary key.
@@ -33,8 +33,7 @@ impl Model {
         if self.signature.len() != 65 {
             return Err(format!("Invalid signature length: {}", self.signature.len()));
         }
-        Signature::from_raw(&self.signature)
-            .map_err(|e| format!("Invalid signature: {}", e))
+        Signature::from_raw(&self.signature).map_err(|e| format!("Invalid signature: {}", e))
     }
 }
 
