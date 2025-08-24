@@ -10,7 +10,7 @@ use sea_orm::{Database as SeaOrmDatabase, DatabaseConnection, TransactionTrait};
 /// operations defined in [`crate::DatabaseOperations`]. Atomic operations can be performed using
 /// the [`Database::tx`] method which returns a [`DatabaseTransaction`] that also implements the
 /// [`DatabaseConnectionProvider`] trait and also the [`crate::DatabaseOperations`] trait.
-#[derive(Debug)]
+#[derive(Debug, Default)]
 pub struct Database {
     /// The underlying database connection.
     connection: DatabaseConnection,

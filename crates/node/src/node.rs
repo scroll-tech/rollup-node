@@ -70,7 +70,8 @@ where
             }))
             .network(
                 ScrollNetworkBuilder::new()
-                    .with_sub_protocol(scroll_wire_handler.into_rlpx_sub_protocol()),
+                    .with_sub_protocol(scroll_wire_handler.into_rlpx_sub_protocol())
+                    .with_database_path(self.config.database_args.path.clone()),
             )
     }
 

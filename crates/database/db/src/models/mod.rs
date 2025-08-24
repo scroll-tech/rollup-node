@@ -12,3 +12,6 @@ pub mod l1_message;
 
 /// This module contains the metadata model.
 pub mod metadata;
+
+/// This module contains the block signature model.
+pub mod block_signature;
