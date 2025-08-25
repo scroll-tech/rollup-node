@@ -287,7 +287,7 @@
         "type": "prometheus",
         "uid": "PBFA97CFB590B2093"
       },
-      "description": "The average duration of handling indexer tasks.",
+      "description": "The average duration of handling chain orchestrator tasks.",
       "fieldConfig": {
         "defaults": {
           "color": {

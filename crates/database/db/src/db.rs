@@ -168,7 +168,7 @@ mod test {
                 },
                 l1_messages: vec![],
             };
-            db.insert_block(block_info, batch_info.into()).await.unwrap();
+            db.insert_block(block_info, batch_info).await.unwrap();
             block_number += 1;
         }
 
@@ -212,7 +212,7 @@ mod test {
                 },
                 l1_messages: vec![],
             };
-            db.insert_block(block_info, first_batch_info.into()).await.unwrap();
+            db.insert_block(block_info, first_batch_info).await.unwrap();
             block_number += 1;
         }
 
@@ -365,8 +365,13 @@ mod test {
         db.insert_l1_message(l1_message_2.clone()).await.unwrap();
 
         // collect the L1Messages
-        let l1_messages =
-            db.get_l1_messages().await.unwrap().map(|res| res.unwrap()).collect::<Vec<_>>().await;
+        let l1_messages = db
+            .get_l1_messages(None)
+            .await
+            .unwrap()
+            .map(|res| res.unwrap())
+            .collect::<Vec<_>>()
+            .await;
 
         // Apply the assertions.
         assert!(l1_messages.contains(&l1_message_1));
@@ -437,7 +442,7 @@ mod test {
             let block_info = BlockInfo { number: i, hash: B256::arbitrary(&mut u).unwrap() };
             let l2_block = L2BlockInfoWithL1Messages { block_info, l1_messages: vec![] };
             block_infos.push(block_info);
-            db.insert_block(l2_block, Some(batch_info)).await.unwrap();
+            db.insert_block(l2_block, batch_info).await.unwrap();
         }
 
         // Test getting existing blocks
@@ -462,9 +467,10 @@ mod test {
         rand::rng().fill(bytes.as_mut_slice());
         let mut u = Unstructured::new(&bytes);
 
-        // Initially should return None
-        let latest_safe = db.get_latest_safe_l2_info().await.unwrap();
-        assert!(latest_safe.is_none());
+        // Initially should return the genesis block and hash.
+        let (latest_safe_block, batch) = db.get_latest_safe_l2_info().await.unwrap().unwrap();
+        assert_eq!(latest_safe_block.number, 0);
+        assert_eq!(batch.index, 0);
 
         // Generate and insert a batch
         let batch_data = BatchCommitData { index: 100, ..Arbitrary::arbitrary(&mut u).unwrap() };
@@ -477,23 +483,14 @@ mod test {
 
         db.insert_block(
             L2BlockInfoWithL1Messages { block_info: safe_block_1, l1_messages: vec![] },
-            Some(batch_info),
+            batch_info,
         )
         .await
         .unwrap();
 
         db.insert_block(
             L2BlockInfoWithL1Messages { block_info: safe_block_2, l1_messages: vec![] },
-            Some(batch_info),
-        )
-        .await
-        .unwrap();
-
-        // Insert block without batch info (unsafe block)
-        let unsafe_block = BlockInfo { number: 202, hash: B256::arbitrary(&mut u).unwrap() };
-        db.insert_block(
-            L2BlockInfoWithL1Messages { block_info: unsafe_block, l1_messages: vec![] },
-            None,
+            batch_info,
         )
         .await
         .unwrap();
@@ -501,32 +498,6 @@ mod test {
         // Should return the highest safe block (block 201)
         let latest_safe = db.get_latest_safe_l2_info().await.unwrap();
         assert_eq!(latest_safe, Some((safe_block_2, batch_info)));
-    }
-
-    #[tokio::test]
-    async fn test_get_latest_l2_block() {
-        // Set up the test database.
-        let db = setup_test_db().await;
-
-        // Generate unstructured bytes.
-        let mut bytes = [0u8; 1024];
-        rand::rng().fill(bytes.as_mut_slice());
-        let mut u = Unstructured::new(&bytes);
-
-        // Insert multiple blocks with increasing block numbers
-        let mut latest_block = BlockInfo { number: 0, hash: B256::ZERO };
-        for i in 300..305 {
-            let block_info = BlockInfo { number: i, hash: B256::arbitrary(&mut u).unwrap() };
-            latest_block = block_info;
-
-            db.insert_block(L2BlockInfoWithL1Messages { block_info, l1_messages: vec![] }, None)
-                .await
-                .unwrap();
-        }
-
-        // Should return the block with highest number
-        let retrieved_latest = db.get_latest_l2_block().await.unwrap();
-        assert_eq!(retrieved_latest, Some(latest_block));
     }
 
     #[tokio::test]
@@ -539,13 +510,17 @@ mod test {
         rand::rng().fill(bytes.as_mut_slice());
         let mut u = Unstructured::new(&bytes);
 
-        // Insert multiple L2 blocks
+        // Insert multiple L2 blocks with batch info
+        let batch_info = BatchInfo { index: 0, hash: B256::default() };
         for i in 400..410 {
             let block_info = BlockInfo { number: i, hash: B256::arbitrary(&mut u).unwrap() };
 
-            db.insert_block(L2BlockInfoWithL1Messages { block_info, l1_messages: vec![] }, None)
-                .await
-                .unwrap();
+            db.insert_block(
+                L2BlockInfoWithL1Messages { block_info, l1_messages: vec![] },
+                batch_info,
+            )
+            .await
+            .unwrap();
         }
 
         // Delete blocks with number > 405
@@ -593,15 +568,7 @@ mod test {
             let block_info = BlockInfo { number: 500 + i, hash: B256::arbitrary(&mut u).unwrap() };
             let l2_block = L2BlockInfoWithL1Messages { block_info, l1_messages: vec![] };
 
-            db.insert_block(l2_block, Some(batch_info)).await.unwrap();
-        }
-
-        // Insert some blocks without batch index (should not be deleted)
-        for i in 0..3 {
-            let block_info = BlockInfo { number: 600 + i, hash: B256::arbitrary(&mut u).unwrap() };
-            let l2_block = L2BlockInfoWithL1Messages { block_info, l1_messages: vec![] };
-
-            db.insert_block(l2_block, None).await.unwrap();
+            db.insert_block(l2_block, batch_info).await.unwrap();
         }
 
         // Delete L2 blocks with batch index > 105
@@ -657,7 +624,8 @@ mod test {
             L2BlockInfoWithL1Messages { block_info, l1_messages: l1_message_hashes.clone() };
 
         // Insert block
-        db.insert_block(l2_block, Some(batch_info)).await.unwrap();
+        db.insert_block(l2_block.clone(), batch_info).await.unwrap();
+        db.update_l1_messages_with_l2_block(l2_block).await.unwrap();
 
         // Verify block was inserted
         let retrieved_block = db.get_l2_block_info_by_number(500).await.unwrap();
@@ -693,7 +661,7 @@ mod test {
         let block_info = BlockInfo { number: 600, hash: B256::arbitrary(&mut u).unwrap() };
         let l2_block = L2BlockInfoWithL1Messages { block_info, l1_messages: vec![] };
 
-        db.insert_block(l2_block, Some(batch_info_1)).await.unwrap();
+        db.insert_block(l2_block, batch_info_1).await.unwrap();
 
         // Verify initial insertion
         let retrieved_block = db.get_l2_block_info_by_number(600).await.unwrap();
@@ -706,15 +674,15 @@ mod test {
             .await
             .unwrap()
             .unwrap();
-        let (initial_block_info, initial_batch_info): (BlockInfo, Option<BatchInfo>) =
+        let (initial_block_info, initial_batch_info): (BlockInfo, BatchInfo) =
             initial_l2_block_model.into();
         assert_eq!(initial_block_info, block_info);
-        assert_eq!(initial_batch_info, Some(batch_info_1));
+        assert_eq!(initial_batch_info, batch_info_1);
 
         // Update the same block with different batch info (upsert)
         let updated_l2_block = L2BlockInfoWithL1Messages { block_info, l1_messages: vec![] };
 
-        db.insert_block(updated_l2_block, Some(batch_info_2)).await.unwrap();
+        db.insert_block(updated_l2_block, batch_info_2).await.unwrap();
 
         // Verify the block still exists and was updated
         let retrieved_block = db.get_l2_block_info_by_number(600).await.unwrap().unwrap();
@@ -727,9 +695,9 @@ mod test {
             .await
             .unwrap()
             .unwrap();
-        let (updated_block_info, updated_batch_info): (BlockInfo, Option<BatchInfo>) =
+        let (updated_block_info, updated_batch_info): (BlockInfo, BatchInfo) =
             updated_l2_block_model.into();
         assert_eq!(updated_block_info, block_info);
-        assert_eq!(updated_batch_info, Some(batch_info_2));
+        assert_eq!(updated_batch_info, batch_info_2);
     }
 }
