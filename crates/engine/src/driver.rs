@@ -51,6 +51,8 @@ pub struct EngineDriver<EC, CS, P> {
     payload_building_future: Option<BuildNewPayloadFuture>,
     /// The driver metrics.
     metrics: EngineDriverMetrics,
+    /// A boolean to represent if the L1 has been synced.
+    l1_synced: bool,
     /// The waker to notify when the engine driver should be polled.
     waker: AtomicWaker,
 }
@@ -84,6 +86,7 @@ where
             payload_building_future: None,
             engine_future: None,
             metrics: EngineDriverMetrics::default(),
+            l1_synced: false,
             waker: AtomicWaker::new(),
         }
     }
@@ -205,16 +208,16 @@ where
 
                 match result {
                     Ok(consolidation_outcome) => {
-                        let block_info = consolidation_outcome.block_info();
+                        if let Some(block_info) = consolidation_outcome.block_info() {
+                            // Update the safe block info and return the block info
+                            tracing::trace!(target: "scroll::engine", ?block_info, "updating safe block info from block derived from L1");
+                            self.fcs.update_safe_block_info(block_info.block_info);
 
-                        // Update the safe block info and return the block info
-                        tracing::trace!(target: "scroll::engine", ?block_info, "updating safe block info from block derived from L1");
-                        self.fcs.update_safe_block_info(block_info.block_info);
-
-                        // If we reorged, update the head block info
-                        if consolidation_outcome.is_reorg() {
-                            tracing::warn!(target: "scroll::engine", ?block_info, "reorging head to l1 derived block");
-                            self.fcs.update_head_block_info(block_info.block_info);
+                            // If we reorged, update the head block info
+                            if consolidation_outcome.is_reorg() {
+                                tracing::warn!(target: "scroll::engine", ?block_info, "reorging head to l1 derived block");
+                                self.fcs.update_head_block_info(block_info.block_info);
+                            }
                         }
 
                         // record the metric.
@@ -297,6 +300,11 @@ where
         } else {
             self.fcs.get_alloy_fcs()
         }
+    }
+
+    /// Sets the L1 synced status.
+    pub fn set_l1_synced_status(&mut self, l1_synced: bool) {
+        self.l1_synced = l1_synced;
     }
 }
 
@@ -402,6 +410,7 @@ where
         if let Some(payload_attributes) = this.l1_payload_attributes.pop_front() {
             let fcs = this.fcs.clone();
             let client = this.client.clone();
+            let l1_synced = this.l1_synced;
 
             if let Some(provider) = this.provider.clone() {
                 this.engine_future = Some(MeteredFuture::new(EngineFuture::l1_consolidation(
@@ -409,6 +418,7 @@ where
                     provider,
                     fcs,
                     payload_attributes,
+                    l1_synced,
                 )));
                 this.waker.wake();
             } else {

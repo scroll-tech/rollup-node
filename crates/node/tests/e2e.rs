@@ -707,6 +707,9 @@ async fn graceful_shutdown_consolidates_most_recent_batch_on_startup() -> eyre::
     // Extract the L1 notification sender
     let l1_notification_tx = l1_notification_tx.unwrap();
 
+    // Send a notification that the L1 is synced.
+    l1_notification_tx.send(Arc::new(L1Notification::Synced)).await?;
+
     // Load test batches
     let raw_calldata_0 = read_to_bytes("./tests/testdata/batch_0_calldata.bin")?;
     let batch_0_data = BatchCommitData {
@@ -739,8 +742,8 @@ async fn graceful_shutdown_consolidates_most_recent_batch_on_startup() -> eyre::
             if let Some(RollupManagerEvent::L1DerivedBlockConsolidated(consolidation_outcome)) =
                 rnm_events.next().await
             {
-                assert!(consolidation_outcome.block_info().block_info.number == i);
-                break consolidation_outcome.block_info().block_info;
+                assert!(consolidation_outcome.block_info().unwrap().block_info.number == i);
+                break consolidation_outcome.block_info().unwrap().block_info;
             }
         };
 
@@ -764,8 +767,8 @@ async fn graceful_shutdown_consolidates_most_recent_batch_on_startup() -> eyre::
             if let Some(RollupManagerEvent::L1DerivedBlockConsolidated(consolidation_outcome)) =
                 rnm_events.next().await
             {
-                assert!(consolidation_outcome.block_info().block_info.number == i);
-                break consolidation_outcome.block_info().block_info.hash;
+                assert!(consolidation_outcome.block_info().unwrap().block_info.number == i);
+                break consolidation_outcome.block_info().unwrap().block_info.hash;
             }
         };
         if i == 40 {
@@ -806,6 +809,7 @@ async fn graceful_shutdown_consolidates_most_recent_batch_on_startup() -> eyre::
         )
         .await?;
     let l1_notification_tx = l1_notification_tx.unwrap();
+    l1_notification_tx.send(Arc::new(L1Notification::Synced)).await?;
 
     // Spawn a task that constantly polls the rnm to make progress.
     tokio::spawn(async {
@@ -824,7 +828,7 @@ async fn graceful_shutdown_consolidates_most_recent_batch_on_startup() -> eyre::
         if let Some(RollupManagerEvent::L1DerivedBlockConsolidated(consolidation_outcome)) =
             rnm_events.next().await
         {
-            break consolidation_outcome.block_info().clone();
+            break consolidation_outcome.block_info().unwrap().clone();
         }
     };
 
@@ -841,7 +845,7 @@ async fn graceful_shutdown_consolidates_most_recent_batch_on_startup() -> eyre::
             if let Some(RollupManagerEvent::L1DerivedBlockConsolidated(consolidation_outcome)) =
                 rnm_events.next().await
             {
-                assert!(consolidation_outcome.block_info().block_info.number == i);
+                assert!(consolidation_outcome.block_info().unwrap().block_info.number == i);
                 break;
             }
         }
@@ -911,6 +915,9 @@ async fn can_handle_batch_revert() -> eyre::Result<()> {
         finalized_block_number: None,
     };
 
+    // Send a notification that the L1 is synced.
+    l1_watcher_tx.send(Arc::new(L1Notification::Synced)).await?;
+
     // Send the first batch.
     l1_watcher_tx.send(Arc::new(L1Notification::BatchCommit(batch_0_data))).await?;
 
@@ -919,7 +926,7 @@ async fn can_handle_batch_revert() -> eyre::Result<()> {
         if let Some(RollupManagerEvent::L1DerivedBlockConsolidated(consolidation_outcome)) =
             rnm_events.next().await
         {
-            if consolidation_outcome.block_info().block_info.number == 4 {
+            if consolidation_outcome.block_info().unwrap().block_info.number == 4 {
                 break
             }
         }
@@ -933,7 +940,7 @@ async fn can_handle_batch_revert() -> eyre::Result<()> {
         if let Some(RollupManagerEvent::L1DerivedBlockConsolidated(consolidation_outcome)) =
             rnm_events.next().await
         {
-            if consolidation_outcome.block_info().block_info.number == 46 {
+            if consolidation_outcome.block_info().unwrap().block_info.number == 46 {
                 break
             }
         }
