@@ -145,8 +145,9 @@ impl ScrollRollupNodeConfig {
         // Get the chain spec.
         let chain_spec = ctx.chain_spec;
 
-        // Build NodeConfig directly from the chainspec.
-        let node_config = Arc::new(NodeConfig::from_chainspec(&chain_spec)?);
+        // Get the rollup node config.
+        let named_chain = chain_spec.chain().named().expect("expected named chain");
+        let node_config = Arc::new(NodeConfig::from_named_chain(named_chain));
 
         // Instantiate the network manager
         let network = ctx.network;

@@ -19,7 +19,7 @@ services:
     container_name: rollup-node-sequencer
     entrypoint: ["bash", "/launch_rollup_node_sequencer.bash"]
     environment:
-      - RUST_LOG=info
+      - RUST_LOG=debug
     ports:
       - "8545:8545"   # JSON-RPC
       - "8546:8546"   # WebSocket
@@ -42,7 +42,7 @@ services:
     container_name: rollup-node-follower
     entrypoint: ["bash", "/launch_rollup_node_follower.bash"]
     environment:
-      - RUST_LOG=info
+      - RUST_LOG=debug
     ports:
       - "8547:8545"   # JSON-RPC
       - "8548:8546"   # WebSocket

@@ -545,6 +545,7 @@ where
                     let block_hash = block.hash_slow();
                     tokio::task::block_in_place(|| {
                         tokio::runtime::Handle::current().block_on(async move {
+                            warn!("Persisted block signature to database, block hash: {:?}, sig: {:?}", block_hash, signature.to_string());
                             if let Err(err) = database.insert_signature(block_hash, signature).await {
                                 error!(target: "scroll::node::manager", ?err, "Failed to store block signature");
                             }
