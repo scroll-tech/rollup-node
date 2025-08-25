@@ -301,13 +301,15 @@ impl ScrollRollupNodeConfig {
         };
 
         // Instantiate the signer
-        let signer = if self.test {
+        let chain_id = chain_spec.chain().id();
+        let signer = if let Some(configured_signer) = self.signer_args.signer(chain_id).await? {
+            // Use the signer configured by SignerArgs
+            Some(rollup_node_signer::Signer::spawn(configured_signer))
+        } else if self.test {
             // Use a random private key signer for testing
             Some(rollup_node_signer::Signer::spawn(PrivateKeySigner::random()))
         } else {
-            // Use the signer configured by SignerArgs
-            let chain_id = chain_spec.chain().id();
-            self.signer_args.signer(chain_id).await?.map(rollup_node_signer::Signer::spawn)
+            None
         };
 
         // Instantiate the chain orchestrator
