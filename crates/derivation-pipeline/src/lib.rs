@@ -30,6 +30,7 @@ use rollup_node_providers::{BlockDataProvider, L1Provider};
 use scroll_alloy_rpc_types_engine::{BlockDataHint, ScrollPayloadAttributes};
 use scroll_codec::Codec;
 use scroll_db::{Database, DatabaseOperations};
+use tokio::time::Interval;
 
 /// A future that resolves to a stream of [`ScrollPayloadAttributesWithBatchInfo`].
 type DerivationPipelineFuture = Pin<
@@ -42,6 +43,9 @@ type DerivationPipelineFuture = Pin<
             > + Send,
     >,
 >;
+
+/// The interval (in ms) at which the derivation pipeline should report queue size metrics.
+const QUEUE_METRICS_INTERVAL: u64 = 1000;
 
 /// A structure holding the current unresolved futures for the derivation pipeline.
 pub struct DerivationPipeline<P> {
@@ -59,6 +63,8 @@ pub struct DerivationPipeline<P> {
     waker: Option<Waker>,
     /// The metrics of the pipeline.
     metrics: DerivationPipelineMetrics,
+    /// The interval at which the derivation pipeline should report queue size metrics.
+    queue_metrics_interval: Interval,
 }
 
 impl<P: Debug> Debug for DerivationPipeline<P> {
@@ -92,6 +98,7 @@ where
             attributes_queue: Default::default(),
             waker: None,
             metrics: DerivationPipelineMetrics::default(),
+            queue_metrics_interval: delayed_interval(QUEUE_METRICS_INTERVAL),
         }
     }
 
@@ -160,6 +167,12 @@ where
         self.batch_queue.clear();
         self.pipeline_future = None;
     }
+
+    /// Emits the queue size metrics for the batch and payload attributes queues.
+    fn emit_queue_gauges(&self) {
+        self.metrics.batch_queue_size.set(self.batch_queue.len() as f64);
+        self.metrics.payload_attributes_queue_size.set(self.attributes_queue.len() as f64);
+    }
 }
 
 impl<P> Stream for DerivationPipeline<P>
@@ -170,6 +183,11 @@ where
 
     fn poll_next(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
         let this = self.get_mut();
+
+        // report queue size metrics if the interval has elapsed.
+        while this.queue_metrics_interval.poll_tick(cx).is_ready() {
+            this.emit_queue_gauges();
+        }
 
         // return attributes from the queue if any.
         if let Some(attribute) = this.attributes_queue.pop_front() {
@@ -295,6 +313,14 @@ pub async fn derive<L1P: L1Provider + Sync + Send, L2P: BlockDataProvider + Sync
     Ok(attributes)
 }
 
+/// Creates a delayed interval that will not skip ticks if the interval is missed but will delay
+/// the next tick until the interval has passed.
+fn delayed_interval(interval: u64) -> Interval {
+    let mut interval = tokio::time::interval(tokio::time::Duration::from_millis(interval));
+    interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
+    interval
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -388,6 +414,7 @@ mod tests {
             .into(),
             waker: None,
             metrics: Default::default(),
+            queue_metrics_interval: delayed_interval(QUEUE_METRICS_INTERVAL),
         };
 
         // flush and verify all relevant fields are emptied.
@@ -810,6 +837,7 @@ mod tests {
             attributes_queue: attributes,
             waker: None,
             metrics: Default::default(),
+            queue_metrics_interval: delayed_interval(QUEUE_METRICS_INTERVAL),
         }
     }
 

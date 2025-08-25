@@ -596,7 +596,7 @@ impl<
         } else {
             None
         };
-        Ok(Some(ChainOrchestratorEvent::ChainUnwound {
+        Ok(Some(ChainOrchestratorEvent::L1Reorg {
             l1_block_number,
             queue_index,
             l2_head_block_info,
@@ -1577,7 +1577,7 @@ mod test {
         let event = chain_orchestrator.next().await.unwrap().unwrap();
         assert_eq!(
             event,
-            ChainOrchestratorEvent::ChainUnwound {
+            ChainOrchestratorEvent::L1Reorg {
                 l1_block_number: 17,
                 queue_index: None,
                 l2_head_block_info: None,
@@ -1592,7 +1592,7 @@ mod test {
 
         assert_eq!(
             event,
-            ChainOrchestratorEvent::ChainUnwound {
+            ChainOrchestratorEvent::L1Reorg {
                 l1_block_number: 7,
                 queue_index: Some(8),
                 l2_head_block_info: Some(blocks[7].block_info),
@@ -1606,7 +1606,7 @@ mod test {
 
         assert_eq!(
             event,
-            ChainOrchestratorEvent::ChainUnwound {
+            ChainOrchestratorEvent::L1Reorg {
                 l1_block_number: 3,
                 queue_index: Some(4),
                 l2_head_block_info: Some(blocks[3].block_info),

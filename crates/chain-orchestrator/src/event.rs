@@ -27,8 +27,9 @@ pub enum ChainOrchestratorEvent {
     ChainExtended(ChainImport),
     /// The chain has reorged, returning the new chain and the peer that provided them.
     ChainReorged(ChainImport),
-    /// A `BatchCommit` event has been indexed returning the batch info and the L2 block info to
-    /// revert to due to a batch revert.
+    /// A `BatchCommit` event has been indexed returning the batch info and L1 block number at
+    /// which the event was emitted. If this event is associated with a batch revert then the
+    /// `safe_head` will also be populated with the `BlockInfo` that represents the new L2 head.
     BatchCommitIndexed {
         /// The batch info.
         batch_info: BatchInfo,
@@ -45,10 +46,10 @@ pub enum ChainOrchestratorEvent {
     L1BlockFinalized(u64, Option<BlockInfo>),
     /// A `L1Message` event has been committed returning the message queue index.
     L1MessageCommitted(u64),
-    /// The chain has been unwound, returning the L1 block number of the new L1 head,
+    /// A reorg has occurred on L1, returning the L1 block number of the new L1 head,
     /// the L1 message queue index of the new L1 head, and optionally the L2 head and safe block
-    /// info if the unwind resulted in a new L2 head or safe block.
-    ChainUnwound {
+    /// info if the reorg resulted in a new L2 head or safe block.
+    L1Reorg {
         /// The L1 block number of the new L1 head.
         l1_block_number: u64,
         /// The L1 message queue index of the new L1 head.
