@@ -54,20 +54,25 @@ pub enum ConsolidationOutcome {
     Consolidation(L2BlockInfoWithL1Messages, BatchInfo),
     /// Represents a reorganization outcome with the consolidated block info and batch info.
     Reorg(L2BlockInfoWithL1Messages, BatchInfo),
+    /// Represents no action taken during consolidation, typically due to L1 not being synced.
+    Skipped(BlockInfo, BatchInfo),
 }
 
 impl ConsolidationOutcome {
     /// Returns the consolidated block info.
-    pub const fn block_info(&self) -> &L2BlockInfoWithL1Messages {
+    pub const fn block_info(&self) -> Option<&L2BlockInfoWithL1Messages> {
         match self {
-            Self::Consolidation(info, _) | Self::Reorg(info, _) => info,
+            Self::Consolidation(info, _) | Self::Reorg(info, _) => Some(info),
+            Self::Skipped(_, _) => None,
         }
     }
 
     /// Returns the batch info associated with the consolidation outcome.
     pub const fn batch_info(&self) -> &BatchInfo {
         match self {
-            Self::Consolidation(_, batch_info) | Self::Reorg(_, batch_info) => batch_info,
+            Self::Consolidation(_, batch_info) |
+            Self::Reorg(_, batch_info) |
+            Self::Skipped(_, batch_info) => batch_info,
         }
     }
 
@@ -128,6 +133,7 @@ impl EngineFuture {
         execution_payload_provider: P,
         fcs: ForkchoiceState,
         payload_attributes: ScrollPayloadAttributesWithBatchInfo,
+        l1_synced: bool,
     ) -> Self
     where
         EC: ScrollEngineApi + Unpin + Send + Sync + 'static,
@@ -138,6 +144,7 @@ impl EngineFuture {
             execution_payload_provider,
             fcs,
             payload_attributes,
+            l1_synced,
         )))
     }
 
@@ -259,6 +266,7 @@ async fn handle_payload_attributes<EC, P>(
     provider: P,
     fcs: ForkchoiceState,
     payload_attributes_with_batch_info: ScrollPayloadAttributesWithBatchInfo,
+    l1_synced: bool,
 ) -> Result<ConsolidationOutcome, EngineDriverError>
 where
     EC: ScrollEngineApi + Unpin + Send + Sync + 'static,
@@ -294,7 +302,7 @@ where
             forkchoice_updated(client, fcs, None).await?;
         }
         Ok(ConsolidationOutcome::Consolidation(safe_block_info, batch_info))
-    } else {
+    } else if l1_synced {
         let mut fcs = fcs.get_alloy_fcs();
         // Otherwise, we construct a block from the payload attributes on top of the current
         // safe head.
@@ -326,6 +334,9 @@ where
         forkchoice_updated(client, fcs, None).await?;
 
         Ok(ConsolidationOutcome::Reorg(safe_block_info, batch_info))
+    } else {
+        tracing::warn!(target: "scroll::engine::future", ?payload_attributes_with_batch_info, "L1 not synced, skipping consolidation of non-matching payload attributes");
+        Ok(ConsolidationOutcome::Skipped(*fcs.safe_block_info(), batch_info))
     }
 }
 

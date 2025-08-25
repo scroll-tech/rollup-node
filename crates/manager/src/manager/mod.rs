@@ -370,10 +370,14 @@ where
                 }
             }
             EngineDriverEvent::L1BlockConsolidated(consolidation_outcome) => {
-                self.chain.persist_l1_consolidated_blocks(
-                    vec![consolidation_outcome.block_info().clone()],
-                    *consolidation_outcome.batch_info(),
-                );
+                if let Some(block_info) = consolidation_outcome.block_info() {
+                    self.chain.persist_l1_consolidated_blocks(
+                        vec![block_info.clone()],
+                        *consolidation_outcome.batch_info(),
+                    );
+                } else {
+                    warn!(target: "scroll::node::manager", "L1 derived block consolidation skipped due to L1 not being synced");
+                }
 
                 if let Some(event_sender) = self.event_sender.as_ref() {
                     event_sender.notify(RollupManagerEvent::L1DerivedBlockConsolidated(
@@ -410,6 +414,7 @@ where
             }
             L1Notification::Synced => {
                 self.chain.handle_l1_notification(L1Notification::Synced);
+                self.engine.set_l1_synced_status(true);
             }
             _ => self.chain.handle_l1_notification(notification),
         }
