@@ -19,10 +19,11 @@ use rollup_node::{
         default_sequencer_test_scroll_rollup_node_config, default_test_scroll_rollup_node_config,
         generate_tx, setup_engine,
     },
-    BeaconProviderArgs, ConsensusAlgorithm, ConsensusArgs, DatabaseArgs, EngineDriverArgs,
-    GasPriceOracleArgs, L1ProviderArgs, NetworkArgs as ScrollNetworkArgs, RollupNodeContext,
-    ScrollRollupNodeConfig, SequencerArgs,
+    BeaconProviderArgs, ChainOrchestratorArgs, ConsensusAlgorithm, ConsensusArgs, DatabaseArgs,
+    EngineDriverArgs, GasPriceOracleArgs, L1ProviderArgs, NetworkArgs as ScrollNetworkArgs,
+    RollupNodeContext, ScrollRollupNodeConfig, SequencerArgs,
 };
+use rollup_node_chain_orchestrator::ChainOrchestratorEvent;
 use rollup_node_manager::{RollupManagerCommand, RollupManagerEvent};
 use rollup_node_primitives::{sig_encode_hash, BatchCommitData, ConsensusUpdate};
 use rollup_node_providers::BlobSource;
@@ -50,6 +51,7 @@ async fn can_bridge_l1_messages() -> eyre::Result<()> {
         database_args: DatabaseArgs { path: Some(PathBuf::from("sqlite::memory:")) },
         l1_provider_args: L1ProviderArgs::default(),
         engine_driver_args: EngineDriverArgs::default(),
+        chain_orchestrator_args: ChainOrchestratorArgs::default(),
         sequencer_args: SequencerArgs {
             sequencer_enabled: true,
             block_time: 0,
@@ -86,19 +88,43 @@ async fn can_bridge_l1_messages() -> eyre::Result<()> {
             block_timestamp: 1000,
         }))
         .await?;
-    if let Some(RollupManagerEvent::L1MessageIndexed(index)) = rnm_events.next().await {
-        assert_eq!(index, 0);
-    } else {
-        panic!("Incorrect index for L1 message");
-    };
+
+    wait_n_events(
+        &mut rnm_events,
+        |e| {
+            if let RollupManagerEvent::ChainOrchestratorEvent(
+                rollup_node_chain_orchestrator::ChainOrchestratorEvent::L1MessageCommitted(index),
+            ) = e
+            {
+                assert_eq!(index, 0);
+                true
+            } else {
+                false
+            }
+        },
+        1,
+    )
+    .await;
 
     rnm_handle.build_block().await;
-    if let Some(RollupManagerEvent::BlockSequenced(block)) = rnm_events.next().await {
-        assert_eq!(block.body.transactions.len(), 1);
-        assert_eq!(block.body.transactions[0].as_l1_message().unwrap().inner(), &l1_message,);
-    } else {
-        panic!("Failed to receive block from rollup node");
-    }
+
+    wait_n_events(
+        &mut rnm_events,
+        |e| {
+            if let RollupManagerEvent::BlockSequenced(block) = e {
+                assert_eq!(block.body.transactions.len(), 1);
+                assert_eq!(
+                    block.body.transactions[0].as_l1_message().unwrap().inner(),
+                    &l1_message
+                );
+                true
+            } else {
+                false
+            }
+        },
+        1,
+    )
+    .await;
 
     Ok(())
 }
@@ -119,6 +145,7 @@ async fn can_sequence_and_gossip_blocks() {
         database_args: DatabaseArgs { path: Some(PathBuf::from("sqlite::memory:")) },
         l1_provider_args: L1ProviderArgs::default(),
         engine_driver_args: EngineDriverArgs::default(),
+        chain_orchestrator_args: ChainOrchestratorArgs::default(),
         sequencer_args: SequencerArgs {
             sequencer_enabled: true,
             block_time: 0,
@@ -151,20 +178,49 @@ async fn can_sequence_and_gossip_blocks() {
     sequencer_rnm_handle.build_block().await;
 
     // wait for the sequencer to build a block
-    if let Some(RollupManagerEvent::BlockSequenced(block)) = sequencer_events.next().await {
-        assert_eq!(block.body.transactions.len(), 1);
-    } else {
-        panic!("Failed to receive block from rollup node");
-    }
+    wait_n_events(
+        &mut sequencer_events,
+        |e| {
+            if let RollupManagerEvent::BlockSequenced(block) = e {
+                assert_eq!(block.body.transactions.len(), 1);
+                true
+            } else {
+                false
+            }
+        },
+        1,
+    )
+    .await;
 
     // assert that the follower node has received the block from the peer
-    if let Some(RollupManagerEvent::NewBlockReceived(block_with_peer)) =
-        follower_events.next().await
-    {
-        assert_eq!(block_with_peer.block.body.transactions.len(), 1);
-    } else {
-        panic!("Failed to receive block from rollup node");
-    }
+    wait_n_events(
+        &mut follower_events,
+        |e| {
+            if let RollupManagerEvent::NewBlockReceived(block_with_peer) = e {
+                assert_eq!(block_with_peer.block.body.transactions.len(), 1);
+                true
+            } else {
+                false
+            }
+        },
+        1,
+    )
+    .await;
+
+    // assert that a chain extension is triggered on the follower node
+    wait_n_events(
+        &mut follower_events,
+        |e| {
+            matches!(
+                e,
+                RollupManagerEvent::ChainOrchestratorEvent(
+                    rollup_node_chain_orchestrator::ChainOrchestratorEvent::ChainExtended(_)
+                )
+            )
+        },
+        1,
+    )
+    .await;
 
     // assert that the block was successfully imported by the follower node
     wait_n_events(&mut follower_events, |e| matches!(e, RollupManagerEvent::BlockImported(_)), 1)
@@ -201,6 +257,7 @@ async fn can_penalize_peer_for_invalid_block() {
         signer_args: Default::default(),
         gas_price_oracle_args: GasPriceOracleArgs::default(),
         consensus_args: ConsensusArgs::noop(),
+        chain_orchestrator_args: ChainOrchestratorArgs::default(),
     };
 
     let (nodes, _tasks, _) =
@@ -219,7 +276,10 @@ async fn can_penalize_peer_for_invalid_block() {
     assert_eq!(initial_reputation, 0);
 
     // create invalid block
-    let block = ScrollBlock::default();
+    let mut block = ScrollBlock::default();
+    block.header.number = 1;
+    block.header.parent_hash =
+        b256!("0x14844a4fc967096c628e90df3bb0c3e98941bdd31d1982c2f3e70ed17250d98b");
 
     // send invalid block from node0 to node1. We don't care about the signature here since we use a
     // NoopConsensus in the test.
@@ -418,6 +478,133 @@ where
 
 #[allow(clippy::large_stack_frames)]
 #[tokio::test]
+async fn can_forward_tx_to_sequencer() {
+    reth_tracing::init_test_tracing();
+
+    // create 2 nodes
+    let mut sequencer_node_config = default_sequencer_test_scroll_rollup_node_config();
+    sequencer_node_config.sequencer_args.block_time = 0;
+    sequencer_node_config.network_args.enable_eth_scroll_wire_bridge = false;
+    let mut follower_node_config = default_test_scroll_rollup_node_config();
+    follower_node_config.network_args.enable_eth_scroll_wire_bridge = false;
+
+    // Create the chain spec for scroll mainnet with Euclid v2 activated and a test genesis.
+    let chain_spec = (*SCROLL_DEV).clone();
+    let (mut sequencer_node, _tasks, _) =
+        setup_engine(sequencer_node_config, 1, chain_spec.clone(), false, true).await.unwrap();
+
+    let sequencer_url = format!("http://localhost:{}", sequencer_node[0].rpc_url().port().unwrap());
+    follower_node_config.network_args.sequencer_url = Some(sequencer_url);
+    let (mut follower_node, _tasks, wallet) =
+        setup_engine(follower_node_config, 1, chain_spec, false, true).await.unwrap();
+
+    let wallet = Arc::new(Mutex::new(wallet));
+
+    // Connect the nodes together.
+    sequencer_node[0].network.add_peer(follower_node[0].network.record()).await;
+    follower_node[0].network.next_session_established().await;
+    sequencer_node[0].network.next_session_established().await;
+
+    // generate rollup node manager event streams for each node
+    let sequencer_rnm_handle = sequencer_node[0].inner.add_ons_handle.rollup_manager_handle.clone();
+    let mut sequencer_events = sequencer_rnm_handle.get_event_listener().await.unwrap();
+    let mut follower_events = follower_node[0]
+        .inner
+        .add_ons_handle
+        .rollup_manager_handle
+        .get_event_listener()
+        .await
+        .unwrap();
+
+    // have the sequencer build an empty block and gossip it to follower
+    sequencer_rnm_handle.build_block().await;
+
+    // wait for the sequencer to build a block with no transactions
+    if let Some(RollupManagerEvent::BlockSequenced(block)) = sequencer_events.next().await {
+        assert_eq!(block.body.transactions.len(), 0);
+    } else {
+        panic!("Failed to receive block from rollup node");
+    }
+
+    // assert that the follower node has received the block from the peer
+    wait_n_events(&mut follower_events, |e| matches!(e, RollupManagerEvent::BlockImported(_)), 1)
+        .await;
+
+    // inject a transaction into the pool of the follower node
+    let tx = generate_tx(wallet).await;
+    follower_node[0].rpc.inject_tx(tx).await.unwrap();
+
+    tokio::time::sleep(tokio::time::Duration::from_secs(10)).await;
+
+    // build block
+    sequencer_rnm_handle.build_block().await;
+
+    // wait for the sequencer to build a block with transactions
+    wait_n_events(
+        &mut sequencer_events,
+        |e| {
+            if let RollupManagerEvent::BlockSequenced(block) = e {
+                assert_eq!(block.header.number, 2);
+                assert_eq!(block.body.transactions.len(), 1);
+                return true
+            }
+            false
+        },
+        1,
+    )
+    .await;
+
+    // skip the chain committed event
+    let _ = follower_events.next().await;
+
+    // assert that the follower node has received the block from the peer
+    wait_n_events(
+        &mut follower_events,
+        |e| {
+            if let RollupManagerEvent::NewBlockReceived(block_with_peer) = e {
+                assert_eq!(block_with_peer.block.body.transactions.len(), 1);
+                true
+            } else {
+                false
+            }
+        },
+        1,
+    )
+    .await;
+
+    // assert that a chain extension is triggered on the follower node
+    wait_n_events(
+        &mut follower_events,
+        |e| {
+            matches!(
+                e,
+                RollupManagerEvent::ChainOrchestratorEvent(
+                    rollup_node_chain_orchestrator::ChainOrchestratorEvent::ChainExtended(_)
+                )
+            )
+        },
+        1,
+    )
+    .await;
+
+    // assert that the block was successfully imported by the follower node
+    wait_n_events(
+        &mut follower_events,
+        |e| {
+            if let RollupManagerEvent::BlockImported(block) = e {
+                assert_eq!(block.body.transactions.len(), 1);
+                true
+            } else {
+                false
+            }
+        },
+        1,
+    )
+    .await;
+}
+
+#[allow(clippy::large_stack_frames)]
+#[tokio::test]
 async fn can_sequence_and_gossip_transactions() {
     reth_tracing::init_test_tracing();
 
@@ -490,120 +677,20 @@ async fn can_sequence_and_gossip_transactions() {
     )
     .await;
 
+    // skip the chain committed event
+    let _ = follower_events.next().await;
+
     // assert that the follower node has received the block from the peer
-    wait_n_events(
-        &mut follower_events,
-        |e| {
-            if let RollupManagerEvent::NewBlockReceived(block_with_peer) = e {
-                assert_eq!(block_with_peer.block.body.transactions.len(), 1);
-                true
-            } else {
-                false
-            }
-        },
-        1,
-    )
-    .await;
-
-    // assert that the block was successfully imported by the follower node
-    wait_n_events(
-        &mut follower_events,
-        |e| {
-            if let RollupManagerEvent::BlockImported(block) = e {
-                assert_eq!(block.body.transactions.len(), 1);
-                true
-            } else {
-                false
-            }
-        },
-        1,
-    )
-    .await;
-}
-
-#[allow(clippy::large_stack_frames)]
-#[tokio::test]
-async fn can_forward_tx_to_sequencer() {
-    reth_tracing::init_test_tracing();
-
-    // create 2 nodes
-    let mut sequencer_node_config = default_sequencer_test_scroll_rollup_node_config();
-    sequencer_node_config.sequencer_args.block_time = 0;
-    let mut follower_node_config = default_test_scroll_rollup_node_config();
-
-    // Create the chain spec for scroll mainnet with Euclid v2 activated and a test genesis.
-    let chain_spec = (*SCROLL_DEV).clone();
-    let (mut sequencer_node, _tasks, _) =
-        setup_engine(sequencer_node_config, 1, chain_spec.clone(), false, true).await.unwrap();
-
-    let sequencer_url = format!("http://localhost:{}", sequencer_node[0].rpc_url().port().unwrap());
-    follower_node_config.network_args.sequencer_url = Some(sequencer_url);
-    let (mut follower_node, _tasks, wallet) =
-        setup_engine(follower_node_config, 1, chain_spec, false, true).await.unwrap();
-
-    let wallet = Arc::new(Mutex::new(wallet));
-
-    // Connect the nodes together.
-    sequencer_node[0].network.add_peer(follower_node[0].network.record()).await;
-    follower_node[0].network.next_session_established().await;
-    sequencer_node[0].network.next_session_established().await;
-
-    // generate rollup node manager event streams for each node
-    let sequencer_rnm_handle = sequencer_node[0].inner.add_ons_handle.rollup_manager_handle.clone();
-    let mut sequencer_events = sequencer_rnm_handle.get_event_listener().await.unwrap();
-    let mut follower_events = follower_node[0]
-        .inner
-        .add_ons_handle
-        .rollup_manager_handle
-        .get_event_listener()
-        .await
-        .unwrap();
-
-    // have the sequencer build an empty block and gossip it to follower
-    sequencer_rnm_handle.build_block().await;
-
-    // wait for the sequencer to build a block with no transactions
-    if let Some(RollupManagerEvent::BlockSequenced(block)) = sequencer_events.next().await {
-        assert_eq!(block.body.transactions.len(), 0);
+    if let Some(RollupManagerEvent::NewBlockReceived(block_with_peer)) =
+        follower_events.next().await
+    {
+        assert_eq!(block_with_peer.block.body.transactions.len(), 1);
     } else {
         panic!("Failed to receive block from rollup node");
     }
 
-    // assert that the follower node has received the block from the peer
-    wait_n_events(&mut follower_events, |e| matches!(e, RollupManagerEvent::BlockImported(_)), 1)
-        .await;
-
-    // inject a transaction into the pool of the follower node
-    let tx = generate_tx(wallet).await;
-    follower_node[0].rpc.inject_tx(tx).await.unwrap();
-
-    tokio::time::sleep(tokio::time::Duration::from_secs(10)).await;
-
-    // build block
-    sequencer_rnm_handle.build_block().await;
-
-    // wait for the sequencer to build a block with transactions
-    wait_n_events(
-        &mut sequencer_events,
-        |e| {
-            if let RollupManagerEvent::BlockSequenced(block) = e {
-                assert_eq!(block.header.number, 2);
-                assert_eq!(block.body.transactions.len(), 1);
-                return true
-            }
-            false
-        },
-        1,
-    )
-    .await;
-
-    // assert that the follower node has received the block from the peer
-    wait_n_events(
-        &mut follower_events,
-        |e| matches!(e, RollupManagerEvent::NewBlockReceived(_)),
-        1,
-    )
-    .await;
+    // skip the chain extension event
+    let _ = follower_events.next().await;
 
     // assert that the block was successfully imported by the follower node
     wait_n_events(
@@ -654,8 +741,10 @@ async fn can_bridge_blocks() {
         .build_with_noop_provider(chain_spec.clone());
     let scroll_wire_config = ScrollWireConfig::new(true);
     let mut scroll_network = scroll_network::ScrollNetworkManager::new(
+        chain_spec.clone(),
         network_config,
         scroll_wire_config,
+        None,
         Default::default(),
     )
     .await;
@@ -942,38 +1031,8 @@ async fn can_handle_batch_revert() -> eyre::Result<()> {
         setup_engine(default_test_scroll_rollup_node_config(), 1, chain_spec.clone(), false, false)
             .await?;
     let node = nodes.pop().unwrap();
-
-    // Instantiate the rollup node manager.
-    let mut config = default_test_scroll_rollup_node_config();
-    let path = node.inner.config.datadir().db().join("scroll.db?mode=rwc");
-    let path = PathBuf::from("sqlite://".to_string() + &*path.to_string_lossy());
-    config.database_args.path = Some(path.clone());
-    config.beacon_provider_args.url = Some(
-        "http://dummy:8545"
-            .parse()
-            .expect("valid url that will not be used as test batches use calldata"),
-    );
-
-    let (_, events) = ScrollWireProtocolHandler::new(ScrollWireConfig::new(true));
-    let (rnm, handle, l1_watcher_tx) = config
-        .clone()
-        .build(
-            RollupNodeContext::new(
-                node.inner.network.clone(),
-                chain_spec.clone(),
-                path.clone(),
-                SCROLL_GAS_LIMIT,
-            ),
-            events,
-            node.inner.add_ons_handle.rpc_handle.rpc_server_handles.clone(),
-        )
-        .await?;
-    let l1_watcher_tx = l1_watcher_tx.unwrap();
-
-    // Spawn a task that constantly polls the rnm to make progress.
-    tokio::spawn(async {
-        let _ = rnm.await;
-    });
+    let handle = node.inner.add_ons_handle.rollup_manager_handle.clone();
+    let l1_watcher_tx = node.inner.add_ons_handle.l1_watcher_tx.clone().unwrap();
 
     // Request an event stream from the rollup node manager and manually poll rnm to process the
     // event stream request from the handle.
@@ -1072,28 +1131,20 @@ async fn can_handle_reorgs_while_sequencing() -> eyre::Result<()> {
     let chain_spec = (*SCROLL_DEV).clone();
 
     // Launch a node
-    let mut config = default_test_scroll_rollup_node_config();
-    config.sequencer_args.block_time = 0;
-    let (mut nodes, _tasks, _) = setup_engine(config, 1, chain_spec.clone(), false, false).await?;
-    let node = nodes.pop().unwrap();
-
-    // Instantiate the rollup node manager.
     let mut config = default_sequencer_test_scroll_rollup_node_config();
-    let path = node.inner.config.datadir().db().join("scroll.db?mode=rwc");
-    let path = PathBuf::from("sqlite://".to_string() + &*path.to_string_lossy());
-    config.database_args.path = Some(path.clone());
+    config.sequencer_args.block_time = 0;
     config.beacon_provider_args.url = Some(
         "http://dummy:8545"
             .parse()
             .expect("valid url that will not be used as test batches use calldata"),
     );
     config.engine_driver_args.sync_at_startup = false;
-    let (nodes, _tasks, _) = setup_engine(config, 1, chain_spec, false, false).await?;
-    let node = nodes.first().unwrap();
-    let l1_watcher_tx = node.inner.add_ons_handle.l1_watcher_tx.as_ref().unwrap();
-    let mut rnm_events =
-        node.inner.add_ons_handle.rollup_manager_handle.get_event_listener().await?;
-    let sequencer_rnm_handle = nodes[0].inner.add_ons_handle.rollup_manager_handle.clone();
+    let (mut nodes, _tasks, _) = setup_engine(config, 1, chain_spec.clone(), false, false).await?;
+    let node = nodes.pop().unwrap();
+
+    let handle = node.inner.add_ons_handle.rollup_manager_handle.clone();
+    let l1_watcher_tx = node.inner.add_ons_handle.l1_watcher_tx.clone().unwrap();
+    let mut rnm_events = handle.get_event_listener().await?;
 
     // Send an L1 message.
     let message = TxL1Message {
@@ -1106,14 +1157,15 @@ async fn can_handle_reorgs_while_sequencing() -> eyre::Result<()> {
     };
 
     // Let the sequencer build 10 blocks before performing the reorg process.
+    handle.build_block().await;
     let mut i = 0;
     loop {
-        sequencer_rnm_handle.build_block().await;
         if let Some(RollupManagerEvent::BlockSequenced(_)) = rnm_events.next().await {
+            i += 1;
             if i == 10 {
                 break
             }
-            i += 1;
+            handle.build_block().await;
         }
     }
 
@@ -1122,7 +1174,10 @@ async fn can_handle_reorgs_while_sequencing() -> eyre::Result<()> {
         .send(Arc::new(L1Notification::L1Message { message, block_number: 10, block_timestamp: 0 }))
         .await?;
     loop {
-        if let Some(RollupManagerEvent::L1MessageIndexed(index)) = rnm_events.next().await {
+        if let Some(RollupManagerEvent::ChainOrchestratorEvent(
+            ChainOrchestratorEvent::L1MessageCommitted(index),
+        )) = rnm_events.next().await
+        {
             assert_eq!(index, 0);
             break
         }
@@ -1130,7 +1185,7 @@ async fn can_handle_reorgs_while_sequencing() -> eyre::Result<()> {
     l1_watcher_tx.send(Arc::new(L1Notification::NewBlock(10))).await?;
 
     // Wait for block that contains the L1 message.
-    sequencer_rnm_handle.build_block().await;
+    handle.build_block().await;
     let l2_reorged_height;
     loop {
         if let Some(RollupManagerEvent::BlockSequenced(block)) = rnm_events.next().await {
@@ -1138,6 +1193,7 @@ async fn can_handle_reorgs_while_sequencing() -> eyre::Result<()> {
                 l2_reorged_height = block.header.number;
                 break
             }
+            handle.build_block().await;
         }
     }
 
@@ -1151,7 +1207,7 @@ async fn can_handle_reorgs_while_sequencing() -> eyre::Result<()> {
     }
 
     // Get the next sequenced L2 block.
-    sequencer_rnm_handle.build_block().await;
+    handle.build_block().await;
     loop {
         if let Some(RollupManagerEvent::BlockSequenced(block)) = rnm_events.next().await {
             assert_eq!(block.number, l2_reorged_height);
@@ -1170,15 +1226,9 @@ async fn can_gossip_over_eth_wire() -> eyre::Result<()> {
     let chain_spec = (*SCROLL_DEV).clone();
 
     // Setup the rollup node manager.
-    let (mut nodes, _tasks, _) = setup_engine(
-        default_sequencer_test_scroll_rollup_node_config(),
-        2,
-        chain_spec.clone(),
-        false,
-        false,
-    )
-    .await
-    .unwrap();
+    let config = default_sequencer_test_scroll_rollup_node_config();
+    let (mut nodes, _tasks, _) =
+        setup_engine(config, 2, chain_spec.clone(), false, false).await.unwrap();
     let _sequencer = nodes.pop().unwrap();
     let follower = nodes.pop().unwrap();
 
@@ -1213,18 +1263,20 @@ async fn signer_rotation() -> eyre::Result<()> {
     sequencer_1_config.consensus_args.algorithm = ConsensusAlgorithm::SystemContract;
     sequencer_1_config.consensus_args.authorized_signer = Some(signer_1_address);
     sequencer_1_config.signer_args.private_key = Some(signer_1);
+    sequencer_1_config.network_args.enable_eth_scroll_wire_bridge = false;
 
     let mut sequencer_2_config = default_sequencer_test_scroll_rollup_node_config();
     sequencer_2_config.test = false;
     sequencer_2_config.consensus_args.algorithm = ConsensusAlgorithm::SystemContract;
     sequencer_2_config.consensus_args.authorized_signer = Some(signer_1_address);
     sequencer_2_config.signer_args.private_key = Some(signer_2);
+    sequencer_2_config.network_args.enable_eth_scroll_wire_bridge = false;
 
     // Setup two sequencer nodes.
     let (mut nodes, _tasks, _) =
         setup_engine(sequencer_1_config, 2, chain_spec.clone(), false, false).await.unwrap();
-    let mut sequencer_1 = nodes.pop().unwrap();
     let follower = nodes.pop().unwrap();
+    let mut sequencer_1 = nodes.pop().unwrap();
     let (mut nodes, _tasks, _) =
         setup_engine(sequencer_2_config, 1, chain_spec.clone(), false, false).await.unwrap();
     let mut sequencer_2 = nodes.pop().unwrap();
@@ -1239,23 +1291,40 @@ async fn signer_rotation() -> eyre::Result<()> {
     // Create a follower event stream.
     let mut follower_events =
         follower.inner.add_ons_handle.rollup_manager_handle.get_event_listener().await.unwrap();
+    let mut sequencer_2_events =
+        sequencer_2.inner.add_ons_handle.rollup_manager_handle.get_event_listener().await.unwrap();
 
     // connect the two sequencers
     sequencer_1.connect(&mut sequencer_2).await;
 
+    for _ in 0..5 {
+        wait_n_events(
+            &mut follower_events,
+            |event| {
+                if let RollupManagerEvent::NewBlockReceived(block) = event {
+                    let signature = block.signature;
+                    let hash = sig_encode_hash(&block.block);
+                    // Verify that the block is signed by the first sequencer.
+                    let recovered_address = signature.recover_address_from_prehash(&hash).unwrap();
+                    recovered_address == signer_1_address
+                } else {
+                    false
+                }
+            },
+            1,
+        )
+        .await;
+        wait_n_events(
+            &mut follower_events,
+            |event| matches!(event, RollupManagerEvent::BlockImported(_)),
+            1,
+        )
+        .await;
+    }
+
     wait_n_events(
-        &mut follower_events,
-        |event| {
-            if let RollupManagerEvent::NewBlockReceived(block) = event {
-                let signature = block.signature;
-                let hash = sig_encode_hash(&block.block);
-                // Verify that the block is signed by the first sequencer.
-                let recovered_address = signature.recover_address_from_prehash(&hash).unwrap();
-                recovered_address == signer_1_address
-            } else {
-                false
-            }
-        },
+        &mut sequencer_2_events,
+        |e| matches!(e, RollupManagerEvent::BlockImported(_)),
         5,
     )
     .await;

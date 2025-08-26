@@ -1,3 +1,4 @@
+use alloy_consensus::Header;
 use alloy_eips::{BlockNumHash, Decodable2718};
 use alloy_primitives::{B256, U256};
 use alloy_rpc_types_engine::ExecutionPayload;
@@ -50,6 +51,18 @@ impl From<BlockNumHash> for BlockInfo {
 
 impl From<&ScrollBlock> for BlockInfo {
     fn from(value: &ScrollBlock) -> Self {
+        Self { number: value.number, hash: value.hash_slow() }
+    }
+}
+
+impl From<&Header> for BlockInfo {
+    fn from(value: &Header) -> Self {
+        Self { number: value.number, hash: value.hash_slow() }
+    }
+}
+
+impl From<Header> for BlockInfo {
+    fn from(value: Header) -> Self {
         Self { number: value.number, hash: value.hash_slow() }
     }
 }

@@ -1,6 +1,7 @@
 use alloy_rpc_types_engine::PayloadError;
 use rollup_node_primitives::ScrollPayloadAttributesWithBatchInfo;
 use scroll_alloy_provider::ScrollEngineApiError;
+use scroll_alloy_rpc_types_engine::ScrollPayloadAttributes;
 
 /// The error type for the engine API.
 #[derive(Debug, thiserror::Error)]
@@ -17,7 +18,12 @@ pub enum EngineDriverError {
     /// The forkchoice update failed.
     #[error("Forkchoice update failed: {0}")]
     ForkchoiceUpdateFailed(ScrollEngineApiError),
-    /// The payload id field is missing in the forkchoice update response.
-    #[error("Forkchoice update response missing payload id")]
-    MissingPayloadId(ScrollPayloadAttributesWithBatchInfo),
+    /// The payload id field is missing in the forkchoice update response for an L1 consolidation
+    /// job.
+    #[error("Forkchoice update response missing payload id for L1 consolidation job")]
+    L1ConsolidationMissingPayloadId(ScrollPayloadAttributesWithBatchInfo),
+    /// The payload id field is missing in the forkchoice update response for a payload building
+    /// job.
+    #[error("Forkchoice update response missing payload id for payload building job")]
+    PayloadBuildingMissingPayloadId(ScrollPayloadAttributes),
 }

@@ -7,12 +7,13 @@ use crate::{
 
 use alloy_provider::Provider;
 use futures::{ready, task::AtomicWaker, FutureExt, Stream};
-use rollup_node_primitives::{BlockInfo, MeteredFuture, ScrollPayloadAttributesWithBatchInfo};
+use rollup_node_primitives::{
+    BlockInfo, ChainImport, MeteredFuture, ScrollPayloadAttributesWithBatchInfo,
+};
 use scroll_alloy_hardforks::ScrollHardforks;
 use scroll_alloy_network::Scroll;
 use scroll_alloy_provider::ScrollEngineApi;
 use scroll_alloy_rpc_types_engine::ScrollPayloadAttributes;
-use scroll_network::NewBlockWithPeer;
 use std::{
     collections::VecDeque,
     pin::Pin,
@@ -34,14 +35,14 @@ pub struct EngineDriver<EC, CS, P> {
     fcs: ForkchoiceState,
     /// Whether the EN is syncing.
     syncing: bool,
-    /// The gap between EN and tip of chain which triggers optimistic sync.
-    block_gap_sync_trigger: u64,
     /// Block building duration.
     block_building_duration: Duration,
     /// The pending payload attributes derived from batches on L1.
     l1_payload_attributes: VecDeque<ScrollPayloadAttributesWithBatchInfo>,
     /// The pending block imports received over the network.
-    block_imports: VecDeque<NewBlockWithPeer>,
+    chain_imports: VecDeque<ChainImport>,
+    /// The latest optimistic sync target.
+    optimistic_sync_target: Option<BlockInfo>,
     /// The payload attributes associated with the next block to be built.
     sequencer_payload_attributes: Option<ScrollPayloadAttributes>,
     /// The future related to engine API.
@@ -67,7 +68,6 @@ where
         provider: Option<P>,
         fcs: ForkchoiceState,
         sync_at_start_up: bool,
-        block_gap_sync_trigger: u64,
         block_building_duration: Duration,
     ) -> Self {
         Self {
@@ -77,9 +77,9 @@ where
             fcs,
             block_building_duration,
             syncing: sync_at_start_up,
-            block_gap_sync_trigger,
             l1_payload_attributes: VecDeque::new(),
-            block_imports: VecDeque::new(),
+            chain_imports: VecDeque::new(),
+            optimistic_sync_target: None,
             sequencer_payload_attributes: None,
             payload_building_future: None,
             engine_future: None,
@@ -122,17 +122,24 @@ where
     }
 
     /// Handles a block import request by adding it to the queue and waking up the driver.
-    pub fn handle_block_import(&mut self, block_with_peer: NewBlockWithPeer) {
-        tracing::trace!(target: "scroll::engine", ?block_with_peer, "new block import request received");
+    pub fn handle_chain_import(&mut self, chain_import: ChainImport) {
+        tracing::trace!(target: "scroll::engine", head = %chain_import.chain.last().unwrap().hash_slow(), "new chain import request received");
 
-        // Check diff between EN fcs and P2P network tips.
-        let en_block_number = self.fcs.head_block_info().number;
-        let p2p_block_number = block_with_peer.block.header.number;
-        if p2p_block_number.saturating_sub(en_block_number) > self.block_gap_sync_trigger {
-            self.syncing = true
-        }
+        self.chain_imports.push_back(chain_import);
+        self.waker.wake();
+    }
 
-        self.block_imports.push_back(block_with_peer);
+    /// Optimistically syncs the chain to the provided block info.
+    pub fn handle_optimistic_sync(&mut self, block_info: BlockInfo) {
+        tracing::info!(target: "scroll::engine", ?block_info, "optimistic sync request received");
+
+        // Purge all pending block imports.
+        self.chain_imports.clear();
+
+        // Update the fork choice state with the new block info.
+        self.optimistic_sync_target = Some(block_info);
+
+        // Wake up the driver to process the optimistic sync.
         self.waker.wake();
     }
 
@@ -216,7 +223,13 @@ where
                         return Some(EngineDriverEvent::L1BlockConsolidated(consolidation_outcome))
                     }
                     Err(err) => {
-                        tracing::error!(target: "scroll::engine", ?err, "failed to consolidate block derived from L1")
+                        tracing::error!(target: "scroll::engine", ?err, "failed to consolidate block derived from L1");
+                        if let EngineDriverError::L1ConsolidationMissingPayloadId(attributes) = err
+                        {
+                            tracing::info!(target: "scroll::engine", "retrying L1 consolidation job for missing payload id");
+                            self.l1_payload_attributes.push_front(attributes);
+                            self.waker.wake();
+                        }
                     }
                 }
             }
@@ -238,9 +251,22 @@ where
                     }
                     Err(err) => {
                         tracing::error!(target: "scroll::engine", ?err, "failed to build new payload");
-                        if let EngineDriverError::MissingPayloadId(attributes) = err {
-                            self.l1_payload_attributes.push_front(attributes);
+                        if let EngineDriverError::PayloadBuildingMissingPayloadId(attributes) = err
+                        {
+                            self.sequencer_payload_attributes = Some(attributes);
                         }
+                    }
+                }
+            }
+            EngineDriverFutureResult::OptimisticSync(result) => {
+                tracing::info!(target: "scroll::engine", ?result, "handling optimistic sync result");
+
+                match result {
+                    Err(err) => {
+                        tracing::error!(target: "scroll::engine", ?err, "failed to perform optimistic sync")
+                    }
+                    Ok(fcu) => {
+                        tracing::trace!(target: "scroll::engine", ?fcu, "optimistic sync issued successfully");
                     }
                 }
             }
@@ -260,8 +286,8 @@ where
     }
 
     /// Returns the forkchoice state.
-    pub fn forkchoice_state(&self) -> ForkchoiceState {
-        self.fcs.clone()
+    pub const fn forkchoice_state(&self) -> &ForkchoiceState {
+        &self.fcs
     }
 
     /// Returns the alloy forkchoice state.
@@ -316,6 +342,13 @@ where
                     }
                     Err(err) => {
                         tracing::error!(target: "scroll::engine", ?err, "failed to build new payload");
+
+                        if let EngineDriverError::PayloadBuildingMissingPayloadId(attributes) = err
+                        {
+                            tracing::info!(target: "scroll::engine", "retrying payload building job for missing payload id");
+                            this.sequencer_payload_attributes = Some(attributes);
+                            this.waker.wake();
+                        }
                     }
                 },
                 // The job is still in progress, reassign the handle and continue.
@@ -344,13 +377,23 @@ where
             return Poll::Pending;
         }
 
-        // Handle the block import requests.
-        if let Some(block_with_peer) = this.block_imports.pop_front() {
+        // If we have an optimistic sync target, issue the optimistic sync.
+        if let Some(block_info) = this.optimistic_sync_target.take() {
+            this.fcs.update_head_block_info(block_info);
+            let fcs = this.fcs.get_alloy_optimistic_fcs();
+            this.engine_future =
+                Some(MeteredFuture::new(EngineFuture::optimistic_sync(this.client.clone(), fcs)));
+            this.waker.wake();
+            return Poll::Pending;
+        }
+
+        // Handle the chain import requests.
+        if let Some(chain_import) = this.chain_imports.pop_front() {
             let fcs = this.alloy_forkchoice_state();
             let client = this.client.clone();
 
             this.engine_future =
-                Some(MeteredFuture::new(EngineFuture::block_import(client, block_with_peer, fcs)));
+                Some(MeteredFuture::new(EngineFuture::chain_import(client, chain_import, fcs)));
 
             this.waker.wake();
             return Poll::Pending;
@@ -414,15 +457,8 @@ mod tests {
             ForkchoiceState::from_block_info(BlockInfo { number: 0, hash: Default::default() });
         let duration = Duration::from_secs(2);
 
-        let mut driver = EngineDriver::new(
-            client,
-            chain_spec,
-            None::<ScrollRootProvider>,
-            fcs,
-            false,
-            0,
-            duration,
-        );
+        let mut driver =
+            EngineDriver::new(client, chain_spec, None::<ScrollRootProvider>, fcs, false, duration);
 
         // Initially, it should be false
         assert!(!driver.is_payload_building_in_progress());
@@ -448,7 +484,6 @@ mod tests {
             None::<ScrollRootProvider>,
             fcs,
             false,
-            0,
             duration,
         );
 
