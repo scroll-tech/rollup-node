@@ -6,7 +6,7 @@ use sea_orm::{entity::prelude::*, ActiveValue};
 #[sea_orm(table_name = "block_signature")]
 pub struct Model {
     /// The block hash as a primary key.
-    #[sea_orm(primary_key)]
+    #[sea_orm(primary_key, auto_increment = false)]
     pub block_hash: Vec<u8>,
     /// The block signature.
     pub signature: Vec<u8>,
