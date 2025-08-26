@@ -2,7 +2,6 @@ use super::{transaction::DatabaseTransaction, DatabaseConnectionProvider};
 use crate::error::DatabaseError;
 
 use sea_orm::{ConnectOptions, Database as SeaOrmDatabase, DatabaseConnection, TransactionTrait};
-use std::time::Duration;
 
 /// The [`Database`] struct is responsible for interacting with the database.
 ///
