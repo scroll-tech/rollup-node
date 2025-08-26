@@ -279,7 +279,7 @@ impl<
 
         // We fetch headers for the received chain until we can reconcile it with the chain we
         // currently have in-memory.
-        let mut received_chain_headers = vec![received_block.header.clone()];
+        let mut received_chain_headers = VecDeque::from(vec![received_block.header.clone()]);
 
         // We should never have a re-org that is deeper than the current safe head.
         let (latest_safe_block, _) =
@@ -291,7 +291,7 @@ impl<
             // If we are in optimistic mode and the received chain can not be reconciled with the
             // in-memory chain we break. We will reconcile after optimistic sync has completed.
             if *optimistic_mode.lock().await &&
-                received_chain_headers.last().expect("chain can not be empty").number <
+                received_chain_headers.front().expect("chain can not be empty").number <
                     current_chain_headers.front().expect("chain can not be empty").number
             {
                 return Ok(ChainOrchestratorEvent::InsufficientDataForReceivedBlock(
@@ -301,7 +301,7 @@ impl<
 
             // If the current header block number is less than the latest safe block number then
             // we should error.
-            if received_chain_headers.last().expect("chain can not be empty").number <=
+            if received_chain_headers.front().expect("chain can not be empty").number <=
                 latest_safe_block.number
             {
                 return Err(ChainOrchestratorError::L2SafeBlockReorgDetected);
@@ -310,7 +310,7 @@ impl<
             // If the received header tail has a block number that is less than the current header
             // tail then we should fetch more headers for the current chain to aid
             // reconciliation.
-            if received_chain_headers.last().expect("chain can not be empty").number <
+            if received_chain_headers.front().expect("chain can not be empty").number <
                 current_chain_headers.front().expect("chain can not be empty").number
             {
                 for _ in 0..BATCH_FETCH_SIZE {
@@ -350,19 +350,19 @@ impl<
             // We search the in-memory chain to see if we can reconcile the block import.
             if let Some(pos) = current_chain_headers.iter().rposition(|h| {
                 h.hash_slow() ==
-                    received_chain_headers.last().expect("chain can not be empty").parent_hash
+                    received_chain_headers.front().expect("chain can not be empty").parent_hash
             }) {
                 // If the received fork is older than the current chain, we return an event
                 // indicating that we have received an old fork.
                 if (pos < current_chain_headers.len() - 1) &&
                     current_chain_headers.get(pos + 1).expect("chain can not be empty").timestamp >
                         received_chain_headers
-                            .last()
+                            .front()
                             .expect("chain can not be empty")
                             .timestamp
                 {
                     return Ok(ChainOrchestratorEvent::OldForkReceived {
-                        headers: received_chain_headers,
+                        headers: received_chain_headers.into(),
                         peer_id,
                         signature,
                     });
@@ -370,33 +370,31 @@ impl<
                 break pos;
             }
 
-            tracing::trace!(target: "scroll::chain_orchestrator", number = ?(received_chain_headers.last().expect("chain can not be empty").number - 1), "fetching block");
+            tracing::trace!(target: "scroll::chain_orchestrator", number = ?(received_chain_headers.front().expect("chain can not be empty").number - 1), "fetching block");
             if let Some(header) = network_client
                 .get_header(BlockHashOrNumber::Hash(
-                    received_chain_headers.last().expect("chain can not be empty").parent_hash,
+                    received_chain_headers.front().expect("chain can not be empty").parent_hash,
                 ))
                 .await?
                 .into_data()
             {
-                received_chain_headers.push(header.clone());
+                received_chain_headers.push_front(header.clone());
             } else {
                 return Err(ChainOrchestratorError::MissingBlockHeader {
                     hash: received_chain_headers
-                        .last()
+                        .front()
                         .expect("chain can not be empty")
                         .parent_hash,
                 });
             }
         };
 
-        // Reverse the new chain headers to have them in the correct order.
-        received_chain_headers.reverse();
-
         // Fetch the blocks associated with the new chain headers.
         let new_blocks = if received_chain_headers.len() == 1 {
             vec![received_block]
         } else {
-            fetch_blocks_from_network(received_chain_headers.clone(), network_client.clone()).await
+            fetch_blocks_from_network(received_chain_headers.clone().into(), network_client.clone())
+                .await
         };
 
         // If we are not in optimistic mode, we validate the L1 messages in the new blocks.
