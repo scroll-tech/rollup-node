@@ -1,7 +1,8 @@
 use super::{transaction::DatabaseTransaction, DatabaseConnectionProvider};
 use crate::error::DatabaseError;
 
-use sea_orm::{Database as SeaOrmDatabase, DatabaseConnection, TransactionTrait};
+use sea_orm::{ConnectOptions, Database as SeaOrmDatabase, DatabaseConnection, TransactionTrait};
+use std::time::Duration;
 
 /// The [`Database`] struct is responsible for interacting with the database.
 ///
@@ -19,7 +20,24 @@ pub struct Database {
 impl Database {
     /// Creates a new [`Database`] instance associated with the provided database URL.
     pub async fn new(database_url: &str) -> Result<Self, DatabaseError> {
-        let connection = SeaOrmDatabase::connect(database_url).await?;
+        Self::new_with_options(database_url, None).await
+    }
+
+    /// Creates a new [`Database`] instance with custom connection pool options.
+    pub async fn new_with_options(
+        database_url: &str, 
+        custom_options: Option<ConnectOptions>
+    ) -> Result<Self, DatabaseError> {
+        let connection = if let Some(options) = custom_options {
+            SeaOrmDatabase::connect(options).await?
+        } else {
+            // Use default configuration with optimized settings
+            let mut opt = ConnectOptions::new(database_url);
+            opt.max_connections(250)                        
+                .min_connections(25);
+            
+            SeaOrmDatabase::connect(opt).await?
+        };
         Ok(Self { connection })
     }
 

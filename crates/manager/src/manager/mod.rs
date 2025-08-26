@@ -234,9 +234,10 @@ where
             // Store the block signature in the database
             tokio::task::block_in_place(|| {
                 tokio::runtime::Handle::current().block_on(async move {
-                    if let Err(err) = self.database.insert_signature(block_with_peer.block.hash_slow(), block_with_peer.signature).await {
-                        error!(target: "scroll::node::manager", ?err, "Failed to store block signature");
-                    }
+                    let block_hash = block_with_peer.block.hash_slow();
+                    let signature = block_with_peer.signature;
+                    self.database.insert_signature(block_hash, signature).await
+                        .unwrap_or_else(|err| panic!("Failed to store block signature, but execution client already persisted the block: block_hash={:?}, signature={:?}, error={:?}", block_hash, signature, err));
                 })
             });
         }
@@ -545,10 +546,9 @@ where
                     let block_hash = block.hash_slow();
                     tokio::task::block_in_place(|| {
                         tokio::runtime::Handle::current().block_on(async move {
-                            warn!("Persisted block signature to database, block hash: {:?}, sig: {:?}", block_hash, signature.to_string());
-                            if let Err(err) = database.insert_signature(block_hash, signature).await {
-                                error!(target: "scroll::node::manager", ?err, "Failed to store block signature");
-                            }
+                            database.insert_signature(block_hash, signature).await
+                                .unwrap_or_else(|err| panic!("Failed to store block signature, but execution client already persisted the block: block_hash={:?}, signature={:?}, error={:?}", block_hash, signature, err));
+                            trace!("Persisted block signature to database, block hash: {:?}, sig: {:?}", block_hash, signature.to_string());
                         })
                     });
 
