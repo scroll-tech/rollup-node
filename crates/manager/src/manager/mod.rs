@@ -242,6 +242,7 @@ where
         }
 
         match event {
+            #[allow(clippy::match_same_arms)]
             ChainOrchestratorEvent::BatchCommitIndexed { .. } => {
                 // Uncomment once we implement issue #273.
                 // // if we detected a batch revert event, we reset the pipeline and the engine
@@ -261,7 +262,8 @@ where
                 //     self.engine.set_finalized_block_info(finalized_block);
                 // }
                 // Remove once we implement issue #273.
-                // update the derivation pipeline on new finalized batch.
+                // Update the derivation pipeline on new finalized batch.
+                #[allow(clippy::collapsible_match)]
                 if let Some(batch_info) = batch_info {
                     self.derivation_pipeline.push_batch(batch_info.inner, batch_info.number);
                 }
