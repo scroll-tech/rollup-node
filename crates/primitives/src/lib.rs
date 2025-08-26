@@ -16,6 +16,9 @@ pub use batch::{BatchCommitData, BatchInfo};
 mod bounded_vec;
 pub use bounded_vec::BoundedVec;
 
+mod chain;
+pub use chain::ChainImport;
+
 mod metadata;
 pub use metadata::Metadata;
 

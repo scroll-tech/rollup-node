@@ -9,4 +9,8 @@ pub struct DerivationPipelineMetrics {
     pub derived_blocks: Counter,
     /// The blocks per second derived by the pipeline.
     pub blocks_per_second: Gauge,
+    /// The number of batches in the queue.
+    pub batch_queue_size: Gauge,
+    /// The number of payload attributes in the queue.
+    pub payload_attributes_queue_size: Gauge,
 }

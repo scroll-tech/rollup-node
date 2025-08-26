@@ -1,18 +1,21 @@
 //! The [`RollupNodeManager`] is the main component of the rollup node that manages the
-//! [`ScrollNetworkManager`], [`EngineDriver`], [`Indexer`] and [`Consensus`] components. It is
-//! responsible for handling events from these components and coordinating their actions.
+//! [`ScrollNetworkManager`], [`EngineDriver`], [`ChainOrchestrator`] and [`Consensus`] components.
+//! It is responsible for handling events from these components and coordinating their actions.
 
 use super::Consensus;
-use alloy_primitives::Signature;
+use crate::poll_nested_stream_with_budget;
 use alloy_provider::Provider;
 use futures::StreamExt;
 use reth_chainspec::EthChainSpec;
-use reth_network_api::{block::NewBlockWithPeer as RethNewBlockWithPeer, FullNetwork};
+use reth_network::BlockDownloaderProvider;
+use reth_network_api::FullNetwork;
 use reth_scroll_node::ScrollNetworkPrimitives;
-use reth_scroll_primitives::ScrollBlock;
 use reth_tasks::shutdown::GracefulShutdown;
 use reth_tokio_util::{EventSender, EventStream};
-use rollup_node_indexer::{Indexer, IndexerEvent};
+use rollup_node_chain_orchestrator::{
+    ChainOrchestrator, ChainOrchestratorError, ChainOrchestratorEvent,
+};
+use rollup_node_primitives::BlockInfo;
 use rollup_node_sequencer::Sequencer;
 use rollup_node_signer::{SignerEvent, SignerHandle};
 use rollup_node_watcher::L1Notification;
@@ -38,8 +41,11 @@ use tokio_stream::wrappers::ReceiverStream;
 use tracing::{error, trace, warn};
 
 use rollup_node_providers::{L1MessageProvider, L1Provider};
-use scroll_db::Database;
+use scroll_db::{Database, DatabaseError};
 use scroll_derivation_pipeline::DerivationPipeline;
+
+mod budget;
+use budget::L1_NOTIFICATION_CHANNEL_BUDGET;
 
 mod command;
 pub use command::RollupManagerCommand;
@@ -52,9 +58,6 @@ pub use handle::RollupManagerHandle;
 
 /// The size of the event channel.
 const EVENT_CHANNEL_SIZE: usize = 100;
-
-/// The size of the ECDSA signature in bytes.
-const ECDSA_SIGNATURE_LEN: usize = 65;
 
 /// The main manager for the rollup node.
 ///
@@ -82,19 +85,17 @@ pub struct RollupNodeManager<
     /// The chain spec used by the rollup node.
     chain_spec: Arc<CS>,
     /// The network manager that manages the scroll p2p network.
-    network: ScrollNetworkManager<N>,
+    network: ScrollNetworkManager<N, CS>,
     /// The engine driver used to communicate with the engine.
     engine: EngineDriver<EC, CS, P>,
     /// The derivation pipeline, used to derive payload attributes from batches.
     derivation_pipeline: DerivationPipeline<L1P>,
     /// A receiver for [`L1Notification`]s from the [`rollup_node_watcher::L1Watcher`].
     l1_notification_rx: Option<ReceiverStream<Arc<L1Notification>>>,
-    /// An indexer used to index data for the rollup node.
-    indexer: Indexer<CS>,
+    /// The chain orchestrator.
+    chain: ChainOrchestrator<CS, <N as BlockDownloaderProvider>::Client, P>,
     /// The consensus algorithm used by the rollup node.
     consensus: Box<dyn Consensus>,
-    /// The receiver for new blocks received from the network (used to bridge from eth-wire).
-    eth_wire_block_rx: Option<EventStream<RethNewBlockWithPeer<ScrollBlock>>>,
     /// An event sender for sending events to subscribers of the rollup node manager.
     event_sender: Option<EventSender<RollupManagerEvent>>,
     /// The sequencer which is responsible for sequencing transactions and producing new blocks.
@@ -130,7 +131,7 @@ impl<
             .field("engine", &self.engine)
             .field("derivation_pipeline", &self.derivation_pipeline)
             .field("l1_notification_rx", &self.l1_notification_rx)
-            .field("indexer", &self.indexer)
+            .field("chain_orchestrator", &self.chain)
             .field("consensus", &self.consensus)
             .field("eth_wire_block_rx", &"eth_wire_block_rx")
             .field("event_sender", &self.event_sender)
@@ -152,21 +153,20 @@ where
     /// Create a new [`RollupNodeManager`] instance.
     #[allow(clippy::too_many_arguments)]
     #[allow(clippy::new_ret_no_self)]
-    pub fn new(
-        network: ScrollNetworkManager<N>,
+    pub async fn new(
+        network: ScrollNetworkManager<N, CS>,
         engine: EngineDriver<EC, CS, P>,
         l1_provider: L1P,
         database: Arc<Database>,
         l1_notification_rx: Option<Receiver<Arc<L1Notification>>>,
         consensus: Box<dyn Consensus>,
         chain_spec: Arc<CS>,
-        eth_wire_block_rx: Option<EventStream<RethNewBlockWithPeer<ScrollBlock>>>,
         sequencer: Option<Sequencer<L1MP>>,
         signer: Option<SignerHandle>,
         block_time: Option<u64>,
+        chain_orchestrator: ChainOrchestrator<CS, <N as BlockDownloaderProvider>::Client, P>,
     ) -> (Self, RollupManagerHandle<N>) {
         let (handle_tx, handle_rx) = mpsc::channel(EVENT_CHANNEL_SIZE);
-        let indexer = Indexer::new(database.clone(), chain_spec.clone());
         let derivation_pipeline = DerivationPipeline::new(l1_provider, database);
         let rnm = Self {
             handle_rx,
@@ -175,9 +175,8 @@ where
             engine,
             derivation_pipeline,
             l1_notification_rx: l1_notification_rx.map(Into::into),
-            indexer,
+            chain: chain_orchestrator,
             consensus,
-            eth_wire_block_rx,
             event_sender: None,
             sequencer,
             signer,
@@ -221,7 +220,7 @@ where
                 result: Err(err.into()),
             });
         } else {
-            self.engine.handle_block_import(block_with_peer);
+            self.chain.handle_block_from_peer(block_with_peer);
         }
     }
 
@@ -234,11 +233,20 @@ where
         }
     }
 
-    /// Handles an indexer event.
-    fn handle_indexer_event(&mut self, event: IndexerEvent) {
-        trace!(target: "scroll::node::manager", ?event, "Received indexer event");
+    /// Handles a chain orchestrator event.
+    fn handle_chain_orchestrator_event(&mut self, event: ChainOrchestratorEvent) {
+        trace!(target: "scroll::node::manager", ?event, "Received chain orchestrator event");
+
+        if let Some(event_sender) = self.event_sender.as_ref() {
+            event_sender.notify(RollupManagerEvent::ChainOrchestratorEvent(event.clone()));
+        }
+
         match event {
-            IndexerEvent::BatchCommitIndexed { batch_info, safe_head, l1_block_number } => {
+            ChainOrchestratorEvent::BatchCommitIndexed {
+                batch_info,
+                safe_head,
+                l1_block_number,
+            } => {
                 // if we detected a batch revert event, we reset the pipeline and the engine driver.
                 if let Some(new_safe_head) = safe_head {
                     self.derivation_pipeline.flush();
@@ -249,11 +257,11 @@ where
                 // push the batch info into the derivation pipeline.
                 self.derivation_pipeline.handle_batch_commit(batch_info, l1_block_number);
             }
-            IndexerEvent::BatchFinalizationIndexed(_, Some(finalized_block)) => {
+            ChainOrchestratorEvent::BatchFinalized(_, Some(finalized_block)) => {
                 // update the fcs on new finalized block.
                 self.engine.set_finalized_block_info(finalized_block);
             }
-            IndexerEvent::FinalizedIndexed(l1_block_number, finalized_block) => {
+            ChainOrchestratorEvent::L1BlockFinalized(l1_block_number, finalized_block) => {
                 if let Some(sequencer) = self.sequencer.as_mut() {
                     sequencer.set_l1_finalized_block_number(l1_block_number);
                 }
@@ -262,7 +270,7 @@ where
                     self.engine.set_finalized_block_info(finalized_block);
                 }
             }
-            IndexerEvent::UnwindIndexed {
+            ChainOrchestratorEvent::L1Reorg {
                 l1_block_number,
                 queue_index,
                 l2_head_block_info,
@@ -287,12 +295,52 @@ where
                     event_sender.notify(RollupManagerEvent::Reorg(l1_block_number));
                 }
             }
-            IndexerEvent::L1MessageIndexed(index) => {
+            ChainOrchestratorEvent::ChainExtended(chain_import) => {
+                trace!(target: "scroll::node::manager", head = ?chain_import.chain.last().unwrap().header.clone(), peer_id = ?chain_import.peer_id.clone(),  "Received chain extension from peer");
+                // Issue the new chain to the engine driver for processing.
+                self.engine.handle_chain_import(chain_import)
+            }
+            ChainOrchestratorEvent::ChainReorged(chain_import) => {
+                trace!(target: "scroll::node::manager", head = ?chain_import.chain.last().unwrap().header, ?chain_import.peer_id, "Received chain reorg from peer");
+
+                // Issue the new chain to the engine driver for processing.
+                self.engine.handle_chain_import(chain_import)
+            }
+            ChainOrchestratorEvent::OptimisticSync(block) => {
+                let block_info: BlockInfo = (&block).into();
+                trace!(target: "scroll::node::manager", ?block_info, "Received optimistic sync from peer");
+
+                // Issue the new block info to the engine driver for processing.
+                self.engine.handle_optimistic_sync(block_info)
+            }
+            _ => {}
+        }
+    }
+
+    /// Handles a chain orchestrator error.
+    fn handle_chain_orchestrator_error(&self, err: &ChainOrchestratorError) {
+        error!(
+            target: "scroll::node::manager",
+            ?err,
+            "Error occurred in the chain orchestrator"
+        );
+        match err {
+            ChainOrchestratorError::L1MessageMismatch { expected, actual } => {
                 if let Some(event_sender) = self.event_sender.as_ref() {
-                    event_sender.notify(RollupManagerEvent::L1MessageIndexed(index));
+                    event_sender.notify(RollupManagerEvent::L1MessageConsolidationError {
+                        expected: *expected,
+                        actual: *actual,
+                    });
                 }
             }
-            _ => (),
+            ChainOrchestratorError::DatabaseError(DatabaseError::L1MessageNotFound(start)) => {
+                if let Some(event_sender) = self.event_sender.as_ref() {
+                    event_sender.notify(RollupManagerEvent::L1MessageMissingInDatabase {
+                        start: start.clone(),
+                    });
+                }
+            }
+            _ => {}
         }
     }
 
@@ -305,7 +353,7 @@ where
                     if let Some(event_sender) = self.event_sender.as_ref() {
                         event_sender.notify(RollupManagerEvent::BlockImported(block.clone()));
                     }
-                    self.indexer.handle_block((&block).into(), None);
+                    self.chain.consolidate_validated_l2_blocks(vec![(&block).into()]);
                 }
                 self.network.handle().block_import_outcome(outcome);
             }
@@ -315,15 +363,13 @@ where
                 }
 
                 if let Some(event_sender) = self.event_sender.as_ref() {
-                    event_sender.notify(RollupManagerEvent::BlockSequenced(payload.clone()));
+                    event_sender.notify(RollupManagerEvent::BlockSequenced(payload));
                 }
-
-                self.indexer.handle_block((&payload).into(), None);
             }
             EngineDriverEvent::L1BlockConsolidated(consolidation_outcome) => {
-                self.indexer.handle_block(
-                    consolidation_outcome.block_info().clone(),
-                    Some(*consolidation_outcome.batch_info()),
+                self.chain.persist_l1_consolidated_blocks(
+                    vec![consolidation_outcome.block_info().clone()],
+                    *consolidation_outcome.batch_info(),
                 );
 
                 if let Some(event_sender) = self.event_sender.as_ref() {
@@ -332,46 +378,26 @@ where
                     ));
                 }
             }
+            EngineDriverEvent::ChainImportOutcome(outcome) => {
+                if let Some(block) = outcome.outcome.block() {
+                    if let Some(event_sender) = self.event_sender.as_ref() {
+                        event_sender.notify(RollupManagerEvent::BlockImported(block));
+                    }
+                    self.chain.consolidate_validated_l2_blocks(
+                        outcome.chain.iter().map(|b| b.into()).collect(),
+                    );
+                }
+                self.network.handle().block_import_outcome(outcome.outcome);
+            }
         }
-    }
-
-    fn handle_eth_wire_block(
-        &mut self,
-        block: reth_network_api::block::NewBlockWithPeer<ScrollBlock>,
-    ) {
-        trace!(target: "scroll::node::manager", ?block, "Received new block from eth-wire protocol");
-        let reth_network_api::block::NewBlockWithPeer { peer_id, mut block } = block;
-
-        // We purge the extra data field post euclid v2 to align with protocol specification.
-        let extra_data = if self.chain_spec.is_euclid_v2_active_at_timestamp(block.timestamp) {
-            let extra_data = block.extra_data.clone();
-            block.header.extra_data = Default::default();
-            extra_data
-        } else {
-            block.extra_data.clone()
-        };
-
-        // If we can extract a signature from the extra data we validate consensus and then attempt
-        // import via the EngineAPI in the `handle_new_block` method. The signature is extracted
-        // from the last `ECDSA_SIGNATURE_LEN` bytes of the extra data field as specified by
-        // the protocol.
-        let block = if let Some(signature) = extra_data
-            .len()
-            .checked_sub(ECDSA_SIGNATURE_LEN)
-            .and_then(|i| Signature::from_raw(&extra_data[i..]).ok())
-        {
-            trace!(target: "scroll::bridge::import", peer_id = %peer_id, block = ?block.hash_slow(), "Received new block from eth-wire protocol");
-            NewBlockWithPeer { peer_id, block, signature }
-        } else {
-            warn!(target: "scroll::bridge::import", peer_id = %peer_id, "Failed to extract signature from block extra data");
-            return;
-        };
-
-        self.handle_new_block(block);
     }
 
     /// Handles an [`L1Notification`] from the L1 watcher.
     fn handle_l1_notification(&mut self, notification: L1Notification) {
+        if let Some(event_sender) = self.event_sender.as_ref() {
+            event_sender.notify(RollupManagerEvent::L1NotificationEvent(notification.clone()));
+        }
+
         match notification {
             L1Notification::Consensus(ref update) => self.consensus.update_config(update),
             L1Notification::NewBlock(new_block) => {
@@ -379,7 +405,10 @@ where
                     sequencer.handle_new_l1_block(new_block)
                 }
             }
-            _ => self.indexer.handle_l1_notification(notification),
+            L1Notification::Synced => {
+                self.chain.handle_l1_notification(L1Notification::Synced);
+            }
+            _ => self.chain.handle_l1_notification(notification),
         }
     }
 
@@ -387,7 +416,7 @@ where
     fn status(&self) -> RollupManagerStatus {
         RollupManagerStatus {
             syncing: self.engine.is_syncing(),
-            forkchoice_state: self.engine.forkchoice_state(),
+            forkchoice_state: self.engine.forkchoice_state().clone(),
         }
     }
 
@@ -447,6 +476,10 @@ where
                 RollupManagerCommand::Status(tx) => {
                     tx.send(this.status()).expect("Failed to send status to handle");
                 }
+                RollupManagerCommand::UpdateFcsHead(head) => {
+                    trace!(target: "scroll::node::manager", ?head, "Updating FCS head block info");
+                    this.engine.set_head_block_info(head);
+                }
                 RollupManagerCommand::NetworkHandle(tx) => {
                     let network_handle = this.network.handle();
                     tx.send(network_handle.clone())
@@ -470,22 +503,27 @@ where
             }
         );
 
+        let mut maybe_more_l1_rx_events = false;
         proceed_if!(
             en_synced,
-            // Drain all L1 notifications.
-            while let Some(Poll::Ready(Some(event))) =
-                this.l1_notification_rx.as_mut().map(|rx| rx.poll_next_unpin(cx))
-            {
-                this.handle_l1_notification((*event).clone());
-            }
+            maybe_more_l1_rx_events = poll_nested_stream_with_budget!(
+                "l1_notification_rx",
+                "L1Notification channel",
+                L1_NOTIFICATION_CHANNEL_BUDGET,
+                this.l1_notification_rx
+                    .as_mut()
+                    .map(|rx| rx.poll_next_unpin(cx))
+                    .unwrap_or(Poll::Ready(None)),
+                |event: Arc<L1Notification>| this.handle_l1_notification((*event).clone()),
+            )
         );
 
-        // Drain all Indexer events.
-        while let Poll::Ready(Some(result)) = this.indexer.poll_next_unpin(cx) {
+        // Drain all chain orchestrator events.
+        while let Poll::Ready(Some(result)) = this.chain.poll_next_unpin(cx) {
             match result {
-                Ok(event) => this.handle_indexer_event(event),
+                Ok(event) => this.handle_chain_orchestrator_event(event),
                 Err(err) => {
-                    error!(target: "scroll::node::manager", ?err, "Error occurred at indexer level")
+                    this.handle_chain_orchestrator_error(&err);
                 }
             }
         }
@@ -504,6 +542,11 @@ where
                         ));
                     }
 
+                    this.chain.handle_sequenced_block(NewBlockWithPeer {
+                        peer_id: Default::default(),
+                        block: block.clone(),
+                        signature,
+                    });
                     this.network.handle().announce_block(block, signature);
                 }
             }
@@ -513,7 +556,7 @@ where
             en_synced,
             // Check if we need to trigger the build of a new payload.
             if let (Some(Poll::Ready(_)), Some(sequencer)) = (
-                this.block_building_trigger.as_mut().map(|se| se.poll_tick(cx)),
+                this.block_building_trigger.as_mut().map(|trigger| trigger.poll_tick(cx)),
                 this.sequencer.as_mut()
             ) {
                 if !this.consensus.should_sequence_block(
@@ -536,16 +579,13 @@ where
             this.engine.handle_l1_consolidation(attributes)
         }
 
-        // Handle blocks received from the eth-wire protocol.
-        while let Some(Poll::Ready(Some(block))) =
-            this.eth_wire_block_rx.as_mut().map(|new_block_rx| new_block_rx.poll_next_unpin(cx))
-        {
-            this.handle_eth_wire_block(block);
-        }
-
         // Handle network manager events.
         while let Poll::Ready(Some(event)) = this.network.poll_next_unpin(cx) {
             this.handle_network_manager_event(event);
+        }
+
+        if maybe_more_l1_rx_events {
+            cx.waker().wake_by_ref();
         }
 
         Poll::Pending

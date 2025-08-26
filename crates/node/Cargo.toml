@@ -57,6 +57,7 @@ reth-transaction-pool = { git = "https://github.com/scroll-tech/reth.git", defau
 reth-trie-db = { git = "https://github.com/scroll-tech/reth.git", default-features = false }
 
 # rollup node
+rollup-node-chain-orchestrator.workspace = true
 rollup-node-manager.workspace = true
 rollup-node-primitives.workspace = true
 rollup-node-providers.workspace = true

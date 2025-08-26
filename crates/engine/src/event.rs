@@ -9,6 +9,20 @@ pub enum EngineDriverEvent {
     NewPayload(ScrollBlock),
     /// The result of attempting a block import.
     BlockImportOutcome(BlockImportOutcome),
+    /// The result of attempting a chain import.
+    ChainImportOutcome(ChainImportOutcome),
     /// A block derived from L1 has been consolidated.
     L1BlockConsolidated(ConsolidationOutcome),
+}
+
+/// The outcome of a chain import.
+///
+/// This includes the result of the final block import outcome and the chain of blocks that were
+/// imported.
+#[derive(Debug)]
+pub struct ChainImportOutcome {
+    /// The outcome of the block import.
+    pub outcome: BlockImportOutcome,
+    /// The chain of blocks that were imported.
+    pub chain: Vec<ScrollBlock>,
 }

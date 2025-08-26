@@ -21,6 +21,7 @@ use reth_node_builder::rpc::RethRpcServerHandles;
 use reth_node_core::primitives::BlockHeader;
 use reth_scroll_chainspec::{ChainConfig, ScrollChainConfig, SCROLL_FEE_VAULT_ADDRESS};
 use reth_scroll_node::ScrollNetworkPrimitives;
+use rollup_node_chain_orchestrator::ChainOrchestrator;
 use rollup_node_manager::{
     Consensus, NoopConsensus, RollupManagerHandle, RollupNodeManager, SystemContractConsensus,
 };
@@ -53,6 +54,9 @@ pub struct ScrollRollupNodeConfig {
     /// Database args
     #[command(flatten)]
     pub database_args: DatabaseArgs,
+    /// Chain orchestrator args.
+    #[command(flatten)]
+    pub chain_orchestrator_args: ChainOrchestratorArgs,
     /// Engine driver args.
     #[command(flatten)]
     pub engine_driver_args: EngineDriverArgs,
@@ -140,18 +144,12 @@ impl ScrollRollupNodeConfig {
             "Building rollup node with config:\n{:#?}",
             self
         );
-
         // Get the chain spec.
         let chain_spec = ctx.chain_spec;
 
         // Get the rollup node config.
         let named_chain = chain_spec.chain().named().expect("expected named chain");
         let node_config = Arc::new(NodeConfig::from_named_chain(named_chain));
-
-        // Instantiate the network manager
-        let network = ctx.network;
-        let scroll_network_manager =
-            ScrollNetworkManager::from_parts(network.clone(), events, td_constant(named_chain));
 
         // Create the engine api client.
         let engine_api = ScrollAuthApiEngineClient::new(rpc_server_handles.auth.http_client());
@@ -174,8 +172,8 @@ impl ScrollRollupNodeConfig {
         let l2_provider = rpc_server_handles
             .rpc
             .new_http_provider_for()
-            .map(Arc::new)
             .expect("failed to create payload provider");
+        let l2_provider = Arc::new(l2_provider);
 
         // Instantiate the database
         let db_path = ctx.datadir;
@@ -208,6 +206,19 @@ impl ScrollRollupNodeConfig {
 
         let chain_spec = Arc::new(chain_spec.clone());
 
+        // Instantiate the network manager
+        let eth_wire_listener = self
+            .network_args
+            .enable_eth_scroll_wire_bridge
+            .then_some(ctx.network.eth_wire_block_listener().await?);
+        let scroll_network_manager = ScrollNetworkManager::from_parts(
+            chain_spec.clone(),
+            ctx.network.clone(),
+            events,
+            eth_wire_listener,
+            td_constant(named_chain),
+        );
+
         // On startup we replay the latest batch of blocks from the database as such we set the safe
         // block hash to the latest block hash associated with the previous consolidated
         // batch in the database.
@@ -225,10 +236,9 @@ impl ScrollRollupNodeConfig {
         let engine = EngineDriver::new(
             Arc::new(engine_api),
             chain_spec.clone(),
-            Some(l2_provider),
+            Some(l2_provider.clone()),
             fcs,
             self.engine_driver_args.sync_at_startup && !self.test && !chain_spec.is_dev_chain(),
-            self.engine_driver_args.en_sync_trigger,
             Duration::from_millis(self.sequencer_args.payload_building_duration),
         );
 
@@ -290,12 +300,6 @@ impl ScrollRollupNodeConfig {
             (None, None)
         };
 
-        // Instantiate the eth wire listener
-        let eth_wire_listener = self
-            .network_args
-            .enable_eth_scroll_wire_bridge
-            .then_some(network.eth_wire_block_listener().await?);
-
         // Instantiate the signer
         let signer = if self.test {
             // Use a random private key signer for testing
@@ -306,6 +310,23 @@ impl ScrollRollupNodeConfig {
             self.signer_args.signer(chain_id).await?.map(rollup_node_signer::Signer::spawn)
         };
 
+        // Instantiate the chain orchestrator
+        let block_client = scroll_network_manager
+            .handle()
+            .inner()
+            .fetch_client()
+            .await
+            .expect("failed to fetch block client");
+        let chain_orchestrator = ChainOrchestrator::new(
+            db.clone(),
+            chain_spec.clone(),
+            block_client,
+            l2_provider,
+            self.chain_orchestrator_args.optimistic_sync_trigger,
+            self.chain_orchestrator_args.chain_buffer_size,
+        )
+        .await?;
+
         // Spawn the rollup node manager
         let (rnm, handle) = RollupNodeManager::new(
             scroll_network_manager,
@@ -315,11 +336,12 @@ impl ScrollRollupNodeConfig {
             l1_notification_rx,
             consensus,
             chain_spec,
-            eth_wire_listener,
             sequencer,
             signer,
             block_time,
-        );
+            chain_orchestrator,
+        )
+        .await;
         Ok((rnm, handle, l1_notification_tx))
     }
 }
@@ -397,15 +419,38 @@ impl Default for ConsensusAlgorithm {
 }
 
 /// The engine driver args.
-#[derive(Debug, Default, Clone, clap::Args)]
+#[derive(Debug, Clone, clap::Args)]
 pub struct EngineDriverArgs {
-    /// The amount of block difference between the EN and the latest block received from P2P
-    /// at which the engine driver triggers optimistic sync.
-    #[arg(long = "engine.en-sync-trigger", default_value_t = constants::BLOCK_GAP_TRIGGER)]
-    pub en_sync_trigger: u64,
     /// Whether the engine driver should try to sync at start up.
     #[arg(long = "engine.sync-at-startup", num_args=0..=1, default_value_t = true)]
     pub sync_at_startup: bool,
+}
+
+impl Default for EngineDriverArgs {
+    fn default() -> Self {
+        Self { sync_at_startup: true }
+    }
+}
+
+/// The chain orchestrator arguments.
+#[derive(Debug, Clone, clap::Args)]
+pub struct ChainOrchestratorArgs {
+    /// The amount of block difference between the EN and the latest block received from P2P
+    /// at which the engine driver triggers optimistic sync.
+    #[arg(long = "chain.optimistic-sync-trigger", default_value_t = constants::BLOCK_GAP_TRIGGER)]
+    pub optimistic_sync_trigger: u64,
+    /// The size of the in-memory chain buffer used by the chain orchestrator.
+    #[arg(long = "chain.chain-buffer-size", default_value_t = constants::CHAIN_BUFFER_SIZE)]
+    pub chain_buffer_size: usize,
+}
+
+impl Default for ChainOrchestratorArgs {
+    fn default() -> Self {
+        Self {
+            optimistic_sync_trigger: constants::BLOCK_GAP_TRIGGER,
+            chain_buffer_size: constants::CHAIN_BUFFER_SIZE,
+        }
+    }
 }
 
 /// The network arguments.
@@ -413,10 +458,10 @@ pub struct EngineDriverArgs {
 pub struct NetworkArgs {
     /// A bool to represent if new blocks should be bridged from the eth wire protocol to the
     /// scroll wire protocol.
-    #[arg(long = "network.bridge", default_value_t = true)]
+    #[arg(long = "network.bridge")]
     pub enable_eth_scroll_wire_bridge: bool,
     /// A bool that represents if the scroll wire protocol should be enabled.
-    #[arg(long = "network.scroll-wire", default_value_t = true)]
+    #[arg(long = "network.scroll-wire")]
     pub enable_scroll_wire: bool,
     /// The URL for the Sequencer RPC. (can be both HTTP and WS)
     #[arg(
@@ -621,6 +666,7 @@ mod tests {
             signer_args: SignerArgs { key_file: None, aws_kms_key_id: None, private_key: None },
             database_args: DatabaseArgs::default(),
             engine_driver_args: EngineDriverArgs::default(),
+            chain_orchestrator_args: ChainOrchestratorArgs::default(),
             l1_provider_args: L1ProviderArgs::default(),
             beacon_provider_args: BeaconProviderArgs::default(),
             network_args: NetworkArgs::default(),
@@ -650,6 +696,7 @@ mod tests {
             },
             database_args: DatabaseArgs::default(),
             engine_driver_args: EngineDriverArgs::default(),
+            chain_orchestrator_args: ChainOrchestratorArgs::default(),
             l1_provider_args: L1ProviderArgs::default(),
             beacon_provider_args: BeaconProviderArgs::default(),
             network_args: NetworkArgs::default(),
@@ -676,6 +723,7 @@ mod tests {
                 private_key: None,
             },
             database_args: DatabaseArgs::default(),
+            chain_orchestrator_args: ChainOrchestratorArgs::default(),
             engine_driver_args: EngineDriverArgs::default(),
             l1_provider_args: L1ProviderArgs::default(),
             beacon_provider_args: BeaconProviderArgs::default(),
@@ -699,6 +747,7 @@ mod tests {
             },
             database_args: DatabaseArgs::default(),
             engine_driver_args: EngineDriverArgs::default(),
+            chain_orchestrator_args: ChainOrchestratorArgs::default(),
             l1_provider_args: L1ProviderArgs::default(),
             beacon_provider_args: BeaconProviderArgs::default(),
             network_args: NetworkArgs::default(),
@@ -717,6 +766,7 @@ mod tests {
             signer_args: SignerArgs { key_file: None, aws_kms_key_id: None, private_key: None },
             database_args: DatabaseArgs::default(),
             engine_driver_args: EngineDriverArgs::default(),
+            chain_orchestrator_args: ChainOrchestratorArgs::default(),
             l1_provider_args: L1ProviderArgs::default(),
             beacon_provider_args: BeaconProviderArgs::default(),
             network_args: NetworkArgs::default(),
