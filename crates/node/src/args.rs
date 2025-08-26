@@ -268,7 +268,7 @@ impl ScrollRollupNodeConfig {
         let blob_provider = self
             .beacon_provider_args
             .blob_source
-            .provider(self.beacon_provider_args.url)
+            .provider(self.beacon_provider_args)
             .await
             .expect("failed to construct L1 blob provider");
         let l1_provider = FullL1Provider::new(blob_provider, l1_messages_provider.clone()).await;
