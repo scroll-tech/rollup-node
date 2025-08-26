@@ -1,10 +1,12 @@
 use alloy_consensus::Header;
 use alloy_primitives::{
-    eip191_hash_message, private::alloy_rlp::{self, Encodable}, B256, U256
+    keccak256,
+    private::{alloy_rlp, alloy_rlp::Encodable},
+    B256, U256,
 };
 use std::vec::Vec;
 
-/// Encode block with eip191 and hash it for signature. The function is similar to `Header::encode` but skips
+/// Encode and hash the header for signature. The function is similar to `Header::encode` but skips
 /// the `extra_data` field.
 pub fn sig_encode_hash(header: &Header) -> B256 {
     let out = &mut Vec::new();
@@ -30,8 +32,7 @@ pub fn sig_encode_hash(header: &Header) -> B256 {
     if let Some(ref base_fee) = header.base_fee_per_gas {
         U256::from(*base_fee).encode(out);
     }
-
-    eip191_hash_message(&out)
+    keccak256(&out)
 }
 
 /// Returns the header payload length for signature.
