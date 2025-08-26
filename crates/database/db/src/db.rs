@@ -228,7 +228,7 @@ mod test {
     }
 
     #[tokio::test]
-    async fn test_database_finalized_batch_hash_at_height() {
+    async fn test_database_batches_by_finalized_block_range() {
         // Set up the test database.
         let db = setup_test_db().await;
 
@@ -240,7 +240,7 @@ mod test {
         // Generate randoms BatchInfoCommitData, insert in database and finalize.
         let mut block_number = 100;
         let mut batch_index = 100;
-        let mut highest_finalized_batch_hash = B256::ZERO;
+        let mut finalized_batches_hashes = vec![];
 
         for _ in 0..20 {
             let data = BatchCommitData {
@@ -251,13 +251,9 @@ mod test {
             let hash = data.hash;
             db.insert_batch(data).await.unwrap();
 
-            // save batch hash finalized at block number 109.
-            if block_number == 109 {
-                highest_finalized_batch_hash = hash;
-            }
-
             // Finalize batch up to block number 110.
             if block_number <= 110 {
+                finalized_batches_hashes.push(hash);
                 db.finalize_batch(hash, block_number).await.unwrap();
             }
 
@@ -266,9 +262,14 @@ mod test {
         }
 
         // Fetch the finalized batch for provided height and verify number.
-        let highest_batch_hash_from_db =
-            db.get_finalized_batch_hash_at_height(109).await.unwrap().unwrap();
-        assert_eq!(highest_finalized_batch_hash, highest_batch_hash_from_db);
+        let batch_infos = db
+            .get_batches_by_finalized_block_range(100, 110)
+            .await
+            .unwrap()
+            .into_iter()
+            .map(|b| b.hash)
+            .collect::<Vec<_>>();
+        assert_eq!(finalized_batches_hashes, batch_infos);
     }
 
     #[tokio::test]
