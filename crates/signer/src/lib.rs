@@ -144,8 +144,8 @@ mod tests {
         let (event_block, signature) = match event {
             SignerEvent::SignedBlock { block, signature } => (block, signature),
         };
-        let hash = sig_encode_hash(&event_block);
-        let recovered_address = signature.recover_address_from_prehash(&hash).unwrap();
+        let msg = sig_encode_hash(&event_block);
+        let recovered_address = signature.recover_address_from_prehash(&msg).unwrap();
 
         assert_eq!(event_block, block);
         assert_eq!(recovered_address, signer.address());
