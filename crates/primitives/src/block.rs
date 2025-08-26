@@ -108,8 +108,8 @@ impl<T: Future + Unpin> Future for WithBlockNumber<T> {
 /// A type alias for a wrapper around a type to which a finalized batch information is attached.
 pub type WithFinalizedBatchInfo<T> = WithBatchInfo<T>;
 
-/// A type alias for a wrapper around a type to which a commited batch information is attached.
-pub type WithCommitedBatchInfo<T> = WithBatchInfo<T>;
+/// A type alias for a wrapper around a type to which a committed batch information is attached.
+pub type WithCommittedBatchInfo<T> = WithBatchInfo<T>;
 
 /// A wrapper around a type to which a batch information is attached.
 #[derive(Debug, Default, Copy, Clone, PartialEq, Eq)]
