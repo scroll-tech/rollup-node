@@ -24,8 +24,8 @@ use core::{
 };
 use futures::{FutureExt, Stream};
 use rollup_node_primitives::{
-    BatchCommitData, BatchInfo, ScrollPayloadAttributesWithBatchInfo, WithFinalizedBatchInfo,
-    WithFinalizedBlockNumber,
+    BatchCommitData, BatchInfo, ScrollPayloadAttributesWithBatchInfo, WithBlockNumber,
+    WithFinalizedBatchInfo, WithFinalizedBlockNumber,
 };
 use rollup_node_providers::{BlockDataProvider, L1Provider};
 use scroll_alloy_rpc_types_engine::{BlockDataHint, ScrollPayloadAttributes};

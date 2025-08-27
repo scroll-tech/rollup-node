@@ -1402,11 +1402,12 @@ async fn wait_for_chain_committed(
     wait_for_event_predicate(
         events,
         |e| {
-            if let RollupManagerEvent::ChainOrchestratorEvent(c) = e {
-                if let ChainOrchestratorEvent::L2ChainCommitted(block_info, _, consolidated) = c {
-                    return block_info.block_info.number == expected_block_number &&
-                        expected_consolidated == consolidated;
-                }
+            if let RollupManagerEvent::ChainOrchestratorEvent(
+                ChainOrchestratorEvent::L2ChainCommitted(block_info, _, consolidated),
+            ) = e
+            {
+                return block_info.block_info.number == expected_block_number &&
+                    expected_consolidated == consolidated;
             }
 
             false
