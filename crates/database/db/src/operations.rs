@@ -352,16 +352,22 @@ pub trait DatabaseOperations: DatabaseConnectionProvider {
     ///
     /// This method first unwinds the database to the finalized L1 block. It then fetches the batch
     /// info for the latest safe L2 block. It takes note of the L1 block number at which
-    /// this batch was produced. It then retrieves the latest block for the previous batch
-    /// (i.e., the batch before the latest safe block). It returns a tuple of this latest
-    /// fetched block and the L1 block number of the batch.
+    /// this batch was produced (currently the finalized block for the batch until we implement
+    /// issue #273). It then retrieves the latest block for the previous batch (i.e., the batch
+    /// before the latest safe block). It returns a tuple of this latest fetched block and the
+    /// L1 block number of the batch.
     async fn prepare_on_startup(
         &self,
         genesis_hash: B256,
     ) -> Result<(Option<BlockInfo>, Option<u64>), DatabaseError> {
         tracing::trace!(target: "scroll::db", "Fetching startup safe block from database.");
+
+        // Unwind the database to the last finalized L1 block saved in database.
         let finalized_block_number = self.get_finalized_l1_block_number().await?.unwrap_or(0);
         self.unwind(genesis_hash, finalized_block_number).await?;
+
+        // Fetch the latest safe L2 block and the block number where its associated batch was
+        // finalized.
         let safe = if let Some(batch_info) = self
             .get_latest_safe_l2_info()
             .await?
@@ -377,7 +383,10 @@ pub trait DatabaseOperations: DatabaseConnectionProvider {
                 .await?
                 .expect("Batch info must be present due to database query arguments");
             let l2_block = self.get_highest_block_for_batch_hash(previous_batch.hash).await?;
-            (l2_block, Some(batch.block_number))
+            (
+                l2_block,
+                Some(batch.finalized_block_number.expect("All blocks in database are finalized")),
+            )
         } else {
             (None, None)
         };
