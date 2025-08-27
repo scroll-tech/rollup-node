@@ -276,15 +276,12 @@ where
                 l2_head_block_info,
                 l2_safe_block_info,
             } => {
-                // Update the [`EngineDriver`] fork choice state with the new L2 head info.
-                if let Some(l2_head_block_info) = l2_head_block_info {
-                    self.engine.set_head_block_info(l2_head_block_info);
-                }
-
-                // Update the [`EngineDriver`] fork choice state with the new L2 safe info.
-                if let Some(safe_block_info) = l2_safe_block_info {
-                    self.engine.set_safe_block_info(safe_block_info);
-                }
+                // Handle the reorg in the engine driver.
+                self.engine.handle_l1_reorg(
+                    l1_block_number,
+                    l2_head_block_info,
+                    l2_safe_block_info,
+                );
 
                 // Update the [`Sequencer`] with the new L1 head info and queue index.
                 if let Some(sequencer) = self.sequencer.as_mut() {
