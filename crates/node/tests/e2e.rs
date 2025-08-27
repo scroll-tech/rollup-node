@@ -1000,24 +1000,37 @@ async fn can_handle_l1_message_reorg() -> eyre::Result<()> {
 
     // Send the L1 message to the sequencer node.
     node0_l1_watcher_tx.send(Arc::new(l1_message_notification.clone())).await?;
-    wait_for_event_5s(&mut node0_rnm_events, RollupManagerEvent::L1MessageIndexed(0)).await?;
     node0_l1_watcher_tx.send(Arc::new(L1Notification::NewBlock(10))).await?;
+    wait_for_event_5s(
+        &mut node0_rnm_events,
+        RollupManagerEvent::ChainOrchestratorEvent(ChainOrchestratorEvent::L1MessageCommitted(0)),
+    )
+    .await?;
 
     // Send L1 the L1 message to follower node.
     node1_l1_watcher_tx.send(Arc::new(l1_message_notification)).await?;
-    wait_for_event_5s(&mut node1_rnm_events, RollupManagerEvent::L1MessageIndexed(0)).await?;
     node1_l1_watcher_tx.send(Arc::new(L1Notification::NewBlock(10))).await?;
+    wait_for_event_5s(
+        &mut node1_rnm_events,
+        RollupManagerEvent::ChainOrchestratorEvent(ChainOrchestratorEvent::L1MessageCommitted(0)),
+    )
+    .await?;
 
     // Build block that contains the L1 message.
+    let mut block11_before_reorg = None;
     node0_rnm_handle.build_block().await;
     wait_for_event_predicate_5s(&mut node0_rnm_events, |e| {
-        if let RollupManagerEvent::BlockImported(block) = e {
-            block.header.number == 11 &&
+        if let RollupManagerEvent::BlockSequenced(block) = e {
+            if block.header.number == 11 &&
                 block.body.transactions.len() == 1 &&
                 block.body.transactions.iter().any(|tx| tx.is_l1_message())
-        } else {
-            false
+            {
+                block11_before_reorg = Some(block.header.hash_slow());
+                return true;
+            }
         }
+
+        false
     })
     .await?;
 
@@ -1029,8 +1042,13 @@ async fn can_handle_l1_message_reorg() -> eyre::Result<()> {
     // Assert that the follower node has received the latest block from the sequencer node.
     wait_for_block_imported_5s(&mut node1_rnm_events, 15).await?;
 
-    assert_eq!(latest_block(&node0).await?.header.number, 15);
-    assert_eq!(latest_block(&node1).await?.header.number, 15);
+    // Assert both nodes are at block 15.
+    let node0_latest_block = latest_block(&node0).await?;
+    assert_eq!(node0_latest_block.header.number, 15);
+    assert_eq!(
+        node0_latest_block.header.hash_slow(),
+        latest_block(&node1).await?.header.hash_slow()
+    );
 
     // Issue and wait for the reorg.
     node0_l1_watcher_tx.send(Arc::new(L1Notification::Reorg(9))).await?;
@@ -1045,13 +1063,26 @@ async fn can_handle_l1_message_reorg() -> eyre::Result<()> {
     // Since the L1 reorg reverted the L1 message included in block 11, the sequencer
     // should produce a new block at height 11.
     node0_rnm_handle.build_block().await;
-    wait_for_block_imported_5s(&mut node0_rnm_events, 11).await?;
+    wait_for_block_sequenced_5s(&mut node0_rnm_events, 11).await?;
 
     // Assert that the follower node has received the new block from the sequencer node.
     wait_for_block_imported_5s(&mut node1_rnm_events, 11).await?;
 
-    assert_eq!(latest_block(&node0).await?.header.number, 11);
-    assert_eq!(latest_block(&node1).await?.header.number, 11);
+    // TODO: use eventually instead of sleep
+    tokio::time::sleep(tokio::time::Duration::from_secs(1)).await;
+
+    // TODO: wait for L2ChainCommitted?
+
+    // Assert both nodes are at block 11.
+    let node0_latest_block = latest_block(&node0).await?;
+    assert_eq!(node0_latest_block.header.number, 11);
+    assert_eq!(
+        node0_latest_block.header.hash_slow(),
+        latest_block(&node1).await?.header.hash_slow()
+    );
+
+    // Assert that block 11 has a different hash after the reorg.
+    assert_ne!(block11_before_reorg.unwrap(), node0_latest_block.header.hash_slow());
 
     Ok(())
 }
@@ -1067,7 +1098,6 @@ async fn can_gossip_over_eth_wire() -> eyre::Result<()> {
     config.sequencer_args.block_time = 40;
 
     // Setup the rollup node manager.
-    let config = default_sequencer_test_scroll_rollup_node_config();
     let (mut nodes, _tasks, _) =
         setup_engine(config, 2, chain_spec.clone(), false, false).await.unwrap();
     let _sequencer = nodes.pop().unwrap();

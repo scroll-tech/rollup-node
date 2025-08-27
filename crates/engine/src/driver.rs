@@ -8,9 +8,7 @@ use crate::{
 use alloy_provider::Provider;
 use futures::{ready, task::AtomicWaker, FutureExt, Stream};
 use rollup_node_primitives::{
-    
     BlockInfo, ChainImport, MeteredFuture, ScrollPayloadAttributesWithBatchInfo, WithBlockNumber,
-,
 };
 use scroll_alloy_hardforks::ScrollHardforks;
 use scroll_alloy_network::Scroll;
@@ -139,7 +137,7 @@ where
             self.set_head_block_info(l2_head_block_info);
             if let Some(MeteredFuture { fut, .. }) = self.engine_future.as_ref() {
                 match fut {
-                    EngineFuture::BlockImport(WithBlockNumber { number, .. })
+                    EngineFuture::ChainImport(WithBlockNumber { number, .. })
                         if number > &l2_head_block_info.number =>
                     {
                         self.engine_future = None

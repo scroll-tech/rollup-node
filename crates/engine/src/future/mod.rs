@@ -97,7 +97,7 @@ pub(crate) type OptimisticSyncFuture =
 /// An enum that represents the different types of futures that can be executed on the engine API.
 /// It can be a block import job, an L1 consolidation job, or a new payload processing.
 pub(crate) enum EngineFuture {
-    ChainImport(ChainImportFuture),
+    ChainImport(WithBlockNumber<ChainImportFuture>),
     L1Consolidation(WithBlockNumber<L1ConsolidationFuture>),
     NewPayload(NewPayloadFuture),
     OptimisticSync(OptimisticSyncFuture),
@@ -112,7 +112,11 @@ impl EngineFuture {
     where
         EC: ScrollEngineApi + Unpin + Send + Sync + 'static,
     {
-        Self::ChainImport(Box::pin(handle_chain_import(client, chain_import, fcs)))
+        let highest_block_number = chain_import.chain.last().unwrap().number;
+        Self::ChainImport(WithBlockNumber::new(
+            highest_block_number,
+            Box::pin(handle_chain_import(client, chain_import, fcs)),
+        ))
     }
 
     pub(crate) fn optimistic_sync<EC>(client: Arc<EC>, fcs: AlloyForkchoiceState) -> Self
