@@ -115,24 +115,31 @@ pub trait DatabaseOperations: DatabaseConnectionProvider {
             .map(|x| x.and_then(|x| x.parse::<u64>().ok()))?)
     }
 
-    /// Get the newest finalized batch hash up to or at the provided height.
-    async fn get_finalized_batch_hash_at_height(
+    /// Get the finalized batches between the provided range \[low; high\].
+    async fn get_batches_by_finalized_block_range(
         &self,
-        height: u64,
-    ) -> Result<Option<B256>, DatabaseError> {
+        low: u64,
+        high: u64,
+    ) -> Result<Vec<BatchInfo>, DatabaseError> {
         Ok(models::batch_commit::Entity::find()
             .filter(
                 Condition::all()
                     .add(models::batch_commit::Column::FinalizedBlockNumber.is_not_null())
-                    .add(models::batch_commit::Column::FinalizedBlockNumber.lte(height)),
+                    .add(models::batch_commit::Column::FinalizedBlockNumber.gte(low))
+                    .add(models::batch_commit::Column::FinalizedBlockNumber.lte(high)),
             )
-            .order_by_desc(models::batch_commit::Column::Index)
+            .order_by_asc(models::batch_commit::Column::Index)
             .select_only()
+            .column(models::batch_commit::Column::Index)
             .column(models::batch_commit::Column::Hash)
-            .into_tuple::<Vec<u8>>()
-            .one(self.get_connection())
+            .into_tuple::<(i64, Vec<u8>)>()
+            .all(self.get_connection())
             .await
-            .map(|x| x.map(|x| B256::from_slice(&x)))?)
+            .map(|x| {
+                x.into_iter()
+                    .map(|(index, hash)| BatchInfo::new(index as u64, B256::from_slice(&hash)))
+                    .collect()
+            })?)
     }
 
     /// Delete all [`BatchCommitData`]s with a block number greater than the provided block number.
