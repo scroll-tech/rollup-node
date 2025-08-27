@@ -319,7 +319,7 @@ async fn can_penalize_peer_for_invalid_block() {
 /// 3. **Invalid signature detection**: Sends a block with a malformed signature and verifies
 ///    further reputation decrease or peer disconnection.
 #[tokio::test]
-async fn can_penalize_peer_for_invalid_signature() {
+async fn can_penalize_peer_for_invalid_signature() -> eyre::Result<()> {
     reth_tracing::init_test_tracing();
 
     let chain_spec = (*SCROLL_DEV).clone();
@@ -405,20 +405,18 @@ async fn can_penalize_peer_for_invalid_signature() {
     node0_network_handle.announce_block(block1.clone(), unauthorized_signature);
 
     // Node1 should receive and process the invalid block
-    if let Some(RollupManagerEvent::NewBlockReceived(block_with_peer)) = node1_events.next().await {
-        assert_eq!(block1.hash_slow(), block_with_peer.block.hash_slow());
+    wait_for_event_predicate_5s(&mut node1_events, |e| {
+        if let RollupManagerEvent::NewBlockReceived(block_with_peer) = e {
+            assert_eq!(block1.hash_slow(), block_with_peer.block.hash_slow());
 
-        // Verify the signature is from the unauthorized signer
-        let hash = sig_encode_hash(&block_with_peer.block);
-        let recovered = block_with_peer.signature.recover_address_from_prehash(&hash).unwrap();
-        assert_eq!(
-            recovered,
-            unauthorized_signer.address(),
-            "Block should be signed by unauthorized signer"
-        );
-    } else {
-        panic!("Failed to receive valid block at follower");
-    }
+            // Verify the signature is from the unauthorized signer
+            let hash = sig_encode_hash(&block_with_peer.block);
+            let recovered = block_with_peer.signature.recover_address_from_prehash(&hash).unwrap();
+            return recovered == unauthorized_signer.address();
+        }
+        false
+    })
+    .await?;
 
     eventually(
         Duration::from_secs(5),
@@ -461,6 +459,8 @@ async fn can_penalize_peer_for_invalid_signature() {
         },
     )
     .await;
+
+    Ok(())
 }
 
 #[allow(clippy::large_stack_frames)]
