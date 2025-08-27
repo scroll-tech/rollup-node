@@ -1021,7 +1021,8 @@ async fn can_handle_l1_message_reorg() -> eyre::Result<()> {
     // Let the sequencer build 10 blocks before performing the reorg process.
     for i in 1..=10 {
         node0_rnm_handle.build_block().await;
-        wait_for_block_sequenced_5s(&mut node0_rnm_events, i).await?;
+        let b = wait_for_block_sequenced_5s(&mut node0_rnm_events, i).await?;
+        println!("Sequenced block {} {:?}", b.header.number, b.header.hash_slow());
     }
 
     // Assert that the follower node has received all 10 blocks from the sequencer node.
@@ -1099,10 +1100,6 @@ async fn can_handle_l1_message_reorg() -> eyre::Result<()> {
     node1_l1_watcher_tx.send(Arc::new(L1Notification::Reorg(9))).await?;
     wait_for_event_5s(&mut node1_rnm_events, RollupManagerEvent::Reorg(9)).await?;
 
-    // TODO: this can only become true if we do https://github.com/scroll-tech/rollup-node/issues/254
-    // assert_eq!(latest_block(&node0).await?.header.number, 10);
-    // assert_eq!(latest_block(&node1).await?.header.number, 10);
-
     // Since the L1 reorg reverted the L1 message included in block 11, the sequencer
     // should produce a new block at height 11.
     node0_rnm_handle.build_block().await;
@@ -1116,24 +1113,9 @@ async fn can_handle_l1_message_reorg() -> eyre::Result<()> {
     wait_for_chain_committed_5s(&mut node1_rnm_events, 11, true).await?;
 
     // Assert both nodes are at block 11.
-    eventually(
-        Duration::from_secs(5),
-        Duration::from_millis(100),
-        "Waiting for latest block on node0",
-        || async { latest_block(&node0).await.unwrap().header.number == 11 },
-    )
-    .await;
+    assert_latest_block_on_rpc_by_number(&node0, 11).await;
     let node0_latest_block = latest_block(&node0).await?;
-    eventually(
-        Duration::from_secs(5),
-        Duration::from_millis(100),
-        "Waiting for latest block on node1",
-        || async {
-            node0_latest_block.header.hash_slow() ==
-                latest_block(&node1).await.unwrap().header.hash_slow()
-        },
-    )
-    .await;
+    assert_latest_block_on_rpc_by_hash(&node1, node0_latest_block.header.hash_slow()).await;
 
     // Assert that block 11 has a different hash after the reorg.
     assert_ne!(block11_before_reorg.unwrap(), node0_latest_block.header.hash_slow());
@@ -1499,4 +1481,43 @@ where
 
         interval.tick().await;
     }
+}
+
+async fn assert_latest_block_on_rpc_by_number(
+    node: &NodeHelperType<
+        ScrollRollupNode,
+        BlockchainProvider<NodeTypesWithDBAdapter<ScrollRollupNode, TmpDB>>,
+    >,
+    block_number: u64,
+) {
+    eventually(
+        Duration::from_secs(5),
+        Duration::from_millis(100),
+        "Waiting for latest block by number on node",
+        || async {
+            println!(
+                "Latest block number: {}, hash: {}",
+                latest_block(node).await.unwrap().header.number,
+                latest_block(node).await.unwrap().header.hash_slow()
+            );
+            latest_block(node).await.unwrap().header.number == block_number
+        },
+    )
+    .await;
+}
+
+async fn assert_latest_block_on_rpc_by_hash(
+    node: &NodeHelperType<
+        ScrollRollupNode,
+        BlockchainProvider<NodeTypesWithDBAdapter<ScrollRollupNode, TmpDB>>,
+    >,
+    block_hash: B256,
+) {
+    eventually(
+        Duration::from_secs(5),
+        Duration::from_millis(100),
+        "Waiting for latest block by hash on node",
+        || async { latest_block(node).await.unwrap().header.hash_slow() == block_hash },
+    )
+    .await;
 }
