@@ -232,14 +232,23 @@ where
 
             // TODO: remove this once we deprecate l2geth.
             // Store the block signature in the database
-            tokio::task::block_in_place(|| {
-                tokio::runtime::Handle::current().block_on(async move {
-                    let block_hash = block_with_peer.block.hash_slow();
-                    let signature = block_with_peer.signature;
-                    self.database.insert_signature(block_hash, signature).await
-                        .unwrap_or_else(|err| panic!("Failed to store block signature, but execution client already persisted the block: block_hash={:?}, signature={:?}, error={:?}", block_hash, signature, err));
-                    trace!("Persisted block signature to database, block hash: {:?}, sig: {:?}", block_hash, signature.to_string());
-                })
+            let db = self.database.clone();
+            let block_hash = block_with_peer.block.hash_slow();
+            let signature  = block_with_peer.signature;
+            tokio::spawn(async move {
+                if let Err(err) = db.insert_signature(block_hash, signature).await {
+                    tracing::warn!(
+                        target: "scroll::node::manager",
+                        %block_hash, sig=%signature, error=?err,
+                        "Failed to store block signature; execution client already persisted the block"
+                    );
+                } else {
+                    tracing::trace!(
+                        target: "scroll::node::manager",
+                        %block_hash, sig=%signature,
+                        "Persisted block signature to database"
+                    );
+                }
             });
         }
     }
@@ -543,14 +552,22 @@ where
 
                     // TODO: remove this once we deprecate l2geth.
                     // Store the block signature in the database
-                    let database = this.database.clone();
+                    let db = this.database.clone();
                     let block_hash = block.hash_slow();
-                    tokio::task::block_in_place(|| {
-                        tokio::runtime::Handle::current().block_on(async move {
-                            database.insert_signature(block_hash, signature).await
-                                .unwrap_or_else(|err| panic!("Failed to store block signature, but execution client already persisted the block: block_hash={:?}, signature={:?}, error={:?}", block_hash, signature, err));
-                            trace!("Persisted block signature to database, block hash: {:?}, sig: {:?}", block_hash, signature.to_string());
-                        })
+                    tokio::spawn(async move {
+                        if let Err(err) = db.insert_signature(block_hash, signature).await {
+                            tracing::warn!(
+                                target: "scroll::node::manager",
+                                %block_hash, sig=%signature, error=?err,
+                                "Failed to store block signature; execution client already persisted the block"
+                            );
+                        } else {
+                            tracing::trace!(
+                                target: "scroll::node::manager",
+                                %block_hash, sig=%signature,
+                                "Persisted block signature to database"
+                            );
+                        }
                     });
 
                     this.network.handle().announce_block(block, signature);
