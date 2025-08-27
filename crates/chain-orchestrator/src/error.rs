@@ -44,4 +44,7 @@ pub enum ChainOrchestratorError {
     /// An error occurred while making a JSON-RPC request to the Execution Node (EN).
     #[error("An error occurred while making a JSON-RPC request to the EN: {0}")]
     RpcError(#[from] RpcError<TransportErrorKind>),
+    /// Chain orchestrator command channel has been closed.
+    #[error("Chain orchestrator command channel has been closed")]
+    CommandChannelClosed,
 }

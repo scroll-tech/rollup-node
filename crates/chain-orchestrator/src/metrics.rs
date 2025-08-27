@@ -5,6 +5,8 @@ use strum::EnumIter;
 /// An enum representing the items the chain orchestrator can handle.
 #[derive(Debug, PartialEq, Eq, Hash, EnumIter)]
 pub enum ChainOrchestratorItem {
+    /// Handle a block sequenced by this node.
+    SequencedBlock,
     /// Handle a block received from the network.
     NewBlock,
     /// Insert consolidated L2 blocks into the database.
@@ -27,6 +29,7 @@ impl ChainOrchestratorItem {
     /// Returns the str representation of the [`ChainOrchestratorItem`].
     pub const fn as_str(&self) -> &'static str {
         match self {
+            Self::SequencedBlock => "sequenced_block",
             Self::NewBlock => "new_block",
             Self::InsertConsolidatedL2Blocks => "insert_consolidated_l2_blocks",
             Self::InsertL2Block => "l2_block",

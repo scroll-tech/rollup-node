@@ -1,19 +1,19 @@
 //! The [`RollupNodeManager`] is the main component of the rollup node that manages the
-//! [`ScrollNetworkManager`], [`EngineDriver`], [`ChainOrchestrator`] and [`Consensus`] components.
-//! It is responsible for handling events from these components and coordinating their actions.
+//! [`ScrollNetworkManager`], [`EngineDriver`], [`ChainOrchestratorHandle`] and [`Consensus`]
+//! components. It is responsible for handling events from these components and coordinating their
+//! actions.
 
 use super::Consensus;
 use crate::poll_nested_stream_with_budget;
 use alloy_provider::Provider;
 use futures::StreamExt;
 use reth_chainspec::EthChainSpec;
-use reth_network::BlockDownloaderProvider;
 use reth_network_api::FullNetwork;
 use reth_scroll_node::ScrollNetworkPrimitives;
 use reth_tasks::shutdown::GracefulShutdown;
 use reth_tokio_util::{EventSender, EventStream};
 use rollup_node_chain_orchestrator::{
-    ChainOrchestrator, ChainOrchestratorError, ChainOrchestratorEvent,
+    ChainOrchestratorError, ChainOrchestratorEvent, ChainOrchestratorHandle,
 };
 use rollup_node_primitives::BlockInfo;
 use rollup_node_sequencer::Sequencer;
@@ -93,7 +93,7 @@ pub struct RollupNodeManager<
     /// A receiver for [`L1Notification`]s from the [`rollup_node_watcher::L1Watcher`].
     l1_notification_rx: Option<ReceiverStream<Arc<L1Notification>>>,
     /// The chain orchestrator.
-    chain: ChainOrchestrator<CS, <N as BlockDownloaderProvider>::Client, P>,
+    chain: ChainOrchestratorHandle,
     /// The consensus algorithm used by the rollup node.
     consensus: Box<dyn Consensus>,
     /// An event sender for sending events to subscribers of the rollup node manager.
@@ -164,7 +164,7 @@ where
         sequencer: Option<Sequencer<L1MP>>,
         signer: Option<SignerHandle>,
         block_time: Option<u64>,
-        chain_orchestrator: ChainOrchestrator<CS, <N as BlockDownloaderProvider>::Client, P>,
+        chain_orchestrator: ChainOrchestratorHandle,
     ) -> (Self, RollupManagerHandle<N>) {
         let (handle_tx, handle_rx) = mpsc::channel(EVENT_CHANNEL_SIZE);
         let derivation_pipeline = DerivationPipeline::new(l1_provider, database);
@@ -220,7 +220,7 @@ where
                 result: Err(err.into()),
             });
         } else {
-            self.chain.handle_block_from_peer(block_with_peer);
+            let _ = self.chain.import_block_from_peer(block_with_peer);
         }
     }
 
@@ -356,7 +356,7 @@ where
                     if let Some(event_sender) = self.event_sender.as_ref() {
                         event_sender.notify(RollupManagerEvent::BlockImported(block.clone()));
                     }
-                    self.chain.consolidate_validated_l2_blocks(vec![(&block).into()]);
+                    let _ = self.chain.persist_validated_l2_blocks(vec![(&block).into()]);
                 }
                 self.network.handle().block_import_outcome(outcome);
             }
@@ -370,7 +370,7 @@ where
                 }
             }
             EngineDriverEvent::L1BlockConsolidated(consolidation_outcome) => {
-                self.chain.persist_l1_consolidated_blocks(
+                let _ = self.chain.persist_consolidated_blocks(
                     vec![consolidation_outcome.block_info().clone()],
                     *consolidation_outcome.batch_info(),
                 );
@@ -386,7 +386,7 @@ where
                     if let Some(event_sender) = self.event_sender.as_ref() {
                         event_sender.notify(RollupManagerEvent::BlockImported(block));
                     }
-                    self.chain.consolidate_validated_l2_blocks(
+                    let _ = self.chain.persist_validated_l2_blocks(
                         outcome.chain.iter().map(|b| b.into()).collect(),
                     );
                 }
@@ -409,9 +409,11 @@ where
                 }
             }
             L1Notification::Synced => {
-                self.chain.handle_l1_notification(L1Notification::Synced);
+                let _ = self.chain.handle_l1_notification(L1Notification::Synced);
             }
-            _ => self.chain.handle_l1_notification(notification),
+            _ => {
+                let _ = self.chain.handle_l1_notification(notification);
+            }
         }
     }
 
@@ -545,7 +547,7 @@ where
                         ));
                     }
 
-                    this.chain.handle_sequenced_block(NewBlockWithPeer {
+                    let _ = this.chain.import_sequenced_block(NewBlockWithPeer {
                         peer_id: Default::default(),
                         block: block.clone(),
                         signature,

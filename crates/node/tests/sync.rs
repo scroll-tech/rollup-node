@@ -678,6 +678,8 @@ async fn test_chain_orchestrator_shallow_reorg_with_gap() -> eyre::Result<()> {
         .await;
     }
 
+    println!("produced 100 blocks");
+
     // disconnect the two nodes
     let mut sequencer_network_events = sequencer.inner.network.event_listener();
     let mut follower_network_events = follower.inner.network.event_listener();

@@ -317,7 +317,7 @@ impl ScrollRollupNodeConfig {
             .fetch_client()
             .await
             .expect("failed to fetch block client");
-        let chain_orchestrator = ChainOrchestrator::new(
+        let chain_orchestrator = ChainOrchestrator::spawn(
             db.clone(),
             chain_spec.clone(),
             block_client,
