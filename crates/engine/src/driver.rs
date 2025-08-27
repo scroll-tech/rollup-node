@@ -129,12 +129,22 @@ where
         reorged_unsafe_head: Option<BlockInfo>,
         reorged_safe_head: Option<BlockInfo>,
     ) {
-        // On an unsafe head reorg: clear the payload building future, reset the unsafe head and
-        // drop the engine future if it's a `NewPayload` or `BlockImport` with block number > L2
-        // reorged number.
+        // On an unsafe head reorg.
         if let Some(l2_head_block_info) = reorged_unsafe_head {
+            // clear the payload building future.
             self.payload_building_future = None;
+
+            // retain only blocks from chain imports for which the block number <= L2 reorged
+            // number.
+            for chain_import in &mut self.chain_imports {
+                chain_import.chain.retain(|block| block.number <= l2_head_block_info.number);
+            }
+
+            // reset the unsafe head.
             self.set_head_block_info(l2_head_block_info);
+
+            // drop the engine future if it's a `NewPayload` or `BlockImport` with block number >
+            // L2 reorged number.
             if let Some(MeteredFuture { fut, .. }) = self.engine_future.as_ref() {
                 match fut {
                     EngineFuture::ChainImport(WithBlockNumber { number, .. })
