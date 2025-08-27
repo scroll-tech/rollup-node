@@ -76,6 +76,9 @@ impl arbitrary::Arbitrary<'_> for BlockInfo {
     }
 }
 
+/// A type alias for a wrapper around a type to which a L1 finalized block number is attached.
+pub type WithFinalizedBlockNumber<T> = WithBlockNumber<T>;
+
 /// A wrapper around a type to which a block number is attached.
 #[derive(Debug, Default, Copy, Clone, PartialEq, Eq)]
 pub struct WithBlockNumber<T> {
@@ -99,6 +102,41 @@ impl<T: Future + Unpin> Future for WithBlockNumber<T> {
         let block_number = self.number;
         let inner = ready!(Pin::new(&mut self.get_mut().inner).poll(cx));
         Poll::Ready(WithBlockNumber::new(block_number, inner))
+    }
+}
+
+/// A type alias for a wrapper around a type to which a finalized batch information is attached.
+pub type WithFinalizedBatchInfo<T> = WithBatchInfo<T>;
+
+/// A type alias for a wrapper around a type to which a committed batch information is attached.
+pub type WithCommittedBatchInfo<T> = WithBatchInfo<T>;
+
+/// A wrapper around a type to which a batch information is attached.
+#[derive(Debug, Default, Copy, Clone, PartialEq, Eq)]
+pub struct WithBatchInfo<T> {
+    /// The l1 block number associated with the batch.
+    pub number: u64,
+    /// The index of the batch.
+    pub index: u64,
+    /// The wrapped type.
+    pub inner: T,
+}
+
+impl<T> WithBatchInfo<T> {
+    /// Returns a new instance of a [`WithBatchInfo`] wrapper.
+    pub const fn new(index: u64, number: u64, inner: T) -> Self {
+        Self { index, number, inner }
+    }
+}
+
+impl<T: Future + Unpin> Future for WithBatchInfo<T> {
+    type Output = WithBatchInfo<<T as Future>::Output>;
+
+    fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
+        let block_number = self.number;
+        let index = self.index;
+        let inner = ready!(Pin::new(&mut self.get_mut().inner).poll(cx));
+        Poll::Ready(WithBatchInfo::new(index, block_number, inner))
     }
 }
 

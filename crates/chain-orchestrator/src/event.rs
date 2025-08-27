@@ -2,7 +2,9 @@ use alloy_consensus::Header;
 use alloy_primitives::{Signature, B256};
 use reth_network_peers::PeerId;
 use reth_scroll_primitives::ScrollBlock;
-use rollup_node_primitives::{BatchInfo, BlockInfo, ChainImport, L2BlockInfoWithL1Messages};
+use rollup_node_primitives::{
+    BatchInfo, BlockInfo, ChainImport, L2BlockInfoWithL1Messages, WithFinalizedBlockNumber,
+};
 
 /// An event emitted by the `ChainOrchestrator`.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -38,12 +40,12 @@ pub enum ChainOrchestratorEvent {
         /// The safe L2 block info.
         safe_head: Option<BlockInfo>,
     },
-    /// A batch has been finalized returning the batch hash and new an optional finalized
-    /// L2 block.
-    BatchFinalized(B256, Option<BlockInfo>),
-    /// An L1 block has been finalized returning the L1 block number and an optional
-    /// finalized L2 block.
-    L1BlockFinalized(u64, Option<BlockInfo>),
+    /// A batch has been finalized returning an optional finalized L2 block. Also returns a
+    /// [`BatchInfo`] if the finalized event occurred in a finalized L1 block.
+    BatchFinalized(Option<WithFinalizedBlockNumber<BatchInfo>>, Option<BlockInfo>),
+    /// An L1 block has been finalized returning the L1 block number, the list of finalized batches
+    /// and an optional finalized L2 block.
+    L1BlockFinalized(u64, Vec<BatchInfo>, Option<BlockInfo>),
     /// A `L1Message` event has been committed returning the message queue index.
     L1MessageCommitted(u64),
     /// A reorg has occurred on L1, returning the L1 block number of the new L1 head,

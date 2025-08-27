@@ -261,9 +261,12 @@ where
                     Ok(consolidation_outcome) => {
                         let block_info = consolidation_outcome.block_info();
 
-                        // Update the safe block info and return the block info
-                        tracing::trace!(target: "scroll::engine", ?block_info, "updating safe block info from block derived from L1");
+                        // Batches are now always considered finalized, as such we update both the
+                        // safe and finalized block info. Update this once we implement issue #273.
+                        // Update the safe and finalized block info and return the block info.
+                        tracing::trace!(target: "scroll::engine", ?block_info, "updating safe and finalized block info from block derived from L1");
                         self.fcs.update_safe_block_info(block_info.block_info);
+                        self.fcs.update_finalized_block_info(block_info.block_info);
 
                         // If we reorged, update the head block info
                         if consolidation_outcome.is_reorg() {

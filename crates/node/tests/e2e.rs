@@ -653,8 +653,7 @@ async fn graceful_shutdown_consolidates_most_recent_batch_on_startup() -> eyre::
     // Launch a node
     let (mut nodes, _tasks, _) =
         setup_engine(default_test_scroll_rollup_node_config(), 1, chain_spec.clone(), false, false)
-            .await
-            .unwrap();
+            .await?;
     let node = nodes.pop().unwrap();
 
     // Instantiate the rollup node manager.
@@ -716,8 +715,18 @@ async fn graceful_shutdown_consolidates_most_recent_batch_on_startup() -> eyre::
         finalized_block_number: None,
     };
 
-    // Send the first batch commit to the rollup node manager.
+    // Send the first batch commit to the rollup node manager and finalize it.
     l1_notification_tx.send(Arc::new(L1Notification::BatchCommit(batch_0_data.clone()))).await?;
+    l1_notification_tx
+        .send(Arc::new(L1Notification::BatchFinalization {
+            hash: batch_0_data.hash,
+            index: batch_0_data.index,
+            block_number: batch_0_data.block_number,
+        }))
+        .await?;
+
+    // Lets finalize the first batch
+    l1_notification_tx.send(Arc::new(L1Notification::Finalized(batch_0_data.block_number))).await?;
 
     // Lets iterate over all blocks expected to be derived from the first batch commit.
     let mut i = 1;
@@ -737,11 +746,18 @@ async fn graceful_shutdown_consolidates_most_recent_batch_on_startup() -> eyre::
         i += 1;
     }
 
-    // Lets finalize the first batch
-    l1_notification_tx.send(Arc::new(L1Notification::Finalized(18318208))).await?;
-
-    // Now we send the second batch commit.
+    // Now we send the second batch commit and finalize it.
     l1_notification_tx.send(Arc::new(L1Notification::BatchCommit(batch_1_data.clone()))).await?;
+    l1_notification_tx
+        .send(Arc::new(L1Notification::BatchFinalization {
+            hash: batch_1_data.hash,
+            index: batch_1_data.index,
+            block_number: batch_1_data.block_number,
+        }))
+        .await?;
+
+    // Lets finalize the second batch.
+    l1_notification_tx.send(Arc::new(L1Notification::Finalized(batch_1_data.block_number))).await?;
 
     // The second batch commit contains 42 blocks (5-57), lets iterate until the rnm has
     // consolidated up to block 40.
@@ -805,6 +821,22 @@ async fn graceful_shutdown_consolidates_most_recent_batch_on_startup() -> eyre::
     // Send the second batch again to mimic the watcher behaviour.
     l1_notification_tx.send(Arc::new(L1Notification::BatchCommit(batch_0_data.clone()))).await?;
     l1_notification_tx.send(Arc::new(L1Notification::BatchCommit(batch_1_data.clone()))).await?;
+    l1_notification_tx
+        .send(Arc::new(L1Notification::BatchFinalization {
+            hash: batch_0_data.hash,
+            index: batch_0_data.index,
+            block_number: batch_0_data.block_number,
+        }))
+        .await?;
+    l1_notification_tx
+        .send(Arc::new(L1Notification::BatchFinalization {
+            hash: batch_1_data.hash,
+            index: batch_1_data.index,
+            block_number: batch_1_data.block_number,
+        }))
+        .await?;
+    // Lets finalize the second batch.
+    l1_notification_tx.send(Arc::new(L1Notification::Finalized(batch_1_data.block_number))).await?;
 
     // Lets fetch the first consolidated block event - this should be the first block of the batch.
     let l2_block = loop {
@@ -815,15 +847,17 @@ async fn graceful_shutdown_consolidates_most_recent_batch_on_startup() -> eyre::
         }
     };
 
-    // Assert that the consolidated block is the first block of the batch.
+    // One issue #273 is completed, we will again have safe blocks != finalized blocks, and this
+    // should be changed to 1. Assert that the consolidated block is the first block of the
+    // batch.
     assert_eq!(
-        l2_block.block_info.number, 1,
+        l2_block.block_info.number, 5,
         "Consolidated block number does not match expected number"
     );
 
     // Lets now iterate over all remaining blocks expected to be derived from the second batch
     // commit.
-    for i in 2..=57 {
+    for i in 6..=57 {
         loop {
             if let Some(RollupManagerEvent::L1DerivedBlockConsolidated(consolidation_outcome)) =
                 rnm_events.next().await
@@ -834,10 +868,18 @@ async fn graceful_shutdown_consolidates_most_recent_batch_on_startup() -> eyre::
         }
     }
 
+    let finalized_block = rpc
+        .block_by_number(BlockNumberOrTag::Finalized, false)
+        .await?
+        .expect("finalized block must exist");
     let safe_block =
         rpc.block_by_number(BlockNumberOrTag::Safe, false).await?.expect("safe block must exist");
     let head_block =
         rpc.block_by_number(BlockNumberOrTag::Latest, false).await?.expect("head block must exist");
+    assert_eq!(
+        finalized_block.header.number, 57,
+        "Finalized block number should be 57 after all blocks are consolidated"
+    );
     assert_eq!(
         safe_block.header.number, 57,
         "Safe block number should be 57 after all blocks are consolidated"
@@ -851,6 +893,7 @@ async fn graceful_shutdown_consolidates_most_recent_batch_on_startup() -> eyre::
 }
 
 #[tokio::test]
+#[ignore = "Enable once we implement issue #273"]
 async fn can_handle_batch_revert() -> eyre::Result<()> {
     reth_tracing::init_test_tracing();
     let chain_spec = (*SCROLL_MAINNET).clone();
@@ -939,7 +982,7 @@ async fn can_handle_batch_revert() -> eyre::Result<()> {
     l1_watcher_tx.send(Arc::new(L1Notification::BatchCommit(revert_batch_data))).await?;
 
     // Wait for the third batch to be proceeded.
-    tokio::time::sleep(tokio::time::Duration::from_millis(300)).await;
+    tokio::time::sleep(Duration::from_millis(300)).await;
 
     let (tx, rx) = oneshot::channel();
     handle.send_command(RollupManagerCommand::Status(tx)).await;
