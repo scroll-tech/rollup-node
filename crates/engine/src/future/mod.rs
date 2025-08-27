@@ -90,8 +90,8 @@ type NewPayloadFuture =
 pub(crate) type BuildNewPayloadFuture =
     MeteredFuture<Pin<Box<dyn Future<Output = Result<ScrollBlock, EngineDriverError>> + Send>>>;
 
-/// A future that represents a new payload building job.
-pub(crate) type OptimisticSyncFuture =
+/// A future that represents a fork choice update job.
+pub(crate) type ForkChoiceUpdateFuture =
     Pin<Box<dyn Future<Output = Result<ForkchoiceUpdated, EngineDriverError>> + Send>>;
 
 /// An enum that represents the different types of futures that can be executed on the engine API.
@@ -100,7 +100,7 @@ pub(crate) enum EngineFuture {
     ChainImport(WithBlockNumber<ChainImportFuture>),
     L1Consolidation(WithBlockNumber<L1ConsolidationFuture>),
     NewPayload(NewPayloadFuture),
-    OptimisticSync(OptimisticSyncFuture),
+    ForkChoiceUpdate(ForkChoiceUpdateFuture),
 }
 
 impl EngineFuture {
@@ -119,11 +119,11 @@ impl EngineFuture {
         ))
     }
 
-    pub(crate) fn optimistic_sync<EC>(client: Arc<EC>, fcs: AlloyForkchoiceState) -> Self
+    pub(crate) fn fork_choice_update<EC>(client: Arc<EC>, fcs: AlloyForkchoiceState) -> Self
     where
         EC: ScrollEngineApi + Unpin + Send + Sync + 'static,
     {
-        Self::OptimisticSync(Box::pin(forkchoice_updated(client, fcs, None)))
+        Self::ForkChoiceUpdate(Box::pin(forkchoice_updated(client, fcs, None)))
     }
 
     /// Creates a new [`EngineFuture::L1Consolidation`] future from the provided parameters.
@@ -172,7 +172,7 @@ impl Future for EngineFuture {
             Self::ChainImport(fut) => fut.inner.as_mut().poll(cx).map(Into::into),
             Self::L1Consolidation(fut) => fut.inner.as_mut().poll(cx).map(Into::into),
             Self::NewPayload(fut) => fut.as_mut().poll(cx).map(Into::into),
-            Self::OptimisticSync(fut) => fut.as_mut().poll(cx).map(Into::into),
+            Self::ForkChoiceUpdate(fut) => fut.as_mut().poll(cx).map(Into::into),
         }
     }
 }

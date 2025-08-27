@@ -11,7 +11,7 @@ pub(crate) enum EngineDriverFutureResult {
     ),
     L1Consolidation(Result<ConsolidationOutcome, EngineDriverError>),
     PayloadBuildingJob(Result<ScrollBlock, EngineDriverError>),
-    OptimisticSync(Result<ForkchoiceUpdated, EngineDriverError>),
+    ForkChoiceUpdate(Result<ForkchoiceUpdated, EngineDriverError>),
 }
 
 impl
@@ -46,6 +46,6 @@ impl From<Result<ScrollBlock, EngineDriverError>> for EngineDriverFutureResult {
 
 impl From<Result<ForkchoiceUpdated, EngineDriverError>> for EngineDriverFutureResult {
     fn from(value: Result<ForkchoiceUpdated, EngineDriverError>) -> Self {
-        Self::OptimisticSync(value)
+        Self::ForkChoiceUpdate(value)
     }
 }

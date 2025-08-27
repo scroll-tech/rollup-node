@@ -35,6 +35,8 @@ pub struct EngineDriver<EC, CS, P> {
     fcs: ForkchoiceState,
     /// Whether the EN is syncing.
     syncing: bool,
+    /// Whether a fork choice update is required.
+    fcu_required: bool,
     /// Block building duration.
     block_building_duration: Duration,
     /// The pending payload attributes derived from batches on L1.
@@ -77,6 +79,7 @@ where
             fcs,
             block_building_duration,
             syncing: sync_at_start_up,
+            fcu_required: false,
             l1_payload_attributes: VecDeque::new(),
             chain_imports: VecDeque::new(),
             optimistic_sync_target: None,
@@ -170,6 +173,13 @@ where
 
         // retain the L1 payload attributes with block number <= L1 block.
         self.l1_payload_attributes.retain(|attribute| attribute.number <= l1_block_number);
+
+        // require fork choice update so that Engine API is notified of the L1 reorg.
+        self.fcu_required = true;
+        println!(
+            "L1 reorg to {:?} {:?} {:?} handled by engine driver",
+            l1_block_number, reorged_unsafe_head, reorged_safe_head
+        );
     }
 
     /// Handles a block import request by adding it to the queue and waking up the driver.
@@ -315,15 +325,15 @@ where
                     }
                 }
             }
-            EngineDriverFutureResult::OptimisticSync(result) => {
-                tracing::info!(target: "scroll::engine", ?result, "handling optimistic sync result");
-
+            EngineDriverFutureResult::ForkChoiceUpdate(result) => {
+                tracing::info!(target: "scroll::engine", ?result, "handling forkchoice update result");
+                println!("Forkchoice update result: {:?}", result);
                 match result {
                     Err(err) => {
-                        tracing::error!(target: "scroll::engine", ?err, "failed to perform optimistic sync")
+                        tracing::error!(target: "scroll::engine", ?err, "failed to perform forkchoice update")
                     }
                     Ok(fcu) => {
-                        tracing::trace!(target: "scroll::engine", ?fcu, "optimistic sync issued successfully");
+                        tracing::trace!(target: "scroll::engine", ?fcu, "forkchoice update issued successfully");
                     }
                 }
             }
@@ -379,6 +389,19 @@ where
                 return Poll::Ready(Some(event));
             }
         };
+
+        // If fork choice update required, issue it.
+        if this.fcu_required {
+            let fcs = this.fcs.get_alloy_fcs();
+            println!("Issuing fork choice update to block number {:?}", fcs.head_block_hash);
+            this.engine_future = Some(MeteredFuture::new(EngineFuture::fork_choice_update(
+                this.client.clone(),
+                fcs,
+            )));
+            this.fcu_required = false;
+            this.waker.wake();
+            return Poll::Pending;
+        }
 
         // Take the handle to the payload building job if it exists and poll it.
         if let Some(mut handle) = this.payload_building_future.take() {
@@ -438,8 +461,10 @@ where
         if let Some(block_info) = this.optimistic_sync_target.take() {
             this.fcs.update_head_block_info(block_info);
             let fcs = this.fcs.get_alloy_optimistic_fcs();
-            this.engine_future =
-                Some(MeteredFuture::new(EngineFuture::optimistic_sync(this.client.clone(), fcs)));
+            this.engine_future = Some(MeteredFuture::new(EngineFuture::fork_choice_update(
+                this.client.clone(),
+                fcs,
+            )));
             this.waker.wake();
             return Poll::Pending;
         }
