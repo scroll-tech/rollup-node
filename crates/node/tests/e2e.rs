@@ -1068,18 +1068,29 @@ async fn can_handle_l1_message_reorg() -> eyre::Result<()> {
     // Assert that the follower node has received the new block from the sequencer node.
     wait_for_block_imported_5s(&mut node1_rnm_events, 11).await?;
 
-    // TODO: use eventually instead of sleep
-    tokio::time::sleep(tokio::time::Duration::from_secs(1)).await;
-
-    // TODO: wait for L2ChainCommitted?
+    // Assert ChainOrchestrator finished processing block.
+    wait_for_chain_committed_5s(&mut node0_rnm_events, 11, true).await?;
+    wait_for_chain_committed_5s(&mut node1_rnm_events, 11, true).await?;
 
     // Assert both nodes are at block 11.
+    eventually(
+        Duration::from_secs(5),
+        Duration::from_millis(100),
+        "Waiting for latest block on node0",
+        || async { latest_block(&node0).await.unwrap().header.number == 11 },
+    )
+    .await;
     let node0_latest_block = latest_block(&node0).await?;
-    assert_eq!(node0_latest_block.header.number, 11);
-    assert_eq!(
-        node0_latest_block.header.hash_slow(),
-        latest_block(&node1).await?.header.hash_slow()
-    );
+    eventually(
+        Duration::from_secs(5),
+        Duration::from_millis(100),
+        "Waiting for latest block on node1",
+        || async {
+            node0_latest_block.header.hash_slow() ==
+                latest_block(&node1).await.unwrap().header.hash_slow()
+        },
+    )
+    .await;
 
     // Assert that block 11 has a different hash after the reorg.
     assert_ne!(block11_before_reorg.unwrap(), node0_latest_block.header.hash_slow());
@@ -1323,6 +1334,43 @@ async fn wait_for_block_imported_5s(
     block_number: u64,
 ) -> eyre::Result<ScrollBlock> {
     wait_for_block_imported(events, block_number, Duration::from_secs(5)).await
+}
+
+async fn wait_for_chain_committed_5s(
+    events: &mut EventStream<RollupManagerEvent>,
+    expected_block_number: u64,
+    expected_consolidated: bool,
+) -> eyre::Result<()> {
+    wait_for_chain_committed(
+        events,
+        expected_block_number,
+        expected_consolidated,
+        Duration::from_secs(5),
+    )
+    .await
+}
+
+async fn wait_for_chain_committed(
+    events: &mut EventStream<RollupManagerEvent>,
+    expected_block_number: u64,
+    expected_consolidated: bool,
+    timeout: Duration,
+) -> eyre::Result<()> {
+    wait_for_event_predicate(
+        events,
+        |e| {
+            if let RollupManagerEvent::ChainOrchestratorEvent(c) = e {
+                if let ChainOrchestratorEvent::L2ChainCommitted(block_info, _, consolidated) = c {
+                    return block_info.block_info.number == expected_block_number &&
+                        expected_consolidated == consolidated;
+                }
+            }
+
+            false
+        },
+        timeout,
+    )
+    .await
 }
 
 async fn wait_for_event_predicate(
