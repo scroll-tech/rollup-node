@@ -11142,6 +11142,7 @@ dependencies = [
  "alloy-primitives",
  "alloy-rlp",
  "alloy-sol-types",
+ "bitvec",
  "derive_more",
  "eyre",
  "scroll-alloy-consensus",
@@ -11241,8 +11242,10 @@ dependencies = [
  "alloy-primitives",
  "alloy-sol-types",
  "arbitrary",
+ "bitvec",
  "derive_more",
  "scroll-alloy-consensus",
+ "thiserror 2.0.12",
 ]
 
 [[package]]

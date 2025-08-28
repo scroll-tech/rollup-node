@@ -13,6 +13,7 @@ use crate::{
 use std::vec::Vec;
 
 use alloy_primitives::bytes::Buf;
+use bitvec::vec::BitVec;
 use scroll_l1::abi::calls::CommitBatchCall;
 
 /// The max amount of chunks per batch for V1 codec.
@@ -54,7 +55,7 @@ pub fn decode_v1(calldata: &[u8], blob: &[u8]) -> Result<Batch, DecodingError> {
 
     decode_v1_chunk(
         call.version(),
-        call.skipped_l1_message_bitmap(),
+        call.skipped_l1_message_bitmap()?,
         l1_message_start_index,
         chunks,
         buf,
@@ -64,7 +65,7 @@ pub fn decode_v1(calldata: &[u8], blob: &[u8]) -> Result<Batch, DecodingError> {
 /// Decode the provided chunks and blob data into [`L2Block`].
 pub(crate) fn decode_v1_chunk(
     version: u8,
-    skipped_l1_message_bitmap: Option<Vec<u8>>,
+    skipped_l1_message_bitmap: Option<BitVec>,
     l1_message_start_index: u64,
     chunks: Vec<&[u8]>,
     blob: &[u8],

@@ -52,7 +52,7 @@ pub fn decode_v2(calldata: &[u8], blob: &[u8]) -> Result<Batch, DecodingError> {
 
     decode_v1_chunk(
         call.version(),
-        call.skipped_l1_message_bitmap(),
+        call.skipped_l1_message_bitmap()?,
         l1_message_start_index,
         chunks,
         buf,
