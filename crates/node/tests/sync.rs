@@ -97,7 +97,8 @@ async fn test_should_consolidate_to_block_15k() -> eyre::Result<()> {
 async fn test_should_trigger_pipeline_sync_for_execution_node() -> eyre::Result<()> {
     reth_tracing::init_test_tracing();
     let node_config = default_test_scroll_rollup_node_config();
-    let sequencer_node_config = default_sequencer_test_scroll_rollup_node_config();
+    let mut sequencer_node_config = default_sequencer_test_scroll_rollup_node_config();
+    sequencer_node_config.sequencer_args.block_time = 40;
 
     // Create the chain spec for scroll mainnet with Feynman activated and a test genesis.
     let chain_spec = (*SCROLL_DEV).clone();
