@@ -217,7 +217,7 @@ mod tests {
         );
 
         let expected = alloy_primitives::hex!(
-            "0x28ef61340bd939bc2195fe537567866003e1a15d3c71ff63e1590620aa63627667cbe9d8997f761aecb703304b3800ccf555c9f3dc64214b297fb1966a3b6d831b"
+            "0x28ef61340bd939bc2195fe537567866003e1a15d3c71ff63e1590620aa63627667cbe9d8997f761aecb703304b3800ccf555c9f3dc64214b297fb1966a3b6d8300"
         );
         assert_eq!(sig.as_bytes(), expected);
     }
