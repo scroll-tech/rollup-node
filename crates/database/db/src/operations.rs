@@ -595,7 +595,7 @@ pub trait DatabaseOperations: DatabaseConnectionProvider {
 ///
 /// It can either be an index, which is the queue index of the first message to return, or a hash,
 /// which is the hash of the first message to return.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum L1MessageStart {
     /// Start from the provided queue index.
     Index(u64),

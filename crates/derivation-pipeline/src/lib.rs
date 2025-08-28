@@ -24,8 +24,8 @@ use core::{
 };
 use futures::{FutureExt, Stream};
 use rollup_node_primitives::{
-    BatchCommitData, BatchInfo, ScrollPayloadAttributesWithBatchInfo, WithFinalizedBatchInfo,
-    WithFinalizedBlockNumber,
+    BatchCommitData, BatchInfo, ScrollPayloadAttributesWithBatchInfo, WithBlockNumber,
+    WithFinalizedBatchInfo, WithFinalizedBlockNumber,
 };
 use rollup_node_providers::{BlockDataProvider, L1Provider};
 use scroll_alloy_rpc_types_engine::{BlockDataHint, ScrollPayloadAttributes};
@@ -186,7 +186,7 @@ impl<P> Stream for DerivationPipeline<P>
 where
     P: L1Provider + Clone + Unpin + Send + Sync + 'static,
 {
-    type Item = ScrollPayloadAttributesWithBatchInfo;
+    type Item = WithBlockNumber<ScrollPayloadAttributesWithBatchInfo>;
 
     fn poll_next(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
         let this = self.get_mut();
@@ -198,7 +198,7 @@ where
 
         // return attributes from the queue if any.
         if let Some(attribute) = this.attributes_queue.pop_front() {
-            return Poll::Ready(Some(attribute.inner))
+            return Poll::Ready(Some(attribute))
         }
 
         // if future is None and the batch queue is empty, store the waker and return.
@@ -487,8 +487,10 @@ mod tests {
 
         // check the correctness of the last attribute.
         let mut attribute = ScrollPayloadAttributes::default();
-        while let Some(ScrollPayloadAttributesWithBatchInfo { payload_attributes: a, .. }) =
-            pipeline.next().await
+        while let Some(WithBlockNumber {
+            inner: ScrollPayloadAttributesWithBatchInfo { payload_attributes: a, .. },
+            ..
+        }) = pipeline.next().await
         {
             if a.payload_attributes.timestamp == 1696935657 {
                 attribute = a;
@@ -545,8 +547,10 @@ mod tests {
 
         // check the correctness of the last attribute.
         let mut attribute = ScrollPayloadAttributes::default();
-        while let Some(ScrollPayloadAttributesWithBatchInfo { payload_attributes: a, .. }) =
-            pipeline.next().await
+        while let Some(WithBlockNumber {
+            inner: ScrollPayloadAttributesWithBatchInfo { payload_attributes: a, .. },
+            ..
+        }) = pipeline.next().await
         {
             if a.payload_attributes.timestamp == 1696935657 {
                 attribute = a;

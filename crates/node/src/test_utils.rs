@@ -161,6 +161,13 @@ pub fn default_test_scroll_rollup_node_config() -> ScrollRollupNodeConfig {
 }
 
 /// Returns a default [`ScrollRollupNodeConfig`] preconfigured for testing with sequencer.
+/// It sets `sequencer_args.block_time = 0` so that no blocks are produced automatically.
+/// To produce blocks the `build_block` method needs to be invoked.
+/// This is so that block production and test scenarios remain predictable.
+///
+/// In case this behavior is not wanted, `block_time` can be adjusted to any value > 0 after
+/// obtaining the config so that the sequencer node will produce blocks automatically in this
+/// interval.
 pub fn default_sequencer_test_scroll_rollup_node_config() -> ScrollRollupNodeConfig {
     ScrollRollupNodeConfig {
         test: true,
@@ -174,7 +181,7 @@ pub fn default_sequencer_test_scroll_rollup_node_config() -> ScrollRollupNodeCon
         },
         sequencer_args: SequencerArgs {
             sequencer_enabled: true,
-            block_time: 50,
+            block_time: 0,
             payload_building_duration: 40,
             fee_recipient: Default::default(),
             l1_message_inclusion_mode: L1MessageInclusionMode::BlockDepth(0),

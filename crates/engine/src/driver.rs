@@ -8,7 +8,7 @@ use crate::{
 use alloy_provider::Provider;
 use futures::{ready, task::AtomicWaker, FutureExt, Stream};
 use rollup_node_primitives::{
-    BlockInfo, ChainImport, MeteredFuture, ScrollPayloadAttributesWithBatchInfo,
+    BlockInfo, ChainImport, MeteredFuture, ScrollPayloadAttributesWithBatchInfo, WithBlockNumber,
 };
 use scroll_alloy_hardforks::ScrollHardforks;
 use scroll_alloy_network::Scroll;
@@ -38,7 +38,7 @@ pub struct EngineDriver<EC, CS, P> {
     /// Block building duration.
     block_building_duration: Duration,
     /// The pending payload attributes derived from batches on L1.
-    l1_payload_attributes: VecDeque<ScrollPayloadAttributesWithBatchInfo>,
+    l1_payload_attributes: VecDeque<WithBlockNumber<ScrollPayloadAttributesWithBatchInfo>>,
     /// The pending block imports received over the network.
     chain_imports: VecDeque<ChainImport>,
     /// The latest optimistic sync target.
@@ -121,6 +121,67 @@ where
         }
     }
 
+    /// Handle L1 reorg, with the L1 block number reorged to, and whether this reorged the head or
+    /// batches.
+    pub fn handle_l1_reorg(
+        &mut self,
+        l1_block_number: u64,
+        reorged_unsafe_head: Option<BlockInfo>,
+        reorged_safe_head: Option<BlockInfo>,
+    ) {
+        // On an unsafe head reorg.
+        if let Some(l2_head_block_info) = reorged_unsafe_head {
+            // clear the payload building future.
+            self.payload_building_future = None;
+
+            // retain only blocks from chain imports for which the block number <= L2 reorged
+            // number.
+            for chain_import in &mut self.chain_imports {
+                chain_import.chain.retain(|block| block.number <= l2_head_block_info.number);
+            }
+
+            // reset the unsafe head.
+            self.set_head_block_info(l2_head_block_info);
+
+            // drop the engine future if it's a `NewPayload` or `BlockImport` with block number >
+            // L2 reorged number.
+            if let Some(MeteredFuture { fut, .. }) = self.engine_future.as_ref() {
+                match fut {
+                    EngineFuture::ChainImport(WithBlockNumber { number, .. })
+                        if number > &l2_head_block_info.number =>
+                    {
+                        self.engine_future = None
+                    }
+                    // `NewPayload` future is ONLY instantiated when the payload building future is
+                    // done, and we want to issue the payload to the EN. Thus, we also clear it on a
+                    // L2 reorg.
+                    EngineFuture::NewPayload(_) => self.engine_future = None,
+                    _ => {}
+                }
+            }
+        }
+
+        // On a safe head reorg: reset the safe head.
+        if let Some(safe_block_info) = reorged_safe_head {
+            self.set_safe_block_info(safe_block_info);
+        }
+
+        // drop the engine future if it's a `L1Consolidation` future associated with a L1 block
+        // number > l1_block_number.
+        if matches!(
+            self.engine_future.as_ref(),
+            Some(MeteredFuture {
+                fut: EngineFuture::L1Consolidation(WithBlockNumber { number, .. }),
+                ..
+            }) if number > &l1_block_number
+        ) {
+            self.engine_future = None;
+        }
+
+        // retain the L1 payload attributes with block number <= L1 block.
+        self.l1_payload_attributes.retain(|attribute| attribute.number <= l1_block_number);
+    }
+
     /// Handles a block import request by adding it to the queue and waking up the driver.
     pub fn handle_chain_import(&mut self, chain_import: ChainImport) {
         tracing::trace!(target: "scroll::engine", head = %chain_import.chain.last().unwrap().hash_slow(), "new chain import request received");
@@ -145,7 +206,10 @@ where
 
     /// Handles a [`ScrollPayloadAttributes`] sourced from L1 by initiating a task sending the
     /// attribute to the EN via the [`EngineDriver`].
-    pub fn handle_l1_consolidation(&mut self, attributes: ScrollPayloadAttributesWithBatchInfo) {
+    pub fn handle_l1_consolidation(
+        &mut self,
+        attributes: WithBlockNumber<ScrollPayloadAttributesWithBatchInfo>,
+    ) {
         self.l1_payload_attributes.push_back(attributes);
         self.waker.wake();
     }
@@ -193,7 +257,7 @@ where
                         self.metrics.block_import_duration.record(duration.as_secs_f64());
 
                         // Return the block import outcome
-                        return block_import_outcome.map(EngineDriverEvent::BlockImportOutcome)
+                        return block_import_outcome.map(EngineDriverEvent::BlockImportOutcome);
                     }
                     Err(err) => {
                         tracing::error!(target: "scroll::engine", ?err, "failed to import block");
@@ -223,7 +287,7 @@ where
                         // record the metric.
                         self.metrics.l1_consolidation_duration.record(duration.as_secs_f64());
 
-                        return Some(EngineDriverEvent::L1BlockConsolidated(consolidation_outcome))
+                        return Some(EngineDriverEvent::L1BlockConsolidated(consolidation_outcome));
                     }
                     Err(err) => {
                         tracing::error!(target: "scroll::engine", ?err, "failed to consolidate block derived from L1");
@@ -250,7 +314,7 @@ where
                         self.metrics.build_new_payload_duration.record(duration.as_secs_f64());
                         self.metrics.gas_per_block.record(block.gas_used as f64);
 
-                        return Some(EngineDriverEvent::NewPayload(block))
+                        return Some(EngineDriverEvent::NewPayload(block));
                     }
                     Err(err) => {
                         tracing::error!(target: "scroll::engine", ?err, "failed to build new payload");
