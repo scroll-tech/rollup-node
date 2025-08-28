@@ -244,7 +244,7 @@ where
     ) -> Option<EngineDriverEvent> {
         match result {
             EngineDriverFutureResult::BlockImport(result) => {
-                tracing::info!(target: "scroll::engine", ?result, "handling block import result");
+                tracing::trace!(target: "scroll::engine", ?result, "handling block import result");
 
                 match result {
                     Ok((block_info, block_import_outcome, payload_status)) => {
@@ -272,7 +272,7 @@ where
                 }
             }
             EngineDriverFutureResult::L1Consolidation(result) => {
-                tracing::info!(target: "scroll::engine", ?result, "handling L1 consolidation result");
+                tracing::trace!(target: "scroll::engine", ?result, "handling L1 consolidation result");
 
                 match result {
                     Ok(consolidation_outcome) => {
@@ -308,7 +308,7 @@ where
                 }
             }
             EngineDriverFutureResult::PayloadBuildingJob(result) => {
-                tracing::info!(target: "scroll::engine", result = ?result.as_ref().map(|b| b.header.as_ref()), "handling payload building result");
+                tracing::trace!(target: "scroll::engine", result = ?result.as_ref().map(|b| b.header.as_ref()), "handling payload building result");
 
                 match result {
                     Ok(block) => {
@@ -333,7 +333,7 @@ where
                 }
             }
             EngineDriverFutureResult::OptimisticSync(result) => {
-                tracing::info!(target: "scroll::engine", ?result, "handling optimistic sync result");
+                tracing::trace!(target: "scroll::engine", ?result, "handling optimistic sync result");
 
                 match result {
                     Err(err) => {
@@ -419,7 +419,7 @@ where
 
                         if let EngineDriverError::PayloadBuildingMissingPayloadId(attributes) = err
                         {
-                            tracing::info!(target: "scroll::engine", "retrying payload building job for missing payload id");
+                            tracing::warn!(target: "scroll::engine", "retrying payload building job for missing payload id");
                             this.sequencer_payload_attributes = Some(attributes);
                             this.waker.wake();
                         }
