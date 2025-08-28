@@ -1,7 +1,10 @@
 use super::{transaction::DatabaseTransaction, DatabaseConnectionProvider};
 use crate::error::DatabaseError;
 
-use sea_orm::{Database as SeaOrmDatabase, DatabaseConnection, TransactionTrait};
+use sea_orm::{
+    ConnectOptions, ConnectionTrait, Database as SeaOrmDatabase, DatabaseConnection,
+    TransactionTrait,
+};
 
 /// The [`Database`] struct is responsible for interacting with the database.
 ///
@@ -19,7 +22,17 @@ pub struct Database {
 impl Database {
     /// Creates a new [`Database`] instance associated with the provided database URL.
     pub async fn new(database_url: &str) -> Result<Self, DatabaseError> {
-        let connection = SeaOrmDatabase::connect(database_url).await?;
+        let connection = SeaOrmDatabase::connect(ConnectOptions::new(database_url)).await?;
+
+        // Enable Write-Ahead Logging for better concurrent reads/writes.
+        connection.execute_unprepared("PRAGMA journal_mode = WAL").await?;
+        // Set synchronous to NORMAL to avoid constant flushes to disk.
+        connection.execute_unprepared("PRAGMA synchronous = NORMAL").await?;
+        // Set a larger cache size (defaults to -2000 pages, i.e. ~2MB).
+        connection.execute_unprepared("PRAGMA cache_size = -64000").await?;
+        // Store temporary tables in memory.
+        connection.execute_unprepared("PRAGMA temp_store = MEMORY").await?;
+
         Ok(Self { connection })
     }
 

@@ -39,6 +39,10 @@ impl<MI: MigrationInfo + Send + Sync> MigrationTrait for Migration<MI> {
                             .on_delete(ForeignKeyAction::Cascade)
                             .on_update(ForeignKeyAction::Cascade),
                     )
+                    .index(Index::create().name("idx_block_number").col(L2Block::BlockNumber))
+                    .index(Index::create().name("idx_block_hash").col(L2Block::BlockHash))
+                    .index(Index::create().name("idx_batch_hash").col(L2Block::BatchHash))
+                    .index(Index::create().name("idx_batch_index").col(L2Block::BatchIndex))
                     .to_owned(),
             )
             .await?;

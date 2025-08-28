@@ -21,6 +21,11 @@ impl MigrationTrait for Migration {
                     .col(binary_len(L1Message::Value, 32))
                     .col(binary_len(L1Message::Sender, 20))
                     .col(var_binary(L1Message::Input, 1024))
+                    .index(Index::create().name("idx_queue_hash").col(L1Message::QueueHash))
+                    .index(Index::create().name("idx_hash").col(L1Message::Hash))
+                    .index(
+                        Index::create().name("idx_l1_block_number").col(L1Message::L1BlockNumber),
+                    )
                     .to_owned(),
             )
             .await
