@@ -513,6 +513,7 @@ pub trait DatabaseOperations: DatabaseConnectionProvider {
     }
 
     /// Store a block signature in the database.
+    /// TODO: remove this once we deprecated l2geth.
     async fn insert_signature(
         &self,
         block_hash: B256,
@@ -536,6 +537,7 @@ pub trait DatabaseOperations: DatabaseConnectionProvider {
     }
 
     /// Get a block signature from the database by block hash.
+    /// TODO: remove this once we deprecated l2geth.
     async fn get_block_signature(
         &self,
         block_hash: B256,

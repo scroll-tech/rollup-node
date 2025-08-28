@@ -3,6 +3,10 @@ use rollup_node_signer::Signature;
 use sea_orm::{entity::prelude::*, ActiveValue};
 
 /// A database model that represents a block signature.
+///
+/// TODO: remove this once we deprecated l2geth.
+/// The purpose of this model is to store the block signature in the database, and it will be used
+/// to provide the block signature when reth receives eth66 block request from scroll's l2geth.
 #[derive(Clone, Debug, PartialEq, Eq, DeriveEntityModel)]
 #[sea_orm(table_name = "block_signature")]
 pub struct Model {
