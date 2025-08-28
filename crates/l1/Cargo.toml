@@ -19,7 +19,7 @@ scroll-alloy-consensus.workspace = true
 
 # misc
 arbitrary = { workspace = true, optional = true, features = ["derive"] }
-bitvec.workspace = true
+bitvec = { workspace = true, features = ["alloc"] }
 derive_more.workspace = true
 thiserror.workspace = true
 
