@@ -277,7 +277,7 @@ pub async fn derive<L1P: L1Provider + Sync + Send, L2P: BlockDataProvider + Sync
         let mut txs = Vec::with_capacity(block.context.num_transactions as usize);
         for _ in 0..block.context.num_l1_messages {
             // check if the next l1 message should be skipped.
-            if matches!(skipped_l1_messages.next(), Some(bit) if bit == 1) {
+            if matches!(skipped_l1_messages.next(), Some(bit) if bit) {
                 l1_provider.increment_cursor();
                 continue;
             }
@@ -709,6 +709,64 @@ mod tests {
         // the first L1 message should be skipped.
         let expected_l1_messages: Vec<_> =
             l1_messages[1..].iter().map(|msg| msg.transaction.clone()).collect();
+        assert_eq!(expected_l1_messages, derived_l1_messages);
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn test_should_skip_l1_messages_complex() -> eyre::Result<()> {
+        // https://sepolia.etherscan.io/tx/0x3ac4fa531bba0cd1593e2f5e6720a6c580864665d50fbf0de4ca9d7de10c504b
+        // load batch data in the db.
+        let db = Arc::new(setup_test_db().await);
+        let raw_calldata =
+            read_to_bytes("./testdata/calldata_v0_with_skipped_l1_messages_complex.bin")?;
+        let batch_data = BatchCommitData {
+            hash: b256!("082A1232491ACFBB436BF37E788967773DDF3B40E0F60170355870868E45FD7F"),
+            index: 38265,
+            block_number: 4373247,
+            block_timestamp: 1695797868,
+            calldata: Arc::new(raw_calldata),
+            blob_versioned_hash: None,
+            finalized_block_number: None,
+        };
+
+        // prepare the l1 messages.
+        let l1_messages = (777290..=777306)
+            .map(|index| L1MessageEnvelope {
+                l1_block_number: 0,
+                l2_block_number: None,
+                queue_hash: None,
+                transaction: TxL1Message { queue_index: index, ..Default::default() },
+            })
+            .collect::<Vec<_>>();
+
+        for message in l1_messages.clone() {
+            db.insert_l1_message(message).await?;
+        }
+
+        let l1_messages_provider = DatabaseL1MessageProvider::new(db.clone(), 0);
+        let l1_provider = MockL1Provider { l1_messages_provider, blobs: HashMap::new() };
+        let l2_provider = MockL2Provider;
+
+        // derive attributes and extract l1 messages.
+        let attributes: Vec<_> = derive(batch_data, l1_provider, l2_provider).await?;
+        let derived_l1_messages: Vec<_> = attributes
+            .into_iter()
+            .filter_map(|a| a.transactions)
+            .flatten()
+            .filter_map(|rlp| {
+                let buf = &mut rlp.as_ref();
+                TxL1Message::decode_2718(buf).ok()
+            })
+            .collect();
+
+        // skipped bitmap should be [0, 1, 0, 1, 0, 1, 0, 1], [0, 1, 0, 1, 0, 1, 0, 1], [0..0], ..
+        // meaning every second message is skipped.
+        let expected_l1_messages: Vec<_> = l1_messages
+            .into_iter()
+            .enumerate()
+            .filter_map(|(index, message)| (index % 2 == 0).then_some(message.transaction))
+            .collect();
         assert_eq!(expected_l1_messages, derived_l1_messages);
         Ok(())
     }
