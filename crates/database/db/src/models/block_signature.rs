@@ -1,4 +1,5 @@
-use alloy_primitives::{Signature, B256};
+use alloy_primitives::B256;
+use rollup_node_signer::Signature;
 use sea_orm::{entity::prelude::*, ActiveValue};
 
 /// A database model that represents a block signature.

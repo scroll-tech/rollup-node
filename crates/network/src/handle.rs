@@ -1,4 +1,4 @@
-use alloy_primitives::Signature;
+use rollup_node_signer::Signature;
 use reth_network_api::FullNetwork;
 use reth_scroll_primitives::ScrollBlock;
 use std::sync::Arc;

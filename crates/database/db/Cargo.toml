@@ -21,6 +21,7 @@ scroll-alloy-rpc-types-engine.workspace = true
 # scroll
 scroll-migration = { workspace = true, optional = true }
 rollup-node-primitives.workspace = true
+rollup-node-signer.workspace = true
 
 # misc
 async-trait.workspace = true
