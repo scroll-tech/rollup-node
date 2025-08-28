@@ -125,6 +125,11 @@ impl<
         })
     }
 
+    /// Returns the number of pending futures.
+    pub fn pending_futures_len(&self) -> usize {
+        self.pending_futures.len()
+    }
+
     /// Wraps a pending chain orchestrator future, metering the completion of it.
     pub fn handle_metered(
         &mut self,

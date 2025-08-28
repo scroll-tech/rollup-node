@@ -59,6 +59,14 @@ pub use handle::RollupManagerHandle;
 /// The size of the event channel.
 const EVENT_CHANNEL_SIZE: usize = 100;
 
+/// The maximum capacity of the pending futures queue in the chain orchestrator for acceptance of
+/// new events from the L1 notification channel.
+const CHAIN_ORCHESTRATOR_MAX_PENDING_FUTURES: usize = 5000;
+
+/// The maximum number of pending futures in the engine driver for acceptance of new events from the
+/// L1 notification channel.
+const ENGINE_MAX_PENDING_FUTURES: usize = 5000;
+
 /// The main manager for the rollup node.
 ///
 /// This is an endless [`Future`] that drives the state of the entire network forward and includes
@@ -444,6 +452,14 @@ where
 
         drop(graceful_guard);
     }
+
+    /// Returns true if the manager has capacity to accept new L1 notifications.
+    pub fn has_capacity_for_l1_notifications(&self) -> bool {
+        let chain_orchestrator_has_capacity = self.chain.pending_futures_len() <
+            CHAIN_ORCHESTRATOR_MAX_PENDING_FUTURES - L1_NOTIFICATION_CHANNEL_BUDGET as usize;
+        let engine_has_capacity = self.engine.pending_futures_len() < ENGINE_MAX_PENDING_FUTURES;
+        chain_orchestrator_has_capacity && engine_has_capacity
+    }
 }
 
 impl<N, EC, P, L1P, L1MP, CS> Future for RollupNodeManager<N, EC, P, L1P, L1MP, CS>
@@ -516,7 +532,7 @@ where
 
         let mut maybe_more_l1_rx_events = false;
         proceed_if!(
-            en_synced,
+            en_synced && this.has_capacity_for_l1_notifications(),
             maybe_more_l1_rx_events = poll_nested_stream_with_budget!(
                 "l1_notification_rx",
                 "L1Notification channel",

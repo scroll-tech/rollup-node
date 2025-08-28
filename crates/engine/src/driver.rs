@@ -88,6 +88,13 @@ where
         }
     }
 
+    /// Returns the number of pending futures in the queue.
+    ///
+    /// This only considers the length of the L1 payload attributes and chain import queues.
+    pub fn pending_futures_len(&self) -> usize {
+        self.l1_payload_attributes.len() + self.chain_imports.len()
+    }
+
     /// Sets the finalized block info.
     pub fn set_finalized_block_info(&mut self, block_info: BlockInfo) {
         self.fcs.update_finalized_block_info(block_info);
