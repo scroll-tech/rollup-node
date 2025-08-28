@@ -22,13 +22,34 @@ impl MigrationTrait for Migration {
                     .col(binary(BatchCommit::Calldata))
                     .col(binary_len_null(BatchCommit::BlobHash, HASH_LENGTH))
                     .col(big_unsigned_null(BatchCommit::FinalizedBlockNumber))
-                    .index(Index::create().name("idx_hash").col(BatchCommit::Hash))
-                    .index(Index::create().name("idx_block_number").col(BatchCommit::BlockNumber))
-                    .index(
-                        Index::create()
-                            .name("idx_finalized_block_number")
-                            .col(BatchCommit::FinalizedBlockNumber),
-                    )
+                    .to_owned(),
+            )
+            .await?;
+
+        manager
+            .create_index(
+                Index::create()
+                    .name("idx_batch_commit_hash")
+                    .col(BatchCommit::Hash)
+                    .table(BatchCommit::Table)
+                    .to_owned(),
+            )
+            .await?;
+        manager
+            .create_index(
+                Index::create()
+                    .name("idx_batch_commit_block_number")
+                    .col(BatchCommit::BlockNumber)
+                    .table(BatchCommit::Table)
+                    .to_owned(),
+            )
+            .await?;
+        manager
+            .create_index(
+                Index::create()
+                    .name("idx_finalized_block_number")
+                    .col(BatchCommit::FinalizedBlockNumber)
+                    .table(BatchCommit::Table)
                     .to_owned(),
             )
             .await?;
