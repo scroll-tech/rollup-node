@@ -25,5 +25,11 @@ thiserror.workspace = true
 
 [features]
 default = ["std"]
-std = ["alloy-primitives/std", "scroll-alloy-consensus/std", "alloy-sol-types/std", "derive_more/std"]
+std = [
+    "alloy-primitives/std",
+    "scroll-alloy-consensus/std",
+    "alloy-sol-types/std",
+    "derive_more/std",
+    "bitvec/std",
+]
 test-utils = ["std", "dep:arbitrary", "alloy-primitives/arbitrary"]
