@@ -1,4 +1,5 @@
 use alloy_primitives::U256;
+use scroll_l1::abi::calls::InvalidCommitBatchCall;
 
 /// An error occurring during the codec process.
 #[derive(Debug, thiserror::Error)]
@@ -27,6 +28,8 @@ pub enum DecodingError {
     InvalidCalldataFormat,
     #[error("invalid parent header format")]
     InvalidParentHeaderFormat,
+    #[error(transparent)]
+    InvalidCommitBatchCall(#[from] InvalidCommitBatchCall),
     #[error("end of file")]
     Eof,
     #[error("decoding error occurred: {0}")]
