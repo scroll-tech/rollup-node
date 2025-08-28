@@ -289,7 +289,9 @@ where
         // this payload has already been passed to the EN in the form of a P2P gossiped
         // execution payload. We can advance the safe head by one by issuing a
         // forkchoiceUpdated.
-        let safe_block_info: L2BlockInfoWithL1Messages = (&execution_payload).into();
+        // We also advance the finalized head since batches are always finalized until we implement
+        // issue #273.
+        let block_info: L2BlockInfoWithL1Messages = (&execution_payload).into();
 
         // We only need to update the safe block hash if we are advancing the safe head past the
         // finalized head. There is a possible edge case where on startup,
@@ -297,10 +299,11 @@ where
         // head.
         if fcs.safe_block_info().number > fcs.finalized_block_info().number {
             let mut fcs = fcs.get_alloy_fcs();
-            fcs.safe_block_hash = safe_block_info.block_info.hash;
+            fcs.safe_block_hash = block_info.block_info.hash;
+            fcs.finalized_block_hash = block_info.block_info.hash;
             forkchoice_updated(client, fcs, None).await?;
         }
-        Ok(ConsolidationOutcome::Consolidation(safe_block_info, batch_info))
+        Ok(ConsolidationOutcome::Consolidation(block_info, batch_info))
     } else {
         let mut fcs = fcs.get_alloy_fcs();
         // Otherwise, we construct a block from the payload attributes on top of the current
@@ -320,7 +323,7 @@ where
         )
         .await?;
         // issue the execution payload to the EL
-        let safe_block_info: L2BlockInfoWithL1Messages = (&execution_payload).into();
+        let block_info: L2BlockInfoWithL1Messages = (&execution_payload).into();
         let result = new_payload(client.clone(), execution_payload.into_v1()).await?;
 
         // we should only have a valid payload when deriving from payload attributes (should not
@@ -328,11 +331,14 @@ where
         debug_assert!(result.is_valid());
 
         // update the fork choice state with the new block hash.
-        fcs.head_block_hash = safe_block_info.block_info.hash;
-        fcs.safe_block_hash = safe_block_info.block_info.hash;
+        // We also advance the finalized head since batches are always finalized until we implement
+        // issue #273.
+        fcs.head_block_hash = block_info.block_info.hash;
+        fcs.safe_block_hash = block_info.block_info.hash;
+        fcs.finalized_block_hash = block_info.block_info.hash;
         forkchoice_updated(client, fcs, None).await?;
 
-        Ok(ConsolidationOutcome::Reorg(safe_block_info, batch_info))
+        Ok(ConsolidationOutcome::Reorg(block_info, batch_info))
     }
 }
 

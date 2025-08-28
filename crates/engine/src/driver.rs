@@ -88,6 +88,13 @@ where
         }
     }
 
+    /// Returns the number of pending futures in the queue.
+    ///
+    /// This only considers the length of the L1 payload attributes and chain import queues.
+    pub fn pending_futures_len(&self) -> usize {
+        self.l1_payload_attributes.len() + self.chain_imports.len()
+    }
+
     /// Sets the finalized block info.
     pub fn set_finalized_block_info(&mut self, block_info: BlockInfo) {
         self.fcs.update_finalized_block_info(block_info);
@@ -129,12 +136,22 @@ where
         reorged_unsafe_head: Option<BlockInfo>,
         reorged_safe_head: Option<BlockInfo>,
     ) {
-        // On an unsafe head reorg: clear the payload building future, reset the unsafe head and
-        // drop the engine future if it's a `NewPayload` or `BlockImport` with block number > L2
-        // reorged number.
+        // On an unsafe head reorg.
         if let Some(l2_head_block_info) = reorged_unsafe_head {
+            // clear the payload building future.
             self.payload_building_future = None;
+
+            // retain only blocks from chain imports for which the block number <= L2 reorged
+            // number.
+            for chain_import in &mut self.chain_imports {
+                chain_import.chain.retain(|block| block.number <= l2_head_block_info.number);
+            }
+
+            // reset the unsafe head.
             self.set_head_block_info(l2_head_block_info);
+
+            // drop the engine future if it's a `NewPayload` or `BlockImport` with block number >
+            // L2 reorged number.
             if let Some(MeteredFuture { fut, .. }) = self.engine_future.as_ref() {
                 match fut {
                     EngineFuture::ChainImport(WithBlockNumber { number, .. })
@@ -227,7 +244,7 @@ where
     ) -> Option<EngineDriverEvent> {
         match result {
             EngineDriverFutureResult::BlockImport(result) => {
-                tracing::info!(target: "scroll::engine", ?result, "handling block import result");
+                tracing::trace!(target: "scroll::engine", ?result, "handling block import result");
 
                 match result {
                     Ok((block_info, block_import_outcome, payload_status)) => {
@@ -255,15 +272,18 @@ where
                 }
             }
             EngineDriverFutureResult::L1Consolidation(result) => {
-                tracing::info!(target: "scroll::engine", ?result, "handling L1 consolidation result");
+                tracing::trace!(target: "scroll::engine", ?result, "handling L1 consolidation result");
 
                 match result {
                     Ok(consolidation_outcome) => {
                         let block_info = consolidation_outcome.block_info();
 
-                        // Update the safe block info and return the block info
-                        tracing::trace!(target: "scroll::engine", ?block_info, "updating safe block info from block derived from L1");
+                        // Batches are now always considered finalized, as such we update both the
+                        // safe and finalized block info. Update this once we implement issue #273.
+                        // Update the safe and finalized block info and return the block info.
+                        tracing::trace!(target: "scroll::engine", ?block_info, "updating safe and finalized block info from block derived from L1");
                         self.fcs.update_safe_block_info(block_info.block_info);
+                        self.fcs.update_finalized_block_info(block_info.block_info);
 
                         // If we reorged, update the head block info
                         if consolidation_outcome.is_reorg() {
@@ -288,7 +308,7 @@ where
                 }
             }
             EngineDriverFutureResult::PayloadBuildingJob(result) => {
-                tracing::info!(target: "scroll::engine", result = ?result.as_ref().map(|b| b.header.as_ref()), "handling payload building result");
+                tracing::trace!(target: "scroll::engine", result = ?result.as_ref().map(|b| b.header.as_ref()), "handling payload building result");
 
                 match result {
                     Ok(block) => {
@@ -313,7 +333,7 @@ where
                 }
             }
             EngineDriverFutureResult::OptimisticSync(result) => {
-                tracing::info!(target: "scroll::engine", ?result, "handling optimistic sync result");
+                tracing::trace!(target: "scroll::engine", ?result, "handling optimistic sync result");
 
                 match result {
                     Err(err) => {
@@ -399,7 +419,7 @@ where
 
                         if let EngineDriverError::PayloadBuildingMissingPayloadId(attributes) = err
                         {
-                            tracing::info!(target: "scroll::engine", "retrying payload building job for missing payload id");
+                            tracing::warn!(target: "scroll::engine", "retrying payload building job for missing payload id");
                             this.sequencer_payload_attributes = Some(attributes);
                             this.waker.wake();
                         }

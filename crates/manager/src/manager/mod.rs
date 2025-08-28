@@ -59,6 +59,14 @@ pub use handle::RollupManagerHandle;
 /// The size of the event channel.
 const EVENT_CHANNEL_SIZE: usize = 100;
 
+/// The maximum capacity of the pending futures queue in the chain orchestrator for acceptance of
+/// new events from the L1 notification channel.
+const CHAIN_ORCHESTRATOR_MAX_PENDING_FUTURES: usize = 5000;
+
+/// The maximum number of pending futures in the engine driver for acceptance of new events from the
+/// L1 notification channel.
+const ENGINE_MAX_PENDING_FUTURES: usize = 5000;
+
 /// The main manager for the rollup node.
 ///
 /// This is an endless [`Future`] that drives the state of the entire network forward and includes
@@ -242,32 +250,46 @@ where
         }
 
         match event {
-            ChainOrchestratorEvent::BatchCommitIndexed {
-                batch_info,
-                safe_head,
-                l1_block_number,
-            } => {
-                // if we detected a batch revert event, we reset the pipeline and the engine driver.
-                if let Some(new_safe_head) = safe_head {
-                    self.derivation_pipeline.flush();
-                    self.engine.clear_l1_payload_attributes();
-                    self.engine.set_head_block_info(new_safe_head);
-                    self.engine.set_safe_block_info(new_safe_head);
+            #[allow(clippy::match_same_arms)]
+            ChainOrchestratorEvent::BatchCommitIndexed { .. } => {
+                // Uncomment once we implement issue #273.
+                // // if we detected a batch revert event, we reset the pipeline and the engine
+                // driver. if let Some(new_safe_head) = safe_head {
+                //     self.derivation_pipeline.handle_batch_revert(batch_info.index);
+                //     self.engine.clear_l1_payload_attributes();
+                //     self.engine.set_head_block_info(new_safe_head);
+                //     self.engine.set_safe_block_info(new_safe_head);
+                // }
+                // // push the batch info into the derivation pipeline.
+                // self.derivation_pipeline.push_batch(batch_info, l1_block_number);
+            }
+            ChainOrchestratorEvent::BatchFinalized(batch_info, ..) => {
+                // Uncomment once we implement issue #273.
+                // // update the fcs on new finalized block.
+                // if let Some(finalized_block) = finalized_block {
+                //     self.engine.set_finalized_block_info(finalized_block);
+                // }
+                // Remove once we implement issue #273.
+                // Update the derivation pipeline on new finalized batch.
+                #[allow(clippy::collapsible_match)]
+                if let Some(batch_info) = batch_info {
+                    self.derivation_pipeline.push_batch(batch_info.inner, batch_info.number);
                 }
-                // push the batch info into the derivation pipeline.
-                self.derivation_pipeline.handle_batch_commit(batch_info, l1_block_number);
             }
-            ChainOrchestratorEvent::BatchFinalized(_, Some(finalized_block)) => {
-                // update the fcs on new finalized block.
-                self.engine.set_finalized_block_info(finalized_block);
-            }
-            ChainOrchestratorEvent::L1BlockFinalized(l1_block_number, finalized_block) => {
+            ChainOrchestratorEvent::L1BlockFinalized(l1_block_number, finalized_batches, ..) => {
+                // update the sequencer's l1 finalized block number.
                 if let Some(sequencer) = self.sequencer.as_mut() {
                     sequencer.set_l1_finalized_block_number(l1_block_number);
                 }
-                // update the fcs on new finalized block.
-                if let Some(finalized_block) = finalized_block {
-                    self.engine.set_finalized_block_info(finalized_block);
+                // Uncomment once we implement issue #273.
+                // // update the fcs on new finalized block.
+                // if let Some(finalized_block) = finalized_block {
+                //     self.engine.set_finalized_block_info(finalized_block);
+                // }
+                // Remove once we implement issue #273.
+                // push all finalized batches into the derivation pipeline.
+                for batch_info in finalized_batches {
+                    self.derivation_pipeline.push_batch(batch_info, l1_block_number);
                 }
             }
             ChainOrchestratorEvent::L1Reorg {
@@ -405,9 +427,6 @@ where
                     sequencer.handle_new_l1_block(new_block)
                 }
             }
-            L1Notification::Synced => {
-                self.chain.handle_l1_notification(L1Notification::Synced);
-            }
             _ => self.chain.handle_l1_notification(notification),
         }
     }
@@ -432,6 +451,14 @@ where
         }
 
         drop(graceful_guard);
+    }
+
+    /// Returns true if the manager has capacity to accept new L1 notifications.
+    pub fn has_capacity_for_l1_notifications(&self) -> bool {
+        let chain_orchestrator_has_capacity = self.chain.pending_futures_len() <
+            CHAIN_ORCHESTRATOR_MAX_PENDING_FUTURES - L1_NOTIFICATION_CHANNEL_BUDGET as usize;
+        let engine_has_capacity = self.engine.pending_futures_len() < ENGINE_MAX_PENDING_FUTURES;
+        chain_orchestrator_has_capacity && engine_has_capacity
     }
 }
 
@@ -505,7 +532,7 @@ where
 
         let mut maybe_more_l1_rx_events = false;
         proceed_if!(
-            en_synced,
+            en_synced && this.has_capacity_for_l1_notifications(),
             maybe_more_l1_rx_events = poll_nested_stream_with_budget!(
                 "l1_notification_rx",
                 "L1Notification channel",

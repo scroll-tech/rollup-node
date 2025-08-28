@@ -115,24 +115,31 @@ pub trait DatabaseOperations: DatabaseConnectionProvider {
             .map(|x| x.and_then(|x| x.parse::<u64>().ok()))?)
     }
 
-    /// Get the newest finalized batch hash up to or at the provided height.
-    async fn get_finalized_batch_hash_at_height(
+    /// Get the finalized batches between the provided range \[low; high\].
+    async fn get_batches_by_finalized_block_range(
         &self,
-        height: u64,
-    ) -> Result<Option<B256>, DatabaseError> {
+        low: u64,
+        high: u64,
+    ) -> Result<Vec<BatchInfo>, DatabaseError> {
         Ok(models::batch_commit::Entity::find()
             .filter(
                 Condition::all()
                     .add(models::batch_commit::Column::FinalizedBlockNumber.is_not_null())
-                    .add(models::batch_commit::Column::FinalizedBlockNumber.lte(height)),
+                    .add(models::batch_commit::Column::FinalizedBlockNumber.gte(low))
+                    .add(models::batch_commit::Column::FinalizedBlockNumber.lte(high)),
             )
-            .order_by_desc(models::batch_commit::Column::Index)
+            .order_by_asc(models::batch_commit::Column::Index)
             .select_only()
+            .column(models::batch_commit::Column::Index)
             .column(models::batch_commit::Column::Hash)
-            .into_tuple::<Vec<u8>>()
-            .one(self.get_connection())
+            .into_tuple::<(i64, Vec<u8>)>()
+            .all(self.get_connection())
             .await
-            .map(|x| x.map(|x| B256::from_slice(&x)))?)
+            .map(|x| {
+                x.into_iter()
+                    .map(|(index, hash)| BatchInfo::new(index as u64, B256::from_slice(&hash)))
+                    .collect()
+            })?)
     }
 
     /// Delete all [`BatchCommitData`]s with a block number greater than the provided block number.
@@ -345,16 +352,22 @@ pub trait DatabaseOperations: DatabaseConnectionProvider {
     ///
     /// This method first unwinds the database to the finalized L1 block. It then fetches the batch
     /// info for the latest safe L2 block. It takes note of the L1 block number at which
-    /// this batch was produced. It then retrieves the latest block for the previous batch
-    /// (i.e., the batch before the latest safe block). It returns a tuple of this latest
-    /// fetched block and the L1 block number of the batch.
+    /// this batch was produced (currently the finalized block for the batch until we implement
+    /// issue #273). It then retrieves the latest block for the previous batch (i.e., the batch
+    /// before the latest safe block). It returns a tuple of this latest fetched block and the
+    /// L1 block number of the batch.
     async fn prepare_on_startup(
         &self,
         genesis_hash: B256,
     ) -> Result<(Option<BlockInfo>, Option<u64>), DatabaseError> {
         tracing::trace!(target: "scroll::db", "Fetching startup safe block from database.");
+
+        // Unwind the database to the last finalized L1 block saved in database.
         let finalized_block_number = self.get_finalized_l1_block_number().await?.unwrap_or(0);
         self.unwind(genesis_hash, finalized_block_number).await?;
+
+        // Fetch the latest safe L2 block and the block number where its associated batch was
+        // finalized.
         let safe = if let Some(batch_info) = self
             .get_latest_safe_l2_info()
             .await?
@@ -370,7 +383,10 @@ pub trait DatabaseOperations: DatabaseConnectionProvider {
                 .await?
                 .expect("Batch info must be present due to database query arguments");
             let l2_block = self.get_highest_block_for_batch_hash(previous_batch.hash).await?;
-            (l2_block, Some(batch.block_number))
+            (
+                l2_block,
+                Some(batch.finalized_block_number.expect("All blocks in database are finalized")),
+            )
         } else {
             (None, None)
         };
