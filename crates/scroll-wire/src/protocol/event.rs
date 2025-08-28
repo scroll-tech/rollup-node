@@ -1,5 +1,5 @@
 use crate::protocol::ScrollMessage;
-use alloy_primitives::Signature;
+use rollup_node_signer::Signature;
 use reth_network::Direction;
 use reth_network_api::PeerId;
 use tokio::sync::mpsc::UnboundedSender;

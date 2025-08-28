@@ -33,7 +33,7 @@ impl Database {
         } else {
             // Use default configuration with optimized settings
             let mut opt = ConnectOptions::new(database_url);
-            opt.max_connections(250)                        
+            opt.max_connections(500)                        
                 .min_connections(25);
             
             SeaOrmDatabase::connect(opt).await?

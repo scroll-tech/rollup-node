@@ -31,10 +31,13 @@ pub use metrics::SignerMetrics;
 mod requests;
 pub use requests::SignerRequest;
 
+mod signature;
+pub use signature::{Signature, SignerAdapter};
+
 /// The signer instance is responsible for signing artifacts for the rollup node.
 pub struct Signer {
     /// The signer instance.
-    signer: Arc<dyn alloy_signer::Signer + Send + Sync>,
+    signer: Arc<dyn alloy_signer::Signer<Signature> + Send + Sync>,
     /// A stream of pending signing requests.
     requests: UnboundedReceiverStream<SignerRequest>,
     /// In progress signing requests.
@@ -47,7 +50,7 @@ pub struct Signer {
 
 impl Signer {
     /// Creates a new [`Signer`] instance and [`SignerHandle`] with the provided signer.
-    fn new(signer: impl alloy_signer::Signer + Send + Sync + 'static) -> (Self, SignerHandle) {
+    fn new(signer: impl alloy_signer::Signer<Signature> + Send + Sync + 'static) -> (Self, SignerHandle) {
         let (req_tx, req_rx) = tokio::sync::mpsc::unbounded_channel();
         let (event_tx, event_rx) = tokio::sync::mpsc::unbounded_channel();
         let address = signer.address();
@@ -62,7 +65,7 @@ impl Signer {
     }
 
     /// Spawns a new `Signer` instance onto the tokio runtime.
-    pub fn spawn(signer: impl alloy_signer::Signer + Send + Sync + 'static) -> SignerHandle {
+    pub fn spawn(signer: impl alloy_signer::Signer<Signature> + Send + Sync + 'static) -> SignerHandle {
         let (signer, handle) = Self::new(signer);
         tokio::spawn(signer.run());
         handle
@@ -133,7 +136,7 @@ mod tests {
     async fn test_signer_local() {
         reth_tracing::init_test_tracing();
         let signer = PrivateKeySigner::random();
-        let mut handle = Signer::spawn(Box::new(signer.clone()));
+        let mut handle = Signer::spawn(SignerAdapter::new(signer.clone()));
 
         // Test sending a request
         let block = ScrollBlock::default();
@@ -161,7 +164,7 @@ mod tests {
 
         // Create a local signer and the signer service
         let key = PrivateKeySigner::random();
-        let (signer, handle) = Signer::new(Box::new(key.clone()));
+        let (signer, handle) = Signer::new(SignerAdapter::new(key.clone()));
 
         // Spawn the signer task and capture the JoinHandle
         let task = tokio::spawn(signer.run());
@@ -179,7 +182,7 @@ mod tests {
 
         // Create a local signer and the signer service
         let key = PrivateKeySigner::random();
-        let (signer, handle) = Signer::new(Box::new(key.clone()));
+        let (signer, handle) = Signer::new(SignerAdapter::new(key.clone()));
 
         // Spawn the signer task and capture the JoinHandle
         let task = tokio::spawn(signer.run());
@@ -200,7 +203,7 @@ mod tests {
 
         // Create a local signer and the signer service
         let key = PrivateKeySigner::random();
-        let (signer, handle) = Signer::new(Box::new(key.clone()));
+        let (signer, handle) = Signer::new(SignerAdapter::new(key.clone()));
 
         // Spawn the signer task and capture the JoinHandle
         let task = tokio::spawn(signer.run());

@@ -1,7 +1,8 @@
 //! End-to-end tests for the rollup node.
 
 use alloy_eips::BlockNumberOrTag;
-use alloy_primitives::{address, b256, Address, Bytes, Signature, B256, U256};
+use alloy_primitives::{address, b256, Address, Bytes, B256, U256};
+use rollup_node_signer::Signature;
 use alloy_signer::Signer;
 use alloy_signer_local::PrivateKeySigner;
 use futures::StreamExt;
@@ -558,7 +559,7 @@ async fn can_bridge_blocks() {
         assert_eq!(peer_id, bridge_peer_id);
         assert_eq!(block.hash_slow(), block_1_hash);
         assert_eq!(
-            TryInto::<Signature>::try_into(extra_data.as_ref().windows(65).last().unwrap())
+            Signature::from_raw(extra_data.as_ref().windows(65).last().unwrap())
                 .unwrap(),
             signature
         )
