@@ -10415,7 +10415,7 @@ dependencies = [
  "rollup-node-primitives 0.0.1",
  "rollup-node-providers",
  "rollup-node-sequencer",
- "rollup-node-signer",
+ "rollup-node-signer 0.0.1",
  "rollup-node-watcher",
  "scroll-alloy-consensus",
  "scroll-alloy-evm",
@@ -10482,7 +10482,7 @@ dependencies = [
  "rollup-node-primitives 0.0.1",
  "rollup-node-providers",
  "rollup-node-sequencer",
- "rollup-node-signer",
+ "rollup-node-signer 0.0.1",
  "rollup-node-watcher",
  "scroll-alloy-consensus",
  "scroll-alloy-hardforks",
@@ -10523,7 +10523,7 @@ dependencies = [
 [[package]]
 name = "rollup-node-primitives"
 version = "0.0.1"
-source = "git+https://github.com/scroll-tech/rollup-node.git?branch=morty/fix-eth66-serve-signature#b3560191bc6ed2e53cf1d924ab097afe9cd9a2a4"
+source = "git+https://github.com/scroll-tech/rollup-node.git?branch=morty/fix-eth66-serve-signature#d6cf3f3d90615936d5a5ef778288f1d4e21d6d2a"
 dependencies = [
  "alloy-chains",
  "alloy-consensus 1.0.27",
@@ -10587,7 +10587,7 @@ dependencies = [
  "rollup-node-primitives 0.0.1",
  "rollup-node-providers",
  "rollup-node-sequencer",
- "rollup-node-signer",
+ "rollup-node-signer 0.0.1",
  "scroll-alloy-consensus",
  "scroll-alloy-provider",
  "scroll-alloy-rpc-types-engine",
@@ -10613,6 +10613,25 @@ dependencies = [
  "reth-scroll-primitives",
  "reth-tracing",
  "rollup-node-primitives 0.0.1",
+ "thiserror 2.0.16",
+ "tokio",
+ "tokio-stream",
+ "tracing",
+]
+
+[[package]]
+name = "rollup-node-signer"
+version = "0.0.1"
+source = "git+https://github.com/scroll-tech/rollup-node.git?branch=morty/fix-eth66-serve-signature#d6cf3f3d90615936d5a5ef778288f1d4e21d6d2a"
+dependencies = [
+ "alloy-primitives",
+ "alloy-signer",
+ "async-trait",
+ "futures",
+ "metrics",
+ "metrics-derive",
+ "reth-scroll-primitives",
+ "rollup-node-primitives 0.0.1 (git+https://github.com/scroll-tech/rollup-node.git?branch=morty/fix-eth66-serve-signature)",
  "thiserror 2.0.16",
  "tokio",
  "tokio-stream",
@@ -11162,7 +11181,7 @@ dependencies = [
  "futures",
  "rand 0.9.2",
  "rollup-node-primitives 0.0.1",
- "rollup-node-signer",
+ "rollup-node-signer 0.0.1",
  "scroll-alloy-consensus",
  "scroll-alloy-rpc-types-engine",
  "scroll-migration",
@@ -11175,7 +11194,7 @@ dependencies = [
 [[package]]
 name = "scroll-db"
 version = "0.0.1"
-source = "git+https://github.com/scroll-tech/rollup-node.git?branch=morty/fix-eth66-serve-signature#b3560191bc6ed2e53cf1d924ab097afe9cd9a2a4"
+source = "git+https://github.com/scroll-tech/rollup-node.git?branch=morty/fix-eth66-serve-signature#d6cf3f3d90615936d5a5ef778288f1d4e21d6d2a"
 dependencies = [
  "alloy-eips 1.0.27",
  "alloy-primitives",
@@ -11183,6 +11202,7 @@ dependencies = [
  "auto_impl",
  "futures",
  "rollup-node-primitives 0.0.1 (git+https://github.com/scroll-tech/rollup-node.git?branch=morty/fix-eth66-serve-signature)",
+ "rollup-node-signer 0.0.1 (git+https://github.com/scroll-tech/rollup-node.git?branch=morty/fix-eth66-serve-signature)",
  "scroll-alloy-consensus",
  "scroll-alloy-rpc-types-engine",
  "sea-orm",
@@ -11299,7 +11319,7 @@ dependencies = [
  "reth-scroll-node",
  "reth-scroll-primitives",
  "reth-storage-api",
- "rollup-node-signer",
+ "rollup-node-signer 0.0.1",
  "scroll-wire",
  "thiserror 2.0.16",
  "tokio",
@@ -11318,7 +11338,7 @@ dependencies = [
  "reth-network",
  "reth-network-api",
  "reth-scroll-primitives",
- "rollup-node-signer",
+ "rollup-node-signer 0.0.1",
  "tokio",
  "tokio-stream",
  "tracing",
