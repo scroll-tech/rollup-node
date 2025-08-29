@@ -1157,22 +1157,10 @@ async fn can_handle_batch_revert() -> eyre::Result<()> {
 #[allow(clippy::large_stack_frames)]
 #[tokio::test]
 async fn can_handle_l1_message_reorg() -> eyre::Result<()> {
-async fn can_handle_l1_message_reorg() -> eyre::Result<()> {
     reth_tracing::init_test_tracing();
-    color_eyre::install()?;
     color_eyre::install()?;
     let chain_spec = (*SCROLL_DEV).clone();
 
-    // Launch 2 nodes: node0=sequencer and node1=follower.
-    let config = default_sequencer_test_scroll_rollup_node_config();
-    let (mut nodes, _tasks, _) = setup_engine(config, 2, chain_spec.clone(), false, false).await?;
-    let node0 = nodes.remove(0);
-    let node1 = nodes.remove(0);
-
-    // Get handles
-    let node0_rnm_handle = node0.inner.add_ons_handle.rollup_manager_handle.clone();
-    let mut node0_rnm_events = node0_rnm_handle.get_event_listener().await?;
-    let node0_l1_watcher_tx = node0.inner.add_ons_handle.l1_watcher_tx.as_ref().unwrap();
     // Launch 2 nodes: node0=sequencer and node1=follower.
     let config = default_sequencer_test_scroll_rollup_node_config();
     let (mut nodes, _tasks, _) = setup_engine(config, 2, chain_spec.clone(), false, false).await?;
