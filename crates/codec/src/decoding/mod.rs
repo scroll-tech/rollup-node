@@ -3,6 +3,9 @@
 /// Batch related structures.
 pub mod batch;
 
+/// Batch header related structures.
+pub mod batch_header;
+
 /// Blob related helpers.
 pub mod blob;
 
