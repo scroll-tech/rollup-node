@@ -9,8 +9,7 @@ use rollup_node_primitives::{
 use scroll_alloy_rpc_types_engine::BlockDataHint;
 use sea_orm::{
     sea_query::{Expr, OnConflict},
-    ActiveModelTrait, ColumnTrait, Condition, DbErr, EntityTrait, QueryFilter, QueryOrder,
-    QuerySelect, Set,
+    ColumnTrait, Condition, DbErr, EntityTrait, QueryFilter, QueryOrder, QuerySelect,
 };
 use std::fmt;
 
@@ -39,34 +38,27 @@ pub trait DatabaseOperations: DatabaseConnectionProvider {
             .map(|_| ())?)
     }
 
-    /// Finalize a [`BatchCommitData`] with the provided `batch_hash` in the database and set the
+    /// Finalizes all [`BatchCommitData`] up to the provided `batch_index` by setting their
     /// finalized block number to the provided block number.
-    ///
-    /// Errors if the [`BatchCommitData`] associated with the provided `batch_hash` is not found in
-    /// the database, this method logs and returns an error.
-    async fn finalize_batch(
+    async fn finalize_batches_up_to_index(
         &self,
-        batch_hash: B256,
+        batch_index: u64,
         block_number: u64,
     ) -> Result<(), DatabaseError> {
-        if let Some(batch) = models::batch_commit::Entity::find()
-            .filter(models::batch_commit::Column::Hash.eq(batch_hash.to_vec()))
-            .one(self.get_connection())
-            .await?
-        {
-            tracing::trace!(target: "scroll::db", batch_hash = ?batch_hash, block_number, "Finalizing batch commit in database.");
-            let mut batch: models::batch_commit::ActiveModel = batch.into();
-            batch.finalized_block_number = Set(Some(block_number as i64));
-            batch.update(self.get_connection()).await?;
-        } else {
-            tracing::error!(
-                target: "scroll::db",
-                batch_hash = ?batch_hash,
-                block_number,
-                "Batch not found in DB when trying to finalize."
-            );
-            return Err(DatabaseError::BatchNotFound(batch_hash));
-        }
+        tracing::trace!(target: "scroll::db", ?batch_index, block_number, "Finalizing batch commits in database up to index.");
+
+        models::batch_commit::Entity::update_many()
+            .filter(
+                models::batch_commit::Column::Index
+                    .lte(batch_index)
+                    .and(models::batch_commit::Column::FinalizedBlockNumber.is_null()),
+            )
+            .col_expr(
+                models::batch_commit::Column::FinalizedBlockNumber,
+                Expr::value(Some(block_number as i64)),
+            )
+            .exec(self.get_connection())
+            .await?;
 
         Ok(())
     }

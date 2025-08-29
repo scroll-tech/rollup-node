@@ -263,7 +263,7 @@ where
             }
 
             // send all notifications on the channel.
-            self.notify_all(notifications).await;
+            self.notify_all(notifications).await?;
 
             // update the latest block the l1 watcher has indexed.
             self.update_current_block(&latest);
@@ -587,12 +587,13 @@ where
     }
 
     /// Send all notifications on the channel.
-    async fn notify_all(&self, notifications: Vec<L1Notification>) {
+    async fn notify_all(&self, notifications: Vec<L1Notification>) -> L1WatcherResult<()> {
         for notification in notifications {
             self.metrics.process_l1_notification(&notification);
             tracing::trace!(target: "scroll::watcher", %notification, "sending l1 notification");
-            let _ = self.notify(notification).await;
+            self.notify(notification).await?;
         }
+        Ok(())
     }
 
     /// Send the notification in the channel.
@@ -653,6 +654,8 @@ where
         // skip a block for `from_block` since `self.current_block_number` is the last indexed
         // block.
         filter = filter.from_block(self.current_block_number + 1).to_block(to_block);
+
+        tracing::trace!(target: "scroll::watcher", ?filter, "fetching logs");
 
         Ok(self.execution_provider.get_logs(&filter).await?)
     }
