@@ -27,34 +27,6 @@ impl MigrationTrait for Migration {
             .await?;
 
         manager
-            .create_index(
-                Index::create()
-                    .name("idx_batch_commit_hash")
-                    .col(BatchCommit::Hash)
-                    .table(BatchCommit::Table)
-                    .to_owned(),
-            )
-            .await?;
-        manager
-            .create_index(
-                Index::create()
-                    .name("idx_batch_commit_block_number")
-                    .col(BatchCommit::BlockNumber)
-                    .table(BatchCommit::Table)
-                    .to_owned(),
-            )
-            .await?;
-        manager
-            .create_index(
-                Index::create()
-                    .name("idx_finalized_block_number")
-                    .col(BatchCommit::FinalizedBlockNumber)
-                    .table(BatchCommit::Table)
-                    .to_owned(),
-            )
-            .await?;
-
-        manager
             .get_connection()
             .execute(Statement::from_sql_and_values(
                 manager.get_database_backend(),

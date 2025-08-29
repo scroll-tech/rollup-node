@@ -43,43 +43,6 @@ impl<MI: MigrationInfo + Send + Sync> MigrationTrait for Migration<MI> {
             )
             .await?;
 
-        manager
-            .create_index(
-                Index::create()
-                    .name("idx_l2_block_block_number")
-                    .col(L2Block::BlockNumber)
-                    .table(L2Block::Table)
-                    .to_owned(),
-            )
-            .await?;
-        manager
-            .create_index(
-                Index::create()
-                    .name("idx_block_hash")
-                    .col(L2Block::BlockHash)
-                    .table(L2Block::Table)
-                    .to_owned(),
-            )
-            .await?;
-        manager
-            .create_index(
-                Index::create()
-                    .name("idx_batch_hash")
-                    .col(L2Block::BatchHash)
-                    .table(L2Block::Table)
-                    .to_owned(),
-            )
-            .await?;
-        manager
-            .create_index(
-                Index::create()
-                    .name("idx_batch_index")
-                    .col(L2Block::BatchIndex)
-                    .table(L2Block::Table)
-                    .to_owned(),
-            )
-            .await?;
-
         // Insert the genesis block.
         let genesis_hash = MI::genesis_hash();
 
@@ -104,7 +67,7 @@ impl<MI: MigrationInfo + Send + Sync> MigrationTrait for Migration<MI> {
 }
 
 #[derive(DeriveIden)]
-enum L2Block {
+pub(crate) enum L2Block {
     Table,
     BatchIndex,
     BatchHash,

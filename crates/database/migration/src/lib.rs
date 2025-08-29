@@ -7,6 +7,7 @@ mod m20250408_150338_load_header_metadata;
 mod m20250411_072004_add_l2_block;
 mod m20250616_223947_add_metadata;
 mod m20250825_093350_remove_unsafe_l2_blocks;
+mod m20250829_042803_add_table_indexes;
 mod migration_info;
 pub use migration_info::{
     MigrationInfo, ScrollDevMigrationInfo, ScrollMainnetMigrationInfo, ScrollSepoliaMigrationInfo,
@@ -25,6 +26,7 @@ impl<MI: MigrationInfo + Send + Sync + 'static> MigratorTrait for Migrator<MI> {
             Box::new(m20250411_072004_add_l2_block::Migration::<MI>(Default::default())),
             Box::new(m20250616_223947_add_metadata::Migration),
             Box::new(m20250825_093350_remove_unsafe_l2_blocks::Migration),
+            Box::new(m20250829_042803_add_table_indexes::Migration),
         ]
     }
 }
