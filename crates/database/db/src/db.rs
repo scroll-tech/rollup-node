@@ -1,7 +1,22 @@
+use std::{str::FromStr, time::Duration};
+
 use super::{transaction::DatabaseTransaction, DatabaseConnectionProvider};
 use crate::error::DatabaseError;
 
-use sea_orm::{Database as SeaOrmDatabase, DatabaseConnection, TransactionTrait};
+use sea_orm::{
+    sqlx::sqlite::SqliteConnectOptions, DatabaseConnection, SqlxSqliteConnector, TransactionTrait,
+};
+
+// TODO: make these configurable via CLI.
+
+/// The timeout duration for database busy errors.
+const BUSY_TIMEOUT_SECS: u64 = 5;
+
+/// The maximum number of connections in the database connection pool.
+const MAX_CONNECTIONS: u32 = 10;
+
+/// The timeout for acquiring a connection from the pool.
+const ACQUIRE_TIMEOUT_SECS: u64 = 5;
 
 /// The [`Database`] struct is responsible for interacting with the database.
 ///
@@ -19,8 +34,20 @@ pub struct Database {
 impl Database {
     /// Creates a new [`Database`] instance associated with the provided database URL.
     pub async fn new(database_url: &str) -> Result<Self, DatabaseError> {
-        let connection = SeaOrmDatabase::connect(database_url).await?;
-        Ok(Self { connection })
+        let options = SqliteConnectOptions::from_str(database_url)?
+            .create_if_missing(true)
+            .journal_mode(sea_orm::sqlx::sqlite::SqliteJournalMode::Wal)
+            .busy_timeout(Duration::from_secs(BUSY_TIMEOUT_SECS))
+            .foreign_keys(true)
+            .synchronous(sea_orm::sqlx::sqlite::SqliteSynchronous::Normal);
+
+        let sqlx_pool = sea_orm::sqlx::sqlite::SqlitePoolOptions::new()
+            .max_connections(MAX_CONNECTIONS)
+            .acquire_timeout(Duration::from_secs(ACQUIRE_TIMEOUT_SECS))
+            .connect_with(options)
+            .await?;
+
+        Ok(Self { connection: SqlxSqliteConnector::from_sqlx_sqlite_pool(sqlx_pool) })
     }
 
     /// Creates a new [`DatabaseTransaction`] which can be used for atomic operations.

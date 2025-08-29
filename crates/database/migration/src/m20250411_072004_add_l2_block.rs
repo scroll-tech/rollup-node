@@ -67,7 +67,7 @@ impl<MI: MigrationInfo + Send + Sync> MigrationTrait for Migration<MI> {
 }
 
 #[derive(DeriveIden)]
-enum L2Block {
+pub(crate) enum L2Block {
     Table,
     BatchIndex,
     BatchHash,
