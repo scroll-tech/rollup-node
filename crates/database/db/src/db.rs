@@ -113,7 +113,7 @@ mod test {
         let db = setup_test_db().await;
 
         // Generate unstructured bytes.
-        let mut bytes = [0u8; 1024];
+        let mut bytes = [0u8; 2048];
         rand::rng().fill(bytes.as_mut_slice());
         let mut u = Unstructured::new(&bytes);
 
@@ -127,6 +127,8 @@ mod test {
             };
             db.insert_batch(batch_commit.clone()).await.unwrap();
         }
+        // Finalize all batches below batch index 10.
+        db.finalize_batches_up_to_index(10, 100).await.unwrap();
 
         // Generate 10 commit batches not finalized.
         for i in 10..20 {
@@ -143,11 +145,12 @@ mod test {
         db.finalize_batches_up_to_index(15, 200).await.unwrap();
 
         // Verify the finalized_block_number is correctly updated.
-        let mut batches = db.get_batches().await.unwrap();
-        while let Ok(batch) = batches.next().await.unwrap() {
+        let batches = db.get_batches().await.unwrap().collect::<Vec<Result<_, _>>>().await;
+        for batch in batches {
+            let batch = batch.unwrap();
             if batch.index < 10 {
                 assert_eq!(batch.finalized_block_number, Some(100));
-            } else if batch.index < 15 {
+            } else if batch.index <= 15 {
                 assert_eq!(batch.finalized_block_number, Some(200));
             } else {
                 assert_eq!(batch.finalized_block_number, None);
