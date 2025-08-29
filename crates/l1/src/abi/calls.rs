@@ -1,6 +1,7 @@
 use std::vec::Vec;
 
 use alloy_sol_types::{sol, SolCall};
+use bitvec::vec::BitVec;
 
 sol! {
     #[cfg_attr(feature = "test-utils", derive(arbitrary::Arbitrary))]
@@ -29,6 +30,14 @@ sol! {
         bytes32 parent_batch_hash,
         bytes32 last_batch_hash
     ) external;
+}
+
+/// Encountered an invalid commit batch call.
+#[derive(Debug, thiserror::Error)]
+pub enum InvalidCommitBatchCall {
+    /// The skipped L1 message bitmap is malformed.
+    #[error("invalid skipped L1 message bitmap length: {0}")]
+    InvalidSkippedL1MessageBitmapLength(usize),
 }
 
 /// A call to commit a batch on the L1 Scroll Rollup contract.
@@ -88,14 +97,26 @@ impl CommitBatchCall {
     }
 
     /// Returns the skipped L1 message bitmap for the commit call if any, returns None otherwise.
-    pub fn skipped_l1_message_bitmap(&self) -> Option<Vec<u8>> {
+    pub fn skipped_l1_message_bitmap(&self) -> Result<Option<BitVec>, InvalidCommitBatchCall> {
         let bitmap = match self {
             Self::CommitBatch(b) => &b.skipped_l1_message_bitmap,
             Self::CommitBatchWithBlobProof(b) => &b.skipped_l1_message_bitmap,
-            Self::CommitBatches(_) => return None,
+            Self::CommitBatches(_) => return Ok(None),
         };
-        let mut bitmap = bitmap.to_vec();
-        bitmap.reverse();
-        Some(bitmap)
+        if bitmap.len() % 32 != 0 {
+            return Err(InvalidCommitBatchCall::InvalidSkippedL1MessageBitmapLength(bitmap.len()));
+        }
+
+        let mut bitvec = BitVec::with_capacity(bitmap.len() * 8);
+
+        // the `skipped_l1_message_bitmap` field is read in little-endian order, so we need to
+        // reverse the bytes before pushing them to the bitvec.
+        for bytes in bitmap.into_iter().rev() {
+            for i in 0u8..8 {
+                bitvec.push((bytes >> i) & 1 == 1);
+            }
+        }
+
+        Ok(Some(bitvec))
     }
 }

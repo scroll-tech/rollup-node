@@ -64,7 +64,7 @@ pub fn decode_v0(calldata: &[u8]) -> Result<Batch, DecodingError> {
     let payload = PayloadData {
         blocks: l2_blocks,
         l1_message_queue_info: l1_message_start_index.into(),
-        skipped_l1_message_bitmap: call.skipped_l1_message_bitmap(),
+        skipped_l1_message_bitmap: call.skipped_l1_message_bitmap()?,
     };
 
     Ok(Batch::new(call.version(), Some(chunks_block_count), payload))

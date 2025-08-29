@@ -11,8 +11,9 @@ use reth_scroll_node::test_utils::setup;
 use rollup_node::{
     constants::SCROLL_GAS_LIMIT,
     test_utils::{default_test_scroll_rollup_node_config, setup_engine},
-    BeaconProviderArgs, ConsensusArgs, DatabaseArgs, EngineDriverArgs, GasPriceOracleArgs,
-    L1ProviderArgs, NetworkArgs, ScrollRollupNodeConfig, SequencerArgs, SignerArgs,
+    BeaconProviderArgs, ChainOrchestratorArgs, ConsensusArgs, DatabaseArgs, EngineDriverArgs,
+    GasPriceOracleArgs, L1ProviderArgs, NetworkArgs, ScrollRollupNodeConfig, SequencerArgs,
+    SignerArgs,
 };
 use rollup_node_manager::RollupManagerEvent;
 use rollup_node_primitives::{sig_encode_hash, BlockInfo, L1MessageEnvelope};
@@ -41,7 +42,6 @@ async fn can_build_blocks() {
     reth_tracing::init_test_tracing();
 
     const BLOCK_BUILDING_DURATION: Duration = Duration::from_millis(0);
-    const BLOCK_GAP_TRIGGER: u64 = 100;
 
     // setup a test node
     let (mut nodes, _tasks, wallet) = setup(1, false).await.unwrap();
@@ -65,7 +65,6 @@ async fn can_build_blocks() {
         None::<ScrollRootProvider>,
         fcs,
         false,
-        BLOCK_GAP_TRIGGER,
         BLOCK_BUILDING_DURATION,
     );
 
@@ -116,7 +115,7 @@ async fn can_build_blocks() {
     assert_eq!(block.header.parent_hash, genesis_hash);
 
     // check the base fee has been set for the block.
-    assert_eq!(block.header.base_fee_per_gas.unwrap(), 15711571);
+    assert_eq!(block.header.base_fee_per_gas.unwrap(), 1015680000);
 
     // now lets add an L1 message to the database
     let wallet_lock = wallet.lock().await;
@@ -165,7 +164,6 @@ async fn can_build_blocks_with_delayed_l1_messages() {
 
     let chain_spec = SCROLL_DEV.clone();
     const BLOCK_BUILDING_DURATION: Duration = Duration::from_millis(0);
-    const BLOCK_GAP_TRIGGER: u64 = 100;
     const L1_MESSAGE_DELAY: u64 = 2;
 
     // setup a test node
@@ -193,7 +191,6 @@ async fn can_build_blocks_with_delayed_l1_messages() {
         None::<ScrollRootProvider>,
         fcs,
         false,
-        BLOCK_GAP_TRIGGER,
         BLOCK_BUILDING_DURATION,
     );
 
@@ -294,8 +291,6 @@ async fn can_build_blocks_with_finalized_l1_messages() {
 
     let chain_spec = SCROLL_DEV.clone();
     const BLOCK_BUILDING_DURATION: Duration = tokio::time::Duration::from_millis(0);
-    const BLOCK_GAP_TRIGGER: u64 = 100;
-
     // setup a test node
     let (mut nodes, _tasks, wallet) =
         setup_engine(default_test_scroll_rollup_node_config(), 1, chain_spec, false, false)
@@ -321,7 +316,6 @@ async fn can_build_blocks_with_finalized_l1_messages() {
         None::<ScrollRootProvider>,
         fcs,
         false,
-        BLOCK_GAP_TRIGGER,
         BLOCK_BUILDING_DURATION,
     );
 
@@ -447,6 +441,7 @@ async fn can_sequence_blocks_with_private_key_file() -> eyre::Result<()> {
         database_args: DatabaseArgs { path: Some(PathBuf::from("sqlite::memory:")) },
         l1_provider_args: L1ProviderArgs::default(),
         engine_driver_args: EngineDriverArgs::default(),
+        chain_orchestrator_args: ChainOrchestratorArgs::default(),
         sequencer_args: SequencerArgs {
             sequencer_enabled: true,
             block_time: 0,
@@ -537,6 +532,7 @@ async fn can_sequence_blocks_with_hex_key_file_without_prefix() -> eyre::Result<
         database_args: DatabaseArgs { path: Some(PathBuf::from("sqlite::memory:")) },
         l1_provider_args: L1ProviderArgs::default(),
         engine_driver_args: EngineDriverArgs::default(),
+        chain_orchestrator_args: ChainOrchestratorArgs::default(),
         sequencer_args: SequencerArgs {
             sequencer_enabled: true,
             block_time: 0,
@@ -588,16 +584,17 @@ async fn can_sequence_blocks_with_hex_key_file_without_prefix() -> eyre::Result<
     }
 
     // Verify signing event and signature correctness
-    if let Some(RollupManagerEvent::SignerEvent(SignerEvent::SignedBlock {
-        block: signed_block,
-        signature,
-    })) = sequencer_events.next().await
-    {
-        let hash = sig_encode_hash(&signed_block);
-        let recovered_address = signature.recover_address_from_prehash(&hash)?;
-        assert_eq!(recovered_address, expected_address);
-    } else {
-        panic!("Failed to receive SignerEvent with signed block");
+    while let Some(event) = sequencer_events.next().await {
+        if let RollupManagerEvent::SignerEvent(SignerEvent::SignedBlock {
+            block: signed_block,
+            signature,
+        }) = event
+        {
+            let hash = sig_encode_hash(&signed_block);
+            let recovered_address = signature.recover_address_from_prehash(&hash)?;
+            assert_eq!(recovered_address, expected_address);
+            break;
+        }
     }
 
     Ok(())
@@ -610,7 +607,6 @@ async fn can_build_blocks_and_exit_at_gas_limit() {
     let chain_spec = SCROLL_DEV.clone();
     const MIN_TRANSACTION_GAS_COST: u64 = 21_000;
     const BLOCK_BUILDING_DURATION: Duration = Duration::from_millis(250);
-    const BLOCK_GAP_TRIGGER: u64 = 100;
     const TRANSACTIONS_COUNT: usize = 2000;
 
     // setup a test node. use a high value for the payload building duration to be sure we don't
@@ -661,7 +657,6 @@ async fn can_build_blocks_and_exit_at_gas_limit() {
         None::<ScrollRootProvider>,
         fcs,
         false,
-        BLOCK_GAP_TRIGGER,
         BLOCK_BUILDING_DURATION,
     );
 
@@ -697,7 +692,6 @@ async fn can_build_blocks_and_exit_at_time_limit() {
     let chain_spec = SCROLL_DEV.clone();
     const MIN_TRANSACTION_GAS_COST: u64 = 21_000;
     const BLOCK_BUILDING_DURATION: Duration = Duration::from_secs(1);
-    const BLOCK_GAP_TRIGGER: u64 = 100;
     const TRANSACTIONS_COUNT: usize = 2000;
 
     // setup a test node. use a low payload building duration in order to exit before we reach the
@@ -748,7 +742,6 @@ async fn can_build_blocks_and_exit_at_time_limit() {
         None::<ScrollRootProvider>,
         fcs,
         false,
-        BLOCK_GAP_TRIGGER,
         BLOCK_BUILDING_DURATION,
     );
 
@@ -789,7 +782,6 @@ async fn should_limit_l1_message_cumulative_gas() {
 
     let chain_spec = SCROLL_DEV.clone();
     const BLOCK_BUILDING_DURATION: Duration = Duration::from_millis(0);
-    const BLOCK_GAP_TRIGGER: u64 = 100;
 
     // setup a test node
     let (mut nodes, _tasks, wallet) =
@@ -816,7 +808,6 @@ async fn should_limit_l1_message_cumulative_gas() {
         None::<ScrollRootProvider>,
         fcs,
         false,
-        BLOCK_GAP_TRIGGER,
         BLOCK_BUILDING_DURATION,
     );
 

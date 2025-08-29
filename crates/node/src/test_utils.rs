@@ -3,8 +3,8 @@
 use crate::{ConsensusArgs, GasPriceOracleArgs};
 
 use super::{
-    BeaconProviderArgs, DatabaseArgs, EngineDriverArgs, L1ProviderArgs, ScrollRollupNode,
-    ScrollRollupNodeConfig, SequencerArgs,
+    BeaconProviderArgs, ChainOrchestratorArgs, DatabaseArgs, EngineDriverArgs, L1ProviderArgs,
+    ScrollRollupNode, ScrollRollupNodeConfig, SequencerArgs,
 };
 use alloy_primitives::Bytes;
 use reth_chainspec::EthChainSpec;
@@ -144,7 +144,11 @@ pub fn default_test_scroll_rollup_node_config() -> ScrollRollupNodeConfig {
         network_args: crate::args::NetworkArgs::default(),
         database_args: DatabaseArgs { path: Some(PathBuf::from("sqlite::memory:")) },
         l1_provider_args: L1ProviderArgs::default(),
-        engine_driver_args: EngineDriverArgs { en_sync_trigger: 100, sync_at_startup: true },
+        engine_driver_args: EngineDriverArgs { sync_at_startup: true },
+        chain_orchestrator_args: ChainOrchestratorArgs {
+            optimistic_sync_trigger: 100,
+            chain_buffer_size: 100,
+        },
         sequencer_args: SequencerArgs { payload_building_duration: 1000, ..Default::default() },
         beacon_provider_args: BeaconProviderArgs {
             blob_source: BlobSource::Mock,
@@ -170,7 +174,11 @@ pub fn default_sequencer_test_scroll_rollup_node_config() -> ScrollRollupNodeCon
         network_args: crate::args::NetworkArgs::default(),
         database_args: DatabaseArgs { path: Some(PathBuf::from("sqlite::memory:")) },
         l1_provider_args: L1ProviderArgs::default(),
-        engine_driver_args: EngineDriverArgs { en_sync_trigger: 100, sync_at_startup: true },
+        engine_driver_args: EngineDriverArgs { sync_at_startup: true },
+        chain_orchestrator_args: ChainOrchestratorArgs {
+            optimistic_sync_trigger: 100,
+            chain_buffer_size: 100,
+        },
         sequencer_args: SequencerArgs {
             sequencer_enabled: true,
             block_time: 0,

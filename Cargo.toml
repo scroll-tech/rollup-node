@@ -12,7 +12,7 @@ members = [
     "crates/database/migration",
     "crates/derivation-pipeline",
     "crates/engine",
-    "crates/indexer",
+    "crates/chain-orchestrator",
     "crates/l1",
     "crates/manager",
     "crates/network",
@@ -155,6 +155,7 @@ reth-primitives-traits = { git = "https://github.com/scroll-tech/reth.git", defa
 reth-provider = { git = "https://github.com/scroll-tech/reth.git", default-features = false }
 reth-rpc-builder = { git = "https://github.com/scroll-tech/reth.git", default-features = false }
 reth-rpc-server-types = { git = "https://github.com/scroll-tech/reth.git", default-features = false }
+reth-storage-api = { git = "https://github.com/scroll-tech/reth.git", default-features = false }
 reth-tasks = { git = "https://github.com/scroll-tech/reth.git", default-features = false }
 reth-tokio-util = { git = "https://github.com/scroll-tech/reth.git", default-features = false }
 reth-tracing = { git = "https://github.com/scroll-tech/reth.git", default-features = false }
@@ -168,7 +169,7 @@ reth-scroll-primitives = { git = "https://github.com/scroll-tech/reth.git", defa
 
 # rollup node
 rollup-node = { path = "crates/node" }
-rollup-node-indexer = { path = "crates/indexer" }
+rollup-node-chain-orchestrator = { path = "crates/chain-orchestrator" }
 rollup-node-manager = { path = "crates/manager" }
 rollup-node-primitives = { path = "crates/primitives" }
 rollup-node-providers = { path = "crates/providers" }
@@ -188,6 +189,7 @@ scroll-migration = { path = "crates/database/migration" }
 arbitrary = { version = "1.4", default-features = false }
 async-trait = "0.1"
 auto_impl = "1.2"
+bitvec = { version = "1.0", default-features = false }
 clap = { version = "4", features = ["derive", "env"] }
 derive_more = { version = "2.0", default-features = false }
 eyre = "0.6"

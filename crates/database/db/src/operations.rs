@@ -12,6 +12,7 @@ use sea_orm::{
     ActiveModelTrait, ColumnTrait, Condition, DbErr, EntityTrait, QueryFilter, QueryOrder,
     QuerySelect, Set,
 };
+use std::fmt;
 
 /// The [`DatabaseOperations`] trait provides methods for interacting with the database.
 #[async_trait::async_trait]
@@ -114,24 +115,31 @@ pub trait DatabaseOperations: DatabaseConnectionProvider {
             .map(|x| x.and_then(|x| x.parse::<u64>().ok()))?)
     }
 
-    /// Get the newest finalized batch hash up to or at the provided height.
-    async fn get_finalized_batch_hash_at_height(
+    /// Get the finalized batches between the provided range \[low; high\].
+    async fn get_batches_by_finalized_block_range(
         &self,
-        height: u64,
-    ) -> Result<Option<B256>, DatabaseError> {
+        low: u64,
+        high: u64,
+    ) -> Result<Vec<BatchInfo>, DatabaseError> {
         Ok(models::batch_commit::Entity::find()
             .filter(
                 Condition::all()
                     .add(models::batch_commit::Column::FinalizedBlockNumber.is_not_null())
-                    .add(models::batch_commit::Column::FinalizedBlockNumber.lte(height)),
+                    .add(models::batch_commit::Column::FinalizedBlockNumber.gte(low))
+                    .add(models::batch_commit::Column::FinalizedBlockNumber.lte(high)),
             )
-            .order_by_desc(models::batch_commit::Column::Index)
+            .order_by_asc(models::batch_commit::Column::Index)
             .select_only()
+            .column(models::batch_commit::Column::Index)
             .column(models::batch_commit::Column::Hash)
-            .into_tuple::<Vec<u8>>()
-            .one(self.get_connection())
+            .into_tuple::<(i64, Vec<u8>)>()
+            .all(self.get_connection())
             .await
-            .map(|x| x.map(|x| B256::from_slice(&x)))?)
+            .map(|x| {
+                x.into_iter()
+                    .map(|(index, hash)| BatchInfo::new(index as u64, B256::from_slice(&hash)))
+                    .collect()
+            })?)
     }
 
     /// Delete all [`BatchCommitData`]s with a block number greater than the provided block number.
@@ -238,12 +246,30 @@ pub trait DatabaseOperations: DatabaseConnectionProvider {
             .map(|x| x.map(Into::into))?)
     }
 
-    /// Gets an iterator over all [`L1MessageEnvelope`]s in the database.
+    /// Get an iterator over all [`L1MessageEnvelope`]s in the database starting from the provided
+    /// `start` point.
     async fn get_l1_messages<'a>(
         &'a self,
+        start: Option<L1MessageStart>,
     ) -> Result<impl Stream<Item = Result<L1MessageEnvelope, DatabaseError>> + 'a, DatabaseError>
     {
+        let queue_index = match start {
+            Some(L1MessageStart::Index(i)) => i,
+            Some(L1MessageStart::Hash(ref h)) => {
+                // Lookup message by hash
+                let record = models::l1_message::Entity::find()
+                    .filter(models::l1_message::Column::Hash.eq(h.to_vec()))
+                    .one(self.get_connection())
+                    .await?
+                    .ok_or_else(|| DatabaseError::L1MessageNotFound(L1MessageStart::Hash(*h)))?;
+
+                record.queue_index as u64
+            }
+            None => 0,
+        };
+
         Ok(models::l1_message::Entity::find()
+            .filter(models::l1_message::Column::QueueIndex.gte(queue_index))
             .stream(self.get_connection())
             .await?
             .map(|res| Ok(res.map(Into::into)?)))
@@ -261,6 +287,24 @@ pub trait DatabaseOperations: DatabaseConnectionProvider {
             .map(|x| x.map(Into::into))?)
     }
 
+    /// Get the [`BlockInfo`] and optional [`BatchInfo`] for the provided block hash.
+    async fn get_l2_block_and_batch_info_by_hash(
+        &self,
+        block_hash: B256,
+    ) -> Result<Option<(BlockInfo, BatchInfo)>, DatabaseError> {
+        tracing::trace!(target: "scroll::db", ?block_hash, "Fetching L2 block and batch info by hash from database.");
+        Ok(models::l2_block::Entity::find()
+            .filter(models::l2_block::Column::BlockHash.eq(block_hash.to_vec()))
+            .one(self.get_connection())
+            .await
+            .map(|x| {
+                x.map(|x| {
+                    let (block_info, batch_info): (BlockInfo, BatchInfo) = x.into();
+                    (block_info, batch_info)
+                })
+            })?)
+    }
+
     /// Get a [`BlockInfo`] from the database by its block number.
     async fn get_l2_block_info_by_number(
         &self,
@@ -272,7 +316,7 @@ pub trait DatabaseOperations: DatabaseConnectionProvider {
             .await
             .map(|x| {
                 x.map(|x| {
-                    let (block_info, _maybe_batch_info): (BlockInfo, Option<BatchInfo>) = x.into();
+                    let (block_info, _maybe_batch_info): (BlockInfo, BatchInfo) = x.into();
                     block_info
                 })
             })?)
@@ -288,25 +332,19 @@ pub trait DatabaseOperations: DatabaseConnectionProvider {
             .order_by_desc(models::l2_block::Column::BlockNumber)
             .one(self.get_connection())
             .await
-            .map(|x| {
-                x.map(|x| {
-                    (
-                        x.block_info(),
-                        x.batch_info()
-                            .expect("Batch info must be present due to database query arguments"),
-                    )
-                })
-            })?)
+            .map(|x| x.map(|x| (x.block_info(), x.batch_info())))?)
     }
 
-    /// Get the latest L2 [`BlockInfo`] from the database.
-    async fn get_latest_l2_block(&self) -> Result<Option<BlockInfo>, DatabaseError> {
-        tracing::trace!(target: "scroll::db", "Fetching latest L2 block from database.");
+    /// Get an iterator over all L2 blocks in the database starting from the most recent one.
+    async fn get_l2_blocks<'a>(
+        &'a self,
+    ) -> Result<impl Stream<Item = Result<BlockInfo, DatabaseError>> + 'a, DatabaseError> {
+        tracing::trace!(target: "scroll::db", "Fetching L2 blocks from database.");
         Ok(models::l2_block::Entity::find()
             .order_by_desc(models::l2_block::Column::BlockNumber)
-            .one(self.get_connection())
-            .await
-            .map(|x| x.map(|x| x.block_info()))?)
+            .stream(self.get_connection())
+            .await?
+            .map(|res| Ok(res.map(|res| res.block_info())?)))
     }
 
     /// Prepare the database on startup and return metadata used for other components in the
@@ -314,16 +352,22 @@ pub trait DatabaseOperations: DatabaseConnectionProvider {
     ///
     /// This method first unwinds the database to the finalized L1 block. It then fetches the batch
     /// info for the latest safe L2 block. It takes note of the L1 block number at which
-    /// this batch was produced. It then retrieves the latest block for the previous batch
-    /// (i.e., the batch before the latest safe block). It returns a tuple of this latest
-    /// fetched block and the L1 block number of the batch.
+    /// this batch was produced (currently the finalized block for the batch until we implement
+    /// issue #273). It then retrieves the latest block for the previous batch (i.e., the batch
+    /// before the latest safe block). It returns a tuple of this latest fetched block and the
+    /// L1 block number of the batch.
     async fn prepare_on_startup(
         &self,
         genesis_hash: B256,
     ) -> Result<(Option<BlockInfo>, Option<u64>), DatabaseError> {
         tracing::trace!(target: "scroll::db", "Fetching startup safe block from database.");
+
+        // Unwind the database to the last finalized L1 block saved in database.
         let finalized_block_number = self.get_finalized_l1_block_number().await?.unwrap_or(0);
         self.unwind(genesis_hash, finalized_block_number).await?;
+
+        // Fetch the latest safe L2 block and the block number where its associated batch was
+        // finalized.
         let safe = if let Some(batch_info) = self
             .get_latest_safe_l2_info()
             .await?
@@ -339,7 +383,10 @@ pub trait DatabaseOperations: DatabaseConnectionProvider {
                 .await?
                 .expect("Batch info must be present due to database query arguments");
             let l2_block = self.get_highest_block_for_batch_hash(previous_batch.hash).await?;
-            (l2_block, Some(batch.block_number))
+            (
+                l2_block,
+                Some(batch.finalized_block_number.expect("All blocks in database are finalized")),
+            )
         } else {
             (None, None)
         };
@@ -377,16 +424,29 @@ pub trait DatabaseOperations: DatabaseConnectionProvider {
             .map(|x| x.rows_affected)?)
     }
 
+    /// Insert multiple blocks into the database.
+    async fn insert_blocks(
+        &self,
+        blocks: Vec<L2BlockInfoWithL1Messages>,
+        batch_info: BatchInfo,
+    ) -> Result<(), DatabaseError> {
+        for block in blocks {
+            self.insert_block(block, batch_info).await?;
+        }
+        Ok(())
+    }
+
     /// Insert a new block in the database.
     async fn insert_block(
         &self,
         block_info: L2BlockInfoWithL1Messages,
-        batch_info: Option<BatchInfo>,
+        batch_info: BatchInfo,
     ) -> Result<(), DatabaseError> {
+        // We only insert safe blocks into the database, we do not persist unsafe blocks.
         tracing::trace!(
             target: "scroll::db",
-            batch_hash = ?batch_info.as_ref().map(|b| b.hash),
-            batch_index = batch_info.as_ref().map(|b| b.index),
+            batch_hash = ?batch_info.hash,
+            batch_index = batch_info.index,
             block_number = block_info.block_info.number,
             block_hash = ?block_info.block_info.hash,
             "Inserting block into database."
@@ -405,6 +465,25 @@ pub trait DatabaseOperations: DatabaseConnectionProvider {
             .exec(self.get_connection())
             .await?;
 
+        Ok(())
+    }
+
+    /// Update the executed L1 messages from the provided L2 blocks in the database.
+    async fn update_l1_messages_from_l2_blocks(
+        &self,
+        blocks: Vec<L2BlockInfoWithL1Messages>,
+    ) -> Result<(), DatabaseError> {
+        for block in blocks {
+            self.update_l1_messages_with_l2_block(block).await?;
+        }
+        Ok(())
+    }
+
+    /// Update the executed L1 messages with the provided L2 block number in the database.
+    async fn update_l1_messages_with_l2_block(
+        &self,
+        block_info: L2BlockInfoWithL1Messages,
+    ) -> Result<(), DatabaseError> {
         tracing::trace!(
             target: "scroll::db",
             block_number = block_info.block_info.number,
@@ -466,7 +545,8 @@ pub trait DatabaseOperations: DatabaseConnectionProvider {
             .map(|model| model.block_info()))
     }
 
-    /// Unwinds the indexer by deleting all indexed data greater than the provided L1 block number.
+    /// Unwinds the chain orchestrator by deleting all indexed data greater than the provided L1
+    /// block number.
     async fn unwind(
         &self,
         genesis_hash: B256,
@@ -483,15 +563,14 @@ pub trait DatabaseOperations: DatabaseConnectionProvider {
             .sort_by(|a, b| a.transaction.queue_index.cmp(&b.transaction.queue_index));
 
         // check if we need to reorg the L2 head and delete some L2 blocks
-        let (queue_index, l2_head_block_info) =
+        let (queue_index, l2_head_block_number) =
             if let Some(msg) = removed_executed_l1_messages.first() {
                 let l2_reorg_block_number = msg
                     .l2_block_number
                     .expect("we guarantee that this is Some(u64) due to the filter above")
                     .saturating_sub(1);
-                let l2_block_info = self.get_l2_block_info_by_number(l2_reorg_block_number).await?;
-                self.delete_l2_blocks_gt_block_number(l2_reorg_block_number).await?;
-                (Some(msg.transaction.queue_index), l2_block_info)
+
+                (Some(msg.transaction.queue_index), Some(l2_reorg_block_number))
             } else {
                 (None, None)
             };
@@ -508,7 +587,28 @@ pub trait DatabaseOperations: DatabaseConnectionProvider {
         };
 
         // commit the transaction
-        Ok(UnwindResult { l1_block_number, queue_index, l2_head_block_info, l2_safe_block_info })
+        Ok(UnwindResult { l1_block_number, queue_index, l2_head_block_number, l2_safe_block_info })
+    }
+}
+
+/// This type defines the start of an L1 message stream.
+///
+/// It can either be an index, which is the queue index of the first message to return, or a hash,
+/// which is the hash of the first message to return.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum L1MessageStart {
+    /// Start from the provided queue index.
+    Index(u64),
+    /// Start from the provided queue hash.
+    Hash(B256),
+}
+
+impl fmt::Display for L1MessageStart {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Index(index) => write!(f, "Index({index})"),
+            Self::Hash(hash) => write!(f, "Hash({hash:#x})"),
+        }
     }
 }
 
@@ -519,8 +619,9 @@ pub struct UnwindResult {
     pub l1_block_number: u64,
     /// The latest unconsumed queue index after the uwnind.
     pub queue_index: Option<u64>,
-    /// The L2 head block info after the unwind. This is only populated if the L2 head has reorged.
-    pub l2_head_block_info: Option<BlockInfo>,
+    /// The L2 head block number after the unwind. This is only populated if the L2 head has
+    /// reorged.
+    pub l2_head_block_number: Option<u64>,
     /// The L2 safe block info after the unwind. This is only populated if the L2 safe has reorged.
     pub l2_safe_block_info: Option<BlockInfo>,
 }
