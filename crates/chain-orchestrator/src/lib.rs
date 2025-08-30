@@ -721,8 +721,8 @@ impl<
         l1_block_number: Arc<AtomicU64>,
         l2_block_number: Arc<AtomicU64>,
     ) -> Result<Option<ChainOrchestratorEvent>, ChainOrchestratorError> {
-        // finalized the batch.
-        database.finalize_batch(batch_hash, block_number).await?;
+        // finalize all batches up to `batch_index`.
+        database.finalize_batches_up_to_index(batch_index, block_number).await?;
 
         let mut finalized_block = None;
         let mut finalized_batch = None;
