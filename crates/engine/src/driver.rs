@@ -312,6 +312,12 @@ where
 
                 match result {
                     Ok(block) => {
+                        // Skip block if no transactions are present in block.
+                        if block.body.transactions.is_empty() {
+                            tracing::trace!(target: "scroll::engine", "no transactions in block");
+                            return None;
+                        }
+
                         // Update the unsafe block info and return the block
                         let block_info = BlockInfo::new(block.number, block.hash_slow());
                         tracing::trace!(target: "scroll::engine", ?block_info, "updating unsafe block info from new payload");

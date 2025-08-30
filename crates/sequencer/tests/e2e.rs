@@ -38,6 +38,60 @@ use tokio::{
 };
 
 #[tokio::test]
+async fn skip_block_with_no_transactions() {
+    reth_tracing::init_test_tracing();
+
+    const BLOCK_BUILDING_DURATION: Duration = Duration::from_millis(0);
+
+    // setup a test node
+    let (mut nodes, _tasks, _wallet) = setup(1, false).await.unwrap();
+    let node = nodes.pop().unwrap();
+
+    // create a forkchoice state
+    let genesis_hash = node.inner.chain_spec().genesis_hash();
+    let fcs = ForkchoiceState::new(
+        BlockInfo { hash: genesis_hash, number: 0 },
+        Default::default(),
+        Default::default(),
+    );
+
+    // create the engine driver connected to the node
+    let auth_client = node.inner.engine_http_client();
+    let engine_client = ScrollAuthApiEngineClient::new(auth_client);
+    let mut engine_driver = EngineDriver::new(
+        Arc::new(engine_client),
+        (*SCROLL_DEV).clone(),
+        None::<ScrollRootProvider>,
+        fcs,
+        false,
+        BLOCK_BUILDING_DURATION,
+    );
+
+    // create a test database
+    let database = Arc::new(setup_test_db().await);
+    let provider = Arc::new(DatabaseL1MessageProvider::new(database.clone(), 0));
+
+    // create a sequencer
+    let mut sequencer = Sequencer::new(
+        provider,
+        Default::default(),
+        SCROLL_GAS_LIMIT,
+        4,
+        1,
+        L1MessageInclusionMode::BlockDepth(0),
+    );
+
+    // send a new payload attributes request.
+    sequencer.build_payload_attributes();
+    let payload_attributes = sequencer.next().await.unwrap();
+    engine_driver.handle_build_new_payload(payload_attributes);
+
+    // assert that no new payload event is emitted
+    let res = tokio::time::timeout(Duration::from_secs(1), engine_driver.next()).await;
+    assert!(res.is_err(), "expected no new payload, but a block was built: {:?}", res.ok());
+}
+
+#[tokio::test]
 async fn can_build_blocks() {
     reth_tracing::init_test_tracing();
 
