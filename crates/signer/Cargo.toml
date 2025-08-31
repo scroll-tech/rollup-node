@@ -21,7 +21,6 @@ reth-scroll-primitives = { workspace = true, features = ["std"] }
 rollup-node-primitives.workspace = true
 
 # misc
-async-trait.workspace = true
 futures = { workspace = true, features = ["std"] }
 metrics.workspace = true
 metrics-derive.workspace = true

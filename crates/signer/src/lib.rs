@@ -8,6 +8,7 @@
 
 use std::time::Instant;
 
+use alloy_primitives::Signature;
 use futures::stream::{FuturesOrdered, StreamExt};
 use std::sync::Arc;
 use tokio::sync::mpsc::UnboundedSender;
@@ -32,7 +33,7 @@ mod requests;
 pub use requests::SignerRequest;
 
 mod signature;
-pub use signature::{Signature, SignerAdapter};
+pub use signature::SignatureAsBytes;
 
 /// The signer instance is responsible for signing artifacts for the rollup node.
 pub struct Signer {
@@ -136,7 +137,7 @@ mod tests {
     async fn test_signer_local() {
         reth_tracing::init_test_tracing();
         let signer = PrivateKeySigner::random();
-        let mut handle = Signer::spawn(SignerAdapter::new(signer.clone()));
+        let mut handle = Signer::spawn(Box::new(signer.clone()));
 
         // Test sending a request
         let block = ScrollBlock::default();
@@ -164,7 +165,7 @@ mod tests {
 
         // Create a local signer and the signer service
         let key = PrivateKeySigner::random();
-        let (signer, handle) = Signer::new(SignerAdapter::new(key.clone()));
+        let (signer, handle) = Signer::new(Box::new(key.clone()));
 
         // Spawn the signer task and capture the JoinHandle
         let task = tokio::spawn(signer.run());
@@ -182,7 +183,7 @@ mod tests {
 
         // Create a local signer and the signer service
         let key = PrivateKeySigner::random();
-        let (signer, handle) = Signer::new(SignerAdapter::new(key.clone()));
+        let (signer, handle) = Signer::new(Box::new(key.clone()));
 
         // Spawn the signer task and capture the JoinHandle
         let task = tokio::spawn(signer.run());
@@ -203,7 +204,7 @@ mod tests {
 
         // Create a local signer and the signer service
         let key = PrivateKeySigner::random();
-        let (signer, handle) = Signer::new(SignerAdapter::new(key.clone()));
+        let (signer, handle) = Signer::new(Box::new(key.clone()));
 
         // Spawn the signer task and capture the JoinHandle
         let task = tokio::spawn(signer.run());

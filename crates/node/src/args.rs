@@ -299,11 +299,11 @@ impl ScrollRollupNodeConfig {
         // Instantiate the signer
         let signer = if self.test {
             // Use a random private key signer for testing
-            Some(rollup_node_signer::Signer::spawn(rollup_node_signer::SignerAdapter::new(PrivateKeySigner::random())))
+            Some(rollup_node_signer::Signer::spawn(PrivateKeySigner::random()))
         } else {
             // Use the signer configured by SignerArgs
             let chain_id = chain_spec.chain().id();
-            self.signer_args.signer(chain_id).await?.map(|s| rollup_node_signer::Signer::spawn(rollup_node_signer::SignerAdapter::new(s)))
+            self.signer_args.signer(chain_id).await?.map(rollup_node_signer::Signer::spawn)
         };
 
         // Spawn the rollup node manager

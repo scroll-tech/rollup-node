@@ -2,7 +2,7 @@ use crate::{
     protocol::{ScrollMessage, ScrollMessagePayload, ScrollWireEvent, ScrollWireProtocolState},
     ScrollWireConfig,
 };
-use rollup_node_signer::Signature;
+use alloy_primitives::Signature;
 use alloy_rlp::BytesMut;
 use futures::{Stream, StreamExt};
 use reth_eth_wire::multiplex::ProtocolConnection;

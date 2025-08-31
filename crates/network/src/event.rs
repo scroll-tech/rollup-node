@@ -1,4 +1,4 @@
-use rollup_node_signer::Signature;
+use alloy_primitives::Signature;
 use reth_network_api::PeerId;
 use reth_scroll_primitives::ScrollBlock;
 

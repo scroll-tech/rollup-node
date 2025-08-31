@@ -1,8 +1,7 @@
 use super::{models, DatabaseError};
 use crate::DatabaseConnectionProvider;
 
-use alloy_primitives::B256;
-use rollup_node_signer::Signature;
+use alloy_primitives::{Signature, B256};
 use futures::{Stream, StreamExt};
 use rollup_node_primitives::{
     BatchCommitData, BatchInfo, BlockInfo, L1MessageEnvelope, L2BlockInfoWithL1Messages, Metadata,

@@ -1,5 +1,4 @@
 use super::{SignerError, SignerEvent};
-use crate::signature::Signature;
 use std::{future::Future, pin::Pin, sync::Arc};
 
 use reth_scroll_primitives::ScrollBlock;
@@ -11,7 +10,7 @@ pub type SignerFuture = Pin<Box<dyn Future<Output = Result<SignerEvent, SignerEr
 /// A future that signs a block using the provided signer.
 pub fn sign_block(
     block: ScrollBlock,
-    signer: Arc<dyn alloy_signer::Signer<Signature> + Send + Sync>,
+    signer: Arc<dyn alloy_signer::Signer + Send + Sync>,
 ) -> SignerFuture {
     Box::pin(async move {
         // TODO: Are we happy to sign the hash directly or do we want to use EIP-191
