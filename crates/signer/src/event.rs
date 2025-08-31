@@ -1,5 +1,5 @@
+use alloy_signer::Signature;
 use reth_scroll_primitives::ScrollBlock;
-use crate::signature::Signature;
 
 /// An enum representing the events that can be emitted by the signer.
 #[derive(Debug, Clone)]

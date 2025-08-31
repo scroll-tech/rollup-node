@@ -25,9 +25,6 @@ reth-scroll-node.workspace = true
 reth-scroll-primitives.workspace = true
 scroll-wire.workspace = true
 
-# rollup-node
-rollup-node-signer.workspace = true
-
 # misc
 futures.workspace = true
 parking_lot.workspace = true

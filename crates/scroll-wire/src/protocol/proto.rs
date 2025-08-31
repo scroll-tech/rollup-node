@@ -1,9 +1,9 @@
 use alloy_primitives::{
     bytes::{Buf, BufMut, Bytes, BytesMut},
+    Signature,
 };
 use alloy_rlp::{Decodable, Encodable, RlpDecodable, RlpEncodable};
 use reth_eth_wire::{protocol::Protocol, Capability};
-use rollup_node_signer::Signature;
 
 /// The message IDs for messages sent over the scroll wire protocol.
 /// This is used to identify the type of message being sent or received

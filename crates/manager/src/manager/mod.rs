@@ -4,7 +4,7 @@
 
 use super::Consensus;
 use crate::poll_nested_stream_with_budget;
-
+use alloy_primitives::Signature;
 use alloy_provider::Provider;
 use futures::StreamExt;
 use reth_chainspec::EthChainSpec;
@@ -15,7 +15,7 @@ use reth_tasks::shutdown::GracefulShutdown;
 use reth_tokio_util::{EventSender, EventStream};
 use rollup_node_indexer::{Indexer, IndexerEvent, IndexerHandle};
 use rollup_node_sequencer::Sequencer;
-use rollup_node_signer::{SignerEvent, SignerHandle, Signature};
+use rollup_node_signer::{SignerEvent, SignerHandle};
 use rollup_node_watcher::L1Notification;
 use scroll_alloy_hardforks::ScrollHardforks;
 use scroll_alloy_network::Scroll;
