@@ -37,6 +37,7 @@ async fn test_should_consolidate_to_block_15k() -> eyre::Result<()> {
             enable_eth_scroll_wire_bridge: false,
             enable_scroll_wire: false,
             sequencer_url: None,
+            signer_address: None,
         },
         database_args: DatabaseArgs::default(),
         l1_provider_args: L1ProviderArgs {
