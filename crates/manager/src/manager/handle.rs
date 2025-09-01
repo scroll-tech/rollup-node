@@ -52,4 +52,18 @@ impl<N: FullNetwork<Primitives = ScrollNetworkPrimitives>> RollupManagerHandle<N
     pub async fn update_fcs_head(&self, head: BlockInfo) {
         self.send_command(RollupManagerCommand::UpdateFcsHead(head)).await;
     }
+
+    /// Sends a command to the rollup manager to enable automatic sequencing.
+    pub async fn enable_automatic_sequencing(&self) -> Result<bool, oneshot::error::RecvError> {
+        let (tx, rx) = oneshot::channel();
+        self.send_command(RollupManagerCommand::EnableAutomaticSequencing(tx)).await;
+        rx.await
+    }
+
+    /// Sends a command to the rollup manager to disable automatic sequencing.
+    pub async fn disable_automatic_sequencing(&self) -> Result<bool, oneshot::error::RecvError> {
+        let (tx, rx) = oneshot::channel();
+        self.send_command(RollupManagerCommand::DisableAutomaticSequencing(tx)).await;
+        rx.await
+    }
 }
