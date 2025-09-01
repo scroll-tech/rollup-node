@@ -306,6 +306,164 @@ async fn can_penalize_peer_for_invalid_block() {
     .await;
 }
 
+/// Tests that peers are penalized for broadcasting blocks with invalid signatures.
+///
+/// This test verifies the network's ability to detect and penalize peers that send
+/// blocks with either unauthorized or malformed signatures when using the `SystemContract`
+/// consensus algorithm.
+///
+/// The test proceeds in three phases:
+/// 1. **Valid signature verification**: Confirms that blocks signed by the authorized signer are
+///    accepted and processed normally without peer penalization.
+/// 2. **Unauthorized signer detection**: Sends a block signed by an unauthorized signer and
+///    verifies that the sending peer's reputation is decreased.
+/// 3. **Invalid signature detection**: Sends a block with a malformed signature and verifies
+///    further reputation decrease or peer disconnection.
+#[tokio::test]
+async fn can_penalize_peer_for_invalid_signature() -> eyre::Result<()> {
+    reth_tracing::init_test_tracing();
+
+    let chain_spec = (*SCROLL_DEV).clone();
+
+    // Create two signers - one authorized and one unauthorized
+    let authorized_signer = PrivateKeySigner::random().with_chain_id(Some(chain_spec.chain().id()));
+    let authorized_address = authorized_signer.address();
+    let unauthorized_signer =
+        PrivateKeySigner::random().with_chain_id(Some(chain_spec.chain().id()));
+
+    let mut test_config = default_sequencer_test_scroll_rollup_node_config();
+    test_config.consensus_args.algorithm = ConsensusAlgorithm::SystemContract;
+    test_config.consensus_args.authorized_signer = Some(authorized_address);
+    test_config.signer_args.private_key = Some(authorized_signer.clone());
+
+    // Setup nodes
+    let (mut nodes, _tasks, _) =
+        setup_engine(test_config, 2, chain_spec.clone(), false, false).await.unwrap();
+
+    let node0 = nodes.remove(0);
+    let node1 = nodes.remove(0);
+
+    // Get handles
+    let node0_rmn_handle = node0.inner.add_ons_handle.rollup_manager_handle.clone();
+    let node0_network_handle = node0_rmn_handle.get_network_handle().await.unwrap();
+    let node0_id = node0_network_handle.inner().peer_id();
+
+    let node1_rnm_handle = node1.inner.add_ons_handle.rollup_manager_handle.clone();
+    let node1_network_handle = node1_rnm_handle.get_network_handle().await.unwrap();
+
+    // Get event streams
+    let mut node0_events = node0_rmn_handle.get_event_listener().await.unwrap();
+    let mut node1_events = node1_rnm_handle.get_event_listener().await.unwrap();
+
+    // === Phase 1: Test valid block with correct signature ===
+
+    // Have the legitimate sequencer build and sign a block
+    node0_rmn_handle.build_block().await;
+
+    // Wait for the sequencer to build the block
+    let block0 = if let Some(RollupManagerEvent::BlockSequenced(block)) = node0_events.next().await
+    {
+        assert_eq!(block.body.transactions.len(), 0, "Block should have no transactions");
+        block
+    } else {
+        panic!("Failed to receive block from sequencer");
+    };
+
+    // Node1 should receive and accept the valid block
+    if let Some(RollupManagerEvent::NewBlockReceived(block_with_peer)) = node1_events.next().await {
+        assert_eq!(block0.hash_slow(), block_with_peer.block.hash_slow());
+
+        // Verify the signature is from the authorized signer
+        let hash = sig_encode_hash(&block_with_peer.block);
+        let recovered = block_with_peer.signature.recover_address_from_prehash(&hash).unwrap();
+        assert_eq!(recovered, authorized_address, "Block should be signed by authorized signer");
+    } else {
+        panic!("Failed to receive valid block at follower");
+    }
+
+    // Wait for successful import
+    wait_n_events(&mut node1_events, |e| matches!(e, RollupManagerEvent::BlockImported(_)), 1)
+        .await;
+
+    // === Phase 2: Create and send valid block with unauthorized signer signature ===
+
+    // Get initial reputation of node0 from node1's perspective
+    let initial_reputation =
+        node1_network_handle.inner().reputation_by_id(*node0_id).await.unwrap().unwrap();
+    assert_eq!(initial_reputation, 0, "Initial reputation should be zero");
+
+    // Create a new block manually (we'll reuse the valid block structure but with wrong signature)
+    let mut block1 = block0.clone();
+    block1.header.number += 1;
+    block1.header.parent_hash = block0.hash_slow();
+    block1.header.timestamp += 1;
+
+    // Sign the block with the unauthorized signer
+    let block_hash = sig_encode_hash(&block1);
+    let unauthorized_signature = unauthorized_signer.sign_hash(&block_hash).await.unwrap();
+
+    // Send the block with invalid signature from node0 to node1
+    node0_network_handle.announce_block(block1.clone(), unauthorized_signature);
+
+    // Node1 should receive and process the invalid block
+    wait_for_event_predicate_5s(&mut node1_events, |e| {
+        if let RollupManagerEvent::NewBlockReceived(block_with_peer) = e {
+            assert_eq!(block1.hash_slow(), block_with_peer.block.hash_slow());
+
+            // Verify the signature is from the unauthorized signer
+            let hash = sig_encode_hash(&block_with_peer.block);
+            let recovered = block_with_peer.signature.recover_address_from_prehash(&hash).unwrap();
+            return recovered == unauthorized_signer.address();
+        }
+        false
+    })
+    .await?;
+
+    eventually(
+        Duration::from_secs(5),
+        Duration::from_millis(100),
+        "Node0 reputation should be lower after sending block with invalid signature",
+        || async {
+            let current_reputation =
+                node1_network_handle.inner().reputation_by_id(*node0_id).await.unwrap().unwrap();
+            current_reputation < initial_reputation
+        },
+    )
+    .await;
+
+    // === Phase 3: Send valid block with invalid signature ===
+    // Get current reputation of node0 from node1's perspective
+    let current_reputation =
+        node1_network_handle.inner().reputation_by_id(*node0_id).await.unwrap().unwrap();
+
+    let invalid_signature = Signature::new(U256::from(1), U256::from(1), false);
+
+    // Create a new block with the same structure as before but with an invalid signature.
+    // We need to make sure the block is different so that it is not filtered.
+    block1.header.timestamp += 1;
+    node0_network_handle.announce_block(block1.clone(), invalid_signature);
+
+    eventually(
+        Duration::from_secs(5),
+        Duration::from_millis(100),
+        "Node0 reputation should be lower after sending block with invalid signature",
+        || async {
+            let all_peers = node1_network_handle.inner().get_all_peers().await.unwrap();
+            if all_peers.is_empty() {
+                return true; // No peers to check, assume penalization and peer0 is blocked and
+                             // disconnected
+            }
+
+            let penalized_reputation =
+                node1_network_handle.inner().reputation_by_id(*node0_id).await.unwrap().unwrap();
+            penalized_reputation < current_reputation
+        },
+    )
+    .await;
+
+    Ok(())
+}
+
 #[allow(clippy::large_stack_frames)]
 #[tokio::test]
 async fn can_forward_tx_to_sequencer() {
