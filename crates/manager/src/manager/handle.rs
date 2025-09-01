@@ -2,6 +2,7 @@ use super::{RollupManagerCommand, RollupManagerEvent};
 use reth_network_api::FullNetwork;
 use reth_scroll_node::ScrollNetworkPrimitives;
 use reth_tokio_util::EventStream;
+use rollup_node_primitives::BlockInfo;
 use scroll_network::ScrollNetworkHandle;
 use tokio::sync::{mpsc, oneshot};
 
@@ -45,5 +46,10 @@ impl<N: FullNetwork<Primitives = ScrollNetworkPrimitives>> RollupManagerHandle<N
         let (tx, rx) = oneshot::channel();
         self.send_command(RollupManagerCommand::EventListener(tx)).await;
         rx.await
+    }
+
+    /// Sends a command to the rollup manager to update the head of the FCS in the engine driver.
+    pub async fn update_fcs_head(&self, head: BlockInfo) {
+        self.send_command(RollupManagerCommand::UpdateFcsHead(head)).await;
     }
 }

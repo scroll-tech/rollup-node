@@ -1,8 +1,8 @@
 use crate::{
     check_buf_len,
     decoding::{
-        batch::Batch, blob::BlobSliceIter, v1::decode_v1_chunk, v2::zstd::decompress_blob_data,
-        v3::BatchHeaderV3,
+        batch::Batch, batch_header::BatchHeader, blob::BlobSliceIter, v1::decode_v1_chunk,
+        v2::zstd::decompress_blob_data,
     },
     error::DecodingError,
     from_be_bytes_slice_and_advance_buf,
@@ -20,8 +20,8 @@ pub fn decode_v4(calldata: &[u8], blob: &[u8]) -> Result<Batch, DecodingError> {
 
     // decode the parent batch header.
     let raw_parent_header = call.parent_batch_header().ok_or(DecodingError::MissingParentHeader)?;
-    let parent_header = BatchHeaderV3::try_from_buf(&mut (&*raw_parent_header))?;
-    let l1_message_start_index = parent_header.total_l1_message_popped;
+    let parent_header = BatchHeader::try_from_buf(&mut (&*raw_parent_header))?;
+    let l1_message_start_index = parent_header.total_l1_message_popped().expect("exists for v4");
 
     // get blob iterator and collect, skipping unused bytes.
     let mut heap_blob = BlobSliceIter::from_blob_slice(blob).copied().collect::<Vec<_>>();
@@ -48,7 +48,7 @@ pub fn decode_v4(calldata: &[u8], blob: &[u8]) -> Result<Batch, DecodingError> {
 
     decode_v1_chunk(
         call.version(),
-        call.skipped_l1_message_bitmap(),
+        call.skipped_l1_message_bitmap()?,
         l1_message_start_index,
         chunks,
         buf,

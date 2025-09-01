@@ -2,11 +2,15 @@ use metrics::Histogram;
 use metrics_derive::Metrics;
 use strum::EnumIter;
 
-/// An enum representing the items the indexer can handle.
+/// An enum representing the items the chain orchestrator can handle.
 #[derive(Debug, PartialEq, Eq, Hash, EnumIter)]
-pub enum IndexerItem {
+pub enum ChainOrchestratorItem {
+    /// Handle a block received from the network.
+    NewBlock,
+    /// Insert consolidated L2 blocks into the database.
+    InsertConsolidatedL2Blocks,
     /// L2 block.
-    L2Block,
+    InsertL2Block,
     /// L1 reorg.
     L1Reorg,
     /// L1 finalization.
@@ -19,11 +23,13 @@ pub enum IndexerItem {
     BatchFinalization,
 }
 
-impl IndexerItem {
-    /// Returns the str representation of the [`IndexerItem`].
+impl ChainOrchestratorItem {
+    /// Returns the str representation of the [`ChainOrchestratorItem`].
     pub const fn as_str(&self) -> &'static str {
         match self {
-            Self::L2Block => "l2_block",
+            Self::NewBlock => "new_block",
+            Self::InsertConsolidatedL2Blocks => "insert_consolidated_l2_blocks",
+            Self::InsertL2Block => "l2_block",
             Self::L1Reorg => "l1_reorg",
             Self::L1Finalization => "l1_finalization",
             Self::L1Message => "l1_message",
@@ -33,10 +39,10 @@ impl IndexerItem {
     }
 }
 
-/// The metrics for the [`super::Indexer`].
+/// The metrics for the [`super::ChainOrchestrator`].
 #[derive(Metrics, Clone)]
 #[metrics(scope = "indexer")]
-pub struct IndexerMetrics {
-    /// The duration of the task for the indexer.
+pub struct ChainOrchestratorMetrics {
+    /// The duration of the task for the chain orchestrator.
     pub task_duration: Histogram,
 }
