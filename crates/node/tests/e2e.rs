@@ -1023,7 +1023,7 @@ async fn can_handle_l1_message_reorg() -> eyre::Result<()> {
     for i in 1..=10 {
         node0_rnm_handle.build_block().await;
         let b = wait_for_block_sequenced_5s(&mut node0_rnm_events, i).await?;
-        println!("Sequenced block {} {:?}", b.header.number, b.header.hash_slow());
+        tracing::info!(target: "scroll::test", block_number = ?b.header.number, block_hash = ?b.header.hash_slow(), "Sequenced block");
     }
 
     // Assert that the follower node has received all 10 blocks from the sequencer node.
@@ -1172,7 +1172,7 @@ async fn can_reject_l2_block_with_unknown_l1_message() -> eyre::Result<()> {
     for i in 1..=10 {
         node0_rnm_handle.build_block().await;
         let b = wait_for_block_sequenced_5s(&mut node0_rnm_events, i).await?;
-        println!("Sequenced block {} {:?}", b.header.number, b.header.hash_slow());
+        tracing::info!(target: "scroll::test", block_number = ?b.header.number, block_hash = ?b.header.hash_slow(), "Sequenced block")
     }
 
     // Assert that the follower node has received all 10 blocks from the sequencer node.
@@ -1554,11 +1554,11 @@ async fn wait_for_event_predicate(
             maybe_event = event_stream.next() => {
                 match maybe_event {
                     Some(e) if predicate(e.clone()) => {
+                        tracing::debug!(target: "scroll::test", event = ?e, "Received event");
                         return Ok(());
                     }
                     Some(e) => {
-                        tracing::debug!(target: "TODO:nodeX", "ignoring event {:?}", e);
-                        // println!("++++ ignoring event {:?}", e);
+                        tracing::debug!(target: "scroll::test", event = ?e, "Ignoring event");
                     }, // Ignore other events
                     None => return Err(eyre::eyre!("Event stream ended unexpectedly")),
                 }
