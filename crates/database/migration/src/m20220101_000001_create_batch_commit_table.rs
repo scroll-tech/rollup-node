@@ -64,4 +64,5 @@ pub(crate) enum BatchCommit {
     Calldata,
     BlobHash,
     FinalizedBlockNumber,
+    Processed,
 }

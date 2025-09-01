@@ -977,15 +977,7 @@ async fn graceful_shutdown_consolidates_most_recent_batch_on_startup() -> eyre::
     let mut rnm_events = handle.get_event_listener().await?;
 
     // Send the second batch again to mimic the watcher behaviour.
-    l1_notification_tx.send(Arc::new(L1Notification::BatchCommit(batch_0_data.clone()))).await?;
     l1_notification_tx.send(Arc::new(L1Notification::BatchCommit(batch_1_data.clone()))).await?;
-    l1_notification_tx
-        .send(Arc::new(L1Notification::BatchFinalization {
-            hash: batch_0_data.hash,
-            index: batch_0_data.index,
-            block_number: batch_0_data.block_number,
-        }))
-        .await?;
     l1_notification_tx
         .send(Arc::new(L1Notification::BatchFinalization {
             hash: batch_1_data.hash,
