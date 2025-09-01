@@ -65,6 +65,7 @@ async fn skip_block_with_no_transactions() {
         fcs,
         false,
         BLOCK_BUILDING_DURATION,
+        false,
     );
 
     // create a test database
@@ -120,6 +121,7 @@ async fn can_build_blocks() {
         fcs,
         false,
         BLOCK_BUILDING_DURATION,
+        true,
     );
 
     // create a test database
@@ -246,6 +248,7 @@ async fn can_build_blocks_with_delayed_l1_messages() {
         fcs,
         false,
         BLOCK_BUILDING_DURATION,
+        true,
     );
 
     // create a test database
@@ -371,6 +374,7 @@ async fn can_build_blocks_with_finalized_l1_messages() {
         fcs,
         false,
         BLOCK_BUILDING_DURATION,
+        true,
     );
 
     // create a test database
@@ -514,6 +518,7 @@ async fn can_sequence_blocks_with_private_key_file() -> eyre::Result<()> {
         },
         gas_price_oracle_args: GasPriceOracleArgs::default(),
         consensus_args: ConsensusArgs::noop(),
+        allow_empty_blocks: true,
     };
 
     let (nodes, _tasks, wallet) =
@@ -605,6 +610,7 @@ async fn can_sequence_blocks_with_hex_key_file_without_prefix() -> eyre::Result<
         },
         gas_price_oracle_args: GasPriceOracleArgs::default(),
         consensus_args: ConsensusArgs::noop(),
+        allow_empty_blocks: true,
     };
 
     let (nodes, _tasks, wallet) =
@@ -712,6 +718,7 @@ async fn can_build_blocks_and_exit_at_gas_limit() {
         fcs,
         false,
         BLOCK_BUILDING_DURATION,
+        true,
     );
 
     // issue a new payload to the execution layer.
@@ -797,6 +804,7 @@ async fn can_build_blocks_and_exit_at_time_limit() {
         fcs,
         false,
         BLOCK_BUILDING_DURATION,
+        true,
     );
 
     // start timer.
@@ -863,6 +871,7 @@ async fn should_limit_l1_message_cumulative_gas() {
         fcs,
         false,
         BLOCK_BUILDING_DURATION,
+        true,
     );
 
     // create a test database

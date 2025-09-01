@@ -78,6 +78,9 @@ pub struct ScrollRollupNodeConfig {
     /// The gas price oracle args
     #[command(flatten)]
     pub gas_price_oracle_args: GasPriceOracleArgs,
+    /// Enable empty blocks
+    #[arg(long)]
+    pub allow_empty_blocks: bool,
 }
 
 impl ScrollRollupNodeConfig {
@@ -240,6 +243,7 @@ impl ScrollRollupNodeConfig {
             fcs,
             self.engine_driver_args.sync_at_startup && !self.test && !chain_spec.is_dev_chain(),
             Duration::from_millis(self.sequencer_args.payload_building_duration),
+            self.allow_empty_blocks,
         );
 
         // Create the consensus.
@@ -677,6 +681,7 @@ mod tests {
                 algorithm: ConsensusAlgorithm::SystemContract,
                 authorized_signer: None,
             },
+            allow_empty_blocks: true,
         };
 
         let result = config.validate();
@@ -707,6 +712,7 @@ mod tests {
                 algorithm: ConsensusAlgorithm::SystemContract,
                 authorized_signer: None,
             },
+            allow_empty_blocks: true,
         };
 
         let result = config.validate();
@@ -732,6 +738,7 @@ mod tests {
             network_args: NetworkArgs::default(),
             gas_price_oracle_args: GasPriceOracleArgs::default(),
             consensus_args: ConsensusArgs::noop(),
+            allow_empty_blocks: true,
         };
 
         assert!(config.validate().is_ok());
@@ -755,6 +762,7 @@ mod tests {
             network_args: NetworkArgs::default(),
             gas_price_oracle_args: GasPriceOracleArgs::default(),
             consensus_args: ConsensusArgs::noop(),
+            allow_empty_blocks: true,
         };
 
         assert!(config.validate().is_ok());
@@ -774,6 +782,7 @@ mod tests {
             network_args: NetworkArgs::default(),
             gas_price_oracle_args: GasPriceOracleArgs::default(),
             consensus_args: ConsensusArgs::noop(),
+            allow_empty_blocks: true,
         };
 
         assert!(config.validate().is_ok());

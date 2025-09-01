@@ -68,6 +68,7 @@ async fn test_should_consolidate_to_block_15k() -> eyre::Result<()> {
         signer_args: Default::default(),
         gas_price_oracle_args: GasPriceOracleArgs::default(),
         consensus_args: ConsensusArgs::noop(),
+        allow_empty_blocks: true,
     };
 
     let chain_spec = (*SCROLL_SEPOLIA).clone();
@@ -204,6 +205,7 @@ async fn test_should_consolidate_after_optimistic_sync() -> eyre::Result<()> {
         signer_args: Default::default(),
         gas_price_oracle_args: GasPriceOracleArgs::default(),
         consensus_args: ConsensusArgs::noop(),
+        allow_empty_blocks: true,
     };
 
     // Create the chain spec for scroll dev with Feynman activated and a test genesis.
@@ -451,6 +453,7 @@ async fn test_consolidation() -> eyre::Result<()> {
         signer_args: Default::default(),
         gas_price_oracle_args: GasPriceOracleArgs::default(),
         consensus_args: ConsensusArgs::noop(),
+        allow_empty_blocks: true,
     };
 
     // Create the chain spec for scroll dev with Feynman activated and a test genesis.
@@ -623,6 +626,7 @@ async fn test_chain_orchestrator_shallow_reorg_with_gap() -> eyre::Result<()> {
         signer_args: Default::default(),
         gas_price_oracle_args: GasPriceOracleArgs::default(),
         consensus_args: ConsensusArgs::noop(),
+        allow_empty_blocks: true,
     };
 
     // Create the chain spec for scroll dev with Feynman activated and a test genesis.

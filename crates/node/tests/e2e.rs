@@ -71,6 +71,7 @@ async fn can_bridge_l1_messages() -> eyre::Result<()> {
         signer_args: Default::default(),
         gas_price_oracle_args: GasPriceOracleArgs::default(),
         consensus_args: ConsensusArgs::noop(),
+        allow_empty_blocks: true,
     };
     let (mut nodes, _tasks, _wallet) = setup_engine(node_args, 1, chain_spec, false, false).await?;
     let node = nodes.pop().unwrap();
@@ -166,6 +167,7 @@ async fn can_sequence_and_gossip_blocks() {
         signer_args: Default::default(),
         gas_price_oracle_args: GasPriceOracleArgs::default(),
         consensus_args: ConsensusArgs::noop(),
+        allow_empty_blocks: true,
     };
 
     let (nodes, _tasks, wallet) =
@@ -264,6 +266,7 @@ async fn can_penalize_peer_for_invalid_block() {
         gas_price_oracle_args: GasPriceOracleArgs::default(),
         consensus_args: ConsensusArgs::noop(),
         chain_orchestrator_args: ChainOrchestratorArgs::default(),
+        allow_empty_blocks: true,
     };
 
     let (nodes, _tasks, _) =

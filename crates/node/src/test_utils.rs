@@ -157,6 +157,7 @@ pub fn default_test_scroll_rollup_node_config() -> ScrollRollupNodeConfig {
         signer_args: Default::default(),
         gas_price_oracle_args: GasPriceOracleArgs::default(),
         consensus_args: ConsensusArgs::noop(),
+        allow_empty_blocks: true,
     }
 }
 
@@ -193,5 +194,6 @@ pub fn default_sequencer_test_scroll_rollup_node_config() -> ScrollRollupNodeCon
         signer_args: Default::default(),
         gas_price_oracle_args: GasPriceOracleArgs::default(),
         consensus_args: ConsensusArgs::noop(),
+        allow_empty_blocks: true,
     }
 }
