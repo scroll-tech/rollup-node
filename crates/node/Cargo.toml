@@ -91,6 +91,7 @@ eyre.workspace = true
 reqwest.workspace = true
 tokio.workspace = true
 tracing.workspace = true
+console-subscriber = "0.4.1"
 
 [dev-dependencies]
 alloy-chains.workspace = true
