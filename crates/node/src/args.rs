@@ -425,11 +425,14 @@ pub struct NetworkArgs {
         value_name = "NETWORK_SEQUENCER_URL"
     )]
     pub sequencer_url: Option<String>,
+    /// The valid signer address for the network.
+    #[arg(long = "network.valid_signer", value_name = "VALID_SIGNER")]
+    pub signer_address: Option<Address>,
 }
 
 impl Default for NetworkArgs {
     fn default() -> Self {
-        Self { enable_eth_scroll_wire_bridge: true, enable_scroll_wire: true, sequencer_url: None }
+        Self { enable_eth_scroll_wire_bridge: true, enable_scroll_wire: true, sequencer_url: None, signer_address: None }
     }
 }
 
