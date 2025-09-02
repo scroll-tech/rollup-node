@@ -33,6 +33,8 @@ pub use handle::ScrollAddOnsHandle;
 
 mod rpc;
 pub use rpc::{RollupNodeExtApiServer, RollupNodeRpcExt};
+#[cfg(test)]
+pub use rpc::RollupNodeExtApiClient;
 
 mod rollup;
 pub use rollup::IsDevChain;

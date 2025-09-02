@@ -66,7 +66,7 @@ where
 /// ```bash
 /// cast rpc rollupNode_enableAutomaticSequencing
 /// ```
-#[cfg_attr(not(test), rpc(server, namespace = "rollupNode"))]
+#[cfg_attr(not(test), rpc(server, client, namespace = "rollupNode"))]
 #[cfg_attr(test, rpc(server, client, namespace = "rollupNode"))]
 pub trait RollupNodeExtApi {
     /// Enables automatic sequencing in the rollup node.

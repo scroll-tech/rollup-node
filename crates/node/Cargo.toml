@@ -91,7 +91,7 @@ scroll-network.workspace = true
 auto_impl.workspace = true
 clap = { workspace = true, features = ["derive", "env"] }
 eyre.workspace = true
-jsonrpsee = { version = "0.25.1", features = ["server", "macros"] }
+jsonrpsee = { version = "0.25.1", features = ["server", "client", "macros"] }
 reqwest.workspace = true
 tokio.workspace = true
 tracing.workspace = true

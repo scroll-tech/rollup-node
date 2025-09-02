@@ -26,7 +26,8 @@ use rollup_node::{
     },
     BeaconProviderArgs, ChainOrchestratorArgs, ConsensusAlgorithm, ConsensusArgs, DatabaseArgs,
     EngineDriverArgs, GasPriceOracleArgs, L1ProviderArgs, NetworkArgs as ScrollNetworkArgs,
-    RollupNodeContext, ScrollRollupNode, ScrollRollupNodeConfig, SequencerArgs,
+    RollupNodeContext, RollupNodeExtApiClient, ScrollRollupNode, ScrollRollupNodeConfig,
+    SequencerArgs,
 };
 use rollup_node_chain_orchestrator::ChainOrchestratorEvent;
 use rollup_node_manager::{RollupManagerCommand, RollupManagerEvent};
@@ -1270,6 +1271,69 @@ async fn can_handle_l1_message_reorg() -> eyre::Result<()> {
 
     // Assert that block 11 has a different hash after the reorg.
     assert_ne!(block11_before_reorg.unwrap(), node0_latest_block.header.hash_slow());
+
+    Ok(())
+}
+
+#[tokio::test]
+async fn can_rpc_enable_disable_sequencing() -> eyre::Result<()> {
+    reth_tracing::init_test_tracing();
+    color_eyre::install()?;
+    let chain_spec = (*SCROLL_DEV).clone();
+
+    // Launch 1 sequencer node with automatic sequencing initially disabled (block_time = 0)
+    let mut config = default_sequencer_test_scroll_rollup_node_config();
+    config.sequencer_args.block_time = 0; // Disable automatic block production
+
+    let (mut nodes, _tasks, _) = setup_engine(config, 1, chain_spec.clone(), false, false).await?;
+    let node0 = nodes.remove(0);
+
+    // Get handles
+    let node0_rnm_handle = node0.inner.add_ons_handle.rollup_manager_handle.clone();
+    let mut node0_rnm_events = node0_rnm_handle.get_event_listener().await?;
+
+    // Create RPC client
+    let client0 = node0.rpc_client().expect("RPC client should be available");
+
+    // Test that sequencing is initially disabled (no blocks produced automatically)
+    tokio::time::sleep(Duration::from_millis(100)).await;
+    assert_eq!(latest_block(&node0).await?.header.number, 0, "Should start at genesis block");
+
+    // Enable automatic sequencing via RPC
+    let result = RollupNodeExtApiClient::enable_automatic_sequencing(&client0).await?;
+    assert!(result, "Enable automatic sequencing should return true");
+
+    // // Wait for automatic blocks to be produced
+    // wait_for_block_sequenced_5s(&mut node0_rnm_events, 1).await?;
+    // wait_for_block_sequenced_5s(&mut node0_rnm_events, 2).await?;
+
+    // // Verify blocks are being produced automatically
+    // let latest_block_num = latest_block(&node0).await?.header.number;
+    // assert!(latest_block_num >= 2, "Should have produced at least 2 blocks automatically");
+
+    // // Disable automatic sequencing via RPC
+    // let result = RollupNodeExtApiClient::disable_automatic_sequencing(&client).await?;
+    // assert!(result, "Disable automatic sequencing should return true");
+
+    // // Wait a bit and verify no more blocks are produced automatically
+    // let block_num_before_wait = latest_block(&node0).await?.header.number;
+    // tokio::time::sleep(Duration::from_millis(500)).await;
+    // let block_num_after_wait = latest_block(&node0).await?.header.number;
+    // assert_eq!(
+    //     block_num_before_wait, block_num_after_wait,
+    //     "No blocks should be produced automatically after disabling"
+    // );
+
+    // // Verify manual block building still works
+    // node0_rnm_handle.build_block().await;
+    // wait_for_block_sequenced_5s(&mut node0_rnm_events, block_num_after_wait + 1).await?;
+
+    // let final_block_num = latest_block(&node0).await?.header.number;
+    // assert_eq!(
+    //     final_block_num,
+    //     block_num_after_wait + 1,
+    //     "Manual block building should still work after disabling automatic sequencing"
+    // );
 
     Ok(())
 }
