@@ -3,6 +3,7 @@ use crate::{
     constants::{self},
     context::RollupNodeContext,
 };
+use scroll_migration::MigratorTrait;
 use std::{fs, path::PathBuf, sync::Arc, time::Duration};
 
 use alloy_chains::NamedChain;
@@ -190,10 +191,16 @@ impl ScrollRollupNodeConfig {
         let db = Database::new(&database_path).await?;
 
         // Run the database migrations
-        named_chain
-            .migrate(db.get_connection(), self.test)
-            .await
-            .expect("failed to perform migration");
+        if let Some(named) = chain_spec.chain().named() {
+            named
+                .migrate(db.get_connection(), self.test)
+                .await
+                .expect("failed to perform migration");
+        } else {
+            scroll_migration::Migrator::<()>::up(db.get_connection(), None)
+                .await
+                .expect("failed to perform migration (custom chain)");
+        }
 
         // Wrap the database in an Arc
         let db = Arc::new(db);

@@ -18,6 +18,9 @@ impl DockerComposeEnv {
     /// The follower node RPC URL for the Docker Compose environment.
     const FOLLOWER_RPC_URL: &str = "http://localhost:8547";
 
+    /// The l2geth node RPC URL for the Docker Compose environment.
+    const L2GETH_RPC_URL: &str = "http://localhost:8549";
+
     // ===== CONSTRUCTOR AND LIFECYCLE =====
 
     /// Create a new DockerComposeEnv and wait for all services to be ready
@@ -40,6 +43,7 @@ impl DockerComposeEnv {
         tracing::info!("⏳ Waiting for services to be ready...");
         env.wait_for_sequencer_ready().await?;
         env.wait_for_follower_ready().await?;
+        env.wait_for_l2geth_ready().await?;
 
         tracing::info!("✅ All services are ready!");
         Ok(env)
@@ -121,6 +125,11 @@ impl DockerComposeEnv {
         Self::wait_for_l2_node_ready(Self::FOLLOWER_RPC_URL, 30).await
     }
 
+    /// Wait for l2geth to be ready
+    async fn wait_for_l2geth_ready(&self) -> Result<()> {
+        Self::wait_for_l2_node_ready(Self::L2GETH_RPC_URL, 30).await // Same timeout as others
+    }
+
     /// Wait for L2 node to be ready
     async fn wait_for_l2_node_ready(provider_url: &str, max_retries: u32) -> Result<()> {
         for i in 0..max_retries {
@@ -171,6 +180,15 @@ impl DockerComposeEnv {
             .connect(Self::FOLLOWER_RPC_URL)
             .await
             .map_err(|e| eyre::eyre!("Failed to connect to follower: {}", e))
+    }
+
+    /// Get a configured l2geth provider
+    pub async fn get_l2geth_provider(&self) -> Result<impl Provider<Scroll>> {
+        ProviderBuilder::<_, _, Scroll>::default()
+            .with_recommended_fillers()
+            .connect(Self::L2GETH_RPC_URL)
+            .await
+            .map_err(|e| eyre::eyre!("Failed to connect to l2geth: {}", e))
     }
 
     // ===== UTILITIES =====
