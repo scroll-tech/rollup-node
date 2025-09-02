@@ -10532,7 +10532,10 @@ dependencies = [
  "alloy-rpc-types-engine 1.0.24",
  "arbitrary",
  "derive_more",
+ "eyre",
+ "reth-chainspec",
  "reth-network-peers",
+ "reth-node-core",
  "reth-primitives-traits",
  "reth-scroll-chainspec",
  "reth-scroll-primitives",
@@ -11246,7 +11249,7 @@ dependencies = [
  "bitvec",
  "derive_more",
  "scroll-alloy-consensus",
- "thiserror 2.0.12",
+ "thiserror 2.0.14",
 ]
 
 [[package]]
