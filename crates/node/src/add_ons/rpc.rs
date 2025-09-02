@@ -13,7 +13,7 @@ use tokio::sync::{oneshot, Mutex, OnceCell};
 ///
 /// This struct provides a custom JSON-RPC namespace (`rollupNode`) that exposes
 /// rollup management functionality to RPC clients. It manages a connection to the
-/// rollup manager through a handle that is initialized lazily via a oneshot channel.///
+/// rollup manager through a handle that is initialized lazily via a oneshot channel.
 #[derive(Debug)]
 pub struct RollupNodeRpcExt<N>
 where
