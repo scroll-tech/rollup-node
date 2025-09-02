@@ -634,7 +634,9 @@ impl<
         let event = ChainOrchestratorEvent::L1MessageCommitted(l1_message.queue_index);
 
         let queue_hash = if l1_message.queue_index == l1_message_queue_index_boundary {
-            Some(B256::default())
+            let mut input = B256::default().to_vec();
+            input.append(&mut l1_message.tx_hash().to_vec());
+            Some(keccak256(input) & L1_MESSAGE_QUEUE_HASH_MASK)
         } else if l1_message.queue_index > l1_message_queue_index_boundary {
             let index = l1_message.queue_index - 1;
             let mut input = database

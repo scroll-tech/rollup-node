@@ -260,10 +260,17 @@ pub async fn derive<L1P: L1Provider + Sync + Send, L2P: BlockDataProvider + Sync
     if let Some(index) = data.queue_index_start() {
         l1_provider.set_queue_index_cursor(index);
     } else if let Some(hash) = data.prev_l1_message_queue_hash() {
-        l1_provider.set_hash_cursor(*hash).await;
-        // we skip the first l1 message, as we are interested in the one starting after
-        // prev_l1_message_queue_hash.
-        let _ = l1_provider.next_l1_message().await.map_err(Into::into)?;
+        // TODO: For the first L1 batch the start hash is [0u8; 32] and as such we do not have
+        // this indexed in the database. As such we skip setting the hash cursor and use the cursor
+        // index set from the end of the previous batch. This should work in practice but
+        // there may be an edge case in which execution stops on the boundary of V1 -> V2
+        // message queue migration.
+        if hash != &B256::default() {
+            l1_provider.set_hash_cursor(*hash).await;
+            // we skip the first l1 message, as we are interested in the one starting after
+            // prev_l1_message_queue_hash.
+            let _ = l1_provider.next_l1_message().await.map_err(Into::into)?;
+        }
     } else {
         return Err(DerivationPipelineError::MissingL1MessageQueueCursor)
     }
