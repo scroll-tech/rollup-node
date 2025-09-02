@@ -327,6 +327,7 @@ impl ScrollRollupNodeConfig {
             l2_provider,
             self.chain_orchestrator_args.optimistic_sync_trigger,
             self.chain_orchestrator_args.chain_buffer_size,
+            l1_message_queue_index_boundary(chain_spec.chain().named()),
         )
         .await?;
 
@@ -653,6 +654,17 @@ const fn td_constant(chain: NamedChain) -> U128 {
         NamedChain::Scroll => constants::SCROLL_MAINNET_TD_CONSTANT,
         NamedChain::ScrollSepolia => constants::SCROLL_SEPOLIA_TD_CONSTANT,
         _ => U128::ZERO, // Default to zero for other chains
+    }
+}
+
+/// The L1 message queue index at which queue hashes should be computed .
+const fn l1_message_queue_index_boundary(chain: Option<NamedChain>) -> u64 {
+    match chain {
+        Some(NamedChain::Scroll) => constants::SCROLL_MAINNET_L1_MESSAGE_QUEUE_INDEX_BOUNDARY,
+        Some(NamedChain::ScrollSepolia) => {
+            constants::SCROLL_SEPOLIA_L1_MESSAGE_QUEUE_INDEX_BOUNDARY
+        }
+        _ => 0,
     }
 }
 

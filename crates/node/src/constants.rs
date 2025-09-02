@@ -40,3 +40,9 @@ pub(crate) const SCROLL_MAINNET_TD_CONSTANT: U128 = U128::from_limbs([14906960, 
 /// The constant value that must be added to the block number to get the total difficulty for Scroll
 /// Sepolia.
 pub(crate) const SCROLL_SEPOLIA_TD_CONSTANT: U128 = U128::from_limbs([8484488, 0]);
+
+/// The L1 message queue index at which queue hashes should be computed for mainnet.
+pub(crate) const SCROLL_MAINNET_L1_MESSAGE_QUEUE_INDEX_BOUNDARY: u64 = 953885;
+
+/// The L1 message queue index at which queue hashes should be computed for sepolia.
+pub(crate) const SCROLL_SEPOLIA_L1_MESSAGE_QUEUE_INDEX_BOUNDARY: u64 = 1062110;
