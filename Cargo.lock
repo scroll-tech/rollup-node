@@ -10382,6 +10382,7 @@ dependencies = [
  "color-eyre",
  "eyre",
  "futures",
+ "jsonrpsee",
  "reqwest",
  "reth-chainspec",
  "reth-cli-util",

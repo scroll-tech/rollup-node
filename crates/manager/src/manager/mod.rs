@@ -38,7 +38,7 @@ use tokio::{
     time::Interval,
 };
 use tokio_stream::wrappers::ReceiverStream;
-use tracing::{error, trace, warn};
+use tracing::{error, info, trace, warn};
 
 use rollup_node_providers::{L1MessageProvider, L1Provider};
 use scroll_db::{Database, DatabaseError};
@@ -521,11 +521,10 @@ where
                         if this.block_building_trigger.is_none() {
                             this.block_building_trigger = Some(delayed_interval(block_time));
                             info!(target: "scroll::node::manager", "Enabled automatic sequencing with interval {}ms", block_time);
-                            true
                         } else {
                             info!(target: "scroll::node::manager", "Automatic sequencing already enabled");
-                            true
                         }
+                        true
                     } else {
                         warn!(target: "scroll::node::manager", "Cannot enable automatic sequencing: no block time configured");
                         false

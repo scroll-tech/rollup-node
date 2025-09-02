@@ -31,6 +31,9 @@ use scroll_wire::ScrollWireEvent;
 mod handle;
 pub use handle::ScrollAddOnsHandle;
 
+mod rpc;
+pub use rpc::{RollupNodeExtApiServer, RollupNodeRpcExt};
+
 mod rollup;
 pub use rollup::IsDevChain;
 use rollup::RollupManagerAddOn;
@@ -123,9 +126,19 @@ where
         rpc_add_ons.eth_api_builder.with_propagate_local_transactions(
             !ctx.config.txpool.no_local_transactions_propagation,
         );
+
+        let (tx, rx) = tokio::sync::oneshot::channel();
+        let rollup_node_rpc_ext = RollupNodeRpcExt::<N::Network>::new(rx);
+        rpc_add_ons = rpc_add_ons.extend_rpc_modules(move |ctx| {
+            ctx.modules.merge_configured(rollup_node_rpc_ext.into_rpc())?;
+            Ok(())
+        });
+
         let rpc_handle = rpc_add_ons.launch_add_ons_with(ctx.clone(), |_| Ok(())).await?;
         let (rollup_manager_handle, l1_watcher_tx) =
             rollup_node_manager_addon.launch(ctx.clone(), rpc_handle.clone()).await?;
+
+        tx.send(rollup_manager_handle.clone()).map_err(|_| eyre::eyre!("failed to send rollup manager handle"))?;
         Ok(ScrollAddOnsHandle {
             rollup_manager_handle,
             rpc_handle,
