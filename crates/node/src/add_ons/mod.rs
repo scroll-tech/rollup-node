@@ -138,7 +138,9 @@ where
         let (rollup_manager_handle, l1_watcher_tx) =
             rollup_node_manager_addon.launch(ctx.clone(), rpc_handle.clone()).await?;
 
-        tx.send(rollup_manager_handle.clone()).map_err(|_| eyre::eyre!("failed to send rollup manager handle"))?;
+        tx.send(rollup_manager_handle.clone())
+            .map_err(|_| eyre::eyre!("failed to send rollup manager handle"))?;
+
         Ok(ScrollAddOnsHandle {
             rollup_manager_handle,
             rpc_handle,

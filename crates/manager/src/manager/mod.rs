@@ -526,7 +526,7 @@ where
                         }
                         true
                     } else {
-                        warn!(target: "scroll::node::manager", "Cannot enable automatic sequencing: no block time configured");
+                        warn!(target: "scroll::node::manager", "Cannot enable automatic sequencing: sequencer and block time not configured");
                         false
                     };
                     tx.send(success).expect("Failed to send enable automatic sequencing response");

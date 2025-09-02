@@ -10375,6 +10375,7 @@ dependencies = [
  "alloy-signer-aws",
  "alloy-signer-local",
  "alloy-transport",
+ "async-trait",
  "auto_impl",
  "aws-config",
  "aws-sdk-kms",
