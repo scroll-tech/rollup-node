@@ -43,8 +43,8 @@ pub enum ChainOrchestratorEvent {
     /// A batch has been finalized returning an optional finalized L2 block. Also returns a
     /// [`BatchInfo`] if the finalized event occurred in a finalized L1 block.
     BatchFinalized(Option<WithFinalizedBlockNumber<BatchInfo>>, Option<BlockInfo>),
-    /// An L1 block has been finalized returning the L1 block number, the list of finalized batches
-    /// and an optional finalized L2 block.
+    /// An L1 block has been finalized returning the L1 block number and the list of finalized
+    /// batches.
     L1BlockFinalized(u64, Vec<BatchInfo>),
     /// A `L1Message` event has been committed returning the message queue index.
     L1MessageCommitted(u64),
