@@ -242,6 +242,7 @@ impl ScrollRollupNodeConfig {
             });
         }
 
+        tracing::info!(target: "scroll::node::args", fcs = ?fcs, payload_building_duration = ?self.sequencer_args.payload_building_duration, "Starting engine driver");
         let engine = EngineDriver::new(
             Arc::new(engine_api),
             chain_spec.clone(),
@@ -265,7 +266,7 @@ impl ScrollRollupNodeConfig {
 
         let (l1_notification_tx, l1_notification_rx): (Option<Sender<Arc<L1Notification>>>, _) =
             if let Some(provider) = l1_provider.filter(|_| !self.test) {
-                // Determine the start block number for the L1 watcher
+                tracing::info!(target: "scroll::node::args", ?l1_start_block_number, "Starting L1 watcher");
                 (None, Some(L1Watcher::spawn(provider, l1_start_block_number, node_config).await))
             } else {
                 // Create a channel for L1 notifications that we can use to inject L1 messages for
