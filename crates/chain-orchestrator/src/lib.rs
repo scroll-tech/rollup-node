@@ -11,7 +11,7 @@ use reth_network_p2p::{BlockClient, BodiesClient};
 use reth_scroll_primitives::ScrollBlock;
 use rollup_node_primitives::{
     BatchCommitData, BatchInfo, BlockInfo, BoundedVec, ChainImport, L1MessageEnvelope,
-    L2BlockInfoWithL1Messages, WithBlockNumber,
+    L2BlockInfoWithL1Messages,
 };
 use rollup_node_watcher::L1Notification;
 use scroll_alloy_consensus::TxL1Message;
@@ -21,7 +21,6 @@ use scroll_db::{Database, DatabaseError, DatabaseOperations, L1MessageStart, Unw
 use scroll_network::NewBlockWithPeer;
 use std::{
     collections::{HashMap, VecDeque},
-    ops::Add,
     pin::Pin,
     sync::{
         atomic::{AtomicU64, Ordering},
@@ -67,8 +66,6 @@ pub struct ChainOrchestrator<ChainSpec, BC, P> {
     pending_futures: VecDeque<ChainOrchestratorFuture>,
     /// The block number of the L1 finalized block.
     l1_finalized_block_number: Arc<AtomicU64>,
-    /// The block number of the L2 finalized block.
-    l2_finalized_block_number: Arc<AtomicU64>,
     /// The chain specification for the chain orchestrator.
     chain_spec: Arc<ChainSpec>,
     /// The metrics for the chain orchestrator.
@@ -109,7 +106,6 @@ impl<
             database,
             pending_futures: Default::default(),
             l1_finalized_block_number: Arc::new(AtomicU64::new(0)),
-            l2_finalized_block_number: Arc::new(AtomicU64::new(0)),
             chain_spec,
             metrics: ChainOrchestratorItem::iter()
                 .map(|i| {
@@ -529,7 +525,6 @@ impl<
                         self.database.clone(),
                         block_number,
                         self.l1_finalized_block_number.clone(),
-                        self.l2_finalized_block_number.clone(),
                     )),
                 ))
             }
@@ -551,16 +546,13 @@ impl<
                     )),
                 ))
             }
-            L1Notification::BatchFinalization { hash, index, block_number } => {
+            L1Notification::BatchFinalization { hash: _hash, index, block_number } => {
                 ChainOrchestratorFuture::HandleBatchFinalization(self.handle_metered(
                     ChainOrchestratorItem::BatchFinalization,
                     Box::pin(Self::handle_batch_finalization(
                         self.database.clone(),
-                        hash,
                         index,
                         block_number,
-                        self.l1_finalized_block_number.clone(),
-                        self.l2_finalized_block_number.clone(),
                     )),
                 ))
             }
@@ -615,35 +607,18 @@ impl<
         database: Arc<Database>,
         block_number: u64,
         l1_block_number: Arc<AtomicU64>,
-        l2_block_number: Arc<AtomicU64>,
     ) -> Result<Option<ChainOrchestratorEvent>, ChainOrchestratorError> {
         // Set the latest finalized L1 block in the database.
         database.set_latest_finalized_l1_block_number(block_number).await?;
 
-        // get the finalized batch infos.
-        // we add 1 to the low finalized l1 block number to avoid fetching the last finalized batch
-        // a second time.
-        let low_finalized_l1_block_number =
-            l1_block_number.load(Ordering::Relaxed).add(1).max(block_number);
-        let finalized_batches = database
-            .get_batches_by_finalized_block_range(low_finalized_l1_block_number, block_number)
-            .await?;
+        // Get all unprocessed batches that have been finalized by this L1 block finalization.
+        let finalized_batches =
+            database.fetch_and_update_unprocessed_finalized_batches(block_number).await?;
 
-        // get the finalized block for the batch.
-        let finalized_block = if let Some(info) = finalized_batches.last() {
-            Self::fetch_highest_finalized_block(database, info.hash, l2_block_number).await?
-        } else {
-            None
-        };
-
-        // update the chain orchestrator l1 block number.
+        // Update the chain orchestrator L1 block number.
         l1_block_number.store(block_number, Ordering::Relaxed);
 
-        Ok(Some(ChainOrchestratorEvent::L1BlockFinalized(
-            block_number,
-            finalized_batches,
-            finalized_block,
-        )))
+        Ok(Some(ChainOrchestratorEvent::L1BlockFinalized(block_number, finalized_batches)))
     }
 
     /// Handles an L1 message by inserting it into the database.
@@ -715,54 +690,13 @@ impl<
     /// Handles a batch finalization event by updating the batch input in the database.
     async fn handle_batch_finalization(
         database: Arc<Database>,
-        batch_hash: B256,
         batch_index: u64,
         block_number: u64,
-        l1_block_number: Arc<AtomicU64>,
-        l2_block_number: Arc<AtomicU64>,
     ) -> Result<Option<ChainOrchestratorEvent>, ChainOrchestratorError> {
         // finalize all batches up to `batch_index`.
         database.finalize_batches_up_to_index(batch_index, block_number).await?;
 
-        let mut finalized_block = None;
-        let mut finalized_batch = None;
-
-        // check if the block where the batch was finalized is finalized on L1.
-        let l1_block_number_value = l1_block_number.load(Ordering::Relaxed);
-        if l1_block_number_value >= block_number {
-            // fetch the finalized block.
-            finalized_block =
-                Self::fetch_highest_finalized_block(database, batch_hash, l2_block_number).await?;
-
-            // set the finalized batch info.
-            finalized_batch =
-                Some(WithBlockNumber::new(block_number, BatchInfo::new(batch_index, batch_hash)));
-        }
-
-        let event = ChainOrchestratorEvent::BatchFinalized(finalized_batch, finalized_block);
-        Ok(Some(event))
-    }
-
-    /// Returns the highest finalized block for the provided batch hash. Will return [`None`] if the
-    /// block number has already been seen by the chain orchestrator.
-    async fn fetch_highest_finalized_block(
-        database: Arc<Database>,
-        batch_hash: B256,
-        l2_block_number: Arc<AtomicU64>,
-    ) -> Result<Option<BlockInfo>, ChainOrchestratorError> {
-        let finalized_block = database.get_highest_block_for_batch_hash(batch_hash).await?;
-
-        // only return the block if the chain orchestrator hasn't seen it.
-        // in which case also update the `l2_finalized_block_number` value.
-        Ok(finalized_block.filter(|info| {
-            let current_l2_block_number = l2_block_number.load(Ordering::Relaxed);
-            if info.number > current_l2_block_number {
-                l2_block_number.store(info.number, Ordering::Relaxed);
-                true
-            } else {
-                false
-            }
-        }))
+        Ok(None)
     }
 }
 
