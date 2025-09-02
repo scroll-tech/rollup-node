@@ -15,6 +15,7 @@ pub struct Model {
     calldata: Vec<u8>,
     blob_hash: Option<Vec<u8>>,
     pub(crate) finalized_block_number: Option<i64>,
+    processed: bool,
 }
 
 /// The relation for the batch input model.
@@ -50,6 +51,7 @@ impl From<BatchCommitData> for ActiveModel {
             calldata: ActiveValue::Set(batch_commit.calldata.0.to_vec()),
             blob_hash: ActiveValue::Set(batch_commit.blob_versioned_hash.map(|b| b.to_vec())),
             finalized_block_number: ActiveValue::Unchanged(None),
+            processed: ActiveValue::Unchanged(false),
         }
     }
 }
