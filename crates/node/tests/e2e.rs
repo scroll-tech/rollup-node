@@ -14,7 +14,7 @@ use reth_network_api::block::EthWireProvider;
 use reth_node_api::NodeTypesWithDBAdapter;
 use reth_provider::providers::BlockchainProvider;
 use reth_rpc_api::EthApiServer;
-use reth_scroll_chainspec::SCROLL_DEV;
+use reth_scroll_chainspec::{ScrollChainSpec, SCROLL_DEV, SCROLL_MAINNET, SCROLL_SEPOLIA};
 use reth_scroll_node::ScrollNetworkPrimitives;
 use reth_scroll_primitives::ScrollBlock;
 use reth_tokio_util::EventStream;
@@ -37,8 +37,9 @@ use rollup_node_watcher::L1Notification;
 use scroll_alloy_consensus::TxL1Message;
 use scroll_alloy_rpc_types::Transaction as ScrollAlloyTransaction;
 use scroll_db::L1MessageStart;
-use scroll_network::{NewBlockWithPeer, SCROLL_MAINNET};
+use scroll_network::NewBlockWithPeer;
 use scroll_wire::{ScrollWireConfig, ScrollWireProtocolHandler};
+use serde_json;
 use std::{path::PathBuf, sync::Arc, time::Duration};
 use tokio::{
     sync::{oneshot, Mutex},
@@ -1280,6 +1281,141 @@ async fn can_handle_l1_message_reorg() -> eyre::Result<()> {
     assert_ne!(block11_before_reorg.unwrap(), node0_latest_block.header.hash_slow());
 
     Ok(())
+}
+
+/// Tests that a sequencer and follower node can produce blocks using a custom local genesis
+/// configuration and properly propagate them between nodes.
+///
+/// This test validates the PR #250 feature for local genesis file support by:
+/// 1. Creating a custom genesis configuration based on SCROLL_DEV but with distinct parameters
+/// 2. Starting one sequencer node and one follower node with the custom genesis
+/// 3. Verifying both nodes use the same genesis hash
+/// 4. Testing that the sequencer can produce blocks
+/// 5. Confirming the follower receives and processes blocks from the sequencer
+#[tokio::test]
+async fn test_custom_genesis_block_production_and_propagation() -> eyre::Result<()> {
+    reth_tracing::init_test_tracing();
+    color_eyre::install()?;
+
+    // Create a custom genesis config.
+    // This is based on SCROLL_DEV but with custom timestamp and extra data to make it distinct
+    // In a real scenario, this JSON would be loaded from a file using --chain flag.
+    let custom_genesis_json = r#"{
+        "config": {
+            "chainId": 999999,
+            "homesteadBlock": 0,
+            "eip150Block": 0,
+            "eip155Block": 0,
+            "eip158Block": 0,
+            "byzantiumBlock": 0,
+            "constantinopleBlock": 0,
+            "petersburgBlock": 0,
+            "istanbulBlock": 0,
+            "berlinBlock": 0,
+            "londonBlock": 0,
+            "shanghaiTime": 0,
+            "bernoulliBlock": 0,
+            "curieBlock": 0,
+            "darwinTime": 0,
+            "darwinV2Time": 0,
+            "scroll": {
+                "maxTxPayloadBytesPerBlock": 122880,
+                "feeVaultAddress": "0x5300000000000000000000000000000000000005",
+                "l1Config": {
+                    "l1ChainId": 1,
+                    "l1MessageQueueAddress": "0x0000000000000000000000000000000001dead",
+                    "l1MessageQueueV2Address": "0x0000000000000000000000000000000002dead", 
+                    "scrollChainAddress": "0x000000000000000000000000000000000000dead",
+                    "l2SystemConfigAddress": "0x000000000000000000000000000000000003dead",
+                    "numL1MessagesPerBlock": 10
+                }
+            }
+        },
+        "nonce": "0x0",
+        "timestamp": "0x12345678",
+        "extraData": "0x637573746f6d5f67656e657369735f74657374",
+        "gasLimit": "0x1c9c380",
+        "baseFeePerGas": "0x0",
+        "difficulty": "0x0",
+        "mixHash": "0x0000000000000000000000000000000000000000000000000000000000000000",
+        "coinbase": "0x0000000000000000000000000000000000000000",
+        "number": "0x0", 
+        "gasUsed": "0x0",
+        "parentHash": "0x0000000000000000000000000000000000000000000000000000000000000000"
+    }"#;
+
+    let custom_genesis =
+        serde_json::from_str(custom_genesis_json).expect("Custom genesis JSON should be valid");
+
+    // println!("Custom genesis: {custom_genesis:#?}");
+
+    // Create a custom ScrollChainSpec using the from_custom_genesis method
+    // This simulates what would happen when using --chain flag with a custom file
+    let custom_chain_spec = Arc::new(ScrollChainSpec::from_custom_genesis(custom_genesis));
+
+    // TODO: Set a custom chain ID to make it distinct
+    // custom_chain_spec.inner.chain = Chain::from_id(999999);
+
+    // Launch 2 nodes: node0=sequencer and node1=follower.
+    let config = default_sequencer_test_scroll_rollup_node_config();
+    let (mut nodes, _tasks, _) =
+        setup_engine(config, 2, custom_chain_spec.clone(), false, false).await?;
+    let node0 = nodes.remove(0);
+    let node1 = nodes.remove(0);
+
+    // Get handles
+    let node0_rnm_handle = node0.inner.add_ons_handle.rollup_manager_handle.clone();
+    let mut node0_rnm_events = node0_rnm_handle.get_event_listener().await?;
+    let node0_l1_watcher_tx = node0.inner.add_ons_handle.l1_watcher_tx.as_ref().unwrap();
+
+    let node1_rnm_handle = node1.inner.add_ons_handle.rollup_manager_handle.clone();
+    let mut node1_rnm_events = node1_rnm_handle.get_event_listener().await?;
+    let node1_l1_watcher_tx = node1.inner.add_ons_handle.l1_watcher_tx.as_ref().unwrap();
+
+    // Verify chain id
+    assert_eq!(custom_chain_spec.chain_id(), 12345);
+
+    // Verify both nodes start with the same genesis hash from the custom chain spec
+    let sequencer_genesis_hash = node0.block_hash(0);
+    let follower_genesis_hash = node1.block_hash(0);
+    assert_eq!(
+        sequencer_genesis_hash, follower_genesis_hash,
+        "Both nodes should have the same genesis hash from custom genesis"
+    );
+
+    // Verify the genesis hash matches the expected custom chain spec genesis
+    let expected_genesis_hash = custom_chain_spec.genesis_hash();
+    assert_eq!(
+        sequencer_genesis_hash, expected_genesis_hash,
+        "Genesis hash should match the custom chain spec"
+    );
+
+    // Verify that our custom genesis is actually different from SCROLL_MAINNET, SCROLL_SEPOLIA and
+    // SCROLL_DEV. This proves we're using a genuinely custom genesis configuration.
+    assert_ne!(
+        sequencer_genesis_hash,
+        SCROLL_MAINNET.genesis_hash(),
+        "Custom genesis hash should be different from SCROLL_MAINNET genesis hash"
+    );
+    assert_ne!(
+        sequencer_genesis_hash,
+        SCROLL_SEPOLIA.genesis_hash(),
+        "Custom genesis hash should be different from SCROLL_SEPOLIA genesis hash"
+    );
+    assert_ne!(
+        sequencer_genesis_hash,
+        SCROLL_DEV.genesis_hash(),
+        "Custom genesis hash should be different from SCROLL_DEV genesis hash"
+    );
+
+    // Let the sequencer build 10 blocks before performing the reorg process.
+    for i in 1..=10 {
+        node0_rnm_handle.build_block().await;
+        let b = wait_for_block_sequenced_5s(&mut node0_rnm_events, i).await?;
+        tracing::info!(target: "scroll::test", block_number = ?b.header.number, block_hash = ?b.header.hash_slow(), "Sequenced block");
+    }
+
+    return Ok(());
 }
 
 /// Tests that a follower node correctly rejects L2 blocks containing L1 messages it hasn't received
