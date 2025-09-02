@@ -633,15 +633,20 @@ impl<
     ) -> Result<Option<ChainOrchestratorEvent>, ChainOrchestratorError> {
         let event = ChainOrchestratorEvent::L1MessageCommitted(l1_message.queue_index);
 
-        let queue_hash = if l1_message.queue_index > l1_message_queue_index_boundary {
-            let index = l1_message.queue_index - 1;
-            let prev_queue_hash = database
-                .get_l1_message_by_index(index)
-                .await?
-                .map(|m| m.queue_hash)
-                .ok_or(DatabaseError::L1MessageNotFound(L1MessageStart::Index(index)))?;
+        let queue_hash = if l1_message.queue_index >= l1_message_queue_index_boundary {
+            let mut input = if l1_message.queue_index == 0 {
+                B256::default().to_vec()
+            } else {
+                let index = l1_message.queue_index - 1;
+                database
+                    .get_l1_message_by_index(index)
+                    .await?
+                    .map(|m| m.queue_hash)
+                    .ok_or(DatabaseError::L1MessageNotFound(L1MessageStart::Index(index)))?
+                    .unwrap_or_default()
+                    .to_vec()
+            };
 
-            let mut input = prev_queue_hash.unwrap_or_default().to_vec();
             input.append(&mut l1_message.tx_hash().to_vec());
             Some(keccak256(input) & L1_MESSAGE_QUEUE_HASH_MASK)
         } else {
@@ -1313,7 +1318,7 @@ mod test {
         // insert the previous L1 message in database.
         chain_orchestrator.handle_l1_notification(L1Notification::L1Message {
             message: TxL1Message {
-                queue_index: TEST_L1_MESSAGE_QUEUE_INDEX_BOUNDARY,
+                queue_index: TEST_L1_MESSAGE_QUEUE_INDEX_BOUNDARY - 1,
                 ..Default::default()
             },
             block_number: 1475588,
@@ -1323,7 +1328,7 @@ mod test {
 
         // <https://sepolia.scrollscan.com/tx/0xd80cd61ac5d8665919da19128cc8c16d3647e1e2e278b931769e986d01c6b910>
         let message = TxL1Message {
-            queue_index: TEST_L1_MESSAGE_QUEUE_INDEX_BOUNDARY + 1,
+            queue_index: TEST_L1_MESSAGE_QUEUE_INDEX_BOUNDARY ,
             gas_limit: 168000,
             to: address!("Ba50f5340FB9F3Bd074bD638c9BE13eCB36E603d"),
             value: U256::ZERO,
@@ -1342,7 +1347,7 @@ mod test {
             db.get_l1_message_by_index(message.queue_index).await.unwrap().unwrap();
 
         assert_eq!(
-            b256!("322881db10fa96b7bfed5a51a24d5a1ab86ab8fc7e0dab1b4ee4146f00000000"),
+            b256!("390cc9241304858dc5b0cf49049630ef65ac8473d3238faca853a5d700000000"),
             l1_message_result.queue_hash.unwrap()
         );
     }
