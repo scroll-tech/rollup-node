@@ -12,67 +12,67 @@ services:
     networks:
       - test-scroll-network
 
-  rollup-node-sequencer:
-    build:
-      context: ../
-      dockerfile: Dockerfile
-    container_name: rollup-node-sequencer
-    entrypoint: ["bash", "/launch_rollup_node_sequencer.bash"]
-    environment:
-      - RUST_LOG=debug
-    ports:
-      - "8545:8545"   # JSON-RPC
-      - "8546:8546"   # WebSocket
-      - "6060:6060"   # Metrics
-    volumes:
-      - ./launch_rollup_node_sequencer.bash:/launch_rollup_node_sequencer.bash:ro
-      - ./discovery-secret:/l2reth/discovery-secret:ro
-      - ./sequencer-key.txt:/l2reth/sequencer-key.txt:ro
-      - ./l2reth-genesis-e2e.json:/l2reth/l2reth-genesis-e2e.json:ro
-      - l2reth-sequencer:/l2reth
-    networks:
-      - test-scroll-network
-    depends_on:
-      - l1-node
+  # rollup-node-sequencer:
+  #   build:
+    #   context: ../
+    #   dockerfile: Dockerfile
+    # container_name: rollup-node-sequencer
+    # entrypoint: ["bash", "/launch_rollup_node_sequencer.bash"]
+    # environment:
+    #   - RUST_LOG=debug
+    # ports:
+    #   - "8545:8545"   # JSON-RPC
+    #   - "8546:8546"   # WebSocket
+    #   - "6060:6060"   # Metrics
+    # volumes:
+    #   - ./launch_rollup_node_sequencer.bash:/launch_rollup_node_sequencer.bash:ro
+    #   - ./discovery-secret:/l2reth/discovery-secret:ro
+    #   - ./sequencer-key.txt:/l2reth/sequencer-key.txt:ro
+    #   - ./l2reth-genesis-e2e.json:/l2reth/l2reth-genesis-e2e.json:ro
+    #   - l2reth-sequencer:/l2reth
+    # networks:
+    #   - test-scroll-network
+    # depends_on:
+    #   - l1-node
 
-  rollup-node-follower:
-    build:
-      context: ../
-      dockerfile: Dockerfile
-    container_name: rollup-node-follower
-    entrypoint: ["bash", "/launch_rollup_node_follower.bash"]
-    environment:
-      - RUST_LOG=debug
-    ports:
-      - "8547:8545"   # JSON-RPC
-      - "8548:8546"   # WebSocket
-      - "6061:6060"   # Metrics
-    volumes:
-      - ./launch_rollup_node_follower.bash:/launch_rollup_node_follower.bash:ro
-      - ./l2reth-genesis-e2e.json:/l2reth/l2reth-genesis-e2e.json:ro
-      - l2reth-follower:/l2reth
-    networks:
-      - test-scroll-network
-    depends_on:
-      - rollup-node-sequencer
+  # rollup-node-follower:
+  #   build:
+  #     context: ../
+  #     dockerfile: Dockerfile
+  #   container_name: rollup-node-follower
+  #   entrypoint: ["bash", "/launch_rollup_node_follower.bash"]
+  #   environment:
+  #     - RUST_LOG=debug
+  #   ports:
+  #     - "8547:8545"   # JSON-RPC
+  #     - "8548:8546"   # WebSocket
+  #     - "6061:6060"   # Metrics
+  #   volumes:
+  #     - ./launch_rollup_node_follower.bash:/launch_rollup_node_follower.bash:ro
+  #     - ./l2reth-genesis-e2e.json:/l2reth/l2reth-genesis-e2e.json:ro
+  #     - l2reth-follower:/l2reth
+  #   networks:
+  #     - test-scroll-network
+  #   depends_on:
+  #     - rollup-node-sequencer
 
-  l2geth:
-    image: scrolltech/l2geth:scroll-v5.8.74
-    platform: linux/amd64
-    container_name: l2geth
-    entrypoint: ["bash", "/launch_l2geth.bash"]
-    ports:
-      - "8549:8545"    # JSON-RPC
-      - "8550:8546"    # WebSocket
-      - "6062:6060"    # Metrics
-    volumes:
-      - ./l2geth-genesis-e2e.json:/l2geth-genesis-e2e.json:ro
-      - ./launch_l2geth.bash:/launch_l2geth.bash:ro
-      - l2geth-data:/l2geth
-    networks:
-      - test-scroll-network
-    depends_on:
-      - rollup-node-sequencer
+  # l2geth:
+  #   image: scrolltech/l2geth:scroll-v5.8.74
+  #   platform: linux/amd64
+  #   container_name: l2geth
+  #   entrypoint: ["bash", "/launch_l2geth.bash"]
+  #   ports:
+  #     - "8549:8545"    # JSON-RPC
+  #     - "8550:8546"    # WebSocket
+  #     - "6062:6060"    # Metrics
+  #   volumes:
+  #     - ./l2geth-genesis-e2e.json:/l2geth-genesis-e2e.json:ro
+  #     - ./launch_l2geth.bash:/launch_l2geth.bash:ro
+  #     - l2geth-data:/l2geth
+  #   networks:
+  #     - test-scroll-network
+  #   depends_on:
+  #     - rollup-node-sequencer
 
 networks:
   test-scroll-network:
