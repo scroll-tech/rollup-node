@@ -23,6 +23,7 @@ scroll-alloy-rpc-types-engine.workspace = true
 reth-scroll-chainspec.workspace = true
 
 # reth
+reth-network-peers.workspace = true
 reth-primitives-traits.workspace = true
 reth-scroll-primitives.workspace = true
 reth-chainspec.workspace = true
@@ -48,6 +49,7 @@ std = [
     "alloy-chains/std",
     "reth-chainspec/std",
     "reth-scroll-chainspec/std",
+    "reth-network-peers/std",
 ]
 arbitrary = [
     "std",

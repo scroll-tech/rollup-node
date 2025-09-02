@@ -82,6 +82,8 @@ pub struct L1Watcher<EP> {
     config: Arc<NodeConfig>,
     /// The metrics for the watcher.
     metrics: WatcherMetrics,
+    /// Whether the watcher is synced to the L1 head.
+    is_synced: bool,
 }
 
 /// The L1 notification type yielded by the [`L1Watcher`].
@@ -115,6 +117,8 @@ pub enum L1Notification {
     NewBlock(u64),
     /// A block has been finalized on the L1.
     Finalized(u64),
+    /// A notification that the L1 watcher is synced to the L1 head.
+    Synced,
 }
 
 impl Display for L1Notification {
@@ -136,6 +140,7 @@ impl Display for L1Notification {
             Self::Consensus(u) => write!(f, "{u:?}"),
             Self::NewBlock(n) => write!(f, "NewBlock({n})"),
             Self::Finalized(n) => write!(f, "Finalized({n})"),
+            Self::Synced => write!(f, "Synced"),
         }
     }
 }
@@ -151,6 +156,8 @@ where
         start_block: Option<u64>,
         config: Arc<NodeConfig>,
     ) -> mpsc::Receiver<Arc<L1Notification>> {
+        tracing::trace!(target: "scroll::watcher", ?start_block, ?config, "spawning L1 watcher");
+
         let (tx, rx) = mpsc::channel(LOGS_QUERY_BLOCK_RANGE as usize);
 
         let fetch_block_number = async |tag: BlockNumberOrTag| {
@@ -181,6 +188,7 @@ where
             sender: tx,
             config,
             metrics: WatcherMetrics::default(),
+            is_synced: false,
         };
 
         // notify at spawn.
@@ -212,8 +220,17 @@ where
             }
 
             // sleep if we are synced.
-            if self.is_synced() {
+            if self.is_synced {
                 tokio::time::sleep(SLOW_SYNC_INTERVAL).await;
+            } else if self.current_block_number == self.l1_state.head {
+                // if we have synced to the head of the L1, notify the channel and set the
+                // `is_synced`` flag.
+                if let Err(L1WatcherError::SendError(_)) = self.notify(L1Notification::Synced).await
+                {
+                    tracing::warn!(target: "scroll::watcher", "L1 watcher channel closed, stopping the watcher");
+                    break;
+                }
+                self.is_synced = true;
             }
         }
     }
@@ -246,7 +263,7 @@ where
             }
 
             // send all notifications on the channel.
-            self.notify_all(notifications).await;
+            self.notify_all(notifications).await?;
 
             // update the latest block the l1 watcher has indexed.
             self.update_current_block(&latest);
@@ -316,7 +333,7 @@ where
         } else if tail.is_some_and(|h| h.hash == latest.parent_hash) {
             // latest block extends the tip.
             tracing::trace!(target: "scroll::watcher", number = ?latest.number, hash = ?latest.hash, "block extends chain");
-            self.unfinalized_blocks.push(latest.clone());
+            self.unfinalized_blocks.push_back(latest.clone());
         } else {
             // chain reorged or need to backfill.
             tracing::trace!(target: "scroll::watcher", number = ?latest.number, hash = ?latest.hash, "gap or reorg");
@@ -569,18 +586,14 @@ where
         Ok(prefix)
     }
 
-    /// Returns true if the [`L1Watcher`] is synced to the head of the L1.
-    const fn is_synced(&self) -> bool {
-        self.current_block_number == self.l1_state.head
-    }
-
     /// Send all notifications on the channel.
-    async fn notify_all(&self, notifications: Vec<L1Notification>) {
+    async fn notify_all(&self, notifications: Vec<L1Notification>) -> L1WatcherResult<()> {
         for notification in notifications {
             self.metrics.process_l1_notification(&notification);
             tracing::trace!(target: "scroll::watcher", %notification, "sending l1 notification");
-            let _ = self.notify(notification).await;
+            self.notify(notification).await?;
         }
+        Ok(())
     }
 
     /// Send the notification in the channel.
@@ -642,6 +655,8 @@ where
         // block.
         filter = filter.from_block(self.current_block_number + 1).to_block(to_block);
 
+        tracing::trace!(target: "scroll::watcher", ?filter, "fetching logs");
+
         Ok(self.execution_provider.get_logs(&filter).await?)
     }
 }
@@ -688,6 +703,7 @@ mod tests {
                 sender: tx,
                 config: Arc::new(NodeConfig::mainnet()),
                 metrics: WatcherMetrics::default(),
+                is_synced: false,
             },
             rx,
         )

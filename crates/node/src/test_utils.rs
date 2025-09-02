@@ -3,8 +3,8 @@
 use crate::{ConsensusArgs, GasPriceOracleArgs};
 
 use super::{
-    BeaconProviderArgs, DatabaseArgs, EngineDriverArgs, L1ProviderArgs, ScrollRollupNode,
-    ScrollRollupNodeConfig, SequencerArgs,
+    BeaconProviderArgs, ChainOrchestratorArgs, DatabaseArgs, EngineDriverArgs, L1ProviderArgs,
+    ScrollRollupNode, ScrollRollupNodeConfig, SequencerArgs,
 };
 use alloy_primitives::Bytes;
 use reth_chainspec::EthChainSpec;
@@ -144,7 +144,11 @@ pub fn default_test_scroll_rollup_node_config() -> ScrollRollupNodeConfig {
         network_args: crate::args::NetworkArgs::default(),
         database_args: DatabaseArgs { path: Some(PathBuf::from("sqlite::memory:")) },
         l1_provider_args: L1ProviderArgs::default(),
-        engine_driver_args: EngineDriverArgs { en_sync_trigger: 100, sync_at_startup: true },
+        engine_driver_args: EngineDriverArgs { sync_at_startup: true },
+        chain_orchestrator_args: ChainOrchestratorArgs {
+            optimistic_sync_trigger: 100,
+            chain_buffer_size: 100,
+        },
         sequencer_args: SequencerArgs { payload_building_duration: 1000, ..Default::default() },
         beacon_provider_args: BeaconProviderArgs {
             blob_source: BlobSource::Mock,
@@ -157,16 +161,27 @@ pub fn default_test_scroll_rollup_node_config() -> ScrollRollupNodeConfig {
 }
 
 /// Returns a default [`ScrollRollupNodeConfig`] preconfigured for testing with sequencer.
+/// It sets `sequencer_args.block_time = 0` so that no blocks are produced automatically.
+/// To produce blocks the `build_block` method needs to be invoked.
+/// This is so that block production and test scenarios remain predictable.
+///
+/// In case this behavior is not wanted, `block_time` can be adjusted to any value > 0 after
+/// obtaining the config so that the sequencer node will produce blocks automatically in this
+/// interval.
 pub fn default_sequencer_test_scroll_rollup_node_config() -> ScrollRollupNodeConfig {
     ScrollRollupNodeConfig {
         test: true,
         network_args: crate::args::NetworkArgs::default(),
         database_args: DatabaseArgs { path: Some(PathBuf::from("sqlite::memory:")) },
         l1_provider_args: L1ProviderArgs::default(),
-        engine_driver_args: EngineDriverArgs { en_sync_trigger: 100, sync_at_startup: true },
+        engine_driver_args: EngineDriverArgs { sync_at_startup: true },
+        chain_orchestrator_args: ChainOrchestratorArgs {
+            optimistic_sync_trigger: 100,
+            chain_buffer_size: 100,
+        },
         sequencer_args: SequencerArgs {
             sequencer_enabled: true,
-            block_time: 50,
+            block_time: 0,
             payload_building_duration: 40,
             fee_recipient: Default::default(),
             l1_message_inclusion_mode: L1MessageInclusionMode::BlockDepth(0),

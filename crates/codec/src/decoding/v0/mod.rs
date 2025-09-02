@@ -7,7 +7,9 @@ pub(crate) use block_context::BlockContextV0;
 mod block_context;
 
 use crate::{
-    decoding::{batch::Batch, payload::PayloadData, transaction::Transaction},
+    decoding::{
+        batch::Batch, batch_header::BatchHeader, payload::PayloadData, transaction::Transaction,
+    },
     error::DecodingError,
     L2Block,
 };
@@ -58,13 +60,13 @@ pub fn decode_v0(calldata: &[u8]) -> Result<Batch, DecodingError> {
 
     // decode the parent batch header.
     let raw_parent_header = call.parent_batch_header().ok_or(DecodingError::MissingParentHeader)?;
-    let parent_header = BatchHeaderV0::try_from_buf(&mut (&*raw_parent_header))?;
-    let l1_message_start_index = parent_header.total_l1_message_popped;
+    let parent_header = BatchHeader::try_from_buf(&mut (&*raw_parent_header))?;
+    let l1_message_start_index = parent_header.total_l1_message_popped().expect("exists for v0");
 
     let payload = PayloadData {
         blocks: l2_blocks,
         l1_message_queue_info: l1_message_start_index.into(),
-        skipped_l1_message_bitmap: call.skipped_l1_message_bitmap(),
+        skipped_l1_message_bitmap: call.skipped_l1_message_bitmap()?,
     };
 
     Ok(Batch::new(call.version(), Some(chunks_block_count), payload))
