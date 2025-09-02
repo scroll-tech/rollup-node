@@ -54,6 +54,8 @@ mod event;
 pub use event::RollupManagerEvent;
 
 mod handle;
+mod metrics;
+
 pub use handle::RollupManagerHandle;
 
 /// The size of the event channel.

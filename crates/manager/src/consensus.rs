@@ -4,6 +4,8 @@ use reth_scroll_primitives::ScrollBlock;
 use rollup_node_primitives::{sig_encode_hash, ConsensusUpdate};
 use scroll_network::ConsensusError;
 use std::fmt::Debug;
+use metrics::Counter;
+use metrics_derive::Metrics;
 
 /// A trait for consensus implementations.
 pub trait Consensus: Send + Debug {
@@ -40,17 +42,32 @@ impl Consensus for NoopConsensus {
     }
 }
 
+
+/// The metrics for the [`SystemContractConsensus`].
+#[derive(Metrics, Clone)]
+#[metrics(scope = "consensus")]
+pub(crate) struct SystemContractConsensusMetrics {
+    /// System contract validate new block failed counter.
+    pub validate_new_block_failed: Counter,
+}
+
 /// The system contract consensus.
 #[derive(Debug)]
 pub struct SystemContractConsensus {
     authorized_signer: Address,
+
+    /// The metrics for the [`SystemContractConsensus`].
+    metrics: SystemContractConsensusMetrics,
 }
 
 impl SystemContractConsensus {
     /// Creates a new [`SystemContractConsensus`] consensus instance with the given authorized
     /// signers.
-    pub const fn new(authorized_signer: Address) -> Self {
-        Self { authorized_signer }
+    pub fn new(authorized_signer: Address) -> Self {
+        Self {
+            authorized_signer,
+            metrics: SystemContractConsensusMetrics::default(),
+        }
     }
 }
 
@@ -70,6 +87,7 @@ impl Consensus for SystemContractConsensus {
         let signer = reth_primitives_traits::crypto::secp256k1::recover_signer(signature, hash)?;
 
         if self.authorized_signer != signer {
+            self.metrics.validate_new_block_failed.increment(1);
             return Err(ConsensusError::IncorrectSigner(GotExpected {
                 got: signer,
                 expected: self.authorized_signer,
