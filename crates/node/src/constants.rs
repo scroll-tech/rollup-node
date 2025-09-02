@@ -41,8 +41,8 @@ pub(crate) const SCROLL_MAINNET_TD_CONSTANT: U128 = U128::from_limbs([14906960, 
 /// Sepolia.
 pub(crate) const SCROLL_SEPOLIA_TD_CONSTANT: U128 = U128::from_limbs([8484488, 0]);
 
-/// The L1 message queue index at which queue hashes should be computed for mainnet.
-pub(crate) const SCROLL_MAINNET_L1_MESSAGE_QUEUE_INDEX_BOUNDARY: u64 = 953885;
+/// The L1 message queue index at which the V2 L1 message queue was enabled on mainnet.
+pub(crate) const SCROLL_MAINNET_V2_MESSAGE_QUEUE_START_INDEX: u64 = 953885;
 
-/// The L1 message queue index at which queue hashes should be computed for sepolia.
-pub(crate) const SCROLL_SEPOLIA_L1_MESSAGE_QUEUE_INDEX_BOUNDARY: u64 = 1062110;
+/// The L1 message queue index at which queue hashes should be computed on sepolia.
+pub(crate) const SCROLL_SEPOLIA_V2_MESSAGE_QUEUE_START_INDEX: u64 = 1062110;

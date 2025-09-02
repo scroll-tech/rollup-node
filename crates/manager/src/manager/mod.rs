@@ -173,9 +173,11 @@ where
         signer: Option<SignerHandle>,
         block_time: Option<u64>,
         chain_orchestrator: ChainOrchestrator<CS, <N as BlockDownloaderProvider>::Client, P>,
+        l1_v2_message_queue_start_index: u64,
     ) -> (Self, RollupManagerHandle<N>) {
         let (handle_tx, handle_rx) = mpsc::channel(EVENT_CHANNEL_SIZE);
-        let derivation_pipeline = DerivationPipeline::new(l1_provider, database);
+        let derivation_pipeline =
+            DerivationPipeline::new(l1_provider, database, l1_v2_message_queue_start_index);
         let rnm = Self {
             handle_rx,
             chain_spec,

@@ -79,8 +79,8 @@ pub struct ChainOrchestrator<ChainSpec, BC, P> {
     chain_buffer_size: usize,
     /// A boolean to represent if the L1 has been synced.
     l1_synced: bool,
-    /// The L1 message index at which queue hashes should be computed.
-    l1_message_queue_index_boundary: u64,
+    /// The L1 message queue index at which the V2 L1 message queue was enabled.
+    l1_v2_message_queue_start_index: u64,
     /// The waker to notify when the engine driver should be polled.
     waker: AtomicWaker,
 }
@@ -99,7 +99,7 @@ impl<
         l2_client: P,
         optimistic_sync_threshold: u64,
         chain_buffer_size: usize,
-        l1_message_queue_index_boundary: u64,
+        l1_v2_message_queue_start_index: u64,
     ) -> Result<Self, ChainOrchestratorError> {
         let chain = init_chain_from_db(&database, &l2_client, chain_buffer_size).await?;
         Ok(Self {
@@ -120,7 +120,7 @@ impl<
             optimistic_sync_threshold,
             chain_buffer_size,
             l1_synced: false,
-            l1_message_queue_index_boundary,
+            l1_v2_message_queue_start_index,
             waker: AtomicWaker::new(),
         })
     }
@@ -545,7 +545,7 @@ impl<
                         self.database.clone(),
                         message,
                         block_number,
-                        self.l1_message_queue_index_boundary,
+                        self.l1_v2_message_queue_start_index,
                     )),
                 ))
             }
@@ -629,15 +629,15 @@ impl<
         database: Arc<Database>,
         l1_message: TxL1Message,
         l1_block_number: u64,
-        l1_message_queue_index_boundary: u64,
+        l1_v2_message_queue_start_index: u64,
     ) -> Result<Option<ChainOrchestratorEvent>, ChainOrchestratorError> {
         let event = ChainOrchestratorEvent::L1MessageCommitted(l1_message.queue_index);
 
-        let queue_hash = if l1_message.queue_index == l1_message_queue_index_boundary {
+        let queue_hash = if l1_message.queue_index == l1_v2_message_queue_start_index {
             let mut input = B256::default().to_vec();
             input.append(&mut l1_message.tx_hash().to_vec());
             Some(keccak256(input) & L1_MESSAGE_QUEUE_HASH_MASK)
-        } else if l1_message.queue_index > l1_message_queue_index_boundary {
+        } else if l1_message.queue_index > l1_v2_message_queue_start_index {
             let index = l1_message.queue_index - 1;
             let mut input = database
                 .get_l1_message_by_index(index)
@@ -1346,7 +1346,7 @@ mod test {
             db.get_l1_message_by_index(message.queue_index).await.unwrap().unwrap();
 
         assert_eq!(
-            b256!("322881db10fa96b7bfed5a51a24d5a1ab86ab8fc7e0dab1b4ee4146f00000000"),
+            b256!("b2331b9010aac89f012d648fccc1f0a9aa5ef7b7b2afe21be297dd1a00000000"),
             l1_message_result.queue_hash.unwrap()
         );
     }
