@@ -194,9 +194,12 @@ impl ScrollRollupNodeConfig {
                 .await
                 .expect("failed to perform migration");
         } else {
-            scroll_migration::Migrator::<()>::up(db.get_connection(), None)
-                .await
-                .expect("failed to perform migration (custom chain)");
+            scroll_migration::Migrator::<scroll_migration::ScrollDevMigrationInfo>::up(
+                db.get_connection(),
+                None,
+            )
+            .await
+            .expect("failed to perform migration (custom chain)");
         }
 
         // Wrap the database in an Arc
@@ -222,7 +225,7 @@ impl ScrollRollupNodeConfig {
             ctx.network.clone(),
             events,
             eth_wire_listener,
-            td_constant(named_chain),
+            td_constant(chain_spec.chain().named()),
         );
 
         // On startup we replay the latest batch of blocks from the database as such we set the safe
@@ -653,10 +656,10 @@ pub struct GasPriceOracleArgs {
 }
 
 /// Returns the total difficulty constant for the given chain.
-const fn td_constant(chain: NamedChain) -> U128 {
+const fn td_constant(chain: Option<NamedChain>) -> U128 {
     match chain {
-        NamedChain::Scroll => constants::SCROLL_MAINNET_TD_CONSTANT,
-        NamedChain::ScrollSepolia => constants::SCROLL_SEPOLIA_TD_CONSTANT,
+        Some(NamedChain::Scroll) => constants::SCROLL_MAINNET_TD_CONSTANT,
+        Some(NamedChain::ScrollSepolia) => constants::SCROLL_SEPOLIA_TD_CONSTANT,
         _ => U128::ZERO, // Default to zero for other chains
     }
 }
