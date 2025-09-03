@@ -4,7 +4,7 @@ use super::{transaction::DatabaseTransaction, DatabaseConnectionProvider};
 use crate::error::DatabaseError;
 
 use sea_orm::{
-    sqlx::sqlite::SqliteConnectOptions, DatabaseConnection, SqlxSqliteConnector, TransactionTrait,
+    sqlx::sqlite::{SqliteConnectOptions, SqlitePoolOptions}, DatabaseConnection, SqlxSqliteConnector, TransactionTrait,
 };
 
 // TODO: make these configurable via CLI.
@@ -13,7 +13,10 @@ use sea_orm::{
 const BUSY_TIMEOUT_SECS: u64 = 5;
 
 /// The maximum number of connections in the database connection pool.
-const MAX_CONNECTIONS: u32 = 10;
+const MAX_CONNECTIONS: u32 = 500;
+
+/// The minimum number of connections in the database connection pool.
+const MIN_CONNECTIONS: u32 = 25;
 
 /// The timeout for acquiring a connection from the pool.
 const ACQUIRE_TIMEOUT_SECS: u64 = 5;
@@ -34,16 +37,28 @@ pub struct Database {
 impl Database {
     /// Creates a new [`Database`] instance associated with the provided database URL.
     pub async fn new(database_url: &str) -> Result<Self, DatabaseError> {
+        Self::new_sqlite_with_pool_options(database_url, MAX_CONNECTIONS, MIN_CONNECTIONS, ACQUIRE_TIMEOUT_SECS, BUSY_TIMEOUT_SECS).await
+    }
+
+    /// Creates a new [`Database`] instance with SQLite-specific optimizations and custom pool settings.
+    pub async fn new_sqlite_with_pool_options(
+        database_url: &str,
+        max_connections: u32,
+        min_connections: u32,
+        acquire_timeout_secs: u64,
+        busy_timeout_secs: u64,
+    ) -> Result<Self, DatabaseError> {
         let options = SqliteConnectOptions::from_str(database_url)?
             .create_if_missing(true)
             .journal_mode(sea_orm::sqlx::sqlite::SqliteJournalMode::Wal)
-            .busy_timeout(Duration::from_secs(BUSY_TIMEOUT_SECS))
+            .busy_timeout(Duration::from_secs(busy_timeout_secs))
             .foreign_keys(true)
             .synchronous(sea_orm::sqlx::sqlite::SqliteSynchronous::Normal);
 
-        let sqlx_pool = sea_orm::sqlx::sqlite::SqlitePoolOptions::new()
-            .max_connections(MAX_CONNECTIONS)
-            .acquire_timeout(Duration::from_secs(ACQUIRE_TIMEOUT_SECS))
+        let sqlx_pool = SqlitePoolOptions::new()
+            .max_connections(max_connections)
+            .min_connections(min_connections)
+            .acquire_timeout(Duration::from_secs(acquire_timeout_secs))
             .connect_with(options)
             .await?;
 
