@@ -80,7 +80,7 @@ reth-provider = { workspace = true, optional = true }
 reth-rpc-server-types = { workspace = true, optional = true }
 scroll-alloy-rpc-types-engine = { workspace = true, optional = true }
 scroll-derivation-pipeline = { workspace = true, optional = true }
-scroll-alloy-rpc-types = { git = "https://github.com/scroll-tech/reth.git", default-features = false }
+scroll-alloy-rpc-types = { git = "https://github.com/scroll-tech/reth.git", branch = "morty/fix-eth66-serve-signature", default-features = false }
 
 scroll-db.workspace = true
 scroll-engine.workspace = true

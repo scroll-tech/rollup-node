@@ -41,11 +41,7 @@ use tokio_stream::wrappers::ReceiverStream;
 use tracing::{error, info, trace, warn};
 
 use rollup_node_providers::{L1MessageProvider, L1Provider};
-<<<<<<< HEAD
-use scroll_db::{Database, DatabaseOperations};
-=======
-use scroll_db::{Database, DatabaseError};
->>>>>>> main
+use scroll_db::{Database, DatabaseError, DatabaseOperations};
 use scroll_derivation_pipeline::DerivationPipeline;
 
 mod budget;
@@ -116,13 +112,10 @@ pub struct RollupNodeManager<
     signer: Option<SignerHandle>,
     /// The trigger for the block building process.
     block_building_trigger: Option<Interval>,
-<<<<<<< HEAD
     /// A connection to the database.
     database: Arc<Database>,
-=======
     /// The original block time configuration for restoring automatic sequencing.
     block_time_config: Option<u64>,
->>>>>>> main
 }
 
 /// The current status of the rollup manager.
@@ -242,8 +235,7 @@ where
                 result: Err(err.into()),
             });
         } else {
-<<<<<<< HEAD
-            self.engine.handle_block_import(block_with_peer.clone());
+            self.chain.handle_block_from_peer(block_with_peer.clone());
 
             // TODO: remove this once we deprecate l2geth.
             // Store the block signature in the database
@@ -265,9 +257,6 @@ where
                     );
                 }
             });
-=======
-            self.chain.handle_block_from_peer(block_with_peer);
->>>>>>> main
         }
     }
 
@@ -629,7 +618,6 @@ where
                         ));
                     }
 
-<<<<<<< HEAD
                     // TODO: remove this once we deprecate l2geth.
                     // Store the block signature in the database
                     let db = this.database.clone();
@@ -650,13 +638,11 @@ where
                         }
                     });
 
-=======
                     this.chain.handle_sequenced_block(NewBlockWithPeer {
                         peer_id: Default::default(),
                         block: block.clone(),
                         signature,
                     });
->>>>>>> main
                     this.network.handle().announce_block(block, signature);
                 }
             }

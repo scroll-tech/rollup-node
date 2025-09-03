@@ -3,9 +3,6 @@ use std::{str::FromStr, time::Duration};
 use super::{transaction::DatabaseTransaction, DatabaseConnectionProvider};
 use crate::error::DatabaseError;
 
-<<<<<<< HEAD
-use sea_orm::{ConnectOptions, Database as SeaOrmDatabase, DatabaseConnection, TransactionTrait};
-=======
 use sea_orm::{
     sqlx::sqlite::SqliteConnectOptions, DatabaseConnection, SqlxSqliteConnector, TransactionTrait,
 };
@@ -20,7 +17,6 @@ const MAX_CONNECTIONS: u32 = 10;
 
 /// The timeout for acquiring a connection from the pool.
 const ACQUIRE_TIMEOUT_SECS: u64 = 5;
->>>>>>> main
 
 /// The [`Database`] struct is responsible for interacting with the database.
 ///

@@ -2598,6 +2598,33 @@ dependencies = [
 ]
 
 [[package]]
+name = "color-eyre"
+version = "0.6.5"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "e5920befb47832a6d61ee3a3a846565cfa39b331331e68a3b1d1116630f2f26d"
+dependencies = [
+ "backtrace",
+ "color-spantrace",
+ "eyre",
+ "indenter",
+ "once_cell",
+ "owo-colors",
+ "tracing-error",
+]
+
+[[package]]
+name = "color-spantrace"
+version = "0.3.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b8b88ea9df13354b55bc7234ebcce36e6ef896aca2e42a15de9e10edce01b427"
+dependencies = [
+ "once_cell",
+ "owo-colors",
+ "tracing-core",
+ "tracing-error",
+]
+
+[[package]]
 name = "colorchoice"
 version = "1.0.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -6195,6 +6222,12 @@ name = "outref"
 version = "0.5.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "1a80800c0488c3a21695ea981a54918fbb37abf04f4d0720c453632255e2ff0e"
+
+[[package]]
+name = "owo-colors"
+version = "4.2.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "48dd4f4a2c8405440fd0462561f0e5806bd0f77e86f51c761481bdd4018b545e"
 
 [[package]]
 name = "p256"
@@ -10414,16 +10447,20 @@ dependencies = [
  "alloy-provider",
  "alloy-rpc-client",
  "alloy-rpc-types-engine 1.0.28",
+ "alloy-rpc-types-eth",
  "alloy-signer",
  "alloy-signer-aws",
  "alloy-signer-local",
  "alloy-transport",
+ "async-trait",
  "auto_impl",
  "aws-config",
  "aws-sdk-kms",
  "clap",
+ "color-eyre",
  "eyre",
  "futures",
+ "jsonrpsee",
  "reqwest",
  "reth-chainspec",
  "reth-cli-util",
@@ -10457,6 +10494,7 @@ dependencies = [
  "reth-transaction-pool",
  "reth-trie-db",
  "rollup-node",
+ "rollup-node-chain-orchestrator",
  "rollup-node-manager",
  "rollup-node-primitives 0.0.1",
  "rollup-node-providers",
@@ -10468,6 +10506,7 @@ dependencies = [
  "scroll-alloy-hardforks",
  "scroll-alloy-network",
  "scroll-alloy-provider",
+ "scroll-alloy-rpc-types",
  "scroll-alloy-rpc-types-engine",
  "scroll-db 0.0.1",
  "scroll-derivation-pipeline",
@@ -10481,23 +10520,39 @@ dependencies = [
 ]
 
 [[package]]
-name = "rollup-node-indexer"
+name = "rollup-node-chain-orchestrator"
 version = "0.0.1"
 dependencies = [
+ "alloy-consensus 1.0.28",
+ "alloy-eips 1.0.28",
+ "alloy-json-rpc",
  "alloy-primitives",
+ "alloy-provider",
+ "alloy-rpc-client",
+ "alloy-transport",
  "arbitrary",
  "futures",
  "metrics",
  "metrics-derive",
+ "parking_lot 0.12.4",
  "rand 0.9.2",
+ "reqwest",
  "reth-chainspec",
+ "reth-eth-wire-types",
+ "reth-network-p2p",
+ "reth-network-peers",
+ "reth-primitives-traits",
  "reth-scroll-chainspec",
  "reth-scroll-forks",
+ "reth-scroll-primitives",
  "rollup-node-primitives 0.0.1",
  "rollup-node-watcher",
  "scroll-alloy-consensus",
  "scroll-alloy-hardforks",
+ "scroll-alloy-network",
  "scroll-db 0.0.1",
+ "scroll-network",
+ "serde_json",
  "strum 0.27.2",
  "thiserror 2.0.16",
  "tokio",
@@ -10524,7 +10579,7 @@ dependencies = [
  "reth-scroll-primitives",
  "reth-tasks",
  "reth-tokio-util",
- "rollup-node-indexer",
+ "rollup-node-chain-orchestrator",
  "rollup-node-primitives 0.0.1",
  "rollup-node-providers",
  "rollup-node-sequencer",
@@ -10558,6 +10613,7 @@ dependencies = [
  "derive_more",
  "eyre",
  "reth-chainspec",
+ "reth-network-peers",
  "reth-node-core",
  "reth-primitives-traits",
  "reth-scroll-chainspec",
@@ -11204,6 +11260,7 @@ dependencies = [
  "alloy-primitives",
  "alloy-rlp",
  "alloy-sol-types",
+ "bitvec",
  "derive_more",
  "eyre",
  "scroll-alloy-consensus",
@@ -11325,8 +11382,10 @@ dependencies = [
  "alloy-primitives",
  "alloy-sol-types",
  "arbitrary",
+ "bitvec",
  "derive_more",
  "scroll-alloy-consensus",
+ "thiserror 2.0.16",
 ]
 
 [[package]]
@@ -11341,6 +11400,7 @@ dependencies = [
  "reqwest-middleware",
  "reqwest-retry",
  "reth-chainspec",
+ "reth-scroll-chainspec",
  "sea-orm",
  "sea-orm-migration",
  "sha2 0.10.9",
@@ -11373,6 +11433,7 @@ dependencies = [
  "alloy-primitives",
  "futures",
  "parking_lot 0.12.4",
+ "reth-chainspec",
  "reth-eth-wire-types",
  "reth-network",
  "reth-network-api",
@@ -11383,6 +11444,8 @@ dependencies = [
  "reth-scroll-node",
  "reth-scroll-primitives",
  "reth-storage-api",
+ "reth-tokio-util",
+ "scroll-alloy-hardforks",
  "scroll-wire",
  "thiserror 2.0.16",
  "tokio",
@@ -12865,6 +12928,16 @@ checksum = "b9d12581f227e93f094d3af2ae690a574abb8a2b9b7a96e7cfe9647b2b617678"
 dependencies = [
  "once_cell",
  "valuable",
+]
+
+[[package]]
+name = "tracing-error"
+version = "0.2.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "8b1581020d7a273442f5b45074a6a57d5757ad0a47dac0e9f0bd57b81936f3db"
+dependencies = [
+ "tracing",
+ "tracing-subscriber 0.3.20",
 ]
 
 [[package]]

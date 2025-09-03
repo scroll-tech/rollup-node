@@ -1,0 +1,19 @@
+[package]
+name = "tests"
+version = "0.0.1"
+edition = "2021"
+
+[lib]
+name = "tests"
+path = "src/lib.rs"
+
+[dependencies]
+alloy-primitives = { workspace = true }
+alloy-network = { workspace = true }
+alloy-provider = { workspace = true, features = ["reqwest", "ws"] }
+alloy-rpc-types-eth = { workspace = true }
+scroll-alloy-network = { workspace = true }
+tokio = { workspace = true, features = ["rt", "time"] }
+eyre = { workspace = true }
+getrandom = { workspace = true }
+tracing = { workspace = true }

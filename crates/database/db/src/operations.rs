@@ -584,27 +584,6 @@ pub trait DatabaseOperations: DatabaseConnectionProvider {
         // commit the transaction
         Ok(UnwindResult { l1_block_number, queue_index, l2_head_block_number, l2_safe_block_info })
     }
-}
-
-/// This type defines the start of an L1 message stream.
-///
-/// It can either be an index, which is the queue index of the first message to return, or a hash,
-/// which is the hash of the first message to return.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum L1MessageStart {
-    /// Start from the provided queue index.
-    Index(u64),
-    /// Start from the provided queue hash.
-    Hash(B256),
-}
-
-impl fmt::Display for L1MessageStart {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            Self::Index(index) => write!(f, "Index({index})"),
-            Self::Hash(hash) => write!(f, "Hash({hash:#x})"),
-        }
-    }
 
     /// Store a block signature in the database.
     /// TODO: remove this once we deprecated l2geth.
@@ -650,6 +629,27 @@ impl fmt::Display for L1MessageStart {
                 Ok(Some(signature))
             }
             None => Ok(None),
+        }
+    }
+}
+
+/// This type defines the start of an L1 message stream.
+///
+/// It can either be an index, which is the queue index of the first message to return, or a hash,
+/// which is the hash of the first message to return.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum L1MessageStart {
+    /// Start from the provided queue index.
+    Index(u64),
+    /// Start from the provided queue hash.
+    Hash(B256),
+}
+
+impl fmt::Display for L1MessageStart {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Index(index) => write!(f, "Index({index})"),
+            Self::Hash(hash) => write!(f, "Hash({hash:#x})"),
         }
     }
 }
