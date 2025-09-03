@@ -1318,6 +1318,7 @@ async fn can_rpc_enable_disable_sequencing() -> eyre::Result<()> {
     );
 
     // Make sure follower is at same block
+    wait_for_block_imported_5s(&mut node1_rnm_events, block_num_after_wait).await?;
     assert_eq!(block_num_after_wait, latest_block(&node1).await?.header.number);
 
     // Verify manual block building still works
