@@ -56,6 +56,8 @@ pub struct DerivationPipeline<P> {
     database: Arc<Database>,
     /// A L1 provider.
     l1_provider: P,
+    /// The L1 message queue index at which the V2 L1 message queue was enabled.
+    l1_v2_message_queue_start_index: u64,
     /// The queue of batches to handle.
     batch_queue: VecDeque<WithFinalizedBlockNumber<Arc<BatchInfo>>>,
     /// The queue of polled attributes.
@@ -90,10 +92,15 @@ where
     P: L1Provider + Clone + Send + Sync + 'static,
 {
     /// Returns a new instance of the [`DerivationPipeline`].
-    pub fn new(l1_provider: P, database: Arc<Database>) -> Self {
+    pub fn new(
+        l1_provider: P,
+        database: Arc<Database>,
+        l1_v2_message_queue_start_index: u64,
+    ) -> Self {
         Self {
             database,
             l1_provider,
+            l1_v2_message_queue_start_index,
             batch_queue: Default::default(),
             pipeline_future: None,
             attributes_queue: Default::default(),
@@ -119,6 +126,7 @@ where
         let database = self.database.clone();
         let metrics = self.metrics.clone();
         let provider = self.l1_provider.clone();
+        let l1_v2_message_queue_start_index = self.l1_v2_message_queue_start_index;
 
         if let Some(info) = self.batch_queue.pop_front() {
             let block_number = info.number;
@@ -136,8 +144,9 @@ where
                     .ok_or((info.clone(), DerivationPipelineError::UnknownBatch(index)))?;
 
                 // derive the attributes and attach the corresponding batch info.
-                let attrs =
-                    derive(batch, provider, database).await.map_err(|err| (info.clone(), err))?;
+                let attrs = derive(batch, provider, database, l1_v2_message_queue_start_index)
+                    .await
+                    .map_err(|err| (info.clone(), err))?;
 
                 // update metrics.
                 metrics.derived_blocks.increment(attrs.len() as u64);
@@ -245,6 +254,7 @@ pub async fn derive<L1P: L1Provider + Sync + Send, L2P: BlockDataProvider + Sync
     batch: BatchCommitData,
     l1_provider: L1P,
     l2_provider: L2P,
+    l1_v2_message_queue_start_index: u64,
 ) -> Result<Vec<ScrollPayloadAttributes>, DerivationPipelineError> {
     // fetch the blob then decode the input batch.
     let blob = if let Some(hash) = batch.blob_versioned_hash {
@@ -260,10 +270,18 @@ pub async fn derive<L1P: L1Provider + Sync + Send, L2P: BlockDataProvider + Sync
     if let Some(index) = data.queue_index_start() {
         l1_provider.set_queue_index_cursor(index);
     } else if let Some(hash) = data.prev_l1_message_queue_hash() {
-        l1_provider.set_hash_cursor(*hash).await;
-        // we skip the first l1 message, as we are interested in the one starting after
-        // prev_l1_message_queue_hash.
-        let _ = l1_provider.next_l1_message().await.map_err(Into::into)?;
+        // If the message queue hash is zero then we should use the V2 L1 message queue start index.
+        // We must apply this branch logic because we do not have a L1 message associated with a
+        // queue hash of ZERO (we only compute a queue hash for the first L1 message of the V2
+        // contract).
+        if hash == &B256::ZERO {
+            l1_provider.set_queue_index_cursor(l1_v2_message_queue_start_index);
+        } else {
+            l1_provider.set_hash_cursor(*hash).await;
+            // we skip the first l1 message, as we are interested in the one starting after
+            // prev_l1_message_queue_hash.
+            let _ = l1_provider.next_l1_message().await.map_err(Into::into)?;
+        }
     } else {
         return Err(DerivationPipelineError::MissingL1MessageQueueCursor)
     }
@@ -411,6 +429,7 @@ mod tests {
             )),
             database: db,
             l1_provider: mock_l1_provider,
+            l1_v2_message_queue_start_index: u64::MAX,
             batch_queue: [
                 WithFinalizedBlockNumber::new(
                     0,
@@ -470,7 +489,7 @@ mod tests {
         // construct the pipeline.
         let l1_messages_provider = DatabaseL1MessageProvider::new(db.clone(), 0);
         let mock_l1_provider = MockL1Provider { l1_messages_provider, blobs: HashMap::new() };
-        let mut pipeline = DerivationPipeline::new(mock_l1_provider, db.clone());
+        let mut pipeline = DerivationPipeline::new(mock_l1_provider, db.clone(), u64::MAX);
 
         // as long as we don't call `push_batch`, pipeline should not return attributes.
         pipeline.push_batch(BatchInfo { index: 12, hash: Default::default() }, 0);
@@ -537,7 +556,7 @@ mod tests {
         // construct the pipeline.
         let l1_messages_provider = DatabaseL1MessageProvider::new(db.clone(), 0);
         let mock_l1_provider = MockL1Provider { l1_messages_provider, blobs: HashMap::new() };
-        let mut pipeline = DerivationPipeline::new(mock_l1_provider, db);
+        let mut pipeline = DerivationPipeline::new(mock_l1_provider, db, u64::MAX);
 
         // as long as we don't call `push_batch`, pipeline should not return attributes.
         pipeline.push_batch(BatchInfo { index: 12, hash: Default::default() }, 0);
@@ -596,7 +615,7 @@ mod tests {
         let l1_provider = MockL1Provider { l1_messages_provider, blobs: HashMap::new() };
         let l2_provider = MockL2Provider;
 
-        let attributes: Vec<_> = derive(batch_data, l1_provider, l2_provider).await?;
+        let attributes: Vec<_> = derive(batch_data, l1_provider, l2_provider, u64::MAX).await?;
         let attribute =
             attributes.iter().find(|a| a.payload_attributes.timestamp == 1696935384).unwrap();
 
@@ -695,7 +714,7 @@ mod tests {
         let l2_provider = MockL2Provider;
 
         // derive attributes and extract l1 messages.
-        let attributes: Vec<_> = derive(batch_data, l1_provider, l2_provider).await?;
+        let attributes: Vec<_> = derive(batch_data, l1_provider, l2_provider, u64::MAX).await?;
         let derived_l1_messages: Vec<_> = attributes
             .into_iter()
             .filter_map(|a| a.transactions)
@@ -749,7 +768,7 @@ mod tests {
         let l2_provider = MockL2Provider;
 
         // derive attributes and extract l1 messages.
-        let attributes: Vec<_> = derive(batch_data, l1_provider, l2_provider).await?;
+        let attributes: Vec<_> = derive(batch_data, l1_provider, l2_provider, u64::MAX).await?;
         let derived_l1_messages: Vec<_> = attributes
             .into_iter()
             .filter_map(|a| a.transactions)
@@ -863,7 +882,7 @@ mod tests {
                     };
                     let l2_provider = MockL2Provider;
 
-                    let attributes: Vec<_> = derive(batch_data, l1_provider, l2_provider).await?;
+                    let attributes: Vec<_> = derive(batch_data, l1_provider, l2_provider, u64::MAX).await?;
 
                     let attribute = attributes.last().unwrap();
                     let expected = ScrollPayloadAttributes {
@@ -918,6 +937,7 @@ mod tests {
             )),
             database: db,
             l1_provider: mock_l1_provider,
+            l1_v2_message_queue_start_index: u64::MAX,
             batch_queue: batches.collect(),
             attributes_queue: attributes,
             waker: None,

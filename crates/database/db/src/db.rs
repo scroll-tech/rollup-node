@@ -108,33 +108,54 @@ mod test {
     }
 
     #[tokio::test]
-    async fn test_database_finalize_batch_commit() {
+    async fn test_database_finalize_batch_commits() {
         // Set up the test database.
         let db = setup_test_db().await;
 
         // Generate unstructured bytes.
-        let mut bytes = [0u8; 1024];
+        let mut bytes = [0u8; 2048];
         rand::rng().fill(bytes.as_mut_slice());
         let mut u = Unstructured::new(&bytes);
 
-        // Generate a random BatchCommitData.
-        let batch_commit = BatchCommitData::arbitrary(&mut u).unwrap();
+        // Generate 10 finalized batches at L1 block 100.
+        for i in 0..10 {
+            let batch_commit = BatchCommitData {
+                index: i,
+                calldata: Arc::new(vec![].into()),
+                finalized_block_number: Some(100),
+                ..Arbitrary::arbitrary(&mut u).unwrap()
+            };
+            db.insert_batch(batch_commit.clone()).await.unwrap();
+        }
+        // Finalize all batches below batch index 10.
+        db.finalize_batches_up_to_index(10, 100).await.unwrap();
 
-        // Store the batch and finalize it.
-        let finalized_block_number = u64::arbitrary(&mut u).unwrap();
-        db.insert_batch(batch_commit.clone()).await.unwrap();
-        db.finalize_batch(batch_commit.hash, finalized_block_number).await.unwrap();
+        // Generate 10 commit batches not finalized.
+        for i in 10..20 {
+            let batch_commit = BatchCommitData {
+                index: i,
+                calldata: Arc::new(vec![].into()),
+                finalized_block_number: None,
+                ..Arbitrary::arbitrary(&mut u).unwrap()
+            };
+            db.insert_batch(batch_commit.clone()).await.unwrap();
+        }
+
+        // Finalize all batches below batch index 15.
+        db.finalize_batches_up_to_index(15, 200).await.unwrap();
 
         // Verify the finalized_block_number is correctly updated.
-        let finalized_block_number_from_db = models::batch_commit::Entity::find()
-            .filter(models::batch_commit::Column::Hash.eq(batch_commit.hash.to_vec()))
-            .one(db.get_connection())
-            .await
-            .unwrap()
-            .unwrap()
-            .finalized_block_number
-            .unwrap();
-        assert_eq!(finalized_block_number, finalized_block_number_from_db as u64);
+        let batches = db.get_batches().await.unwrap().collect::<Vec<Result<_, _>>>().await;
+        for batch in batches {
+            let batch = batch.unwrap();
+            if batch.index < 10 {
+                assert_eq!(batch.finalized_block_number, Some(100));
+            } else if batch.index <= 15 {
+                assert_eq!(batch.finalized_block_number, Some(200));
+            } else {
+                assert_eq!(batch.finalized_block_number, None);
+            }
+        }
     }
 
     #[tokio::test]
@@ -281,7 +302,7 @@ mod test {
             // Finalize batch up to block number 110.
             if block_number <= 110 {
                 finalized_batches_hashes.push(hash);
-                db.finalize_batch(hash, block_number).await.unwrap();
+                db.finalize_batches_up_to_index(batch_index, block_number).await.unwrap();
             }
 
             block_number += 1;
@@ -290,7 +311,7 @@ mod test {
 
         // Fetch the finalized batch for provided height and verify number.
         let batch_infos = db
-            .get_batches_by_finalized_block_range(100, 110)
+            .fetch_and_update_unprocessed_finalized_batches(110)
             .await
             .unwrap()
             .into_iter()

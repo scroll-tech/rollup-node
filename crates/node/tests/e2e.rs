@@ -26,7 +26,8 @@ use rollup_node::{
     },
     BeaconProviderArgs, ChainOrchestratorArgs, ConsensusAlgorithm, ConsensusArgs, DatabaseArgs,
     EngineDriverArgs, GasPriceOracleArgs, L1ProviderArgs, NetworkArgs as ScrollNetworkArgs,
-    RollupNodeContext, ScrollRollupNode, ScrollRollupNodeConfig, SequencerArgs,
+    RollupNodeContext, RollupNodeExtApiClient, ScrollRollupNode, ScrollRollupNodeConfig,
+    SequencerArgs,
 };
 use rollup_node_chain_orchestrator::ChainOrchestratorEvent;
 use rollup_node_manager::{RollupManagerCommand, RollupManagerEvent};
@@ -36,6 +37,7 @@ use rollup_node_sequencer::L1MessageInclusionMode;
 use rollup_node_watcher::L1Notification;
 use scroll_alloy_consensus::TxL1Message;
 use scroll_alloy_rpc_types::Transaction as ScrollAlloyTransaction;
+use scroll_db::L1MessageStart;
 use scroll_network::{NewBlockWithPeer, SCROLL_MAINNET};
 use scroll_wire::{ScrollWireConfig, ScrollWireProtocolHandler};
 use std::{path::PathBuf, sync::Arc, time::Duration};
@@ -980,15 +982,7 @@ async fn graceful_shutdown_consolidates_most_recent_batch_on_startup() -> eyre::
     let mut rnm_events = handle.get_event_listener().await?;
 
     // Send the second batch again to mimic the watcher behaviour.
-    l1_notification_tx.send(Arc::new(L1Notification::BatchCommit(batch_0_data.clone()))).await?;
     l1_notification_tx.send(Arc::new(L1Notification::BatchCommit(batch_1_data.clone()))).await?;
-    l1_notification_tx
-        .send(Arc::new(L1Notification::BatchFinalization {
-            hash: batch_0_data.hash,
-            index: batch_0_data.index,
-            block_number: batch_0_data.block_number,
-        }))
-        .await?;
     l1_notification_tx
         .send(Arc::new(L1Notification::BatchFinalization {
             hash: batch_1_data.hash,
@@ -1183,7 +1177,7 @@ async fn can_handle_l1_message_reorg() -> eyre::Result<()> {
     for i in 1..=10 {
         node0_rnm_handle.build_block().await;
         let b = wait_for_block_sequenced_5s(&mut node0_rnm_events, i).await?;
-        println!("Sequenced block {} {:?}", b.header.number, b.header.hash_slow());
+        tracing::info!(target: "scroll::test", block_number = ?b.header.number, block_hash = ?b.header.hash_slow(), "Sequenced block");
     }
 
     // Assert that the follower node has received all 10 blocks from the sequencer node.
@@ -1280,6 +1274,211 @@ async fn can_handle_l1_message_reorg() -> eyre::Result<()> {
 
     // Assert that block 11 has a different hash after the reorg.
     assert_ne!(block11_before_reorg.unwrap(), node0_latest_block.header.hash_slow());
+
+    Ok(())
+}
+
+#[tokio::test]
+async fn can_rpc_enable_disable_sequencing() -> eyre::Result<()> {
+    reth_tracing::init_test_tracing();
+    color_eyre::install()?;
+    let chain_spec = (*SCROLL_DEV).clone();
+
+    // Launch sequencer node with automatic sequencing enabled.
+    let mut config = default_sequencer_test_scroll_rollup_node_config();
+    config.sequencer_args.block_time = 40; // Enable automatic block production
+
+    let (mut nodes, _tasks, _) = setup_engine(config, 2, chain_spec.clone(), false, false).await?;
+    let node0 = nodes.remove(0);
+    let node1 = nodes.remove(0);
+
+    // Get handles
+    let node0_rnm_handle = node0.inner.add_ons_handle.rollup_manager_handle.clone();
+    let mut node0_rnm_events = node0_rnm_handle.get_event_listener().await?;
+
+    let node1_rnm_handle = node1.inner.add_ons_handle.rollup_manager_handle.clone();
+    let mut node1_rnm_events = node1_rnm_handle.get_event_listener().await?;
+
+    // Create RPC client
+    let client0 = node0.rpc_client().expect("RPC client should be available");
+
+    // Test that sequencing is initially enabled (blocks produced automatically)
+    tokio::time::sleep(Duration::from_millis(100)).await;
+    assert_ne!(latest_block(&node0).await?.header.number, 0, "Should produce blocks");
+
+    // Disable automatic sequencing via RPC
+    let result = RollupNodeExtApiClient::disable_automatic_sequencing(&client0).await?;
+    assert!(result, "Disable automatic sequencing should return true");
+
+    // Wait a bit and verify no more blocks are produced automatically.
+    // +1 blocks is okay due to still being processed
+    let block_num_before_wait = latest_block(&node0).await?.header.number;
+    tokio::time::sleep(Duration::from_millis(300)).await;
+    let block_num_after_wait = latest_block(&node0).await?.header.number;
+    assert!(
+        (block_num_before_wait..=block_num_before_wait + 1).contains(&block_num_after_wait),
+        "No blocks should be produced automatically after disabling"
+    );
+
+    // Make sure follower is at same block
+    wait_for_block_imported_5s(&mut node1_rnm_events, block_num_after_wait).await?;
+    assert_eq!(block_num_after_wait, latest_block(&node1).await?.header.number);
+
+    // Verify manual block building still works
+    node0_rnm_handle.build_block().await;
+    wait_for_block_sequenced_5s(&mut node0_rnm_events, block_num_after_wait + 1).await?;
+
+    // Wait for the follower to import the block
+    wait_for_block_imported_5s(&mut node1_rnm_events, block_num_after_wait + 1).await?;
+
+    // Enable sequencing again
+    let result = RollupNodeExtApiClient::enable_automatic_sequencing(&client0).await?;
+    assert!(result, "Enable automatic sequencing should return true");
+
+    // Make sure automatic sequencing resumes
+    wait_for_block_sequenced_5s(&mut node0_rnm_events, block_num_after_wait + 2).await?;
+    wait_for_block_imported_5s(&mut node1_rnm_events, block_num_after_wait + 2).await?;
+
+    Ok(())
+}
+
+/// Tests that a follower node correctly rejects L2 blocks containing L1 messages it hasn't received
+/// yet.
+///
+/// This test verifies the security mechanism that prevents nodes from processing blocks with
+/// unknown L1 messages, ensuring L2 chain consistency.
+///
+/// # Test scenario
+/// 1. Sets up two nodes: a sequencer and a follower
+/// 2. The sequencer builds 10 initial blocks that are successfully imported by the follower
+/// 3. An L1 message is sent only to the sequencer (not to the follower)
+/// 4. The sequencer includes this L1 message in block 11 and continues building blocks up to block
+///    15
+/// 5. The follower detects the unknown L1 message and stops processing at block 10
+/// 6. Once the L1 message is finally sent to the follower, it can process the previously rejected
+///    blocks
+/// 7. The test confirms both nodes are synchronized at block 16 after the follower catches up
+///
+/// # Key verification points
+/// - The follower correctly identifies missing L1 messages with a `L1MessageMissingInDatabase`
+///   event
+/// - Block processing halts at the last valid block when an unknown L1 message is encountered
+/// - The follower can resume processing and catch up once it receives the missing L1 message
+/// - This prevents nodes from accepting blocks with L1 messages they cannot validate
+#[tokio::test]
+async fn can_reject_l2_block_with_unknown_l1_message() -> eyre::Result<()> {
+    reth_tracing::init_test_tracing();
+    color_eyre::install()?;
+    let chain_spec = (*SCROLL_DEV).clone();
+
+    // Launch 2 nodes: node0=sequencer and node1=follower.
+    let config = default_sequencer_test_scroll_rollup_node_config();
+    let (mut nodes, _tasks, _) = setup_engine(config, 2, chain_spec.clone(), false, false).await?;
+    let node0 = nodes.remove(0);
+    let node1 = nodes.remove(0);
+
+    // Get handles
+    let node0_rnm_handle = node0.inner.add_ons_handle.rollup_manager_handle.clone();
+    let mut node0_rnm_events = node0_rnm_handle.get_event_listener().await?;
+    let node0_l1_watcher_tx = node0.inner.add_ons_handle.l1_watcher_tx.as_ref().unwrap();
+
+    let node1_rnm_handle = node1.inner.add_ons_handle.rollup_manager_handle.clone();
+    let mut node1_rnm_events = node1_rnm_handle.get_event_listener().await?;
+    let node1_l1_watcher_tx = node1.inner.add_ons_handle.l1_watcher_tx.as_ref().unwrap();
+
+    // Let the sequencer build 10 blocks before performing the reorg process.
+    for i in 1..=10 {
+        node0_rnm_handle.build_block().await;
+        let b = wait_for_block_sequenced_5s(&mut node0_rnm_events, i).await?;
+        tracing::info!(target: "scroll::test", block_number = ?b.header.number, block_hash = ?b.header.hash_slow(), "Sequenced block")
+    }
+
+    // Assert that the follower node has received all 10 blocks from the sequencer node.
+    wait_for_block_imported_5s(&mut node1_rnm_events, 10).await?;
+
+    // Send a L1 message and wait for it to be indexed.
+    let l1_message_notification = L1Notification::L1Message {
+        message: TxL1Message {
+            queue_index: 0,
+            gas_limit: 21000,
+            to: Default::default(),
+            value: Default::default(),
+            sender: address!("f39Fd6e51aad88F6F4ce6aB8827279cffFb92266"),
+            input: Default::default(),
+        },
+        block_number: 10,
+        block_timestamp: 0,
+    };
+
+    // Send the L1 message to the sequencer node but not to follower node.
+    node0_l1_watcher_tx.send(Arc::new(l1_message_notification.clone())).await?;
+    node0_l1_watcher_tx.send(Arc::new(L1Notification::NewBlock(10))).await?;
+    wait_for_event_5s(
+        &mut node0_rnm_events,
+        RollupManagerEvent::ChainOrchestratorEvent(ChainOrchestratorEvent::L1MessageCommitted(0)),
+    )
+    .await?;
+
+    // Build block that contains the L1 message.
+    node0_rnm_handle.build_block().await;
+    wait_for_event_predicate_5s(&mut node0_rnm_events, |e| {
+        if let RollupManagerEvent::BlockSequenced(block) = e {
+            if block.header.number == 11 &&
+                block.body.transactions.len() == 1 &&
+                block.body.transactions.iter().any(|tx| tx.is_l1_message())
+            {
+                return true;
+            }
+        }
+
+        false
+    })
+    .await?;
+
+    for i in 12..=15 {
+        node0_rnm_handle.build_block().await;
+        wait_for_block_sequenced_5s(&mut node0_rnm_events, i).await?;
+    }
+
+    wait_for_event_5s(
+        &mut node1_rnm_events,
+        RollupManagerEvent::L1MessageMissingInDatabase {
+            start: L1MessageStart::Hash(b256!(
+                "0x0a2f8e75392ab51a26a2af835042c614eb141cd934fe1bdd4934c10f2fe17e98"
+            )),
+        },
+    )
+    .await?;
+
+    // follower node should not import block 15
+    // follower node doesn't know about the L1 message so stops processing the chain at block 10
+    assert_eq!(latest_block(&node1).await?.header.number, 10);
+
+    // Finally send L1 the L1 message to follower node.
+    node1_l1_watcher_tx.send(Arc::new(l1_message_notification)).await?;
+    node1_l1_watcher_tx.send(Arc::new(L1Notification::NewBlock(10))).await?;
+    wait_for_event_5s(
+        &mut node1_rnm_events,
+        RollupManagerEvent::ChainOrchestratorEvent(ChainOrchestratorEvent::L1MessageCommitted(0)),
+    )
+    .await?;
+
+    // Produce another block and send to follower node.
+    node0_rnm_handle.build_block().await;
+    wait_for_block_sequenced_5s(&mut node0_rnm_events, 16).await?;
+
+    // Assert that the follower node has received the latest block from the sequencer node and
+    // processed the missing chain before.
+    // This is possible now because it has received the L1 message.
+    wait_for_block_imported_5s(&mut node1_rnm_events, 16).await?;
+
+    // Assert both nodes are at block 16.
+    let node0_latest_block = latest_block(&node0).await?;
+    assert_eq!(node0_latest_block.header.number, 16);
+    assert_eq!(
+        node0_latest_block.header.hash_slow(),
+        latest_block(&node1).await?.header.hash_slow()
+    );
 
     Ok(())
 }
@@ -1573,10 +1772,11 @@ async fn wait_for_event_predicate(
             maybe_event = event_stream.next() => {
                 match maybe_event {
                     Some(e) if predicate(e.clone()) => {
+                        tracing::debug!(target: "scroll::test", event = ?e, "Received event");
                         return Ok(());
                     }
                     Some(e) => {
-                        tracing::debug!(target: "TODO:nodeX", "ignoring event {:?}", e);
+                        tracing::debug!(target: "scroll::test", event = ?e, "Ignoring event");
                     }, // Ignore other events
                     None => return Err(eyre::eyre!("Event stream ended unexpectedly")),
                 }
