@@ -135,7 +135,7 @@ where
         });
 
         let rpc_handle = rpc_add_ons.launch_add_ons_with(ctx.clone(), |_| Ok(())).await?;
-        let (rollup_manager_handle, _l1_watcher_tx) =
+        let (rollup_manager_handle, l1_watcher_tx) =
             rollup_node_manager_addon.launch(ctx.clone(), rpc_handle.clone()).await?;
 
         tx.send(rollup_manager_handle.clone())
