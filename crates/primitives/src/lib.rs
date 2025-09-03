@@ -8,13 +8,19 @@ mod attributes;
 pub use attributes::ScrollPayloadAttributesWithBatchInfo;
 
 mod block;
-pub use block::{BlockInfo, L2BlockInfoWithL1Messages, WithBlockNumber, DEFAULT_BLOCK_DIFFICULTY};
+pub use block::{
+    BlockInfo, L2BlockInfoWithL1Messages, WithBatchInfo, WithBlockNumber, WithCommittedBatchInfo,
+    WithFinalizedBatchInfo, WithFinalizedBlockNumber, DEFAULT_BLOCK_DIFFICULTY,
+};
 
 mod batch;
 pub use batch::{BatchCommitData, BatchInfo};
 
 mod bounded_vec;
 pub use bounded_vec::BoundedVec;
+
+mod chain;
+pub use chain::ChainImport;
 
 mod metadata;
 pub use metadata::Metadata;

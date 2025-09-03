@@ -3,6 +3,7 @@ use super::{RollupManagerEvent, RollupManagerStatus};
 use reth_network_api::FullNetwork;
 use reth_scroll_node::ScrollNetworkPrimitives;
 use reth_tokio_util::EventStream;
+use rollup_node_primitives::BlockInfo;
 use scroll_network::ScrollNetworkHandle;
 use tokio::sync::oneshot;
 
@@ -17,4 +18,6 @@ pub enum RollupManagerCommand<N: FullNetwork<Primitives = ScrollNetworkPrimitive
     Status(oneshot::Sender<RollupManagerStatus>),
     /// Returns the network handle.
     NetworkHandle(oneshot::Sender<ScrollNetworkHandle<N>>),
+    /// Update the head of the fcs in the engine driver.
+    UpdateFcsHead(BlockInfo),
 }
