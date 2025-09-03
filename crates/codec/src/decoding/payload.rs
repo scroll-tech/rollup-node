@@ -2,6 +2,7 @@
 
 use crate::L2Block;
 use alloy_primitives::B256;
+use bitvec::vec::BitVec;
 use std::vec::Vec;
 
 /// The payload data on the L1.
@@ -12,7 +13,7 @@ pub struct PayloadData {
     /// Contains information about the current state of the L1 message queue.
     pub l1_message_queue_info: L1MessageQueueInfo,
     /// Contains the skipped L1 message bitmap if present.
-    pub skipped_l1_message_bitmap: Option<Vec<u8>>,
+    pub skipped_l1_message_bitmap: Option<BitVec>,
 }
 
 /// Information about the state of the L1 message queue.

@@ -25,6 +25,7 @@ use core::{
 use futures::{FutureExt, Stream};
 use rollup_node_primitives::{
     BatchCommitData, BatchInfo, ScrollPayloadAttributesWithBatchInfo, WithBlockNumber,
+    WithFinalizedBatchInfo, WithFinalizedBlockNumber,
 };
 use rollup_node_providers::{BlockDataProvider, L1Provider};
 use scroll_alloy_rpc_types_engine::{BlockDataHint, ScrollPayloadAttributes};
@@ -50,15 +51,15 @@ const QUEUE_METRICS_INTERVAL: u64 = 1000;
 /// A structure holding the current unresolved futures for the derivation pipeline.
 pub struct DerivationPipeline<P> {
     /// The current derivation pipeline futures polled.
-    pipeline_future: Option<WithBlockNumber<DerivationPipelineFuture>>,
+    pipeline_future: Option<WithFinalizedBatchInfo<DerivationPipelineFuture>>,
     /// A reference to the database.
     database: Arc<Database>,
     /// A L1 provider.
     l1_provider: P,
     /// The queue of batches to handle.
-    batch_queue: VecDeque<WithBlockNumber<Arc<BatchInfo>>>,
+    batch_queue: VecDeque<WithFinalizedBlockNumber<Arc<BatchInfo>>>,
     /// The queue of polled attributes.
-    attributes_queue: VecDeque<WithBlockNumber<ScrollPayloadAttributesWithBatchInfo>>,
+    attributes_queue: VecDeque<WithFinalizedBlockNumber<ScrollPayloadAttributesWithBatchInfo>>,
     /// The waker for the pipeline.
     waker: Option<Waker>,
     /// The metrics of the pipeline.
@@ -102,11 +103,11 @@ where
         }
     }
 
-    /// Handles a new batch commit index by pushing it in its internal queue.
-    /// Wakes the waker in order to trigger a call to poll.
-    pub fn handle_batch_commit(&mut self, batch_info: BatchInfo, l1_block_number: u64) {
+    /// Handles a new batch by pushing it in its internal queue. Wakes the waker in order to trigger
+    /// a call to poll.
+    pub fn push_batch(&mut self, batch_info: BatchInfo, l1_block_number: u64) {
         let block_info = Arc::new(batch_info);
-        self.batch_queue.push_back(WithBlockNumber::new(l1_block_number, block_info));
+        self.batch_queue.push_back(WithFinalizedBlockNumber::new(l1_block_number, block_info));
         if let Some(waker) = self.waker.take() {
             waker.wake()
         }
@@ -114,13 +115,14 @@ where
 
     /// Handles the next batch index in the batch index queue, pushing the future in the pipeline
     /// futures.
-    fn handle_next_batch(&mut self) -> Option<WithBlockNumber<DerivationPipelineFuture>> {
+    fn handle_next_batch(&mut self) -> Option<WithFinalizedBatchInfo<DerivationPipelineFuture>> {
         let database = self.database.clone();
         let metrics = self.metrics.clone();
         let provider = self.l1_provider.clone();
 
         if let Some(info) = self.batch_queue.pop_front() {
             let block_number = info.number;
+            let index = info.inner.index;
             let fut = Box::pin(async move {
                 let derive_start = Instant::now();
 
@@ -144,7 +146,7 @@ where
 
                 Ok(attrs.into_iter().map(|attr| (attr, *info).into()).collect())
             });
-            return Some(WithBlockNumber::new(block_number, fut));
+            return Some(WithFinalizedBatchInfo::new(index, block_number, fut));
         }
         None
     }
@@ -161,11 +163,16 @@ where
         self.attributes_queue.retain(|attr| attr.number <= l1_block_number);
     }
 
-    /// Flushes all the data in the pipeline.
-    pub fn flush(&mut self) {
-        self.attributes_queue.clear();
-        self.batch_queue.clear();
-        self.pipeline_future = None;
+    /// Handles a batch revert by clearing all internal queues and futures related to a batch index
+    /// >= provided batch index.
+    pub fn handle_batch_revert(&mut self, index: u64) {
+        self.attributes_queue.retain(|attr| attr.inner.batch_info.index < index);
+        self.batch_queue.retain(|attr| attr.inner.index < index);
+        if let Some(fut) = &mut self.pipeline_future {
+            if fut.index >= index {
+                self.pipeline_future = None;
+            }
+        }
     }
 
     /// Emits the queue size metrics for the batch and payload attributes queues.
@@ -179,7 +186,7 @@ impl<P> Stream for DerivationPipeline<P>
 where
     P: L1Provider + Clone + Unpin + Send + Sync + 'static,
 {
-    type Item = ScrollPayloadAttributesWithBatchInfo;
+    type Item = WithBlockNumber<ScrollPayloadAttributesWithBatchInfo>;
 
     fn poll_next(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
         let this = self.get_mut();
@@ -191,7 +198,7 @@ where
 
         // return attributes from the queue if any.
         if let Some(attribute) = this.attributes_queue.pop_front() {
-            return Poll::Ready(Some(attribute.inner))
+            return Poll::Ready(Some(attribute))
         }
 
         // if future is None and the batch queue is empty, store the waker and return.
@@ -209,17 +216,18 @@ where
         if let Some(Poll::Ready(res)) = this.pipeline_future.as_mut().map(|fut| fut.poll_unpin(cx))
         {
             match res {
-                WithBlockNumber { inner: Ok(attributes), number } => {
-                    let attributes =
-                        attributes.into_iter().map(|attr| WithBlockNumber::new(number, attr));
+                WithFinalizedBatchInfo { inner: Ok(attributes), number, .. } => {
+                    let attributes = attributes
+                        .into_iter()
+                        .map(|attr| WithFinalizedBlockNumber::new(number, attr));
                     this.attributes_queue.extend(attributes);
                     this.pipeline_future = None;
                     cx.waker().wake_by_ref();
                 }
-                WithBlockNumber { inner: Err((batch_info, err)), number } => {
+                WithFinalizedBatchInfo { inner: Err((batch_info, err)), number, .. } => {
                     tracing::error!(target: "scroll::node::derivation_pipeline", batch_info = ?*batch_info, ?err, "failed to derive payload attributes for batch");
                     // retry polling the same batch.
-                    this.batch_queue.push_front(WithBlockNumber::new(number, batch_info));
+                    this.batch_queue.push_front(WithFinalizedBlockNumber::new(number, batch_info));
                     let fut = this.handle_next_batch().expect("batch_queue not empty");
                     this.pipeline_future = Some(fut);
                     // notify the waker that work can be done.
@@ -269,7 +277,7 @@ pub async fn derive<L1P: L1Provider + Sync + Send, L2P: BlockDataProvider + Sync
         let mut txs = Vec::with_capacity(block.context.num_transactions as usize);
         for _ in 0..block.context.num_l1_messages {
             // check if the next l1 message should be skipped.
-            if matches!(skipped_l1_messages.next(), Some(bit) if bit == 1) {
+            if matches!(skipped_l1_messages.next(), Some(bit) if bit) {
                 l1_provider.increment_cursor();
                 continue;
             }
@@ -389,26 +397,40 @@ mod tests {
     };
 
     #[tokio::test]
-    async fn test_should_clear_pipeline() -> eyre::Result<()> {
+    async fn test_should_correctly_handle_batch_revert() -> eyre::Result<()> {
         // construct the pipeline.
         let db = Arc::new(setup_test_db().await);
         let l1_messages_provider = DatabaseL1MessageProvider::new(db.clone(), 0);
         let mock_l1_provider = MockL1Provider { l1_messages_provider, blobs: HashMap::new() };
 
         let mut pipeline = DerivationPipeline {
-            pipeline_future: Some(WithBlockNumber::new(0, Box::pin(async { Ok(vec![]) }))),
+            pipeline_future: Some(WithFinalizedBatchInfo::new(
+                10,
+                0,
+                Box::pin(async { Ok(vec![]) }),
+            )),
             database: db,
             l1_provider: mock_l1_provider,
-            batch_queue: [WithBlockNumber::new(
-                0,
-                Arc::new(BatchInfo { index: 0, hash: Default::default() }),
-            )]
+            batch_queue: [
+                WithFinalizedBlockNumber::new(
+                    0,
+                    Arc::new(BatchInfo { index: 11, hash: Default::default() }),
+                ),
+                WithFinalizedBlockNumber::new(
+                    0,
+                    Arc::new(BatchInfo { index: 12, hash: Default::default() }),
+                ),
+                WithFinalizedBlockNumber::new(
+                    0,
+                    Arc::new(BatchInfo { index: 13, hash: Default::default() }),
+                ),
+            ]
             .into(),
-            attributes_queue: [WithBlockNumber::new(
+            attributes_queue: [WithFinalizedBlockNumber::new(
                 0,
                 ScrollPayloadAttributesWithBatchInfo {
                     payload_attributes: Default::default(),
-                    batch_info: Default::default(),
+                    batch_info: BatchInfo { index: 9, hash: Default::default() },
                 },
             )]
             .into(),
@@ -417,11 +439,11 @@ mod tests {
             queue_metrics_interval: delayed_interval(QUEUE_METRICS_INTERVAL),
         };
 
-        // flush and verify all relevant fields are emptied.
-        pipeline.flush();
+        // should clear all data related to batch index >= 9.
+        pipeline.handle_batch_revert(9);
         assert!(pipeline.pipeline_future.is_none());
-        assert!(pipeline.attributes_queue.is_empty());
-        assert!(pipeline.batch_queue.is_empty());
+        assert!(pipeline.attributes_queue.is_empty(),);
+        assert!(pipeline.batch_queue.is_empty(),);
 
         Ok(())
     }
@@ -450,8 +472,8 @@ mod tests {
         let mock_l1_provider = MockL1Provider { l1_messages_provider, blobs: HashMap::new() };
         let mut pipeline = DerivationPipeline::new(mock_l1_provider, db.clone());
 
-        // as long as we don't call `handle_commit_batch`, pipeline should not return attributes.
-        pipeline.handle_batch_commit(BatchInfo { index: 12, hash: Default::default() }, 0);
+        // as long as we don't call `push_batch`, pipeline should not return attributes.
+        pipeline.push_batch(BatchInfo { index: 12, hash: Default::default() }, 0);
 
         // in a separate task, add the second l1 message.
         tokio::task::spawn(async move {
@@ -465,8 +487,10 @@ mod tests {
 
         // check the correctness of the last attribute.
         let mut attribute = ScrollPayloadAttributes::default();
-        while let Some(ScrollPayloadAttributesWithBatchInfo { payload_attributes: a, .. }) =
-            pipeline.next().await
+        while let Some(WithBlockNumber {
+            inner: ScrollPayloadAttributesWithBatchInfo { payload_attributes: a, .. },
+            ..
+        }) = pipeline.next().await
         {
             if a.payload_attributes.timestamp == 1696935657 {
                 attribute = a;
@@ -515,16 +539,18 @@ mod tests {
         let mock_l1_provider = MockL1Provider { l1_messages_provider, blobs: HashMap::new() };
         let mut pipeline = DerivationPipeline::new(mock_l1_provider, db);
 
-        // as long as we don't call `handle_commit_batch`, pipeline should not return attributes.
-        pipeline.handle_batch_commit(BatchInfo { index: 12, hash: Default::default() }, 0);
+        // as long as we don't call `push_batch`, pipeline should not return attributes.
+        pipeline.push_batch(BatchInfo { index: 12, hash: Default::default() }, 0);
 
         // we should find some attributes now
         assert!(pipeline.next().await.is_some());
 
         // check the correctness of the last attribute.
         let mut attribute = ScrollPayloadAttributes::default();
-        while let Some(ScrollPayloadAttributesWithBatchInfo { payload_attributes: a, .. }) =
-            pipeline.next().await
+        while let Some(WithBlockNumber {
+            inner: ScrollPayloadAttributesWithBatchInfo { payload_attributes: a, .. },
+            ..
+        }) = pipeline.next().await
         {
             if a.payload_attributes.timestamp == 1696935657 {
                 attribute = a;
@@ -687,6 +713,64 @@ mod tests {
         Ok(())
     }
 
+    #[tokio::test]
+    async fn test_should_skip_l1_messages_complex() -> eyre::Result<()> {
+        // https://sepolia.etherscan.io/tx/0x3ac4fa531bba0cd1593e2f5e6720a6c580864665d50fbf0de4ca9d7de10c504b
+        // load batch data in the db.
+        let db = Arc::new(setup_test_db().await);
+        let raw_calldata =
+            read_to_bytes("./testdata/calldata_v0_with_skipped_l1_messages_complex.bin")?;
+        let batch_data = BatchCommitData {
+            hash: b256!("082A1232491ACFBB436BF37E788967773DDF3B40E0F60170355870868E45FD7F"),
+            index: 38265,
+            block_number: 4373247,
+            block_timestamp: 1695797868,
+            calldata: Arc::new(raw_calldata),
+            blob_versioned_hash: None,
+            finalized_block_number: None,
+        };
+
+        // prepare the l1 messages.
+        let l1_messages = (777290..=777306)
+            .map(|index| L1MessageEnvelope {
+                l1_block_number: 0,
+                l2_block_number: None,
+                queue_hash: None,
+                transaction: TxL1Message { queue_index: index, ..Default::default() },
+            })
+            .collect::<Vec<_>>();
+
+        for message in l1_messages.clone() {
+            db.insert_l1_message(message).await?;
+        }
+
+        let l1_messages_provider = DatabaseL1MessageProvider::new(db.clone(), 0);
+        let l1_provider = MockL1Provider { l1_messages_provider, blobs: HashMap::new() };
+        let l2_provider = MockL2Provider;
+
+        // derive attributes and extract l1 messages.
+        let attributes: Vec<_> = derive(batch_data, l1_provider, l2_provider).await?;
+        let derived_l1_messages: Vec<_> = attributes
+            .into_iter()
+            .filter_map(|a| a.transactions)
+            .flatten()
+            .filter_map(|rlp| {
+                let buf = &mut rlp.as_ref();
+                TxL1Message::decode_2718(buf).ok()
+            })
+            .collect();
+
+        // skipped bitmap should be [0, 1, 0, 1, 0, 1, 0, 1], [0, 1, 0, 1, 0, 1, 0, 1], [0..0], ..
+        // meaning every second message is skipped.
+        let expected_l1_messages: Vec<_> = l1_messages
+            .into_iter()
+            .enumerate()
+            .filter_map(|(index, message)| (index % 2 == 0).then_some(message.transaction))
+            .collect();
+        assert_eq!(expected_l1_messages, derived_l1_messages);
+        Ok(())
+    }
+
     #[test]
     #[allow(clippy::large_stack_frames)]
     fn test_should_derive_blob_batch() -> eyre::Result<()> {
@@ -808,11 +892,11 @@ mod tests {
         let initial_block = 200;
 
         let batches = (initial_block - 100..initial_block)
-            .map(|i| WithBlockNumber::new(i, Arc::new(BatchInfo::new(i, B256::random()))));
+            .map(|i| WithFinalizedBlockNumber::new(i, Arc::new(BatchInfo::new(i, B256::random()))));
         let attributes = (initial_block..initial_block + 100)
             .zip(batches.clone())
             .map(|(i, batch)| {
-                WithBlockNumber::new(
+                WithFinalizedBlockNumber::new(
                     i,
                     ScrollPayloadAttributesWithBatchInfo {
                         batch_info: *batch.inner,
@@ -827,7 +911,8 @@ mod tests {
         let mock_l1_provider = MockL1Provider { l1_messages_provider, blobs: HashMap::new() };
 
         DerivationPipeline {
-            pipeline_future: Some(WithBlockNumber::new(
+            pipeline_future: Some(WithFinalizedBatchInfo::new(
+                initial_block - 100,
                 initial_block,
                 Box::pin(async { Ok(vec![]) }),
             )),

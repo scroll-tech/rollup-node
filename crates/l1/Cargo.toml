@@ -19,9 +19,17 @@ scroll-alloy-consensus.workspace = true
 
 # misc
 arbitrary = { workspace = true, optional = true, features = ["derive"] }
+bitvec = { workspace = true, features = ["alloc"] }
 derive_more.workspace = true
+thiserror.workspace = true
 
 [features]
 default = ["std"]
-std = ["alloy-primitives/std", "scroll-alloy-consensus/std", "alloy-sol-types/std", "derive_more/std"]
+std = [
+    "alloy-primitives/std",
+    "scroll-alloy-consensus/std",
+    "alloy-sol-types/std",
+    "derive_more/std",
+    "bitvec/std",
+]
 test-utils = ["std", "dep:arbitrary", "alloy-primitives/arbitrary"]

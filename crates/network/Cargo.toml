@@ -11,6 +11,7 @@ exclude.workspace = true
 alloy-primitives = { workspace = true, features = ["map-foldhash"] }
 
 # reth
+reth-chainspec.workspace = true
 reth-eth-wire-types.workspace = true
 reth-network.workspace = true
 reth-network-api.workspace = true
@@ -18,11 +19,13 @@ reth-network-types = { git = "https://github.com/scroll-tech/reth.git", branch =
 reth-network-peers.workspace = true
 reth-primitives-traits.workspace = true
 reth-storage-api = { git = "https://github.com/scroll-tech/reth.git", branch = "morty/fix-eth66-serve-signature", default-features = false }
+reth-tokio-util.workspace = true
 
 # scroll
 reth-scroll-chainspec.workspace = true
 reth-scroll-node.workspace = true
 reth-scroll-primitives.workspace = true
+scroll-alloy-hardforks.workspace = true
 scroll-wire.workspace = true
 
 # misc
@@ -45,4 +48,5 @@ serde = [
     "scroll-wire/serde",
     "reth-primitives-traits/serde",
     "reth-storage-api/serde",
+    "scroll-alloy-hardforks/serde",
 ]

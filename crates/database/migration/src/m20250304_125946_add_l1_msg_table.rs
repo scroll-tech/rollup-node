@@ -23,7 +23,9 @@ impl MigrationTrait for Migration {
                     .col(var_binary(L1Message::Input, 1024))
                     .to_owned(),
             )
-            .await
+            .await?;
+
+        Ok(())
     }
 
     async fn down(&self, manager: &SchemaManager) -> Result<(), DbErr> {
@@ -32,7 +34,7 @@ impl MigrationTrait for Migration {
 }
 
 #[derive(DeriveIden)]
-enum L1Message {
+pub(crate) enum L1Message {
     Table,
     QueueIndex,
     QueueHash,
