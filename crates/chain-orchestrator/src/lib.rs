@@ -686,10 +686,10 @@ impl<
 }
 
 /// Computes the queue hash by taking the previous queue hash and performing a 2-to-1 hash with the
-/// current transaction hash using keccak. It then applies a mask which is required for the kzg
-/// field used for blobs on ethereum. For the first message in the queue, the previous queue
-/// hash is zero. If the L1 message queue index is before migration to `L1MessageQueueV2`,
-/// the queue hash will be None.
+/// current transaction hash using keccak. It then applies a mask to the last 32 bits as these bits
+/// are used to store the timestamp at which the message was enqueued in the contract. For the first
+/// message in the queue, the previous queue hash is zero. If the L1 message queue index is before
+/// migration to `L1MessageQueueV2`, the queue hash will be None.
 ///
 /// The solidity contract (`L1MessageQueueV2.sol`) implementation is defined here: <https://github.com/scroll-tech/scroll-contracts/blob/67c1bde19c1d3462abf8c175916a2bb3c89530e4/src/L1/rollup/L1MessageQueueV2.sol#L379-L403>
 async fn compute_l1_message_queue_hash(
