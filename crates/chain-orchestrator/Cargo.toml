@@ -63,6 +63,7 @@ reth-scroll-forks.workspace = true
 # reth
 reth-eth-wire-types.workspace = true
 reth-network-peers.workspace = true
+reth-tracing.workspace = true
 
 # misc
 arbitrary.workspace = true
