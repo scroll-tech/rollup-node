@@ -10468,6 +10468,7 @@ dependencies = [
  "reth-scroll-chainspec",
  "reth-scroll-forks",
  "reth-scroll-primitives",
+ "reth-tracing",
  "rollup-node-primitives",
  "rollup-node-watcher",
  "scroll-alloy-consensus",

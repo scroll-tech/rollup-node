@@ -15,7 +15,7 @@ use rollup_node_primitives::{
 };
 use rollup_node_watcher::L1Notification;
 use scroll_alloy_consensus::TxL1Message;
-use scroll_alloy_hardforks::{ScrollHardfork, ScrollHardforks};
+use scroll_alloy_hardforks::ScrollHardforks;
 use scroll_alloy_network::Scroll;
 use scroll_db::{Database, DatabaseError, DatabaseOperations, L1MessageStart, UnwindResult};
 use scroll_network::NewBlockWithPeer;
@@ -79,6 +79,8 @@ pub struct ChainOrchestrator<ChainSpec, BC, P> {
     chain_buffer_size: usize,
     /// A boolean to represent if the L1 has been synced.
     l1_synced: bool,
+    /// The L1 message queue index at which the V2 L1 message queue was enabled.
+    l1_v2_message_queue_start_index: u64,
     /// The waker to notify when the engine driver should be polled.
     waker: AtomicWaker,
 }
@@ -97,6 +99,7 @@ impl<
         l2_client: P,
         optimistic_sync_threshold: u64,
         chain_buffer_size: usize,
+        l1_v2_message_queue_start_index: u64,
     ) -> Result<Self, ChainOrchestratorError> {
         let chain = init_chain_from_db(&database, &l2_client, chain_buffer_size).await?;
         Ok(Self {
@@ -117,6 +120,7 @@ impl<
             optimistic_sync_threshold,
             chain_buffer_size,
             l1_synced: false,
+            l1_v2_message_queue_start_index,
             waker: AtomicWaker::new(),
         })
     }
@@ -534,15 +538,14 @@ impl<
                     Box::pin(Self::handle_batch_commit(self.database.clone(), batch)),
                 ))
             }
-            L1Notification::L1Message { message, block_number, block_timestamp } => {
+            L1Notification::L1Message { message, block_number, block_timestamp: _ } => {
                 ChainOrchestratorFuture::HandleL1Message(self.handle_metered(
                     ChainOrchestratorItem::L1Message,
                     Box::pin(Self::handle_l1_message(
+                        self.l1_v2_message_queue_start_index,
                         self.database.clone(),
-                        self.chain_spec.clone(),
                         message,
                         block_number,
-                        block_timestamp,
                     )),
                 ))
             }
@@ -623,33 +626,15 @@ impl<
 
     /// Handles an L1 message by inserting it into the database.
     async fn handle_l1_message(
+        l1_v2_message_queue_start_index: u64,
         database: Arc<Database>,
-        chain_spec: Arc<ChainSpec>,
         l1_message: TxL1Message,
         l1_block_number: u64,
-        block_timestamp: u64,
     ) -> Result<Option<ChainOrchestratorEvent>, ChainOrchestratorError> {
         let event = ChainOrchestratorEvent::L1MessageCommitted(l1_message.queue_index);
-
-        let queue_hash = if chain_spec
-            .scroll_fork_activation(ScrollHardfork::EuclidV2)
-            .active_at_timestamp_or_number(block_timestamp, l1_block_number) &&
-            l1_message.queue_index > 0
-        {
-            let index = l1_message.queue_index - 1;
-            let prev_queue_hash = database
-                .get_l1_message_by_index(index)
-                .await?
-                .map(|m| m.queue_hash)
-                .ok_or(DatabaseError::L1MessageNotFound(L1MessageStart::Index(index)))?;
-
-            let mut input = prev_queue_hash.unwrap_or_default().to_vec();
-            input.append(&mut l1_message.tx_hash().to_vec());
-            Some(keccak256(input) & L1_MESSAGE_QUEUE_HASH_MASK)
-        } else {
-            None
-        };
-
+        let queue_hash =
+            compute_l1_message_queue_hash(&database, &l1_message, l1_v2_message_queue_start_index)
+                .await?;
         let l1_message = L1MessageEnvelope::new(l1_message, l1_block_number, None, queue_hash);
         database.insert_l1_message(l1_message).await?;
         Ok(Some(event))
@@ -698,6 +683,39 @@ impl<
 
         Ok(None)
     }
+}
+
+/// Computes the queue hash by taking the previous queue hash and performing a 2-to-1 hash with the
+/// current transaction hash using keccak. It then applies a mask to the last 32 bits as these bits
+/// are used to store the timestamp at which the message was enqueued in the contract. For the first
+/// message in the queue, the previous queue hash is zero. If the L1 message queue index is before
+/// migration to `L1MessageQueueV2`, the queue hash will be None.
+///
+/// The solidity contract (`L1MessageQueueV2.sol`) implementation is defined here: <https://github.com/scroll-tech/scroll-contracts/blob/67c1bde19c1d3462abf8c175916a2bb3c89530e4/src/L1/rollup/L1MessageQueueV2.sol#L379-L403>
+async fn compute_l1_message_queue_hash(
+    database: &Arc<Database>,
+    l1_message: &TxL1Message,
+    l1_v2_message_queue_start_index: u64,
+) -> Result<Option<alloy_primitives::FixedBytes<32>>, ChainOrchestratorError> {
+    let queue_hash = if l1_message.queue_index == l1_v2_message_queue_start_index {
+        let mut input = B256::default().to_vec();
+        input.append(&mut l1_message.tx_hash().to_vec());
+        Some(keccak256(input) & L1_MESSAGE_QUEUE_HASH_MASK)
+    } else if l1_message.queue_index > l1_v2_message_queue_start_index {
+        let index = l1_message.queue_index - 1;
+        let mut input = database
+            .get_l1_message_by_index(index)
+            .await?
+            .map(|m| m.queue_hash)
+            .ok_or(DatabaseError::L1MessageNotFound(L1MessageStart::Index(index)))?
+            .unwrap_or_default()
+            .to_vec();
+        input.append(&mut l1_message.tx_hash().to_vec());
+        Some(keccak256(input) & L1_MESSAGE_QUEUE_HASH_MASK)
+    } else {
+        None
+    };
+    Ok(queue_hash)
 }
 
 async fn init_chain_from_db<P: Provider<Scroll> + 'static>(
@@ -954,6 +972,7 @@ mod test {
 
     const TEST_OPTIMISTIC_SYNC_THRESHOLD: u64 = 100;
     const TEST_CHAIN_BUFFER_SIZE: usize = 2000;
+    const TEST_L1_MESSAGE_QUEUE_INDEX_BOUNDARY: u64 = 953885;
 
     /// A headers+bodies client that stores the headers and bodies in memory, with an artificial
     /// soft bodies response limit that is set to 20 by default.
@@ -1105,6 +1124,7 @@ mod test {
                 .expect("Failed to parse mainnet genesis block");
         assertor.push_success(&mainnet_genesis);
         let provider = ProviderBuilder::<_, _, Scroll>::default().connect_mocked_client(assertor);
+
         let db = Arc::new(setup_test_db().await);
         (
             ChainOrchestrator::new(
@@ -1114,6 +1134,7 @@ mod test {
                 provider,
                 TEST_OPTIMISTIC_SYNC_THRESHOLD,
                 TEST_CHAIN_BUFFER_SIZE,
+                TEST_L1_MESSAGE_QUEUE_INDEX_BOUNDARY,
             )
             .await
             .unwrap(),
@@ -1274,6 +1295,8 @@ mod test {
 
     #[tokio::test]
     async fn test_handle_l1_message() {
+        reth_tracing::init_test_tracing();
+
         // Instantiate chain orchestrator and db
         let (mut chain_orchestrator, db) = setup_test_chain_orchestrator().await;
 
@@ -1283,7 +1306,7 @@ mod test {
         let mut u = Unstructured::new(&bytes);
 
         let message = TxL1Message {
-            queue_index: i64::arbitrary(&mut u).unwrap().unsigned_abs(),
+            queue_index: TEST_L1_MESSAGE_QUEUE_INDEX_BOUNDARY - 1,
             ..Arbitrary::arbitrary(&mut u).unwrap()
         };
         let block_number = u64::arbitrary(&mut u).unwrap();
@@ -1309,7 +1332,10 @@ mod test {
 
         // insert the previous L1 message in database.
         chain_orchestrator.handle_l1_notification(L1Notification::L1Message {
-            message: TxL1Message { queue_index: 1062109, ..Default::default() },
+            message: TxL1Message {
+                queue_index: TEST_L1_MESSAGE_QUEUE_INDEX_BOUNDARY,
+                ..Default::default()
+            },
             block_number: 1475588,
             block_timestamp: 1745305199,
         });
@@ -1317,7 +1343,7 @@ mod test {
 
         // <https://sepolia.scrollscan.com/tx/0xd80cd61ac5d8665919da19128cc8c16d3647e1e2e278b931769e986d01c6b910>
         let message = TxL1Message {
-            queue_index: 1062110,
+            queue_index: TEST_L1_MESSAGE_QUEUE_INDEX_BOUNDARY + 1,
             gas_limit: 168000,
             to: address!("Ba50f5340FB9F3Bd074bD638c9BE13eCB36E603d"),
             value: U256::ZERO,
@@ -1336,7 +1362,7 @@ mod test {
             db.get_l1_message_by_index(message.queue_index).await.unwrap().unwrap();
 
         assert_eq!(
-            b256!("5e48ae1092c7f912849b9935f4e66870d2034b24fb2016f506e6754900000000"),
+            b256!("b2331b9010aac89f012d648fccc1f0a9aa5ef7b7b2afe21be297dd1a00000000"),
             l1_message_result.queue_hash.unwrap()
         );
     }
@@ -1380,19 +1406,19 @@ mod test {
             queue_hash: None,
             l1_block_number: 1,
             l2_block_number: None,
-            ..Arbitrary::arbitrary(&mut u).unwrap()
+            transaction: TxL1Message { queue_index: 1, ..Arbitrary::arbitrary(&mut u).unwrap() },
         };
         let l1_message_block_20 = L1MessageEnvelope {
             queue_hash: None,
             l1_block_number: 20,
             l2_block_number: None,
-            ..Arbitrary::arbitrary(&mut u).unwrap()
+            transaction: TxL1Message { queue_index: 2, ..Arbitrary::arbitrary(&mut u).unwrap() },
         };
         let l1_message_block_30 = L1MessageEnvelope {
             queue_hash: None,
             l1_block_number: 30,
             l2_block_number: None,
-            ..Arbitrary::arbitrary(&mut u).unwrap()
+            transaction: TxL1Message { queue_index: 3, ..Arbitrary::arbitrary(&mut u).unwrap() },
         };
 
         // Index L1 messages

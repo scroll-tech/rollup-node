@@ -320,6 +320,8 @@ impl ScrollRollupNodeConfig {
             .fetch_client()
             .await
             .expect("failed to fetch block client");
+        let l1_v2_message_queue_start_index =
+            l1_v2_message_queue_start_index(chain_spec.chain().named());
         let chain_orchestrator = ChainOrchestrator::new(
             db.clone(),
             chain_spec.clone(),
@@ -327,6 +329,7 @@ impl ScrollRollupNodeConfig {
             l2_provider,
             self.chain_orchestrator_args.optimistic_sync_trigger,
             self.chain_orchestrator_args.chain_buffer_size,
+            l1_v2_message_queue_start_index,
         )
         .await?;
 
@@ -343,6 +346,7 @@ impl ScrollRollupNodeConfig {
             signer,
             block_time,
             chain_orchestrator,
+            l1_v2_message_queue_start_index,
         )
         .await;
         Ok((rnm, handle, l1_notification_tx))
@@ -653,6 +657,15 @@ const fn td_constant(chain: NamedChain) -> U128 {
         NamedChain::Scroll => constants::SCROLL_MAINNET_TD_CONSTANT,
         NamedChain::ScrollSepolia => constants::SCROLL_SEPOLIA_TD_CONSTANT,
         _ => U128::ZERO, // Default to zero for other chains
+    }
+}
+
+/// The L1 message queue index at which queue hashes should be computed .
+const fn l1_v2_message_queue_start_index(chain: Option<NamedChain>) -> u64 {
+    match chain {
+        Some(NamedChain::Scroll) => constants::SCROLL_MAINNET_V2_MESSAGE_QUEUE_START_INDEX,
+        Some(NamedChain::ScrollSepolia) => constants::SCROLL_SEPOLIA_V2_MESSAGE_QUEUE_START_INDEX,
+        _ => 0,
     }
 }
 
