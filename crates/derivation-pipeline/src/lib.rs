@@ -271,6 +271,9 @@ pub async fn derive<L1P: L1Provider + Sync + Send, L2P: BlockDataProvider + Sync
         l1_provider.set_queue_index_cursor(index);
     } else if let Some(hash) = data.prev_l1_message_queue_hash() {
         // If the message queue hash is zero then we should use the V2 L1 message queue start index.
+        // We must apply this branch logic because we do not have a L1 message associated with a
+        // queue hash of ZERO (we only compute a queue hash for the first L1 message of the V2
+        // contract).
         if hash == &B256::ZERO {
             l1_provider.set_queue_index_cursor(l1_v2_message_queue_start_index);
         } else {

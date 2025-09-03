@@ -542,10 +542,10 @@ impl<
                 ChainOrchestratorFuture::HandleL1Message(self.handle_metered(
                     ChainOrchestratorItem::L1Message,
                     Box::pin(Self::handle_l1_message(
+                        self.l1_v2_message_queue_start_index,
                         self.database.clone(),
                         message,
                         block_number,
-                        self.l1_v2_message_queue_start_index,
                     )),
                 ))
             }
@@ -626,32 +626,15 @@ impl<
 
     /// Handles an L1 message by inserting it into the database.
     async fn handle_l1_message(
+        l1_v2_message_queue_start_index: u64,
         database: Arc<Database>,
         l1_message: TxL1Message,
         l1_block_number: u64,
-        l1_v2_message_queue_start_index: u64,
     ) -> Result<Option<ChainOrchestratorEvent>, ChainOrchestratorError> {
         let event = ChainOrchestratorEvent::L1MessageCommitted(l1_message.queue_index);
-
-        let queue_hash = if l1_message.queue_index == l1_v2_message_queue_start_index {
-            let mut input = B256::default().to_vec();
-            input.append(&mut l1_message.tx_hash().to_vec());
-            Some(keccak256(input) & L1_MESSAGE_QUEUE_HASH_MASK)
-        } else if l1_message.queue_index > l1_v2_message_queue_start_index {
-            let index = l1_message.queue_index - 1;
-            let mut input = database
-                .get_l1_message_by_index(index)
-                .await?
-                .map(|m| m.queue_hash)
-                .ok_or(DatabaseError::L1MessageNotFound(L1MessageStart::Index(index)))?
-                .unwrap_or_default()
-                .to_vec();
-            input.append(&mut l1_message.tx_hash().to_vec());
-            Some(keccak256(input) & L1_MESSAGE_QUEUE_HASH_MASK)
-        } else {
-            None
-        };
-
+        let queue_hash =
+            compute_l1_message_queue_hash(&database, &l1_message, l1_v2_message_queue_start_index)
+                .await?;
         let l1_message = L1MessageEnvelope::new(l1_message, l1_block_number, None, queue_hash);
         database.insert_l1_message(l1_message).await?;
         Ok(Some(event))
@@ -700,6 +683,39 @@ impl<
 
         Ok(None)
     }
+}
+
+/// Computes the queue hash by taking the previous queue hash and performing a 2-to-1 hash with the
+/// current transaction hash using keccak. It then applies a mask which is required for the kzg
+/// field used for blobs on ethereum. For the first message in the queue, the previous queue
+/// hash is zero. If the L1 message queue index is before migration to `L1MessageQueueV2`,
+/// the queue hash will be None.
+///
+/// The solidity contract (`L1MessageQueueV2.sol`) implementation is defined here: <https://github.com/scroll-tech/scroll-contracts/blob/67c1bde19c1d3462abf8c175916a2bb3c89530e4/src/L1/rollup/L1MessageQueueV2.sol#L379-L403>
+async fn compute_l1_message_queue_hash(
+    database: &Arc<Database>,
+    l1_message: &TxL1Message,
+    l1_v2_message_queue_start_index: u64,
+) -> Result<Option<alloy_primitives::FixedBytes<32>>, ChainOrchestratorError> {
+    let queue_hash = if l1_message.queue_index == l1_v2_message_queue_start_index {
+        let mut input = B256::default().to_vec();
+        input.append(&mut l1_message.tx_hash().to_vec());
+        Some(keccak256(input) & L1_MESSAGE_QUEUE_HASH_MASK)
+    } else if l1_message.queue_index > l1_v2_message_queue_start_index {
+        let index = l1_message.queue_index - 1;
+        let mut input = database
+            .get_l1_message_by_index(index)
+            .await?
+            .map(|m| m.queue_hash)
+            .ok_or(DatabaseError::L1MessageNotFound(L1MessageStart::Index(index)))?
+            .unwrap_or_default()
+            .to_vec();
+        input.append(&mut l1_message.tx_hash().to_vec());
+        Some(keccak256(input) & L1_MESSAGE_QUEUE_HASH_MASK)
+    } else {
+        None
+    };
+    Ok(queue_hash)
 }
 
 async fn init_chain_from_db<P: Provider<Scroll> + 'static>(
