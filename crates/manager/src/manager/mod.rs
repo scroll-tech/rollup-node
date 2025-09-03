@@ -38,7 +38,7 @@ use tokio::{
     time::Interval,
 };
 use tokio_stream::wrappers::ReceiverStream;
-use tracing::{error, trace, warn};
+use tracing::{error, info, trace, warn};
 
 use rollup_node_providers::{L1MessageProvider, L1Provider};
 use scroll_db::{Database, DatabaseError};
@@ -112,6 +112,8 @@ pub struct RollupNodeManager<
     signer: Option<SignerHandle>,
     /// The trigger for the block building process.
     block_building_trigger: Option<Interval>,
+    /// The original block time configuration for restoring automatic sequencing.
+    block_time_config: Option<u64>,
 }
 
 /// The current status of the rollup manager.
@@ -145,6 +147,7 @@ impl<
             .field("event_sender", &self.event_sender)
             .field("sequencer", &self.sequencer)
             .field("block_building_trigger", &self.block_building_trigger)
+            .field("block_time_config", &self.block_time_config)
             .finish()
     }
 }
@@ -189,6 +192,7 @@ where
             sequencer,
             signer,
             block_building_trigger: block_time.map(delayed_interval),
+            block_time_config: block_time,
         };
         (rnm, RollupManagerHandle::new(handle_tx))
     }
@@ -511,6 +515,27 @@ where
                     let network_handle = this.network.handle();
                     tx.send(network_handle.clone())
                         .expect("Failed to send network handle to handle");
+                }
+                RollupManagerCommand::EnableAutomaticSequencing(tx) => {
+                    let success = if let Some(block_time) = this.block_time_config {
+                        if this.block_building_trigger.is_none() {
+                            this.block_building_trigger = Some(delayed_interval(block_time));
+                            info!(target: "scroll::node::manager", "Enabled automatic sequencing with interval {}ms", block_time);
+                        } else {
+                            info!(target: "scroll::node::manager", "Automatic sequencing already enabled");
+                        }
+                        true
+                    } else {
+                        warn!(target: "scroll::node::manager", "Cannot enable automatic sequencing: sequencer and block time not configured");
+                        false
+                    };
+                    tx.send(success).expect("Failed to send enable automatic sequencing response");
+                }
+                RollupManagerCommand::DisableAutomaticSequencing(tx) => {
+                    let was_enabled = this.block_building_trigger.is_some();
+                    this.block_building_trigger = None;
+                    info!(target: "scroll::node::manager", "Disabled automatic sequencing (was enabled: {})", was_enabled);
+                    tx.send(true).expect("Failed to send disable automatic sequencing response");
                 }
             }
         }
