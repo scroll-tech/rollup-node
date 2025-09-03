@@ -146,7 +146,7 @@ impl<N: FullNetwork<Primitives = ScrollNetworkPrimitives>> ScrollNetworkManager<
                 let block_hash = block.hash_slow();
                 trace!(target: "scroll::network::manager", peer_id = ?peer_id, block = ?block_hash, signature = ?signature, "Received new block");
                 if self.blocks_seen.contains(&(block_hash, signature)) {
-                    return None;
+                    None
                 } else {
                     // Update the state of the peer cache i.e. peer has seen this block.
                     self.scroll_wire
@@ -156,7 +156,7 @@ impl<N: FullNetwork<Primitives = ScrollNetworkPrimitives>> ScrollNetworkManager<
                         .insert(block_hash);
                     // Update the state of the block cache i.e. we have seen this block.
                     self.blocks_seen.insert((block.hash_slow(), signature));
-                    
+
                     Some(NetworkManagerEvent::NewBlock(NewBlockWithPeer {
                         peer_id,
                         block,
@@ -192,16 +192,9 @@ impl<N: FullNetwork<Primitives = ScrollNetworkPrimitives>> ScrollNetworkManager<
     fn on_block_import_result(&mut self, outcome: BlockImportOutcome) {
         let BlockImportOutcome { peer, result } = outcome;
         match result {
-            Ok(BlockValidation::ValidBlock { new_block: msg })
-            | Ok(BlockValidation::ValidHeader { new_block: msg }) => {
+            Ok(BlockValidation::ValidBlock { new_block: msg }) |
+            Ok(BlockValidation::ValidHeader { new_block: msg }) => {
                 trace!(target: "scroll::network::manager", peer_id = ?peer, block = ?msg.block, "Block import successful - announcing block to network");
-                let hash = msg.block.hash_slow();
-                // Update the state of the peer cache i.e. peer has seen this block.
-                self.scroll_wire
-                    .state_mut()
-                    .entry(peer)
-                    .or_insert_with(|| LruCache::new(LRU_CACHE_SIZE))
-                    .insert(hash);
                 self.announce_block(msg);
             }
             Err(BlockImportError::Consensus(err)) => {

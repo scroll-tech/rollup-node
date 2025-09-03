@@ -368,17 +368,16 @@ where
             let block_hash = block.hash_slow();
             if self.network.blocks_seen.contains(&(block_hash, signature)) {
                 return;
-            } else {
-                // Update the state of the peer cache i.e. peer has seen this block.
-                self.network
-                    .scroll_wire
-                    .state_mut()
-                    .entry(peer_id)
-                    .or_insert_with(|| LruCache::new(LRU_CACHE_SIZE))
-                    .insert(block_hash);
-                // Update the state of the block cache i.e. we have seen this block.
-                self.network.blocks_seen.insert((block_hash, signature));
             }
+            // Update the state of the peer cache i.e. peer has seen this block.
+            self.network
+                .scroll_wire
+                .state_mut()
+                .entry(peer_id)
+                .or_insert_with(|| LruCache::new(LRU_CACHE_SIZE))
+                .insert(block_hash);
+            // Update the state of the block cache i.e. we have seen this block.
+            self.network.blocks_seen.insert((block_hash, signature));
 
             trace!(target: "scroll::bridge::import", peer_id = %peer_id, block = ?block.hash_slow(), "Received new block from eth-wire protocol");
             NewBlockWithPeer { peer_id, block, signature }
