@@ -32,11 +32,7 @@ mod handle;
 pub use handle::ScrollAddOnsHandle;
 
 mod rpc;
-
-#[cfg(feature = "test-utils")]
-pub use rpc::RollupNodeExtApiClient;
-
-pub use rpc::{RollupNodeExtApiServer, RollupNodeRpcExt};
+pub use rpc::{RollupNodeExtApiClient, RollupNodeExtApiServer, RollupNodeRpcExt};
 
 mod rollup;
 pub use rollup::IsDevChain;
