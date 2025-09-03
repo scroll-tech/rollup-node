@@ -2,14 +2,14 @@ use alloy_primitives::Signature;
 
 /// Trait for custom signature byte representation
 pub trait SignatureAsBytes {
-    /// Custom implementation of as_bytes 
+    /// Custom implementation of as_bytes
     /// We remove the `+ 27` offset from the v value
     /// and use the original v value directly.
     fn sig_as_bytes(&self) -> [u8; 65];
 }
 
 impl SignatureAsBytes for Signature {
-    /// Custom implementation of as_bytes 
+    /// Custom implementation of as_bytes
     /// We remove the `+ 27` offset from the v value
     /// and use the original v value directly.
     #[inline]

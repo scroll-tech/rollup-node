@@ -4,7 +4,8 @@ use super::{transaction::DatabaseTransaction, DatabaseConnectionProvider};
 use crate::error::DatabaseError;
 
 use sea_orm::{
-    sqlx::sqlite::{SqliteConnectOptions, SqlitePoolOptions}, DatabaseConnection, SqlxSqliteConnector, TransactionTrait,
+    sqlx::sqlite::{SqliteConnectOptions, SqlitePoolOptions},
+    DatabaseConnection, SqlxSqliteConnector, TransactionTrait,
 };
 
 // TODO: make these configurable via CLI.
@@ -37,10 +38,18 @@ pub struct Database {
 impl Database {
     /// Creates a new [`Database`] instance associated with the provided database URL.
     pub async fn new(database_url: &str) -> Result<Self, DatabaseError> {
-        Self::new_sqlite_with_pool_options(database_url, MAX_CONNECTIONS, MIN_CONNECTIONS, ACQUIRE_TIMEOUT_SECS, BUSY_TIMEOUT_SECS).await
+        Self::new_sqlite_with_pool_options(
+            database_url,
+            MAX_CONNECTIONS,
+            MIN_CONNECTIONS,
+            ACQUIRE_TIMEOUT_SECS,
+            BUSY_TIMEOUT_SECS,
+        )
+        .await
     }
 
-    /// Creates a new [`Database`] instance with SQLite-specific optimizations and custom pool settings.
+    /// Creates a new [`Database`] instance with SQLite-specific optimizations and custom pool
+    /// settings.
     pub async fn new_sqlite_with_pool_options(
         database_url: &str,
         max_connections: u32,

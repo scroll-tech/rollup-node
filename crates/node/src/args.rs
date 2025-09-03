@@ -195,9 +195,12 @@ impl ScrollRollupNodeConfig {
                 .await
                 .expect("failed to perform migration");
         } else {
-            scroll_migration::Migrator::<scroll_migration::ScrollDevMigrationInfo>::up(db.get_connection(), None)
-                .await
-                .expect("failed to perform migration (custom chain)");
+            scroll_migration::Migrator::<scroll_migration::ScrollDevMigrationInfo>::up(
+                db.get_connection(),
+                None,
+            )
+            .await
+            .expect("failed to perform migration (custom chain)");
         }
 
         // Wrap the database in an Arc
@@ -491,7 +494,12 @@ pub struct NetworkArgs {
 
 impl Default for NetworkArgs {
     fn default() -> Self {
-        Self { enable_eth_scroll_wire_bridge: true, enable_scroll_wire: true, sequencer_url: None, signer_address: None }
+        Self {
+            enable_eth_scroll_wire_bridge: true,
+            enable_scroll_wire: true,
+            sequencer_url: None,
+            signer_address: None,
+        }
     }
 }
 

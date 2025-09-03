@@ -51,7 +51,9 @@ pub struct Signer {
 
 impl Signer {
     /// Creates a new [`Signer`] instance and [`SignerHandle`] with the provided signer.
-    fn new(signer: impl alloy_signer::Signer<Signature> + Send + Sync + 'static) -> (Self, SignerHandle) {
+    fn new(
+        signer: impl alloy_signer::Signer<Signature> + Send + Sync + 'static,
+    ) -> (Self, SignerHandle) {
         let (req_tx, req_rx) = tokio::sync::mpsc::unbounded_channel();
         let (event_tx, event_rx) = tokio::sync::mpsc::unbounded_channel();
         let address = signer.address();
@@ -66,7 +68,9 @@ impl Signer {
     }
 
     /// Spawns a new `Signer` instance onto the tokio runtime.
-    pub fn spawn(signer: impl alloy_signer::Signer<Signature> + Send + Sync + 'static) -> SignerHandle {
+    pub fn spawn(
+        signer: impl alloy_signer::Signer<Signature> + Send + Sync + 'static,
+    ) -> SignerHandle {
         let (signer, handle) = Self::new(signer);
         tokio::spawn(signer.run());
         handle

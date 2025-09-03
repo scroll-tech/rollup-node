@@ -243,7 +243,7 @@ where
             // Store the block signature in the database
             let db = self.database.clone();
             let block_hash = block_with_peer.block.hash_slow();
-            let signature  = block_with_peer.signature;
+            let signature = block_with_peer.signature;
             tokio::spawn(async move {
                 if let Err(err) = db.insert_signature(block_hash, signature).await {
                     tracing::warn!(
