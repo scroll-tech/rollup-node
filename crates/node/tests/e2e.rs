@@ -40,7 +40,6 @@ use scroll_alloy_rpc_types::Transaction as ScrollAlloyTransaction;
 use scroll_db::L1MessageStart;
 use scroll_network::NewBlockWithPeer;
 use scroll_wire::{ScrollWireConfig, ScrollWireProtocolHandler};
-use serde_json;
 use std::{path::PathBuf, sync::Arc, time::Duration};
 use tokio::{
     sync::{oneshot, Mutex},

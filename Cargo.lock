@@ -293,7 +293,7 @@ dependencies = [
  "serde",
  "serde_with",
  "sha2 0.10.9",
- "thiserror 2.0.16",
+ "thiserror 2.0.14",
 ]
 
 [[package]]
@@ -828,6 +828,7 @@ dependencies = [
  "k256",
  "rand 0.8.5",
  "thiserror 2.0.14",
+ "zeroize",
 ]
 
 [[package]]
@@ -11489,7 +11490,7 @@ dependencies = [
  "heck 0.4.1",
  "proc-macro2",
  "quote",
- "syn 2.0.104",
+ "syn 2.0.106",
  "thiserror 2.0.14",
 ]
 
