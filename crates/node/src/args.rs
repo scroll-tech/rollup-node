@@ -194,12 +194,23 @@ impl ScrollRollupNodeConfig {
                 .await
                 .expect("failed to perform migration");
         } else {
+            // We can re use the dev migration for custom chains as data source and data hash are
+            // None for both. We overwrite the default genesis hash from ScrollDevMigrationInfo to
+            // match the custom chain.
+            // This is a workaround due to the fact that sea orm migrations are static.
+            // See https://github.com/scroll-tech/rollup-node/issues/297 for more details.
             scroll_migration::Migrator::<scroll_migration::ScrollDevMigrationInfo>::up(
                 db.get_connection(),
                 None,
             )
             .await
             .expect("failed to perform migration (custom chain)");
+
+            // insert the custom chain genesis hash into the database
+            let genesis_hash = chain_spec.genesis_hash();
+            db.insert_genesis_block(genesis_hash)
+                .await
+                .expect("failed to insert genesis block (custom chain)");
         }
 
         // Wrap the database in an Arc
