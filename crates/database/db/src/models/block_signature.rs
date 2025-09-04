@@ -1,5 +1,4 @@
 use alloy_primitives::{Signature, B256};
-use rollup_node_signer::SignatureAsBytes;
 use sea_orm::{entity::prelude::*, ActiveValue};
 
 /// A database model that represents a block signature.
@@ -46,7 +45,7 @@ impl From<(B256, Signature)> for ActiveModel {
     fn from((block_hash, signature): (B256, Signature)) -> Self {
         Self {
             block_hash: ActiveValue::Set(block_hash.to_vec()),
-            signature: ActiveValue::Set(signature.sig_as_bytes().to_vec()),
+            signature: ActiveValue::Set(signature.as_bytes().to_vec()),
         }
     }
 }
