@@ -1,5 +1,5 @@
-use alloy_primitives::{address, Address, Signature, B256};
-use reth_chainspec::{EthChainSpec, NamedChain};
+use alloy_primitives::{Address, Signature, B256};
+use reth_chainspec::EthChainSpec;
 use reth_eth_wire_types::BasicNetworkPrimitives;
 use reth_network::{
     config::NetworkMode,
@@ -19,6 +19,8 @@ use scroll_alloy_hardforks::ScrollHardforks;
 use scroll_db::{Database, DatabaseOperations};
 use std::{fmt, fmt::Debug, path::PathBuf, sync::Arc};
 use tracing::{debug, info, trace, warn};
+
+use crate::args::NetworkArgs;
 
 /// The network builder for Scroll.
 #[derive(Debug, Default)]
@@ -95,11 +97,7 @@ where
         // get the header transform.
         let chain_spec = ctx.chain_spec();
         let authorized_signer = if self.signer.is_none() {
-            match chain_spec.chain().named() {
-                Some(NamedChain::Scroll) => Some(SCROLL_MAINNET_SIGNER),
-                Some(NamedChain::ScrollSepolia) => Some(SCROLL_SEPOLIA_SIGNER),
-                _ => None,
-            }
+            NetworkArgs::default_authorized_signer(chain_spec.chain().named())
         } else {
             self.signer
         };
@@ -127,10 +125,6 @@ where
 /// Network primitive types used by Scroll networks.
 type ScrollNetworkPrimitives =
     BasicNetworkPrimitives<ScrollPrimitives, scroll_alloy_consensus::ScrollPooledTransaction>;
-
-/// The correct signer address for Scroll mainnet and sepolia.
-const SCROLL_MAINNET_SIGNER: Address = address!("0xD83C4892BB5aA241B63d8C4C134920111E142A20");
-const SCROLL_SEPOLIA_SIGNER: Address = address!("0x687E0E85AD67ff71aC134CF61b65905b58Ab43b2");
 
 /// Errors that can occur during signature validation
 #[derive(Debug, Clone, PartialEq, Eq)]

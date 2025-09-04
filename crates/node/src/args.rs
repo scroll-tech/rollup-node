@@ -503,6 +503,22 @@ impl Default for NetworkArgs {
     }
 }
 
+impl NetworkArgs {
+    /// Get the default authorized signer address for the given chain.
+    pub const fn default_authorized_signer(chain: Option<NamedChain>) -> Option<Address> {
+        match chain {
+            Some(NamedChain::Scroll) => Some(constants::SCROLL_MAINNET_SIGNER),
+            Some(NamedChain::ScrollSepolia) => Some(constants::SCROLL_SEPOLIA_SIGNER),
+            _ => None,
+        }
+    }
+
+    /// Get the effective signer address, using the configured signer or falling back to default.
+    pub fn effective_signer(&self, chain: Option<NamedChain>) -> Option<Address> {
+        self.signer_address.or_else(|| Self::default_authorized_signer(chain))
+    }
+}
+
 /// The arguments for the L1 provider.
 #[derive(Debug, Default, Clone, clap::Args)]
 pub struct L1ProviderArgs {
@@ -691,6 +707,48 @@ const fn l1_v2_message_queue_start_index(chain: Option<NamedChain>) -> u64 {
 mod tests {
     use super::*;
     use std::path::PathBuf;
+
+    #[test]
+    fn test_network_args_default_authorized_signer() {
+        // Test Scroll mainnet
+        let mainnet_signer = NetworkArgs::default_authorized_signer(Some(NamedChain::Scroll));
+        assert_eq!(mainnet_signer, Some(constants::SCROLL_MAINNET_SIGNER));
+
+        // Test Scroll Sepolia
+        let sepolia_signer =
+            NetworkArgs::default_authorized_signer(Some(NamedChain::ScrollSepolia));
+        assert_eq!(sepolia_signer, Some(constants::SCROLL_SEPOLIA_SIGNER));
+
+        // Test other chains
+        let other_signer = NetworkArgs::default_authorized_signer(Some(NamedChain::Mainnet));
+        assert_eq!(other_signer, None);
+
+        // Test None chain
+        let none_signer = NetworkArgs::default_authorized_signer(None);
+        assert_eq!(none_signer, None);
+    }
+
+    #[test]
+    fn test_network_args_effective_signer() {
+        let custom_signer = Address::new([0x11; 20]);
+
+        // Test with configured signer
+        let network_args =
+            NetworkArgs { signer_address: Some(custom_signer), ..Default::default() };
+        assert_eq!(network_args.effective_signer(Some(NamedChain::Scroll)), Some(custom_signer));
+
+        // Test without configured signer, fallback to default
+        let network_args_default = NetworkArgs::default();
+        assert_eq!(
+            network_args_default.effective_signer(Some(NamedChain::Scroll)),
+            Some(constants::SCROLL_MAINNET_SIGNER)
+        );
+        assert_eq!(
+            network_args_default.effective_signer(Some(NamedChain::ScrollSepolia)),
+            Some(constants::SCROLL_SEPOLIA_SIGNER)
+        );
+        assert_eq!(network_args_default.effective_signer(Some(NamedChain::Mainnet)), None);
+    }
 
     #[test]
     fn test_validate_sequencer_enabled_without_any_signer_fails() {
