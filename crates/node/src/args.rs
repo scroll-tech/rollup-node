@@ -194,12 +194,23 @@ impl ScrollRollupNodeConfig {
                 .await
                 .expect("failed to perform migration");
         } else {
+            // We can re use the dev migration for custom chains as data source and data hash are
+            // None for both. We overwrite the default genesis hash from ScrollDevMigrationInfo to
+            // match the custom chain.
+            // This is a workaround due to the fact that sea orm migrations are static.
+            // See https://github.com/scroll-tech/rollup-node/issues/297 for more details.
             scroll_migration::Migrator::<scroll_migration::ScrollDevMigrationInfo>::up(
                 db.get_connection(),
                 None,
             )
             .await
             .expect("failed to perform migration (custom chain)");
+
+            // insert the custom chain genesis hash into the database
+            let genesis_hash = chain_spec.genesis_hash();
+            db.insert_genesis_block(genesis_hash)
+                .await
+                .expect("failed to insert genesis block (custom chain)");
         }
 
         // Wrap the database in an Arc
@@ -242,6 +253,7 @@ impl ScrollRollupNodeConfig {
             });
         }
 
+        tracing::info!(target: "scroll::node::args", fcs = ?fcs, payload_building_duration = ?self.sequencer_args.payload_building_duration, "Starting engine driver");
         let engine = EngineDriver::new(
             Arc::new(engine_api),
             chain_spec.clone(),
@@ -265,7 +277,7 @@ impl ScrollRollupNodeConfig {
 
         let (l1_notification_tx, l1_notification_rx): (Option<Sender<Arc<L1Notification>>>, _) =
             if let Some(provider) = l1_provider.filter(|_| !self.test) {
-                // Determine the start block number for the L1 watcher
+                tracing::info!(target: "scroll::node::args", ?l1_start_block_number, "Starting L1 watcher");
                 (None, Some(L1Watcher::spawn(provider, l1_start_block_number, node_config).await))
             } else {
                 // Create a channel for L1 notifications that we can use to inject L1 messages for
@@ -328,6 +340,8 @@ impl ScrollRollupNodeConfig {
             .fetch_client()
             .await
             .expect("failed to fetch block client");
+        let l1_v2_message_queue_start_index =
+            l1_v2_message_queue_start_index(chain_spec.chain().named());
         let chain_orchestrator = ChainOrchestrator::new(
             db.clone(),
             chain_spec.clone(),
@@ -335,6 +349,7 @@ impl ScrollRollupNodeConfig {
             l2_provider,
             self.chain_orchestrator_args.optimistic_sync_trigger,
             self.chain_orchestrator_args.chain_buffer_size,
+            l1_v2_message_queue_start_index,
         )
         .await?;
 
@@ -351,6 +366,7 @@ impl ScrollRollupNodeConfig {
             signer,
             block_time,
             chain_orchestrator,
+            l1_v2_message_queue_start_index,
         )
         .await;
         Ok((rnm, handle, l1_notification_tx))
@@ -661,6 +677,15 @@ const fn td_constant(chain: Option<NamedChain>) -> U128 {
         Some(NamedChain::Scroll) => constants::SCROLL_MAINNET_TD_CONSTANT,
         Some(NamedChain::ScrollSepolia) => constants::SCROLL_SEPOLIA_TD_CONSTANT,
         _ => U128::ZERO, // Default to zero for other chains
+    }
+}
+
+/// The L1 message queue index at which queue hashes should be computed .
+const fn l1_v2_message_queue_start_index(chain: Option<NamedChain>) -> u64 {
+    match chain {
+        Some(NamedChain::Scroll) => constants::SCROLL_MAINNET_V2_MESSAGE_QUEUE_START_INDEX,
+        Some(NamedChain::ScrollSepolia) => constants::SCROLL_SEPOLIA_V2_MESSAGE_QUEUE_START_INDEX,
+        _ => 0,
     }
 }
 

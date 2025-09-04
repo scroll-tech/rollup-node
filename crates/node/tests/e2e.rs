@@ -26,7 +26,8 @@ use rollup_node::{
     },
     BeaconProviderArgs, ChainOrchestratorArgs, ConsensusAlgorithm, ConsensusArgs, DatabaseArgs,
     EngineDriverArgs, GasPriceOracleArgs, L1ProviderArgs, NetworkArgs as ScrollNetworkArgs,
-    RollupNodeContext, ScrollRollupNode, ScrollRollupNodeConfig, SequencerArgs,
+    RollupNodeContext, RollupNodeExtApiClient, ScrollRollupNode, ScrollRollupNodeConfig,
+    SequencerArgs,
 };
 use rollup_node_chain_orchestrator::ChainOrchestratorEvent;
 use rollup_node_manager::{RollupManagerCommand, RollupManagerEvent};
@@ -979,15 +980,7 @@ async fn graceful_shutdown_consolidates_most_recent_batch_on_startup() -> eyre::
     let mut rnm_events = handle.get_event_listener().await?;
 
     // Send the second batch again to mimic the watcher behaviour.
-    l1_notification_tx.send(Arc::new(L1Notification::BatchCommit(batch_0_data.clone()))).await?;
     l1_notification_tx.send(Arc::new(L1Notification::BatchCommit(batch_1_data.clone()))).await?;
-    l1_notification_tx
-        .send(Arc::new(L1Notification::BatchFinalization {
-            hash: batch_0_data.hash,
-            index: batch_0_data.index,
-            block_number: batch_0_data.block_number,
-        }))
-        .await?;
     l1_notification_tx
         .send(Arc::new(L1Notification::BatchFinalization {
             hash: batch_1_data.hash,
@@ -1285,20 +1278,12 @@ async fn can_handle_l1_message_reorg() -> eyre::Result<()> {
 
 /// Tests that a sequencer and follower node can produce blocks using a custom local genesis
 /// configuration and properly propagate them between nodes.
-///
-/// This test validates the PR #250 feature for local genesis file support by:
-/// 1. Creating a custom genesis configuration based on SCROLL_DEV but with distinct parameters
-/// 2. Starting one sequencer node and one follower node with the custom genesis
-/// 3. Verifying both nodes use the same genesis hash
-/// 4. Testing that the sequencer can produce blocks
-/// 5. Confirming the follower receives and processes blocks from the sequencer
 #[tokio::test]
 async fn test_custom_genesis_block_production_and_propagation() -> eyre::Result<()> {
     reth_tracing::init_test_tracing();
     color_eyre::install()?;
 
     // Create a custom genesis config.
-    // This is based on SCROLL_DEV but with custom timestamp and extra data to make it distinct
     // In a real scenario, this JSON would be loaded from a file using --chain flag.
     let custom_genesis_json = r#"{
         "config": {
@@ -1313,32 +1298,54 @@ async fn test_custom_genesis_block_production_and_propagation() -> eyre::Result<
             "istanbulBlock": 0,
             "berlinBlock": 0,
             "londonBlock": 0,
-            "shanghaiTime": 0,
+            "archimedesBlock": 0,
+            "shanghaiBlock": 0,
             "bernoulliBlock": 0,
             "curieBlock": 0,
             "darwinTime": 0,
             "darwinV2Time": 0,
+            "euclidTime": 0,
+            "euclidV2Time": 0,
+            "feynmanTime": 0,
             "scroll": {
-                "maxTxPayloadBytesPerBlock": 122880,
                 "feeVaultAddress": "0x5300000000000000000000000000000000000005",
+                "maxTxPayloadBytesPerBlock": 122880,
                 "l1Config": {
                     "l1ChainId": 1,
-                    "l1MessageQueueAddress": "0x0000000000000000000000000000000001dead",
-                    "l1MessageQueueV2Address": "0x0000000000000000000000000000000002dead", 
-                    "scrollChainAddress": "0x000000000000000000000000000000000000dead",
+                    "l1MessageQueueAddress": "0x0d7E906BD9cAFa154b048cFa766Cc1E54E39AF9B",
+                    "l1MessageQueueV2Address": "0x000000000000000000000000000000000003dead",
+                    "scrollChainAddress": "0x000000000000000000000000000000000003dead",
                     "l2SystemConfigAddress": "0x000000000000000000000000000000000003dead",
-                    "numL1MessagesPerBlock": 10
+                    "numL1MessagesPerBlock": 10,
+                    "l1MessageQueueV2DeploymentBlock": 12345
                 }
             }
         },
         "nonce": "0x0",
         "timestamp": "0x12345678",
         "extraData": "0x637573746f6d5f67656e657369735f74657374",
-        "gasLimit": "0x1c9c380",
-        "baseFeePerGas": "0x0",
+        "gasLimit": "0x1312D00",
+        "baseFeePerGas": "0x1",
         "difficulty": "0x0",
         "mixHash": "0x0000000000000000000000000000000000000000000000000000000000000000",
         "coinbase": "0x0000000000000000000000000000000000000000",
+        "alloc": {
+            "0x8626f6940E2eb28930eFb4CeF49B2d1F2C9C1199": {
+                "balance": "0xD3C21BCECCEDA1000000"
+            },
+            "0x5300000000000000000000000000000000000002": {
+                "balance": "0xd3c21bcecceda1000000",
+                "storage": {
+                    "0x01": "0x000000000000000000000000000000000000000000000000000000003758e6b0",
+                    "0x02": "0x0000000000000000000000000000000000000000000000000000000000000038",
+                    "0x03": "0x000000000000000000000000000000000000000000000000000000003e95ba80",
+                    "0x04": "0x0000000000000000000000005300000000000000000000000000000000000003",
+                    "0x05": "0x000000000000000000000000000000000000000000000000000000008390c2c1",
+                    "0x06": "0x00000000000000000000000000000000000000000000000000000069cf265bfe",
+                    "0x07": "0x00000000000000000000000000000000000000000000000000000000168b9aa3"
+                }
+            }
+        },
         "number": "0x0", 
         "gasUsed": "0x0",
         "parentHash": "0x0000000000000000000000000000000000000000000000000000000000000000"
@@ -1347,14 +1354,9 @@ async fn test_custom_genesis_block_production_and_propagation() -> eyre::Result<
     let custom_genesis =
         serde_json::from_str(custom_genesis_json).expect("Custom genesis JSON should be valid");
 
-    // println!("Custom genesis: {custom_genesis:#?}");
-
     // Create a custom ScrollChainSpec using the from_custom_genesis method
     // This simulates what would happen when using --chain flag with a custom file
     let custom_chain_spec = Arc::new(ScrollChainSpec::from_custom_genesis(custom_genesis));
-
-    // TODO: Set a custom chain ID to make it distinct
-    // custom_chain_spec.inner.chain = Chain::from_id(999999);
 
     // Launch 2 nodes: node0=sequencer and node1=follower.
     let config = default_sequencer_test_scroll_rollup_node_config();
@@ -1366,56 +1368,110 @@ async fn test_custom_genesis_block_production_and_propagation() -> eyre::Result<
     // Get handles
     let node0_rnm_handle = node0.inner.add_ons_handle.rollup_manager_handle.clone();
     let mut node0_rnm_events = node0_rnm_handle.get_event_listener().await?;
-    let node0_l1_watcher_tx = node0.inner.add_ons_handle.l1_watcher_tx.as_ref().unwrap();
 
     let node1_rnm_handle = node1.inner.add_ons_handle.rollup_manager_handle.clone();
     let mut node1_rnm_events = node1_rnm_handle.get_event_listener().await?;
-    let node1_l1_watcher_tx = node1.inner.add_ons_handle.l1_watcher_tx.as_ref().unwrap();
 
-    // Verify chain id
-    assert_eq!(custom_chain_spec.chain_id(), 12345);
+    // Verify the genesis hash is different from all predefined networks
+    assert_ne!(custom_chain_spec.genesis_hash(), SCROLL_DEV.genesis_hash());
+    assert_ne!(custom_chain_spec.genesis_hash(), SCROLL_SEPOLIA.genesis_hash());
+    assert_ne!(custom_chain_spec.genesis_hash(), SCROLL_MAINNET.genesis_hash());
 
     // Verify both nodes start with the same genesis hash from the custom chain spec
-    let sequencer_genesis_hash = node0.block_hash(0);
-    let follower_genesis_hash = node1.block_hash(0);
     assert_eq!(
-        sequencer_genesis_hash, follower_genesis_hash,
-        "Both nodes should have the same genesis hash from custom genesis"
+        custom_chain_spec.genesis_hash(),
+        node0.block_hash(0),
+        "Node0 should have the custom genesis hash"
     );
-
-    // Verify the genesis hash matches the expected custom chain spec genesis
-    let expected_genesis_hash = custom_chain_spec.genesis_hash();
     assert_eq!(
-        sequencer_genesis_hash, expected_genesis_hash,
-        "Genesis hash should match the custom chain spec"
+        custom_chain_spec.genesis_hash(),
+        node1.block_hash(0),
+        "Node1 should have the custom genesis hash"
     );
 
-    // Verify that our custom genesis is actually different from SCROLL_MAINNET, SCROLL_SEPOLIA and
-    // SCROLL_DEV. This proves we're using a genuinely custom genesis configuration.
-    assert_ne!(
-        sequencer_genesis_hash,
-        SCROLL_MAINNET.genesis_hash(),
-        "Custom genesis hash should be different from SCROLL_MAINNET genesis hash"
-    );
-    assert_ne!(
-        sequencer_genesis_hash,
-        SCROLL_SEPOLIA.genesis_hash(),
-        "Custom genesis hash should be different from SCROLL_SEPOLIA genesis hash"
-    );
-    assert_ne!(
-        sequencer_genesis_hash,
-        SCROLL_DEV.genesis_hash(),
-        "Custom genesis hash should be different from SCROLL_DEV genesis hash"
-    );
-
-    // Let the sequencer build 10 blocks before performing the reorg process.
+    // Let the sequencer build 10 blocks.
     for i in 1..=10 {
         node0_rnm_handle.build_block().await;
         let b = wait_for_block_sequenced_5s(&mut node0_rnm_events, i).await?;
         tracing::info!(target: "scroll::test", block_number = ?b.header.number, block_hash = ?b.header.hash_slow(), "Sequenced block");
     }
 
-    return Ok(());
+    // Assert that the follower node has received all 10 blocks from the sequencer node.
+    wait_for_block_imported_5s(&mut node1_rnm_events, 10).await?;
+
+    // Assert both nodes have the same latest block hash.
+    assert_eq!(latest_block(&node0).await?.header.number, 10, "Node0 should be at block 10");
+    assert_eq!(
+        latest_block(&node0).await?.header.hash_slow(),
+        latest_block(&node1).await?.header.hash_slow(),
+        "Both nodes should have the same latest block hash"
+    );
+
+    Ok(())
+}
+
+#[tokio::test]
+async fn can_rpc_enable_disable_sequencing() -> eyre::Result<()> {
+    reth_tracing::init_test_tracing();
+    color_eyre::install()?;
+    let chain_spec = (*SCROLL_DEV).clone();
+
+    // Launch sequencer node with automatic sequencing enabled.
+    let mut config = default_sequencer_test_scroll_rollup_node_config();
+    config.sequencer_args.block_time = 40; // Enable automatic block production
+
+    let (mut nodes, _tasks, _) = setup_engine(config, 2, chain_spec.clone(), false, false).await?;
+    let node0 = nodes.remove(0);
+    let node1 = nodes.remove(0);
+
+    // Get handles
+    let node0_rnm_handle = node0.inner.add_ons_handle.rollup_manager_handle.clone();
+    let mut node0_rnm_events = node0_rnm_handle.get_event_listener().await?;
+
+    let node1_rnm_handle = node1.inner.add_ons_handle.rollup_manager_handle.clone();
+    let mut node1_rnm_events = node1_rnm_handle.get_event_listener().await?;
+
+    // Create RPC client
+    let client0 = node0.rpc_client().expect("RPC client should be available");
+
+    // Test that sequencing is initially enabled (blocks produced automatically)
+    tokio::time::sleep(Duration::from_millis(100)).await;
+    assert_ne!(latest_block(&node0).await?.header.number, 0, "Should produce blocks");
+
+    // Disable automatic sequencing via RPC
+    let result = RollupNodeExtApiClient::disable_automatic_sequencing(&client0).await?;
+    assert!(result, "Disable automatic sequencing should return true");
+
+    // Wait a bit and verify no more blocks are produced automatically.
+    // +1 blocks is okay due to still being processed
+    let block_num_before_wait = latest_block(&node0).await?.header.number;
+    tokio::time::sleep(Duration::from_millis(300)).await;
+    let block_num_after_wait = latest_block(&node0).await?.header.number;
+    assert!(
+        (block_num_before_wait..=block_num_before_wait + 1).contains(&block_num_after_wait),
+        "No blocks should be produced automatically after disabling"
+    );
+
+    // Make sure follower is at same block
+    wait_for_block_imported_5s(&mut node1_rnm_events, block_num_after_wait).await?;
+    assert_eq!(block_num_after_wait, latest_block(&node1).await?.header.number);
+
+    // Verify manual block building still works
+    node0_rnm_handle.build_block().await;
+    wait_for_block_sequenced_5s(&mut node0_rnm_events, block_num_after_wait + 1).await?;
+
+    // Wait for the follower to import the block
+    wait_for_block_imported_5s(&mut node1_rnm_events, block_num_after_wait + 1).await?;
+
+    // Enable sequencing again
+    let result = RollupNodeExtApiClient::enable_automatic_sequencing(&client0).await?;
+    assert!(result, "Enable automatic sequencing should return true");
+
+    // Make sure automatic sequencing resumes
+    wait_for_block_sequenced_5s(&mut node0_rnm_events, block_num_after_wait + 2).await?;
+    wait_for_block_imported_5s(&mut node1_rnm_events, block_num_after_wait + 2).await?;
+
+    Ok(())
 }
 
 /// Tests that a follower node correctly rejects L2 blocks containing L1 messages it hasn't received

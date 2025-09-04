@@ -146,7 +146,7 @@ dependencies = [
  "once_cell",
  "rand 0.8.5",
  "serde",
- "thiserror 2.0.16",
+ "thiserror 2.0.14",
 ]
 
 [[package]]
@@ -172,7 +172,7 @@ dependencies = [
  "secp256k1 0.30.0",
  "serde",
  "serde_with",
- "thiserror 2.0.16",
+ "thiserror 2.0.14",
 ]
 
 [[package]]
@@ -219,7 +219,7 @@ dependencies = [
  "crc",
  "rand 0.8.5",
  "serde",
- "thiserror 2.0.16",
+ "thiserror 2.0.14",
 ]
 
 [[package]]
@@ -248,7 +248,7 @@ dependencies = [
  "rand 0.8.5",
  "serde",
  "serde_with",
- "thiserror 2.0.16",
+ "thiserror 2.0.14",
 ]
 
 [[package]]
@@ -313,7 +313,7 @@ dependencies = [
  "op-alloy-consensus",
  "op-revm",
  "revm",
- "thiserror 2.0.16",
+ "thiserror 2.0.14",
 ]
 
 [[package]]
@@ -367,7 +367,7 @@ dependencies = [
  "http 1.3.1",
  "serde",
  "serde_json",
- "thiserror 2.0.16",
+ "thiserror 2.0.14",
  "tracing",
 ]
 
@@ -394,7 +394,7 @@ dependencies = [
  "futures-utils-wasm",
  "serde",
  "serde_json",
- "thiserror 2.0.16",
+ "thiserror 2.0.14",
 ]
 
 [[package]]
@@ -475,7 +475,7 @@ dependencies = [
  "reqwest",
  "serde",
  "serde_json",
- "thiserror 2.0.16",
+ "thiserror 2.0.14",
  "tokio",
  "tracing",
  "url",
@@ -611,7 +611,7 @@ dependencies = [
  "alloy-rpc-types-engine 0.14.0",
  "serde",
  "serde_with",
- "thiserror 2.0.16",
+ "thiserror 2.0.14",
 ]
 
 [[package]]
@@ -627,7 +627,7 @@ dependencies = [
  "ethereum_ssz_derive",
  "serde",
  "serde_with",
- "thiserror 2.0.16",
+ "thiserror 2.0.14",
  "tree_hash",
  "tree_hash_derive",
 ]
@@ -701,7 +701,7 @@ dependencies = [
  "serde",
  "serde_json",
  "serde_with",
- "thiserror 2.0.16",
+ "thiserror 2.0.14",
 ]
 
 [[package]]
@@ -730,7 +730,7 @@ dependencies = [
  "alloy-serde 1.0.27",
  "serde",
  "serde_json",
- "thiserror 2.0.16",
+ "thiserror 2.0.14",
 ]
 
 [[package]]
@@ -791,7 +791,7 @@ dependencies = [
  "either",
  "elliptic-curve",
  "k256",
- "thiserror 2.0.16",
+ "thiserror 2.0.14",
 ]
 
 [[package]]
@@ -808,7 +808,7 @@ dependencies = [
  "aws-sdk-kms",
  "k256",
  "spki",
- "thiserror 2.0.16",
+ "thiserror 2.0.14",
  "tracing",
 ]
 
@@ -827,8 +827,7 @@ dependencies = [
  "coins-bip39",
  "k256",
  "rand 0.8.5",
- "thiserror 2.0.16",
- "zeroize",
+ "thiserror 2.0.14",
 ]
 
 [[package]]
@@ -917,7 +916,7 @@ dependencies = [
  "parking_lot 0.12.4",
  "serde",
  "serde_json",
- "thiserror 2.0.16",
+ "thiserror 2.0.14",
  "tokio",
  "tower",
  "tracing",
@@ -1012,7 +1011,7 @@ dependencies = [
  "arrayvec",
  "derive_arbitrary",
  "derive_more",
- "nybbles 0.4.3",
+ "nybbles 0.4.2",
  "proptest",
  "proptest-derive",
  "serde",
@@ -2372,7 +2371,7 @@ dependencies = [
  "semver 1.0.26",
  "serde",
  "serde_json",
- "thiserror 2.0.16",
+ "thiserror 2.0.14",
 ]
 
 [[package]]
@@ -2499,9 +2498,9 @@ dependencies = [
 
 [[package]]
 name = "clap"
-version = "4.5.46"
+version = "4.5.45"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2c5e4fcf9c21d2e544ca1ee9d8552de13019a42aa7dbf32747fa7aaf1df76e57"
+checksum = "1fc0e74a703892159f5ae7d3aac52c8e6c392f5ae5f359c70b5881d60aaac318"
 dependencies = [
  "clap_builder",
  "clap_derive",
@@ -2509,9 +2508,9 @@ dependencies = [
 
 [[package]]
 name = "clap_builder"
-version = "4.5.46"
+version = "4.5.44"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "fecb53a0e6fcfb055f686001bc2e2592fa527efaf38dbe81a6a9563562e57d41"
+checksum = "b3e7f4214277f3c7aa526a59dd3fbe306a370daee1f8b7b8c987069cd8e888a8"
 dependencies = [
  "anstream",
  "anstyle",
@@ -4258,7 +4257,7 @@ dependencies = [
  "rand 0.9.2",
  "ring",
  "serde",
- "thiserror 2.0.16",
+ "thiserror 2.0.14",
  "tinyvec",
  "tokio",
  "tracing",
@@ -4282,7 +4281,7 @@ dependencies = [
  "resolv-conf",
  "serde",
  "smallvec",
- "thiserror 2.0.16",
+ "thiserror 2.0.14",
  "tokio",
  "tracing",
 ]
@@ -5013,7 +5012,7 @@ dependencies = [
  "rustls-pki-types",
  "rustls-platform-verifier",
  "soketto",
- "thiserror 2.0.16",
+ "thiserror 2.0.14",
  "tokio",
  "tokio-rustls 0.26.2",
  "tokio-util",
@@ -5041,7 +5040,7 @@ dependencies = [
  "rustc-hash 2.1.1",
  "serde",
  "serde_json",
- "thiserror 2.0.16",
+ "thiserror 2.0.14",
  "tokio",
  "tokio-stream",
  "tower",
@@ -5066,7 +5065,7 @@ dependencies = [
  "rustls-platform-verifier",
  "serde",
  "serde_json",
- "thiserror 2.0.16",
+ "thiserror 2.0.14",
  "tokio",
  "tower",
  "url",
@@ -5104,7 +5103,7 @@ dependencies = [
  "serde",
  "serde_json",
  "soketto",
- "thiserror 2.0.16",
+ "thiserror 2.0.14",
  "tokio",
  "tokio-stream",
  "tokio-util",
@@ -5121,7 +5120,7 @@ dependencies = [
  "http 1.3.1",
  "serde",
  "serde_json",
- "thiserror 2.0.16",
+ "thiserror 2.0.14",
 ]
 
 [[package]]
@@ -5282,7 +5281,7 @@ dependencies = [
  "multihash",
  "quick-protobuf",
  "sha2 0.10.9",
- "thiserror 2.0.16",
+ "thiserror 2.0.14",
  "tracing",
  "zeroize",
 ]
@@ -5989,9 +5988,9 @@ dependencies = [
 
 [[package]]
 name = "nybbles"
-version = "0.4.3"
+version = "0.4.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "63cb50036b1ad148038105af40aaa70ff24d8a14fbc44ae5c914e1348533d12e"
+checksum = "2ff79de40513a478a9e374a480f897c2df829d48dcc64a83e4792a57fe231c64"
 dependencies = [
  "alloy-rlp",
  "arbitrary",
@@ -6048,7 +6047,7 @@ dependencies = [
  "derive_more",
  "serde",
  "serde_with",
- "thiserror 2.0.16",
+ "thiserror 2.0.14",
 ]
 
 [[package]]
@@ -6069,7 +6068,7 @@ dependencies = [
  "op-alloy-consensus",
  "serde",
  "snap",
- "thiserror 2.0.16",
+ "thiserror 2.0.14",
 ]
 
 [[package]]
@@ -6338,7 +6337,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "1db05f56d34358a8b1066f67cbb203ee3e7ed2ba674a6263a1d5ec6db2204323"
 dependencies = [
  "memchr",
- "thiserror 2.0.16",
+ "thiserror 2.0.14",
  "ucd-trie",
 ]
 
@@ -6615,9 +6614,9 @@ dependencies = [
 
 [[package]]
 name = "proc-macro2"
-version = "1.0.101"
+version = "1.0.97"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "89ae43fd86e4158d6db51ad8e2b80f313af9cc74f5c0e03ccb87de09998732de"
+checksum = "d61789d7719defeb74ea5fe81f2fdfdbd28a803847077cecce2ff14e1472f6f1"
 dependencies = [
  "unicode-ident",
 ]
@@ -6775,8 +6774,8 @@ dependencies = [
  "quinn-udp",
  "rustc-hash 2.1.1",
  "rustls 0.23.31",
- "socket2 0.6.0",
- "thiserror 2.0.16",
+ "socket2 0.5.10",
+ "thiserror 2.0.14",
  "tokio",
  "tracing",
  "web-time",
@@ -6797,7 +6796,7 @@ dependencies = [
  "rustls 0.23.31",
  "rustls-pki-types",
  "slab",
- "thiserror 2.0.16",
+ "thiserror 2.0.14",
  "tinyvec",
  "tracing",
  "web-time",
@@ -7011,7 +7010,7 @@ checksum = "a4e608c6638b9c18977b00b475ac1f28d14e84b27d8d42f70e0bf1e3dec127ac"
 dependencies = [
  "getrandom 0.2.16",
  "libredox",
- "thiserror 2.0.16",
+ "thiserror 2.0.14",
 ]
 
 [[package]]
@@ -7356,7 +7355,7 @@ dependencies = [
  "reth-fs-util",
  "secp256k1 0.30.0",
  "serde",
- "thiserror 2.0.16",
+ "thiserror 2.0.14",
 ]
 
 [[package]]
@@ -7415,7 +7414,7 @@ dependencies = [
  "auto_impl",
  "reth-execution-types",
  "reth-primitives-traits",
- "thiserror 2.0.16",
+ "thiserror 2.0.14",
 ]
 
 [[package]]
@@ -7478,7 +7477,7 @@ dependencies = [
  "strum 0.27.2",
  "sysinfo",
  "tempfile",
- "thiserror 2.0.16",
+ "thiserror 2.0.14",
 ]
 
 [[package]]
@@ -7536,7 +7535,7 @@ dependencies = [
  "reth-trie-db",
  "serde",
  "serde_json",
- "thiserror 2.0.16",
+ "thiserror 2.0.14",
  "tracing",
 ]
 
@@ -7575,7 +7574,7 @@ dependencies = [
  "schnellru",
  "secp256k1 0.30.0",
  "serde",
- "thiserror 2.0.16",
+ "thiserror 2.0.14",
  "tokio",
  "tokio-stream",
  "tracing",
@@ -7600,7 +7599,7 @@ dependencies = [
  "reth-metrics",
  "reth-network-peers",
  "secp256k1 0.30.0",
- "thiserror 2.0.16",
+ "thiserror 2.0.14",
  "tokio",
  "tracing",
 ]
@@ -7623,7 +7622,7 @@ dependencies = [
  "secp256k1 0.30.0",
  "serde",
  "serde_with",
- "thiserror 2.0.16",
+ "thiserror 2.0.14",
  "tokio",
  "tokio-stream",
  "tracing",
@@ -7657,7 +7656,7 @@ dependencies = [
  "reth-tasks",
  "reth-testing-utils",
  "tempfile",
- "thiserror 2.0.16",
+ "thiserror 2.0.14",
  "tokio",
  "tokio-stream",
  "tokio-util",
@@ -7750,7 +7749,7 @@ dependencies = [
  "secp256k1 0.30.0",
  "sha2 0.10.9",
  "sha3",
- "thiserror 2.0.16",
+ "thiserror 2.0.14",
  "tokio",
  "tokio-stream",
  "tokio-util",
@@ -7802,7 +7801,7 @@ dependencies = [
  "reth-primitives-traits",
  "reth-trie-common",
  "serde",
- "thiserror 2.0.16",
+ "thiserror 2.0.14",
  "tokio",
 ]
 
@@ -7826,7 +7825,7 @@ dependencies = [
  "reth-prune",
  "reth-stages-api",
  "reth-tasks",
- "thiserror 2.0.16",
+ "thiserror 2.0.14",
 ]
 
 [[package]]
@@ -7876,7 +7875,7 @@ dependencies = [
  "revm",
  "revm-primitives",
  "schnellru",
- "thiserror 2.0.16",
+ "thiserror 2.0.14",
  "tokio",
  "tracing",
 ]
@@ -7922,7 +7921,7 @@ dependencies = [
  "ethereum_ssz_derive",
  "reth-ethereum-primitives",
  "snap",
- "thiserror 2.0.16",
+ "thiserror 2.0.14",
 ]
 
 [[package]]
@@ -7972,7 +7971,7 @@ dependencies = [
  "reth-consensus",
  "reth-execution-errors",
  "reth-storage-errors",
- "thiserror 2.0.16",
+ "thiserror 2.0.14",
 ]
 
 [[package]]
@@ -7996,7 +7995,7 @@ dependencies = [
  "reth-primitives-traits",
  "serde",
  "snap",
- "thiserror 2.0.16",
+ "thiserror 2.0.14",
  "tokio",
  "tokio-stream",
  "tokio-util",
@@ -8021,7 +8020,7 @@ dependencies = [
  "reth-ethereum-primitives",
  "reth-primitives-traits",
  "serde",
- "thiserror 2.0.16",
+ "thiserror 2.0.14",
 ]
 
 [[package]]
@@ -8055,7 +8054,7 @@ dependencies = [
  "reth-primitives-traits",
  "serde",
  "sha2 0.10.9",
- "thiserror 2.0.16",
+ "thiserror 2.0.14",
 ]
 
 [[package]]
@@ -8179,9 +8178,9 @@ dependencies = [
  "alloy-evm",
  "alloy-primitives",
  "alloy-rlp",
- "nybbles 0.4.3",
+ "nybbles 0.4.2",
  "reth-storage-errors",
- "thiserror 2.0.16",
+ "thiserror 2.0.14",
 ]
 
 [[package]]
@@ -8234,7 +8233,7 @@ dependencies = [
  "reth-tasks",
  "reth-tracing",
  "rmp-serde",
- "thiserror 2.0.16",
+ "thiserror 2.0.14",
  "tokio",
  "tokio-util",
  "tracing",
@@ -8261,7 +8260,7 @@ source = "git+https://github.com/scroll-tech/reth.git#d485f4718a0c93f3fc1ec453b8
 dependencies = [
  "serde",
  "serde_json",
- "thiserror 2.0.16",
+ "thiserror 2.0.14",
 ]
 
 [[package]]
@@ -8304,7 +8303,7 @@ dependencies = [
  "jsonrpsee",
  "pin-project",
  "serde_json",
- "thiserror 2.0.16",
+ "thiserror 2.0.14",
  "tokio",
  "tokio-stream",
  "tokio-util",
@@ -8325,7 +8324,7 @@ dependencies = [
  "parking_lot 0.12.4",
  "reth-mdbx-sys",
  "smallvec",
- "thiserror 2.0.16",
+ "thiserror 2.0.14",
  "tracing",
 ]
 
@@ -8367,7 +8366,7 @@ dependencies = [
  "if-addrs",
  "reqwest",
  "serde_with",
- "thiserror 2.0.16",
+ "thiserror 2.0.14",
  "tokio",
  "tracing",
 ]
@@ -8420,7 +8419,7 @@ dependencies = [
  "secp256k1 0.30.0",
  "serde",
  "smallvec",
- "thiserror 2.0.16",
+ "thiserror 2.0.14",
  "tokio",
  "tokio-stream",
  "tokio-util",
@@ -8448,7 +8447,7 @@ dependencies = [
  "reth-primitives-traits",
  "reth-tokio-util",
  "serde",
- "thiserror 2.0.16",
+ "thiserror 2.0.14",
  "tokio",
  "tokio-stream",
 ]
@@ -8486,7 +8485,7 @@ dependencies = [
  "enr",
  "secp256k1 0.30.0",
  "serde_with",
- "thiserror 2.0.16",
+ "thiserror 2.0.14",
  "tokio",
  "url",
 ]
@@ -8517,7 +8516,7 @@ dependencies = [
  "memmap2",
  "reth-fs-util",
  "serde",
- "thiserror 2.0.16",
+ "thiserror 2.0.14",
  "tracing",
  "zstd",
 ]
@@ -8658,7 +8657,7 @@ dependencies = [
  "serde",
  "shellexpand",
  "strum 0.27.2",
- "thiserror 2.0.16",
+ "thiserror 2.0.14",
  "toml",
  "tracing",
  "url",
@@ -8720,7 +8719,7 @@ dependencies = [
  "reth-transaction-pool",
  "serde",
  "serde_json",
- "thiserror 2.0.16",
+ "thiserror 2.0.14",
  "tokio",
  "tokio-stream",
  "tokio-tungstenite",
@@ -8853,7 +8852,7 @@ dependencies = [
  "reth-primitives-traits",
  "scroll-alloy-rpc-types-engine",
  "serde",
- "thiserror 2.0.16",
+ "thiserror 2.0.14",
  "tokio",
 ]
 
@@ -8922,7 +8921,7 @@ dependencies = [
  "secp256k1 0.30.0",
  "serde",
  "serde_with",
- "thiserror 2.0.16",
+ "thiserror 2.0.14",
 ]
 
 [[package]]
@@ -8993,7 +8992,7 @@ dependencies = [
  "reth-static-file-types",
  "reth-tokio-util",
  "rustc-hash 2.1.1",
- "thiserror 2.0.16",
+ "thiserror 2.0.14",
  "tokio",
  "tracing",
 ]
@@ -9009,7 +9008,7 @@ dependencies = [
  "modular-bitfield",
  "reth-codecs",
  "serde",
- "thiserror 2.0.16",
+ "thiserror 2.0.14",
 ]
 
 [[package]]
@@ -9094,7 +9093,7 @@ dependencies = [
  "serde",
  "serde_json",
  "sha2 0.10.9",
- "thiserror 2.0.16",
+ "thiserror 2.0.14",
  "tokio",
  "tokio-stream",
  "tower",
@@ -9160,7 +9159,7 @@ dependencies = [
  "reth-tasks",
  "reth-transaction-pool",
  "serde",
- "thiserror 2.0.16",
+ "thiserror 2.0.14",
  "tokio",
  "tokio-util",
  "tower",
@@ -9190,7 +9189,7 @@ dependencies = [
  "scroll-alloy-consensus",
  "scroll-alloy-evm",
  "scroll-alloy-rpc-types",
- "thiserror 2.0.16",
+ "thiserror 2.0.14",
 ]
 
 [[package]]
@@ -9218,7 +9217,7 @@ dependencies = [
  "reth-tasks",
  "reth-transaction-pool",
  "serde",
- "thiserror 2.0.16",
+ "thiserror 2.0.14",
  "tokio",
  "tracing",
 ]
@@ -9306,7 +9305,7 @@ dependencies = [
  "revm-inspectors",
  "schnellru",
  "serde",
- "thiserror 2.0.16",
+ "thiserror 2.0.14",
  "tokio",
  "tokio-stream",
  "tracing",
@@ -9407,7 +9406,7 @@ dependencies = [
  "reth-scroll-primitives",
  "scroll-alloy-consensus",
  "scroll-alloy-hardforks",
- "thiserror 2.0.16",
+ "thiserror 2.0.14",
  "tracing",
 ]
 
@@ -9462,7 +9461,7 @@ dependencies = [
  "scroll-alloy-consensus",
  "scroll-alloy-evm",
  "scroll-alloy-hardforks",
- "thiserror 2.0.16",
+ "thiserror 2.0.14",
  "tracing",
 ]
 
@@ -9559,7 +9558,7 @@ dependencies = [
  "reth-transaction-pool",
  "revm",
  "scroll-alloy-hardforks",
- "thiserror 2.0.16",
+ "thiserror 2.0.14",
  "tracing",
 ]
 
@@ -9619,7 +9618,7 @@ dependencies = [
  "scroll-alloy-hardforks",
  "scroll-alloy-network",
  "scroll-alloy-rpc-types",
- "thiserror 2.0.16",
+ "thiserror 2.0.14",
  "tokio",
  "tracing",
 ]
@@ -9693,7 +9692,7 @@ dependencies = [
  "reth-trie-db",
  "serde",
  "tempfile",
- "thiserror 2.0.16",
+ "thiserror 2.0.14",
  "tokio",
  "tracing",
 ]
@@ -9720,7 +9719,7 @@ dependencies = [
  "reth-static-file",
  "reth-static-file-types",
  "reth-tokio-util",
- "thiserror 2.0.16",
+ "thiserror 2.0.14",
  "tokio",
  "tracing",
 ]
@@ -9808,7 +9807,7 @@ dependencies = [
  "reth-prune-types",
  "reth-static-file-types",
  "revm-database-interface",
- "thiserror 2.0.16",
+ "thiserror 2.0.14",
 ]
 
 [[package]]
@@ -9823,7 +9822,7 @@ dependencies = [
  "pin-project",
  "rayon",
  "reth-metrics",
- "thiserror 2.0.16",
+ "thiserror 2.0.14",
  "tokio",
  "tracing",
  "tracing-futures",
@@ -9904,7 +9903,7 @@ dependencies = [
  "serde",
  "serde_json",
  "smallvec",
- "thiserror 2.0.16",
+ "thiserror 2.0.14",
  "tokio",
  "tokio-stream",
  "tracing",
@@ -9951,7 +9950,7 @@ dependencies = [
  "derive_more",
  "hash-db",
  "itertools 0.14.0",
- "nybbles 0.4.3",
+ "nybbles 0.4.2",
  "plain_hasher",
  "reth-codecs",
  "reth-primitives-traits",
@@ -9993,7 +9992,7 @@ dependencies = [
  "reth-trie-common",
  "reth-trie-db",
  "reth-trie-sparse",
- "thiserror 2.0.16",
+ "thiserror 2.0.14",
  "tokio",
  "tracing",
 ]
@@ -10187,7 +10186,7 @@ dependencies = [
  "revm",
  "serde",
  "serde_json",
- "thiserror 2.0.16",
+ "thiserror 2.0.14",
 ]
 
 [[package]]
@@ -10405,6 +10404,7 @@ dependencies = [
  "alloy-signer-aws",
  "alloy-signer-local",
  "alloy-transport",
+ "async-trait",
  "auto_impl",
  "aws-config",
  "aws-sdk-kms",
@@ -10412,6 +10412,7 @@ dependencies = [
  "color-eyre",
  "eyre",
  "futures",
+ "jsonrpsee",
  "reqwest",
  "reth-chainspec",
  "reth-cli-util",
@@ -10496,6 +10497,7 @@ dependencies = [
  "reth-scroll-chainspec",
  "reth-scroll-forks",
  "reth-scroll-primitives",
+ "reth-tracing",
  "rollup-node-primitives",
  "rollup-node-watcher",
  "scroll-alloy-consensus",
@@ -10505,7 +10507,7 @@ dependencies = [
  "scroll-network",
  "serde_json",
  "strum 0.27.2",
- "thiserror 2.0.16",
+ "thiserror 2.0.14",
  "tokio",
  "tokio-stream",
  "tracing",
@@ -10596,7 +10598,7 @@ dependencies = [
  "scroll-alloy-rpc-types-engine",
  "scroll-db",
  "serde",
- "thiserror 2.0.16",
+ "thiserror 2.0.14",
  "tokio",
 ]
 
@@ -10630,7 +10632,7 @@ dependencies = [
  "scroll-db",
  "scroll-engine",
  "tempfile",
- "thiserror 2.0.16",
+ "thiserror 2.0.14",
  "tokio",
  "tracing",
 ]
@@ -10648,7 +10650,7 @@ dependencies = [
  "reth-scroll-primitives",
  "reth-tracing",
  "rollup-node-primitives",
- "thiserror 2.0.16",
+ "thiserror 2.0.14",
  "tokio",
  "tokio-stream",
  "tracing",
@@ -10680,7 +10682,7 @@ dependencies = [
  "rollup-node-providers",
  "scroll-alloy-consensus",
  "scroll-l1",
- "thiserror 2.0.16",
+ "thiserror 2.0.14",
  "tokio",
  "tracing",
 ]
@@ -11136,7 +11138,7 @@ dependencies = [
  "reth-scroll-engine-primitives",
  "scroll-alloy-network",
  "scroll-alloy-rpc-types-engine",
- "thiserror 2.0.16",
+ "thiserror 2.0.14",
  "tower",
 ]
 
@@ -11182,7 +11184,7 @@ dependencies = [
  "scroll-alloy-consensus",
  "scroll-l1",
  "serde_json",
- "thiserror 2.0.16",
+ "thiserror 2.0.14",
  "zstd",
 ]
 
@@ -11202,7 +11204,7 @@ dependencies = [
  "scroll-alloy-rpc-types-engine",
  "scroll-migration",
  "sea-orm",
- "thiserror 2.0.16",
+ "thiserror 2.0.14",
  "tokio",
  "tracing",
 ]
@@ -11226,7 +11228,7 @@ dependencies = [
  "scroll-alloy-rpc-types-engine",
  "scroll-codec",
  "scroll-db",
- "thiserror 2.0.16",
+ "thiserror 2.0.14",
  "tokio",
  "tracing",
 ]
@@ -11264,7 +11266,7 @@ dependencies = [
  "scroll-alloy-rpc-types-engine",
  "scroll-engine",
  "scroll-network",
- "thiserror 2.0.16",
+ "thiserror 2.0.14",
  "tokio",
  "tracing",
 ]
@@ -11279,7 +11281,7 @@ dependencies = [
  "bitvec",
  "derive_more",
  "scroll-alloy-consensus",
- "thiserror 2.0.16",
+ "thiserror 2.0.14",
 ]
 
 [[package]]
@@ -11322,7 +11324,7 @@ dependencies = [
  "reth-tokio-util",
  "scroll-alloy-hardforks",
  "scroll-wire",
- "thiserror 2.0.16",
+ "thiserror 2.0.14",
  "tokio",
  "tokio-stream",
  "tracing",
@@ -11389,7 +11391,7 @@ dependencies = [
  "serde_json",
  "sqlx",
  "strum 0.26.3",
- "thiserror 2.0.16",
+ "thiserror 2.0.14",
  "time",
  "tracing",
  "url",
@@ -11487,8 +11489,8 @@ dependencies = [
  "heck 0.4.1",
  "proc-macro2",
  "quote",
- "syn 2.0.106",
- "thiserror 2.0.16",
+ "syn 2.0.104",
+ "thiserror 2.0.14",
 ]
 
 [[package]]
@@ -11882,7 +11884,7 @@ checksum = "297f631f50729c8c99b84667867963997ec0b50f32b2a7dbcab828ef0541e8bb"
 dependencies = [
  "num-bigint",
  "num-traits",
- "thiserror 2.0.16",
+ "thiserror 2.0.14",
  "time",
 ]
 
@@ -12034,7 +12036,7 @@ dependencies = [
  "serde_json",
  "sha2 0.10.9",
  "smallvec",
- "thiserror 2.0.16",
+ "thiserror 2.0.14",
  "time",
  "tokio",
  "tokio-stream",
@@ -12121,7 +12123,7 @@ dependencies = [
  "smallvec",
  "sqlx-core",
  "stringprep",
- "thiserror 2.0.16",
+ "thiserror 2.0.14",
  "time",
  "tracing",
  "uuid",
@@ -12164,7 +12166,7 @@ dependencies = [
  "smallvec",
  "sqlx-core",
  "stringprep",
- "thiserror 2.0.16",
+ "thiserror 2.0.14",
  "time",
  "tracing",
  "uuid",
@@ -12191,7 +12193,7 @@ dependencies = [
  "serde",
  "serde_urlencoded",
  "sqlx-core",
- "thiserror 2.0.16",
+ "thiserror 2.0.14",
  "time",
  "tracing",
  "url",
@@ -12426,11 +12428,11 @@ dependencies = [
 
 [[package]]
 name = "thiserror"
-version = "2.0.16"
+version = "2.0.14"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3467d614147380f2e4e374161426ff399c91084acd2363eaf549172b3d5e60c0"
+checksum = "0b0949c3a6c842cbde3f1686d6eea5a010516deb7085f79db747562d4102f41e"
 dependencies = [
- "thiserror-impl 2.0.16",
+ "thiserror-impl 2.0.14",
 ]
 
 [[package]]
@@ -12446,9 +12448,9 @@ dependencies = [
 
 [[package]]
 name = "thiserror-impl"
-version = "2.0.16"
+version = "2.0.14"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6c5e1be1c48b9172ee610da68fd9cd2770e7a4056cb3fc98710ee6906f0c7960"
+checksum = "cc5b44b4ab9c2fdd0e0512e6bece8388e214c0749f5862b114cc5b7a25daf227"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -12959,7 +12961,7 @@ dependencies = [
  "rustls 0.23.31",
  "rustls-pki-types",
  "sha1",
- "thiserror 2.0.16",
+ "thiserror 2.0.14",
  "utf-8",
 ]
 
@@ -14067,7 +14069,7 @@ dependencies = [
  "pharos",
  "rustc_version 0.4.1",
  "send_wrapper 0.6.0",
- "thiserror 2.0.16",
+ "thiserror 2.0.14",
  "wasm-bindgen",
  "wasm-bindgen-futures",
  "web-sys",

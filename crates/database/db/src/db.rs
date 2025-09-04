@@ -311,7 +311,7 @@ mod test {
 
         // Fetch the finalized batch for provided height and verify number.
         let batch_infos = db
-            .get_batches_by_finalized_block_range(100, 110)
+            .fetch_and_update_unprocessed_finalized_batches(110)
             .await
             .unwrap()
             .into_iter()
