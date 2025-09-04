@@ -463,6 +463,7 @@ pub trait DatabaseOperations: DatabaseConnectionProvider {
         Ok(())
     }
 
+    /// Insert the genesis block into the database.
     async fn insert_genesis_block(&self, genesis_hash: B256) -> Result<(), DatabaseError> {
         let genesis_block = L2BlockInfoWithL1Messages {
             block_info: BlockInfo::new(0, genesis_hash),
