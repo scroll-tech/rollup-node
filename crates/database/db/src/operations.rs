@@ -3,7 +3,6 @@ use crate::DatabaseConnectionProvider;
 
 use alloy_primitives::{Signature, B256};
 use futures::{Stream, StreamExt};
-use reth_scroll_node::SignatureProvider;
 use rollup_node_primitives::{
     BatchCommitData, BatchInfo, BlockInfo, L1MessageEnvelope, L2BlockInfoWithL1Messages, Metadata,
 };
@@ -667,21 +666,3 @@ pub struct UnwindResult {
 }
 
 impl<T> DatabaseOperations for T where T: DatabaseConnectionProvider {}
-
-/// TODO: remove this once we deprecated l2geth.
-#[async_trait::async_trait]
-impl SignatureProvider for crate::Database {
-    type Error = DatabaseError;
-
-    async fn insert_signature(
-        &self,
-        block_hash: B256,
-        signature: Signature,
-    ) -> Result<(), Self::Error> {
-        DatabaseOperations::insert_signature(self, block_hash, signature).await
-    }
-
-    async fn get_signature(&self, block_hash: B256) -> Result<Option<Signature>, Self::Error> {
-        DatabaseOperations::get_signature(self, block_hash).await
-    }
-}

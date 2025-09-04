@@ -33,6 +33,7 @@ scroll-alloy-hardforks.workspace = true
 scroll-alloy-network.workspace = true
 scroll-alloy-provider.workspace = true
 
+reth-primitives-traits.workspace = true
 reth-scroll-engine-primitives.workspace = true
 reth-scroll-evm = { git = "https://github.com/scroll-tech/reth.git", branch = "morty/fix-eth66-serve-signature" }
 reth-scroll-cli = { git = "https://github.com/scroll-tech/reth.git", branch = "morty/fix-eth66-serve-signature" }
