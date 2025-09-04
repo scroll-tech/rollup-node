@@ -661,6 +661,7 @@ impl<
         let txn = database.tx().await?;
         let prev_batch_index = batch.index - 1;
 
+        // Perform a consistency check to ensure the previous commit batch exists in the database.
         if txn.get_batch_by_index(prev_batch_index).await?.is_none() {
             return Err(ChainOrchestratorError::BatchCommitGap(batch.index))
         }
