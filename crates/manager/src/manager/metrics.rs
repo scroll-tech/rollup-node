@@ -1,17 +1,17 @@
 use metrics::{Counter, Gauge};
 use metrics_derive::Metrics;
 
-/// The metrics for the [`Handle`].
+/// The metrics for the [`super::RollupManagerHandle`].
 #[derive(Metrics, Clone)]
-#[metrics(scope = "Manager")]
+#[metrics(scope = "NodeManager")]
 pub(crate) struct HandleMetrics {
     /// Failed to send command to rollup manager from handle counter.
     pub handle_send_command_failed: Counter,
 }
 
-/// The metrics for the [`Manager`].
+/// The metrics for the [`super::RollupNodeManager`].
 #[derive(Metrics, Clone)]
-#[metrics(scope = "Manager")]
+#[metrics(scope = "NodeManager")]
 pub(crate) struct RollupNodeManagerMetrics {
     /// Manager received and handle rollup manager command counter.
     pub handle_rollup_manager_command: Counter,

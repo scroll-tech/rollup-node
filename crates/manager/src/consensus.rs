@@ -1,11 +1,11 @@
 use alloy_primitives::{Address, Signature};
+use metrics::Counter;
+use metrics_derive::Metrics;
 use reth_primitives_traits::GotExpected;
 use reth_scroll_primitives::ScrollBlock;
 use rollup_node_primitives::{sig_encode_hash, ConsensusUpdate};
 use scroll_network::ConsensusError;
 use std::fmt::Debug;
-use metrics::Counter;
-use metrics_derive::Metrics;
 
 /// A trait for consensus implementations.
 pub trait Consensus: Send + Debug {
@@ -42,7 +42,6 @@ impl Consensus for NoopConsensus {
     }
 }
 
-
 /// The metrics for the [`SystemContractConsensus`].
 #[derive(Metrics, Clone)]
 #[metrics(scope = "consensus")]
@@ -64,10 +63,7 @@ impl SystemContractConsensus {
     /// Creates a new [`SystemContractConsensus`] consensus instance with the given authorized
     /// signers.
     pub fn new(authorized_signer: Address) -> Self {
-        Self {
-            authorized_signer,
-            metrics: SystemContractConsensusMetrics::default(),
-        }
+        Self { authorized_signer, metrics: SystemContractConsensusMetrics::default() }
     }
 }
 
