@@ -23,6 +23,9 @@ scroll-migration = { workspace = true, optional = true }
 rollup-node-primitives.workspace = true
 rollup-node-signer.workspace = true
 
+# reth-scroll
+reth-scroll-node.workspace = true
+
 # misc
 async-trait.workspace = true
 auto_impl.workspace = true

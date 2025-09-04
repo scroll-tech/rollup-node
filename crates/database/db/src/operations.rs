@@ -3,6 +3,7 @@ use crate::DatabaseConnectionProvider;
 
 use alloy_primitives::{Signature, B256};
 use futures::{Stream, StreamExt};
+use reth_scroll_node::SignatureProvider;
 use rollup_node_primitives::{
     BatchCommitData, BatchInfo, BlockInfo, L1MessageEnvelope, L2BlockInfoWithL1Messages, Metadata,
 };
@@ -611,10 +612,7 @@ pub trait DatabaseOperations: DatabaseConnectionProvider {
 
     /// Get a block signature from the database by block hash.
     /// TODO: remove this once we deprecated l2geth.
-    async fn get_block_signature(
-        &self,
-        block_hash: B256,
-    ) -> Result<Option<Signature>, DatabaseError> {
+    async fn get_signature(&self, block_hash: B256) -> Result<Option<Signature>, DatabaseError> {
         tracing::trace!(target: "scroll::db", block_hash = ?block_hash, "Retrieving block signature from database.");
 
         let block_signature = models::block_signature::Entity::find_by_id(block_hash.to_vec())
@@ -669,3 +667,21 @@ pub struct UnwindResult {
 }
 
 impl<T> DatabaseOperations for T where T: DatabaseConnectionProvider {}
+
+/// TODO: remove this once we deprecated l2geth.
+#[async_trait::async_trait]
+impl SignatureProvider for crate::Database {
+    type Error = DatabaseError;
+
+    async fn insert_signature(
+        &self,
+        block_hash: B256,
+        signature: Signature,
+    ) -> Result<(), Self::Error> {
+        DatabaseOperations::insert_signature(self, block_hash, signature).await
+    }
+
+    async fn get_signature(&self, block_hash: B256) -> Result<Option<Signature>, Self::Error> {
+        DatabaseOperations::get_signature(self, block_hash).await
+    }
+}
