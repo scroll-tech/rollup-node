@@ -1372,6 +1372,19 @@ mod test {
         // Instantiate chain orchestrator and db
         let (mut chain_orchestrator, db) = setup_test_chain_orchestrator().await;
 
+        // Insert the previous l1 message in the database to satisfy the chain orchestrator
+        // consistency checks.
+        let message = L1MessageEnvelope {
+            transaction: TxL1Message {
+                queue_index: TEST_L1_MESSAGE_QUEUE_INDEX_BOUNDARY - 1,
+                ..Default::default()
+            },
+            l1_block_number: 1475587,
+            l2_block_number: None,
+            queue_hash: None,
+        };
+        db.insert_l1_message(message).await.unwrap();
+
         // insert the previous L1 message in database.
         chain_orchestrator.handle_l1_notification(L1Notification::L1Message {
             message: TxL1Message {
