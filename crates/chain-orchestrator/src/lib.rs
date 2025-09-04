@@ -636,6 +636,19 @@ impl<
             compute_l1_message_queue_hash(&database, &l1_message, l1_v2_message_queue_start_index)
                 .await?;
         let l1_message = L1MessageEnvelope::new(l1_message, l1_block_number, None, queue_hash);
+
+        // Perform a consistency check to ensure the previous L1 message exists in the database.
+        if l1_message.transaction.queue_index > 0 &&
+            database
+                .get_l1_message_by_index(l1_message.transaction.queue_index - 1)
+                .await?
+                .is_none()
+        {
+            return Err(ChainOrchestratorError::L1MessageQueueGap(
+                l1_message.transaction.queue_index,
+            ))
+        }
+
         database.insert_l1_message(l1_message).await?;
         Ok(Some(event))
     }
@@ -647,6 +660,10 @@ impl<
     ) -> Result<Option<ChainOrchestratorEvent>, ChainOrchestratorError> {
         let txn = database.tx().await?;
         let prev_batch_index = batch.index - 1;
+
+        if txn.get_batch_by_index(prev_batch_index).await?.is_none() {
+            return Err(ChainOrchestratorError::BatchCommitGap(batch.index))
+        }
 
         // remove any batches with an index greater than the previous batch.
         let affected = txn.delete_batches_gt_batch_index(prev_batch_index).await?;
