@@ -1,12 +1,12 @@
 use super::{RollupManagerCommand, RollupManagerEvent};
 use crate::manager::metrics::HandleMetrics;
-use log::error;
 use reth_network_api::FullNetwork;
 use reth_scroll_node::ScrollNetworkPrimitives;
 use reth_tokio_util::EventStream;
 use rollup_node_primitives::BlockInfo;
 use scroll_network::ScrollNetworkHandle;
 use tokio::sync::{mpsc, oneshot};
+use tracing::error;
 
 /// The handle used to send commands to the rollup manager.
 #[derive(Debug, Clone)]
