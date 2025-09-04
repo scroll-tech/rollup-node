@@ -14,7 +14,7 @@ use reth_network_api::block::EthWireProvider;
 use reth_node_api::NodeTypesWithDBAdapter;
 use reth_provider::providers::BlockchainProvider;
 use reth_rpc_api::EthApiServer;
-use reth_scroll_chainspec::SCROLL_DEV;
+use reth_scroll_chainspec::{ScrollChainSpec, SCROLL_DEV, SCROLL_MAINNET, SCROLL_SEPOLIA};
 use reth_scroll_node::ScrollNetworkPrimitives;
 use reth_scroll_primitives::ScrollBlock;
 use reth_tokio_util::EventStream;
@@ -38,7 +38,7 @@ use rollup_node_watcher::L1Notification;
 use scroll_alloy_consensus::TxL1Message;
 use scroll_alloy_rpc_types::Transaction as ScrollAlloyTransaction;
 use scroll_db::L1MessageStart;
-use scroll_network::{NewBlockWithPeer, SCROLL_MAINNET};
+use scroll_network::NewBlockWithPeer;
 use scroll_wire::{ScrollWireConfig, ScrollWireProtocolHandler};
 use std::{path::PathBuf, sync::Arc, time::Duration};
 use tokio::{
@@ -1273,6 +1273,140 @@ async fn can_handle_l1_message_reorg() -> eyre::Result<()> {
 
     // Assert that block 11 has a different hash after the reorg.
     assert_ne!(block11_before_reorg.unwrap(), node0_latest_block.header.hash_slow());
+
+    Ok(())
+}
+
+/// Tests that a sequencer and follower node can produce blocks using a custom local genesis
+/// configuration and properly propagate them between nodes.
+#[tokio::test]
+async fn test_custom_genesis_block_production_and_propagation() -> eyre::Result<()> {
+    reth_tracing::init_test_tracing();
+    color_eyre::install()?;
+
+    // Create a custom genesis config.
+    // In a real scenario, this JSON would be loaded from a file using --chain flag.
+    let custom_genesis_json = r#"{
+        "config": {
+            "chainId": 999999,
+            "homesteadBlock": 0,
+            "eip150Block": 0,
+            "eip155Block": 0,
+            "eip158Block": 0,
+            "byzantiumBlock": 0,
+            "constantinopleBlock": 0,
+            "petersburgBlock": 0,
+            "istanbulBlock": 0,
+            "berlinBlock": 0,
+            "londonBlock": 0,
+            "archimedesBlock": 0,
+            "shanghaiBlock": 0,
+            "bernoulliBlock": 0,
+            "curieBlock": 0,
+            "darwinTime": 0,
+            "darwinV2Time": 0,
+            "euclidTime": 0,
+            "euclidV2Time": 0,
+            "feynmanTime": 0,
+            "scroll": {
+                "feeVaultAddress": "0x5300000000000000000000000000000000000005",
+                "maxTxPayloadBytesPerBlock": 122880,
+                "l1Config": {
+                    "l1ChainId": 1,
+                    "l1MessageQueueAddress": "0x0d7E906BD9cAFa154b048cFa766Cc1E54E39AF9B",
+                    "l1MessageQueueV2Address": "0x000000000000000000000000000000000003dead",
+                    "scrollChainAddress": "0x000000000000000000000000000000000003dead",
+                    "l2SystemConfigAddress": "0x000000000000000000000000000000000003dead",
+                    "numL1MessagesPerBlock": 10,
+                    "l1MessageQueueV2DeploymentBlock": 12345
+                }
+            }
+        },
+        "nonce": "0x0",
+        "timestamp": "0x12345678",
+        "extraData": "0x637573746f6d5f67656e657369735f74657374",
+        "gasLimit": "0x1312D00",
+        "baseFeePerGas": "0x1",
+        "difficulty": "0x0",
+        "mixHash": "0x0000000000000000000000000000000000000000000000000000000000000000",
+        "coinbase": "0x0000000000000000000000000000000000000000",
+        "alloc": {
+            "0x8626f6940E2eb28930eFb4CeF49B2d1F2C9C1199": {
+                "balance": "0xD3C21BCECCEDA1000000"
+            },
+            "0x5300000000000000000000000000000000000002": {
+                "balance": "0xd3c21bcecceda1000000",
+                "storage": {
+                    "0x01": "0x000000000000000000000000000000000000000000000000000000003758e6b0",
+                    "0x02": "0x0000000000000000000000000000000000000000000000000000000000000038",
+                    "0x03": "0x000000000000000000000000000000000000000000000000000000003e95ba80",
+                    "0x04": "0x0000000000000000000000005300000000000000000000000000000000000003",
+                    "0x05": "0x000000000000000000000000000000000000000000000000000000008390c2c1",
+                    "0x06": "0x00000000000000000000000000000000000000000000000000000069cf265bfe",
+                    "0x07": "0x00000000000000000000000000000000000000000000000000000000168b9aa3"
+                }
+            }
+        },
+        "number": "0x0", 
+        "gasUsed": "0x0",
+        "parentHash": "0x0000000000000000000000000000000000000000000000000000000000000000"
+    }"#;
+
+    let custom_genesis =
+        serde_json::from_str(custom_genesis_json).expect("Custom genesis JSON should be valid");
+
+    // Create a custom ScrollChainSpec using the from_custom_genesis method
+    // This simulates what would happen when using --chain flag with a custom file
+    let custom_chain_spec = Arc::new(ScrollChainSpec::from_custom_genesis(custom_genesis));
+
+    // Launch 2 nodes: node0=sequencer and node1=follower.
+    let config = default_sequencer_test_scroll_rollup_node_config();
+    let (mut nodes, _tasks, _) =
+        setup_engine(config, 2, custom_chain_spec.clone(), false, false).await?;
+    let node0 = nodes.remove(0);
+    let node1 = nodes.remove(0);
+
+    // Get handles
+    let node0_rnm_handle = node0.inner.add_ons_handle.rollup_manager_handle.clone();
+    let mut node0_rnm_events = node0_rnm_handle.get_event_listener().await?;
+
+    let node1_rnm_handle = node1.inner.add_ons_handle.rollup_manager_handle.clone();
+    let mut node1_rnm_events = node1_rnm_handle.get_event_listener().await?;
+
+    // Verify the genesis hash is different from all predefined networks
+    assert_ne!(custom_chain_spec.genesis_hash(), SCROLL_DEV.genesis_hash());
+    assert_ne!(custom_chain_spec.genesis_hash(), SCROLL_SEPOLIA.genesis_hash());
+    assert_ne!(custom_chain_spec.genesis_hash(), SCROLL_MAINNET.genesis_hash());
+
+    // Verify both nodes start with the same genesis hash from the custom chain spec
+    assert_eq!(
+        custom_chain_spec.genesis_hash(),
+        node0.block_hash(0),
+        "Node0 should have the custom genesis hash"
+    );
+    assert_eq!(
+        custom_chain_spec.genesis_hash(),
+        node1.block_hash(0),
+        "Node1 should have the custom genesis hash"
+    );
+
+    // Let the sequencer build 10 blocks.
+    for i in 1..=10 {
+        node0_rnm_handle.build_block().await;
+        let b = wait_for_block_sequenced_5s(&mut node0_rnm_events, i).await?;
+        tracing::info!(target: "scroll::test", block_number = ?b.header.number, block_hash = ?b.header.hash_slow(), "Sequenced block");
+    }
+
+    // Assert that the follower node has received all 10 blocks from the sequencer node.
+    wait_for_block_imported_5s(&mut node1_rnm_events, 10).await?;
+
+    // Assert both nodes have the same latest block hash.
+    assert_eq!(latest_block(&node0).await?.header.number, 10, "Node0 should be at block 10");
+    assert_eq!(
+        latest_block(&node0).await?.header.hash_slow(),
+        latest_block(&node1).await?.header.hash_slow(),
+        "Both nodes should have the same latest block hash"
+    );
 
     Ok(())
 }

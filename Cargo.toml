@@ -209,3 +209,58 @@ getrandom = { version = "0.2", features = ["js"] }
 [patch.crates-io]
 revm = { git = "https://github.com/scroll-tech/revm" }
 op-revm = { git = "https://github.com/scroll-tech/revm" }
+
+# [patch."https://github.com/scroll-tech/reth.git"]
+# reth crates
+# reth-chainspec = { path = "../reth/crates/chainspec" }
+# reth-e2e-test-utils = { path = "../reth/crates/e2e-test-utils" }
+# reth-eth-wire-types = { path = "../reth/crates/net/eth-wire-types" }
+# reth-network = { path = "../reth/crates/net/network" }
+# reth-network-api = { path = "../reth/crates/net/network-api" }
+# reth-network-peers = { path = "../reth/crates/net/peers" }
+# reth-network-p2p = { path = "../reth/crates/net/p2p" }
+# reth-network-types = { path = "../reth/crates/net/network-types" }
+# reth-node-builder = { path = "../reth/crates/node/builder" }
+# reth-node-core = { path = "../reth/crates/node/core" }
+# reth-node-api = { path = "../reth/crates/node/api" }
+# reth-node-types = { path = "../reth/crates/node/types" }
+# reth-payload-primitives = { path = "../reth/crates/payload/primitives" }
+# reth-primitives = { path = "../reth/crates/primitives" }
+# reth-primitives-traits = { path = "../reth/crates/primitives-traits" }
+# reth-provider = { path = "../reth/crates/storage/provider" }
+# reth-rpc-builder = { path = "../reth/crates/rpc/rpc-builder" }
+# reth-rpc-server-types = { path = "../reth/crates/rpc/rpc-server-types" }
+# reth-rpc-api = { path = "../reth/crates/rpc/rpc-api" }
+# reth-rpc-eth-api = { path = "../reth/crates/rpc/rpc-eth-api" }
+# reth-rpc-eth-types = { path = "../reth/crates/rpc/rpc-eth-types" }
+# reth-storage-api = { path = "../reth/crates/storage/storage-api" }
+# reth-tasks = { path = "../reth/crates/tasks" }
+# reth-tokio-util = { path = "../reth/crates/tokio-util" }
+# reth-tracing = { path = "../reth/crates/tracing" }
+# reth-transaction-pool = { path = "../reth/crates/transaction-pool" }
+# reth-trie-db = { path = "../reth/crates/trie/db" }
+# reth-testing-utils = { path = "../reth/testing/testing-utils" }
+# reth-revm = { path = "../reth/crates/revm" }
+# reth-evm = { path = "../reth/crates/evm/evm" }
+# reth-cli-util = { path = "../reth/crates/cli/util" }
+# reth-engine-local = { path = "../reth/crates/engine/local" }
+# reth-eth-wire = { path = "../reth/crates/net/eth-wire" }
+
+# scroll-alloy crates
+# scroll-alloy-consensus = { path = "../reth/crates/scroll/alloy/consensus" }
+# scroll-alloy-hardforks = { path = "../reth/crates/scroll/alloy/hardforks" }
+# scroll-alloy-network = { path = "../reth/crates/scroll/alloy/network" }
+# scroll-alloy-provider = { path = "../reth/crates/scroll/alloy/provider" }
+# scroll-alloy-rpc-types-engine = { path = "../reth/crates/scroll/alloy/rpc-types-engine" }
+# scroll-alloy-evm = { path = "../reth/crates/scroll/alloy/evm" }
+# scroll-alloy-rpc-types = { path = "../reth/crates/scroll/alloy/rpc-types" }
+
+# reth-scroll crates
+# reth-scroll-chainspec = { path = "../reth/crates/scroll/chainspec" }
+# reth-scroll-engine-primitives = { path = "../reth/crates/scroll/engine-primitives" }
+# reth-scroll-forks = { path = "../reth/crates/scroll/hardforks" }
+# reth-scroll-node = { path = "../reth/crates/scroll/node" }
+# reth-scroll-primitives = { path = "../reth/crates/scroll/primitives" }
+# reth-scroll-evm = { path = "../reth/crates/scroll/evm" }
+# reth-scroll-cli = { path = "../reth/crates/scroll/cli" }
+# reth-scroll-rpc = { path = "../reth/crates/scroll/rpc" }
