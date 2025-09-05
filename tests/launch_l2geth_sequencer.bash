@@ -19,7 +19,7 @@ echo "test" > /l2geth/keystore/password.txt
 # --config /l2geth/config.toml \
 echo "Starting l2geth as sequencer..."
 exec geth --datadir=/l2geth \
-  --port 30303 --syncmode full --networkid 1337 --nodiscover \
+  --port 30303 --syncmode full --networkid 938471 --nodiscover \
   --http --http.addr 0.0.0.0 --http.port 8545 --http.vhosts "*" --http.corsdomain "*" --http.api "eth,scroll,net,web3,debug" \
   --ws --ws.addr 0.0.0.0 --ws.port 8546 --ws.api "eth,scroll,net,web3,debug" \
   --pprof --pprof.addr 0.0.0.0 --pprof.port 6060 --metrics --verbosity 5 --log.debug \
