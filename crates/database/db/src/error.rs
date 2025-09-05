@@ -1,5 +1,7 @@
+use super::L1MessageStart;
 use alloy_eips::BlockId;
 use alloy_primitives::B256;
+use sea_orm::sqlx::Error as SqlxError;
 
 /// The error type for database operations.
 #[derive(Debug, thiserror::Error)]
@@ -15,5 +17,8 @@ pub enum DatabaseError {
     BlockNotFound(BlockId),
     /// The L1 message was not found in database.
     #[error("L1 message at index [{0}] not found in database")]
-    L1MessageNotFound(u64),
+    L1MessageNotFound(L1MessageStart),
+    /// An error occurred at the sqlx level.
+    #[error("A sqlx error occurred: {0}")]
+    SqlxError(#[from] SqlxError),
 }

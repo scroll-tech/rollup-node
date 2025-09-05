@@ -20,14 +20,19 @@ alloy-rpc-types-engine.workspace = true
 # scroll
 scroll-alloy-consensus.workspace = true
 scroll-alloy-rpc-types-engine.workspace = true
+reth-scroll-chainspec.workspace = true
 
 # reth
+reth-network-peers.workspace = true
 reth-primitives-traits.workspace = true
 reth-scroll-primitives.workspace = true
+reth-chainspec.workspace = true
+reth-node-core.workspace = true
 
 # misc
 arbitrary = { workspace = true, optional = true }
 derive_more = { workspace = true, features = ["from"] }
+eyre.workspace = true
 
 [features]
 default = ["std"]
@@ -42,6 +47,9 @@ std = [
     "reth-primitives-traits/std",
     "alloy-consensus/std",
     "alloy-chains/std",
+    "reth-chainspec/std",
+    "reth-scroll-chainspec/std",
+    "reth-network-peers/std",
 ]
 arbitrary = [
     "std",
@@ -56,4 +64,5 @@ arbitrary = [
     "alloy-consensus/arbitrary",
     "alloy-rpc-types-engine/arbitrary",
     "alloy-chains/arbitrary",
+    "reth-chainspec/arbitrary",
 ]

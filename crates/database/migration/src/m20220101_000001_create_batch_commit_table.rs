@@ -1,3 +1,4 @@
+use sea_orm::Statement;
 use sea_orm_migration::{prelude::*, schema::*};
 
 // TODO: migrate these to a constants module
@@ -23,7 +24,29 @@ impl MigrationTrait for Migration {
                     .col(big_unsigned_null(BatchCommit::FinalizedBlockNumber))
                     .to_owned(),
             )
-            .await
+            .await?;
+
+        manager
+            .get_connection()
+            .execute(Statement::from_sql_and_values(
+                manager.get_database_backend(),
+                r#"
+        INSERT INTO batch_commit ("index", hash, block_number, block_timestamp, calldata, blob_hash, finalized_block_number)
+        VALUES (?, ?, ?, ?, ?, ?, ?)
+        "#,
+                vec![
+                    0u64.into(),
+                    vec![0u8; HASH_LENGTH as usize].into(),
+                    0u64.into(),
+                    0u64.into(),
+                    vec![].into(),
+                    None::<Vec<u8>>.into(),
+                    0u64.into(),
+                ],
+            ))
+            .await?;
+
+        Ok(())
     }
 
     async fn down(&self, manager: &SchemaManager) -> Result<(), DbErr> {
@@ -41,4 +64,5 @@ pub(crate) enum BatchCommit {
     Calldata,
     BlobHash,
     FinalizedBlockNumber,
+    Processed,
 }

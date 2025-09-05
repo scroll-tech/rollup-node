@@ -67,7 +67,7 @@ async fn setup_pipeline(
     // construct the pipeline.
     let l1_messages_provider = DatabaseL1MessageProvider::new(db.clone(), 0);
     let mock_l1_provider = MockL1Provider { l1_messages_provider, blobs: HashMap::new() };
-    DerivationPipeline::new(mock_l1_provider, db)
+    DerivationPipeline::new(mock_l1_provider, db, u64::MAX)
 }
 
 fn benchmark_pipeline_derivation(c: &mut Criterion) {
@@ -84,7 +84,7 @@ fn benchmark_pipeline_derivation(c: &mut Criterion) {
 
                     // commit 1000 batches.
                     for _ in 0..1000 {
-                        pipeline.handle_batch_commit(batch_info, 0);
+                        pipeline.push_batch(batch_info, 0);
                     }
 
                     tx.send(pipeline).unwrap();

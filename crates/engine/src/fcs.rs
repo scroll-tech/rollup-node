@@ -127,10 +127,10 @@ impl ForkchoiceState {
 pub fn genesis_hash_from_chain_spec<CS: EthChainSpec<Header: BlockHeader>>(
     chain_spec: CS,
 ) -> Option<B256> {
-    match chain_spec.chain().named()? {
-        NamedChain::Scroll => Some(SCROLL_MAINNET_GENESIS_HASH),
-        NamedChain::ScrollSepolia => Some(SCROLL_SEPOLIA_GENESIS_HASH),
-        NamedChain::Dev => Some(chain_spec.genesis_header().hash_slow()),
+    match chain_spec.chain().named() {
+        Some(NamedChain::Scroll) => Some(SCROLL_MAINNET_GENESIS_HASH),
+        Some(NamedChain::ScrollSepolia) => Some(SCROLL_SEPOLIA_GENESIS_HASH),
+        Some(NamedChain::Dev) | None => Some(chain_spec.genesis_header().hash_slow()),
         _ => None,
     }
 }

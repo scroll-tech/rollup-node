@@ -2,6 +2,7 @@ use super::{RollupManagerCommand, RollupManagerEvent};
 use reth_network_api::FullNetwork;
 use reth_scroll_node::ScrollNetworkPrimitives;
 use reth_tokio_util::EventStream;
+use rollup_node_primitives::BlockInfo;
 use scroll_network::ScrollNetworkHandle;
 use tokio::sync::{mpsc, oneshot};
 
@@ -44,6 +45,25 @@ impl<N: FullNetwork<Primitives = ScrollNetworkPrimitives>> RollupManagerHandle<N
     ) -> Result<EventStream<RollupManagerEvent>, oneshot::error::RecvError> {
         let (tx, rx) = oneshot::channel();
         self.send_command(RollupManagerCommand::EventListener(tx)).await;
+        rx.await
+    }
+
+    /// Sends a command to the rollup manager to update the head of the FCS in the engine driver.
+    pub async fn update_fcs_head(&self, head: BlockInfo) {
+        self.send_command(RollupManagerCommand::UpdateFcsHead(head)).await;
+    }
+
+    /// Sends a command to the rollup manager to enable automatic sequencing.
+    pub async fn enable_automatic_sequencing(&self) -> Result<bool, oneshot::error::RecvError> {
+        let (tx, rx) = oneshot::channel();
+        self.send_command(RollupManagerCommand::EnableAutomaticSequencing(tx)).await;
+        rx.await
+    }
+
+    /// Sends a command to the rollup manager to disable automatic sequencing.
+    pub async fn disable_automatic_sequencing(&self) -> Result<bool, oneshot::error::RecvError> {
+        let (tx, rx) = oneshot::channel();
+        self.send_command(RollupManagerCommand::DisableAutomaticSequencing(tx)).await;
         rx.await
     }
 }

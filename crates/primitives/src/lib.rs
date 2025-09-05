@@ -8,13 +8,19 @@ mod attributes;
 pub use attributes::ScrollPayloadAttributesWithBatchInfo;
 
 mod block;
-pub use block::{BlockInfo, L2BlockInfoWithL1Messages, WithBlockNumber, DEFAULT_BLOCK_DIFFICULTY};
+pub use block::{
+    BlockInfo, L2BlockInfoWithL1Messages, WithBatchInfo, WithBlockNumber, WithCommittedBatchInfo,
+    WithFinalizedBatchInfo, WithFinalizedBlockNumber, DEFAULT_BLOCK_DIFFICULTY,
+};
 
 mod batch;
 pub use batch::{BatchCommitData, BatchInfo};
 
 mod bounded_vec;
 pub use bounded_vec::BoundedVec;
+
+mod chain;
+pub use chain::ChainImport;
 
 mod metadata;
 pub use metadata::Metadata;
@@ -29,12 +35,12 @@ pub use node::{
     config::{
         NodeConfig, DEVNET_L1_MESSAGE_QUEUE_V1_CONTRACT_ADDRESS,
         DEVNET_L1_MESSAGE_QUEUE_V2_CONTRACT_ADDRESS, DEVNET_ROLLUP_CONTRACT_ADDRESS,
-        DEV_L1_START_BLOCK_NUMBER, DEV_SYSTEM_CONTRAT_ADDRESS,
+        DEV_L1_START_BLOCK_NUMBER, DEV_SYSTEM_CONTRACT_ADDRESS,
         MAINNET_L1_MESSAGE_QUEUE_V1_CONTRACT_ADDRESS, MAINNET_L1_MESSAGE_QUEUE_V2_CONTRACT_ADDRESS,
         MAINNET_L1_START_BLOCK_NUMBER, MAINNET_ROLLUP_CONTRACT_ADDRESS,
-        MAINNET_SYSTEM_CONTRAT_ADDRESS, SEPOLIA_L1_MESSAGE_QUEUE_V1_CONTRACT_ADDRESS,
+        MAINNET_SYSTEM_CONTRACT_ADDRESS, SEPOLIA_L1_MESSAGE_QUEUE_V1_CONTRACT_ADDRESS,
         SEPOLIA_L1_MESSAGE_QUEUE_V2_CONTRACT_ADDRESS, SEPOLIA_L1_START_BLOCK_NUMBER,
-        SEPOLIA_ROLLUP_CONTRACT_ADDRESS, SEPOLIA_SYSTEM_CONTRAT_ADDRESS,
+        SEPOLIA_ROLLUP_CONTRACT_ADDRESS, SEPOLIA_SYSTEM_CONTRACT_ADDRESS,
     },
     consensus::ConsensusUpdate,
 };
