@@ -57,7 +57,11 @@ async fn test_should_consolidate_to_block_15k() -> eyre::Result<()> {
             initial_backoff: 100,
         },
         engine_driver_args: EngineDriverArgs { sync_at_startup: false },
-        sequencer_args: SequencerArgs { sequencer_enabled: false, ..Default::default() },
+        sequencer_args: SequencerArgs {
+            sequencer_enabled: false,
+            allow_empty_blocks: true,
+            ..Default::default()
+        },
         beacon_provider_args: BeaconProviderArgs {
             url: Some(Url::parse("https://eth-beacon-chain.drpc.org/rest/")?),
             compute_units_per_second: 100,
@@ -68,7 +72,6 @@ async fn test_should_consolidate_to_block_15k() -> eyre::Result<()> {
         signer_args: Default::default(),
         gas_price_oracle_args: GasPriceOracleArgs::default(),
         consensus_args: ConsensusArgs::noop(),
-        allow_empty_blocks: true,
     };
 
     let chain_spec = (*SCROLL_SEPOLIA).clone();
@@ -196,6 +199,7 @@ async fn test_should_consolidate_after_optimistic_sync() -> eyre::Result<()> {
             sequencer_enabled: true,
             block_time: 0,
             l1_message_inclusion_mode: L1MessageInclusionMode::BlockDepth(0),
+            allow_empty_blocks: true,
             ..SequencerArgs::default()
         },
         beacon_provider_args: BeaconProviderArgs {
@@ -205,7 +209,6 @@ async fn test_should_consolidate_after_optimistic_sync() -> eyre::Result<()> {
         signer_args: Default::default(),
         gas_price_oracle_args: GasPriceOracleArgs::default(),
         consensus_args: ConsensusArgs::noop(),
-        allow_empty_blocks: true,
     };
 
     // Create the chain spec for scroll dev with Feynman activated and a test genesis.
@@ -444,6 +447,7 @@ async fn test_consolidation() -> eyre::Result<()> {
             sequencer_enabled: true,
             block_time: 0,
             l1_message_inclusion_mode: L1MessageInclusionMode::BlockDepth(0),
+            allow_empty_blocks: true,
             ..SequencerArgs::default()
         },
         beacon_provider_args: BeaconProviderArgs {
@@ -453,7 +457,6 @@ async fn test_consolidation() -> eyre::Result<()> {
         signer_args: Default::default(),
         gas_price_oracle_args: GasPriceOracleArgs::default(),
         consensus_args: ConsensusArgs::noop(),
-        allow_empty_blocks: true,
     };
 
     // Create the chain spec for scroll dev with Feynman activated and a test genesis.
@@ -617,6 +620,7 @@ async fn test_chain_orchestrator_shallow_reorg_with_gap() -> eyre::Result<()> {
             sequencer_enabled: true,
             block_time: 0,
             l1_message_inclusion_mode: L1MessageInclusionMode::BlockDepth(0),
+            allow_empty_blocks: true,
             ..SequencerArgs::default()
         },
         beacon_provider_args: BeaconProviderArgs {
@@ -626,7 +630,6 @@ async fn test_chain_orchestrator_shallow_reorg_with_gap() -> eyre::Result<()> {
         signer_args: Default::default(),
         gas_price_oracle_args: GasPriceOracleArgs::default(),
         consensus_args: ConsensusArgs::noop(),
-        allow_empty_blocks: true,
     };
 
     // Create the chain spec for scroll dev with Feynman activated and a test genesis.

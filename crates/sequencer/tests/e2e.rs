@@ -505,6 +505,7 @@ async fn can_sequence_blocks_with_private_key_file() -> eyre::Result<()> {
             block_time: 0,
             l1_message_inclusion_mode: L1MessageInclusionMode::BlockDepth(0),
             payload_building_duration: 1000,
+            allow_empty_blocks: true,
             ..SequencerArgs::default()
         },
         beacon_provider_args: BeaconProviderArgs {
@@ -518,7 +519,6 @@ async fn can_sequence_blocks_with_private_key_file() -> eyre::Result<()> {
         },
         gas_price_oracle_args: GasPriceOracleArgs::default(),
         consensus_args: ConsensusArgs::noop(),
-        allow_empty_blocks: true,
     };
 
     let (nodes, _tasks, wallet) =
@@ -597,6 +597,7 @@ async fn can_sequence_blocks_with_hex_key_file_without_prefix() -> eyre::Result<
             block_time: 0,
             l1_message_inclusion_mode: L1MessageInclusionMode::BlockDepth(0),
             payload_building_duration: 1000,
+            allow_empty_blocks: true,
             ..SequencerArgs::default()
         },
         beacon_provider_args: BeaconProviderArgs {
@@ -610,7 +611,6 @@ async fn can_sequence_blocks_with_hex_key_file_without_prefix() -> eyre::Result<
         },
         gas_price_oracle_args: GasPriceOracleArgs::default(),
         consensus_args: ConsensusArgs::noop(),
-        allow_empty_blocks: true,
     };
 
     let (nodes, _tasks, wallet) =
