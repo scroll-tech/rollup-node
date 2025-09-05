@@ -35,7 +35,7 @@ jobs:
 
   integration:
     runs-on: ubuntu-latest
-    timeout-minutes: 80
+    timeout-minutes: 150
     env:
       RUST_BACKTRACE: 1
     steps:
