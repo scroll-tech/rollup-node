@@ -14,7 +14,7 @@ WORKDIR /app
 COPY --from=planner /recipe.json recipe.json
 RUN cargo chef cook --release --recipe-path recipe.json
 RUN --mount=target=. \
-    cargo build --release --target-dir=/app-target
+    cargo build --features js-trace --release --target-dir=/app-target
 
 # Release
 
