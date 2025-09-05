@@ -44,6 +44,7 @@ async fn test_should_consolidate_to_block_15k() -> eyre::Result<()> {
             enable_eth_scroll_wire_bridge: false,
             enable_scroll_wire: false,
             sequencer_url: None,
+            signer_address: None,
         },
         database_args: DatabaseArgs::default(),
         chain_orchestrator_args: ChainOrchestratorArgs {
@@ -186,6 +187,7 @@ async fn test_should_consolidate_after_optimistic_sync() -> eyre::Result<()> {
             enable_eth_scroll_wire_bridge: true,
             enable_scroll_wire: true,
             sequencer_url: None,
+            signer_address: None,
         },
         database_args: DatabaseArgs { path: Some(PathBuf::from("sqlite::memory:")) },
         l1_provider_args: L1ProviderArgs::default(),
@@ -433,6 +435,7 @@ async fn test_consolidation() -> eyre::Result<()> {
             enable_eth_scroll_wire_bridge: true,
             enable_scroll_wire: true,
             sequencer_url: None,
+            signer_address: None,
         },
         database_args: DatabaseArgs { path: Some(PathBuf::from("sqlite::memory:")) },
         l1_provider_args: L1ProviderArgs::default(),

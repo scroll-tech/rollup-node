@@ -1,6 +1,6 @@
 //! Constants related to the [`crate::ScrollRollupNode`]
 
-use alloy_primitives::U128;
+use alloy_primitives::{address, Address, U128};
 
 /// The max retries for the L1 provider.
 pub(crate) const PROVIDER_MAX_RETRIES: u32 = 10;
@@ -46,3 +46,12 @@ pub(crate) const SCROLL_MAINNET_V2_MESSAGE_QUEUE_START_INDEX: u64 = 953885;
 
 /// The L1 message queue index at which queue hashes should be computed on sepolia.
 pub(crate) const SCROLL_SEPOLIA_V2_MESSAGE_QUEUE_START_INDEX: u64 = 1062110;
+
+/// TODO: remove this once we deprecated l2geth.
+/// The authorized signer address for Scroll mainnet.
+pub(crate) const SCROLL_MAINNET_SIGNER: Address =
+    address!("0xD83C4892BB5aA241B63d8C4C134920111E142A20");
+
+/// The authorized signer address for Scroll sepolia.
+pub(crate) const SCROLL_SEPOLIA_SIGNER: Address =
+    address!("0x687E0E85AD67ff71aC134CF61b65905b58Ab43b2");
