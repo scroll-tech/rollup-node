@@ -116,10 +116,7 @@ color-eyre = "0.6"
 alloy-rpc-types-eth = { workspace = true }
 
 [features]
-js-tracer = [
-    "reth-scroll-node/js-tracer",
-    "reth-scroll-rpc/js-tracer",
-]
+js-tracer = ["reth-scroll-node/js-tracer", "reth-scroll-rpc/js-tracer"]
 test-utils = [
     "reth-chainspec/test-utils",
     "reth-evm/test-utils",
