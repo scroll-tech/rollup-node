@@ -10,6 +10,6 @@ exec rollup-node node --chain /l2reth/l2reth-genesis-e2e.json --datadir=/l2reth 
   --txpool.pending-max-count=1000 \
   --builder.gaslimit=30000000 \
   --rpc.max-connections=5000 \
-  --trusted-peers enode://3983278a7cab48862d9ab3187278edf376a0736a7deb55472a5650592f6922ce626a1ea7d74b77b9a679694b343f5e93ea97d5d60a9db4e4b51bb0c23a36d01b@rollup-node-sequencer:30303 \
+  --trusted-peers enode://8fc4f6dfd0a2ebf56560d0b0ef5e60ad7bcb01e13f929eae53a4c77086d9c1e74eb8b8c8945035d25c6287afdd871f0d41b3fd7e189697decd0f13538d1ac620@l2geth-sequencer:30303 \
   --engine.sync-at-startup false \
-  --consensus.authorized-signer 0xb674Ff99cca262c99D3eAb5B32796a99188543dA
+  --l1.url http://l1-node:8545

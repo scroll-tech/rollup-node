@@ -28,23 +28,23 @@ services:
     # depends_on:
     #   - l1-node
 
-  # rollup-node-follower:
-  #   build:
-  #     context: ../
-  #     dockerfile: Dockerfile
-  #   container_name: rollup-node-follower
-  #   entrypoint: ["bash", "/launch_rollup_node_follower.bash"]
-  #   environment:
-  #     - RUST_LOG=info
-  #   ports:
-  #     - "8546:8545"   # JSON-RPC
-  #     - "6061:6060"   # Metrics
-  #   volumes:
-  #     - ./launch_rollup_node_follower.bash:/launch_rollup_node_follower.bash:ro
-  #     - ./l2reth-genesis-e2e.json:/l2reth/l2reth-genesis-e2e.json:ro
-  #     - l2reth-follower:/l2reth
-  #   depends_on:
-  #     - rollup-node-sequencer
+  rollup-node-follower:
+    build:
+      context: ../
+      dockerfile: Dockerfile
+    container_name: rollup-node-follower
+    entrypoint: ["bash", "/launch_rollup_node_follower.bash"]
+    environment:
+      - RUST_LOG=info
+    ports:
+      - "8546:8545"   # JSON-RPC
+      - "6061:6060"   # Metrics
+    volumes:
+      - ./launch_rollup_node_follower.bash:/launch_rollup_node_follower.bash:ro
+      - ./l2reth-genesis-e2e.json:/l2reth/l2reth-genesis-e2e.json:ro
+      - l2reth-follower:/l2reth
+    depends_on:
+      - l1-node
 
   l2geth-sequencer:
     image: scrolltech/l2geth:scroll-v5.9.4
