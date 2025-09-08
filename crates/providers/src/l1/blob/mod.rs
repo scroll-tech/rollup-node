@@ -124,7 +124,7 @@ impl BlobProvider for BlobProviders {
             match beacon_provider.blob(block_timestamp, hash).await {
                 Ok(blob) => return Ok(blob),
                 Err(_err) => {
-                    warn!(target: "scroll::providers", ?hash, ?block_timestamp, "Beacon provider failed, trying backup providers");
+                    debug!(target: "scroll::providers", ?hash, ?block_timestamp, "Beacon provider failed, trying backup providers");
                 }
             }
         }
