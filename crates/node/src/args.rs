@@ -28,7 +28,7 @@ use rollup_node_manager::{
 };
 use rollup_node_primitives::{BlockInfo, NodeConfig};
 use rollup_node_providers::{
-    BlobSource, DatabaseL1MessageProvider, FullL1Provider, L1MessageProvider, L1Provider,
+    BlobProvidersBuilder, DatabaseL1MessageProvider, FullL1Provider, L1MessageProvider, L1Provider,
     SystemContractProvider,
 };
 use rollup_node_sequencer::{L1MessageInclusionMode, Sequencer};
@@ -296,12 +296,15 @@ impl ScrollRollupNodeConfig {
 
         // Construct the l1 provider.
         let l1_messages_provider = DatabaseL1MessageProvider::new(db.clone(), 0);
-        let blob_provider = self
-            .beacon_provider_args
-            .blob_source
-            .provider(self.beacon_provider_args)
-            .await
-            .expect("failed to construct L1 blob provider");
+        let blob_providers_builder = BlobProvidersBuilder {
+            beacon: self.beacon_provider_args.beacon_node_url,
+            s3: self.beacon_provider_args.s3_url,
+            anvil: self.beacon_provider_args.anvil_url,
+            mock: self.beacon_provider_args.mock,
+        };
+        let blob_provider =
+            blob_providers_builder.build().await.expect("failed to construct L1 blob provider");
+
         let l1_provider = FullL1Provider::new(blob_provider, l1_messages_provider.clone()).await;
 
         // Construct the Sequencer.
@@ -430,19 +433,14 @@ impl ConsensusArgs {
 }
 
 /// The consensus algorithm to use.
-#[derive(Debug, clap::ValueEnum, Clone, PartialEq, Eq)]
+#[derive(Debug, clap::ValueEnum, Clone, PartialEq, Eq, Default)]
 pub enum ConsensusAlgorithm {
     /// System contract consensus with an optional authorized signer. If the authorized signer is
     /// not provided the system will use the L1 provider to query the authorized signer from L1.
+    #[default]
     SystemContract,
     /// No-op consensus that does not validate blocks.
     Noop,
-}
-
-impl Default for ConsensusAlgorithm {
-    fn default() -> Self {
-        Self::SystemContract
-    }
 }
 
 /// The engine driver args.
@@ -525,17 +523,18 @@ pub struct L1ProviderArgs {
 /// The arguments for the Beacon provider.
 #[derive(Debug, Default, Clone, clap::Args)]
 pub struct BeaconProviderArgs {
-    /// The URL for the Beacon chain.
-    #[arg(long = "beacon.url", id = "beacon_url", value_name = "BEACON_URL")]
-    pub url: Option<reqwest::Url>,
-    /// The blob source for the provider.
-    #[arg(
-        long = "beacon.blob-source",
-        id = "beacon_blob_source",
-        value_name = "BEACON_BLOB_SOURCE",
-        default_value = "mock"
-    )]
-    pub blob_source: BlobSource,
+    /// The URL for the beacon node blob provider.
+    #[arg(long = "beacon.beacon_node_url", id = "beacon_node_url", value_name = "BEACON_NODE_URL")]
+    pub beacon_node_url: Option<reqwest::Url>,
+    /// The URL for the s3 blob provider.
+    #[arg(long = "beacon.s3_url", id = "beacon_s3_url", value_name = "BEACON_S3_URL")]
+    pub s3_url: Option<reqwest::Url>,
+    /// The URL for the anvil blob provider.
+    #[arg(long = "beacon.anvil_url", id = "anvil_url", value_name = "ANVIL_URL")]
+    pub anvil_url: Option<reqwest::Url>,
+    /// Enable the mock blob source.
+    #[arg(long = "beacon.mock", default_value_t = false)]
+    pub mock: bool,
     /// The compute units per second for the provider.
     #[arg(long = "beacon.cups", id = "beacon_compute_units_per_second", value_name = "BEACON_COMPUTE_UNITS_PER_SECOND", default_value_t = constants::PROVIDER_COMPUTE_UNITS_PER_SECOND)]
     pub compute_units_per_second: u64,

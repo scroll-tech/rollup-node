@@ -21,7 +21,6 @@ use reth_node_core::args::{DiscoveryArgs, NetworkArgs, RpcServerArgs, TxPoolArgs
 use reth_provider::providers::BlockchainProvider;
 use reth_rpc_server_types::RpcModuleSelection;
 use reth_tasks::TaskManager;
-use rollup_node_providers::BlobSource;
 use rollup_node_sequencer::L1MessageInclusionMode;
 use std::{path::PathBuf, sync::Arc};
 use tokio::sync::Mutex;
@@ -150,10 +149,7 @@ pub fn default_test_scroll_rollup_node_config() -> ScrollRollupNodeConfig {
             chain_buffer_size: 100,
         },
         sequencer_args: SequencerArgs { payload_building_duration: 1000, ..Default::default() },
-        beacon_provider_args: BeaconProviderArgs {
-            blob_source: BlobSource::Mock,
-            ..Default::default()
-        },
+        beacon_provider_args: BeaconProviderArgs { mock: true, ..Default::default() },
         signer_args: Default::default(),
         gas_price_oracle_args: GasPriceOracleArgs::default(),
         consensus_args: ConsensusArgs::noop(),
@@ -186,10 +182,7 @@ pub fn default_sequencer_test_scroll_rollup_node_config() -> ScrollRollupNodeCon
             fee_recipient: Default::default(),
             l1_message_inclusion_mode: L1MessageInclusionMode::BlockDepth(0),
         },
-        beacon_provider_args: BeaconProviderArgs {
-            blob_source: BlobSource::Mock,
-            ..Default::default()
-        },
+        beacon_provider_args: BeaconProviderArgs { mock: true, ..Default::default() },
         signer_args: Default::default(),
         gas_price_oracle_args: GasPriceOracleArgs::default(),
         consensus_args: ConsensusArgs::noop(),

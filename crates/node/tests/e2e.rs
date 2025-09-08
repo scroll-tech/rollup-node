@@ -32,7 +32,6 @@ use rollup_node::{
 use rollup_node_chain_orchestrator::ChainOrchestratorEvent;
 use rollup_node_manager::{RollupManagerCommand, RollupManagerEvent};
 use rollup_node_primitives::{sig_encode_hash, BatchCommitData, ConsensusUpdate};
-use rollup_node_providers::BlobSource;
 use rollup_node_sequencer::L1MessageInclusionMode;
 use rollup_node_watcher::L1Notification;
 use scroll_alloy_consensus::TxL1Message;
@@ -66,10 +65,7 @@ async fn can_bridge_l1_messages() -> eyre::Result<()> {
             l1_message_inclusion_mode: L1MessageInclusionMode::BlockDepth(0),
             ..SequencerArgs::default()
         },
-        beacon_provider_args: BeaconProviderArgs {
-            blob_source: BlobSource::Mock,
-            ..Default::default()
-        },
+        beacon_provider_args: BeaconProviderArgs { mock: true, ..Default::default() },
         signer_args: Default::default(),
         gas_price_oracle_args: GasPriceOracleArgs::default(),
         consensus_args: ConsensusArgs::noop(),
@@ -161,10 +157,7 @@ async fn can_sequence_and_gossip_blocks() {
             payload_building_duration: 1000,
             ..SequencerArgs::default()
         },
-        beacon_provider_args: BeaconProviderArgs {
-            blob_source: BlobSource::Mock,
-            ..Default::default()
-        },
+        beacon_provider_args: BeaconProviderArgs { mock: true, ..Default::default() },
         signer_args: Default::default(),
         gas_price_oracle_args: GasPriceOracleArgs::default(),
         consensus_args: ConsensusArgs::noop(),
@@ -258,10 +251,7 @@ async fn can_penalize_peer_for_invalid_block() {
             payload_building_duration: 1000,
             ..SequencerArgs::default()
         },
-        beacon_provider_args: BeaconProviderArgs {
-            blob_source: BlobSource::Mock,
-            ..Default::default()
-        },
+        beacon_provider_args: BeaconProviderArgs { mock: true, ..Default::default() },
         signer_args: Default::default(),
         gas_price_oracle_args: GasPriceOracleArgs::default(),
         consensus_args: ConsensusArgs::noop(),
@@ -821,7 +811,7 @@ async fn graceful_shutdown_consolidates_most_recent_batch_on_startup() -> eyre::
     let path = node.inner.config.datadir().db().join("scroll.db?mode=rwc");
     let path = PathBuf::from("sqlite://".to_string() + &*path.to_string_lossy());
     config.database_args.path = Some(path.clone());
-    config.beacon_provider_args.url = Some(
+    config.beacon_provider_args.beacon_node_url = Some(
         "http://dummy:8545"
             .parse()
             .expect("valid url that will not be used as test batches use calldata"),
