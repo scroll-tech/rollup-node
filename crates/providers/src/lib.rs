@@ -10,7 +10,7 @@ pub use block::BlockDataProvider;
 mod l1;
 pub use l1::{
     blob::{
-        AnvilBlobProvider, BeaconClientProvider, BlobProvider, BlobProvidersBuilder,
+        AnvilBlobProvider, BeaconClientProvider, BlobProvider, BlobProviders, BlobProvidersBuilder,
         MockBeaconProvider, S3BlobProvider,
     },
     message::{DatabaseL1MessageProvider, L1MessageProvider},
