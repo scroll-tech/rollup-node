@@ -1,5 +1,7 @@
 FROM rust:1.88.0 AS chef
 
+ARG CARGO_FEATURES=""
+
 # Install basic packages
 RUN apt-get update && apt-get -y upgrade && apt-get install -y libclang-dev pkg-config
 RUN cargo install cargo-chef --locked --version  0.1.71
@@ -14,7 +16,7 @@ WORKDIR /app
 COPY --from=planner /recipe.json recipe.json
 RUN cargo chef cook --release --recipe-path recipe.json
 RUN --mount=target=. \
-    cargo build --features js-trace --release --target-dir=/app-target
+    cargo build ${CARGO_FEATURES:+--features $CARGO_FEATURES} --release --target-dir=/app-target
 
 # Release
 
