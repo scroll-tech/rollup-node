@@ -33,13 +33,11 @@ jobs:
           tool: nextest@0.9.98
       - name: Run unit tests
         run: cargo nextest run --all-features --workspace --locked -E '!kind(test)'
-        env:
-          CARGO_BUILD_JOBS: 4
 
   integration:
     runs-on:
       group: scroll-reth-runner-group
-    timeout-minutes: 120
+    timeout-minutes: 60
     env:
       RUST_BACKTRACE: 1
     steps:
@@ -59,13 +57,11 @@ jobs:
           cargo nextest run --all-features --workspace --locked \
             --no-tests=pass -E 'kind(test) and not test(docker)' \
             -- --skip test_should_consolidate_to_block_15k
-        env:
-          CARGO_BUILD_JOBS: 4
 
   integration-docker-compose:
     runs-on:
       group: scroll-reth-runner-group
-    timeout-minutes: 500
+    timeout-minutes: 90
     env:
       RUST_BACKTRACE: 1
     steps:
