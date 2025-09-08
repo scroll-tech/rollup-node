@@ -14,7 +14,8 @@ env:
 
 jobs:
   unit:
-    runs-on: ubuntu-8core
+    runs-on:
+      group: scroll-reth-runner-group
     timeout-minutes: 60
     env:
       RUST_BACKTRACE: 1
@@ -36,7 +37,8 @@ jobs:
           CARGO_BUILD_JOBS: 4
 
   integration:
-    runs-on: ubuntu-8core
+    runs-on:
+      group: scroll-reth-runner-group
     timeout-minutes: 60
     env:
       RUST_BACKTRACE: 1
@@ -61,7 +63,8 @@ jobs:
           CARGO_BUILD_JOBS: 4
 
   integration-docker-compose:
-    runs-on: ubuntu-8core
+    runs-on:
+      group: scroll-reth-runner-group
     timeout-minutes: 90
     env:
       RUST_BACKTRACE: 1
