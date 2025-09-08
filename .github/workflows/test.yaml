@@ -14,7 +14,7 @@ env:
 
 jobs:
   unit:
-    runs-on: ubuntu-latest-8-cores
+    runs-on: ubuntu-8core
     timeout-minutes: 60
     env:
       RUST_BACKTRACE: 1
@@ -36,7 +36,7 @@ jobs:
           CARGO_BUILD_JOBS: 4
 
   integration:
-    runs-on: ubuntu-latest-8-cores
+    runs-on: ubuntu-8core
     timeout-minutes: 60
     env:
       RUST_BACKTRACE: 1
@@ -61,7 +61,7 @@ jobs:
           CARGO_BUILD_JOBS: 4
 
   integration-docker-compose:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-8core
     timeout-minutes: 90
     env:
       RUST_BACKTRACE: 1
