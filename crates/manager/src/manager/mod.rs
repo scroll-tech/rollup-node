@@ -274,7 +274,7 @@ where
                 // // push the batch info into the derivation pipeline.
                 // self.derivation_pipeline.push_batch(batch_info, l1_block_number);
             }
-            ChainOrchestratorEvent::BatchFinalized(batch_info, ..) => {
+            ChainOrchestratorEvent::BatchFinalized(block_number, finalized_batches) => {
                 // Uncomment once we implement issue #273.
                 // // update the fcs on new finalized block.
                 // if let Some(finalized_block) = finalized_block {
@@ -282,9 +282,8 @@ where
                 // }
                 // Remove once we implement issue #273.
                 // Update the derivation pipeline on new finalized batch.
-                #[allow(clippy::collapsible_match)]
-                if let Some(batch_info) = batch_info {
-                    self.derivation_pipeline.push_batch(batch_info.inner, batch_info.number);
+                for batch_info in finalized_batches {
+                    self.derivation_pipeline.push_batch(batch_info, block_number);
                 }
             }
             ChainOrchestratorEvent::L1BlockFinalized(l1_block_number, finalized_batches, ..) => {
