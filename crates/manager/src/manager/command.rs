@@ -20,4 +20,8 @@ pub enum RollupManagerCommand<N: FullNetwork<Primitives = ScrollNetworkPrimitive
     NetworkHandle(oneshot::Sender<ScrollNetworkHandle<N>>),
     /// Update the head of the fcs in the engine driver.
     UpdateFcsHead(BlockInfo),
+    /// Enable automatic sequencing.
+    EnableAutomaticSequencing(oneshot::Sender<bool>),
+    /// Disable automatic sequencing.
+    DisableAutomaticSequencing(oneshot::Sender<bool>),
 }
