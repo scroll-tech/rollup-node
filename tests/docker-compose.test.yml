@@ -8,25 +8,23 @@ services:
     volumes:
       - ./launch_l1.bash:/launch_l1.bash:ro
 
-  # rollup-node-sequencer:
-  #   build:
-  #     context: ../
-  #     dockerfile: Dockerfile
-  #   container_name: rollup-node-sequencer
-  #   entrypoint: ["bash", "/launch_rollup_node_sequencer.bash"]
-  #   environment:
-  #     - RUST_LOG=info
-  #   ports:
-  #     - "8545:8545"   # JSON-RPC
-  #     - "6060:6060"   # Metrics
-  #   volumes:
-  #     - ./launch_rollup_node_sequencer.bash:/launch_rollup_node_sequencer.bash:ro
-  #     - ./discovery-secret:/l2reth/discovery-secret:ro
-  #     - ./sequencer-key.txt:/l2reth/sequencer-key.txt:ro
-  #     - ./l2reth-genesis-e2e.json:/l2reth/l2reth-genesis-e2e.json:ro
-  #     - l2reth-sequencer:/l2reth
-    # depends_on:
-    #   - l1-node
+  rollup-node-sequencer:
+    build:
+      context: ../
+      dockerfile: Dockerfile
+    container_name: rollup-node-sequencer
+    entrypoint: ["bash", "/launch_rollup_node_sequencer.bash"]
+    environment:
+      - RUST_LOG=info
+    ports:
+      - "8545:8545"   # JSON-RPC
+      - "6060:6060"   # Metrics
+    volumes:
+      - ./launch_rollup_node_sequencer.bash:/launch_rollup_node_sequencer.bash:ro
+      - ./l2reth-genesis-e2e.json:/l2reth/l2reth-genesis-e2e.json:ro
+      - l2reth-sequencer:/l2reth
+    depends_on:
+      - l1-node
 
   rollup-node-follower:
     build:
