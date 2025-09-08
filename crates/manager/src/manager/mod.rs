@@ -374,9 +374,11 @@ where
     fn handle_chain_orchestrator_error(&self, err: &ChainOrchestratorError) {
         error!(
             target: "scroll::node::manager",
-            ?err,
+            error = ?err,
+            msg = %err,
             "Error occurred in the chain orchestrator"
         );
+
         match err {
             ChainOrchestratorError::L1MessageMismatch { expected, actual } => {
                 counter!(
