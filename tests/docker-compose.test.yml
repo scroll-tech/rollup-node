@@ -7,6 +7,12 @@ services:
       - "8544:8545"
     volumes:
       - ./launch_l1.bash:/launch_l1.bash:ro
+    healthcheck:
+      test: ["CMD", "bash", "-c", "[ \"$(cast storage 0x55B150d210356452e4E79cCb6B778b4e1B167091 0x67 --rpc-url http://localhost:8545)\" = \"0x000000000000000000000000b674ff99cca262c99d3eab5b32796a99188543da\" ]"]
+      interval: 3s
+      timeout: 10s
+      retries: 30
+      start_period: 0s
 
   rollup-node-sequencer:
     build:
@@ -24,7 +30,8 @@ services:
       - ./l2reth-genesis-e2e.json:/l2reth/l2reth-genesis-e2e.json:ro
       - l2reth-sequencer:/l2reth
     depends_on:
-      - l1-node
+      l1-node:
+        condition: service_healthy
 
   rollup-node-follower:
     build:
@@ -42,7 +49,8 @@ services:
       - ./l2reth-genesis-e2e.json:/l2reth/l2reth-genesis-e2e.json:ro
       - l2reth-follower:/l2reth
     depends_on:
-      - l1-node
+      l1-node:
+        condition: service_healthy
 
   l2geth-sequencer:
     image: scrolltech/l2geth:scroll-v5.9.4
@@ -57,7 +65,8 @@ services:
       - ./launch_l2geth_sequencer.bash:/launch_l2geth.bash:ro
       - l2geth-sequencer:/l2geth
     depends_on:
-      - l1-node
+      l1-node:
+        condition: service_healthy
     
   l2geth-follower:
     image: scrolltech/l2geth:scroll-v5.9.4
@@ -72,7 +81,8 @@ services:
       - ./launch_l2geth_follower.bash:/launch_l2geth.bash:ro
       - l2geth-follower:/l2geth
     depends_on:
-      - l1-node
+      l1-node:
+        condition: service_healthy
 
 volumes:
   l2reth-sequencer:
