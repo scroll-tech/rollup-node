@@ -175,6 +175,7 @@ where
         sequencer: Option<Sequencer<L1MP>>,
         signer: Option<SignerHandle>,
         block_time: Option<u64>,
+        auto_start: bool,
         chain_orchestrator: ChainOrchestrator<CS, <N as BlockDownloaderProvider>::Client, P>,
         l1_v2_message_queue_start_index: u64,
     ) -> (Self, RollupManagerHandle<N>) {
@@ -193,7 +194,11 @@ where
             event_sender: None,
             sequencer,
             signer,
-            block_building_trigger: block_time.map(delayed_interval),
+            block_building_trigger: if auto_start {
+                block_time.map(delayed_interval)
+            } else {
+                None
+            },
             block_time_config: block_time,
         };
         (rnm, RollupManagerHandle::new(handle_tx))
