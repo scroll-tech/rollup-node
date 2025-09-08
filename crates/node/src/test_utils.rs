@@ -148,8 +148,15 @@ pub fn default_test_scroll_rollup_node_config() -> ScrollRollupNodeConfig {
             optimistic_sync_trigger: 100,
             chain_buffer_size: 100,
         },
-        sequencer_args: SequencerArgs { payload_building_duration: 1000, ..Default::default() },
-        beacon_provider_args: BeaconProviderArgs { mock: true, ..Default::default() },
+        sequencer_args: SequencerArgs {
+            payload_building_duration: 1000,
+            allow_empty_blocks: true,
+            ..Default::default()
+        },
+        beacon_provider_args: BeaconProviderArgs {
+            mock: true,
+            ..Default::default()
+        },
         signer_args: Default::default(),
         gas_price_oracle_args: GasPriceOracleArgs::default(),
         consensus_args: ConsensusArgs::noop(),
@@ -181,6 +188,7 @@ pub fn default_sequencer_test_scroll_rollup_node_config() -> ScrollRollupNodeCon
             payload_building_duration: 40,
             fee_recipient: Default::default(),
             l1_message_inclusion_mode: L1MessageInclusionMode::BlockDepth(0),
+            allow_empty_blocks: true,
         },
         beacon_provider_args: BeaconProviderArgs { mock: true, ..Default::default() },
         signer_args: Default::default(),

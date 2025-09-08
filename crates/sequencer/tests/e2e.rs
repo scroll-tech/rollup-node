@@ -38,6 +38,61 @@ use tokio::{
 };
 
 #[tokio::test]
+async fn skip_block_with_no_transactions() {
+    reth_tracing::init_test_tracing();
+
+    const BLOCK_BUILDING_DURATION: Duration = Duration::from_millis(0);
+
+    // setup a test node
+    let (mut nodes, _tasks, _wallet) = setup(1, false).await.unwrap();
+    let node = nodes.pop().unwrap();
+
+    // create a forkchoice state
+    let genesis_hash = node.inner.chain_spec().genesis_hash();
+    let fcs = ForkchoiceState::new(
+        BlockInfo { hash: genesis_hash, number: 0 },
+        Default::default(),
+        Default::default(),
+    );
+
+    // create the engine driver connected to the node
+    let auth_client = node.inner.engine_http_client();
+    let engine_client = ScrollAuthApiEngineClient::new(auth_client);
+    let mut engine_driver = EngineDriver::new(
+        Arc::new(engine_client),
+        (*SCROLL_DEV).clone(),
+        None::<ScrollRootProvider>,
+        fcs,
+        false,
+        BLOCK_BUILDING_DURATION,
+        false,
+    );
+
+    // create a test database
+    let database = Arc::new(setup_test_db().await);
+    let provider = Arc::new(DatabaseL1MessageProvider::new(database.clone(), 0));
+
+    // create a sequencer
+    let mut sequencer = Sequencer::new(
+        provider,
+        Default::default(),
+        SCROLL_GAS_LIMIT,
+        4,
+        1,
+        L1MessageInclusionMode::BlockDepth(0),
+    );
+
+    // send a new payload attributes request.
+    sequencer.build_payload_attributes();
+    let payload_attributes = sequencer.next().await.unwrap();
+    engine_driver.handle_build_new_payload(payload_attributes);
+
+    // assert that no new payload event is emitted
+    let res = tokio::time::timeout(Duration::from_secs(1), engine_driver.next()).await;
+    assert!(res.is_err(), "expected no new payload, but a block was built: {:?}", res.ok());
+}
+
+#[tokio::test]
 async fn can_build_blocks() {
     reth_tracing::init_test_tracing();
 
@@ -66,6 +121,7 @@ async fn can_build_blocks() {
         fcs,
         false,
         BLOCK_BUILDING_DURATION,
+        true,
     );
 
     // create a test database
@@ -192,6 +248,7 @@ async fn can_build_blocks_with_delayed_l1_messages() {
         fcs,
         false,
         BLOCK_BUILDING_DURATION,
+        true,
     );
 
     // create a test database
@@ -317,6 +374,7 @@ async fn can_build_blocks_with_finalized_l1_messages() {
         fcs,
         false,
         BLOCK_BUILDING_DURATION,
+        true,
     );
 
     // create a test database
@@ -447,6 +505,7 @@ async fn can_sequence_blocks_with_private_key_file() -> eyre::Result<()> {
             block_time: 0,
             l1_message_inclusion_mode: L1MessageInclusionMode::BlockDepth(0),
             payload_building_duration: 1000,
+            allow_empty_blocks: true,
             ..SequencerArgs::default()
         },
         beacon_provider_args: BeaconProviderArgs { mock: true, ..Default::default() },
@@ -535,6 +594,7 @@ async fn can_sequence_blocks_with_hex_key_file_without_prefix() -> eyre::Result<
             block_time: 0,
             l1_message_inclusion_mode: L1MessageInclusionMode::BlockDepth(0),
             payload_building_duration: 1000,
+            allow_empty_blocks: true,
             ..SequencerArgs::default()
         },
         beacon_provider_args: BeaconProviderArgs { mock: true, ..Default::default() },
@@ -652,6 +712,7 @@ async fn can_build_blocks_and_exit_at_gas_limit() {
         fcs,
         false,
         BLOCK_BUILDING_DURATION,
+        true,
     );
 
     // issue a new payload to the execution layer.
@@ -737,6 +798,7 @@ async fn can_build_blocks_and_exit_at_time_limit() {
         fcs,
         false,
         BLOCK_BUILDING_DURATION,
+        true,
     );
 
     // start timer.
@@ -803,6 +865,7 @@ async fn should_limit_l1_message_cumulative_gas() {
         fcs,
         false,
         BLOCK_BUILDING_DURATION,
+        true,
     );
 
     // create a test database

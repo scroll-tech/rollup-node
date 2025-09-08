@@ -30,7 +30,7 @@ pub type PayloadBuildingJobFuture =
     Pin<Box<dyn Future<Output = Result<ScrollPayloadAttributes, SequencerError>> + Send>>;
 
 /// Configuration for L1 message inclusion strategy.
-#[derive(Debug, Clone, Copy, Default)]
+#[derive(Debug, Default, Clone, Copy)]
 pub enum L1MessageInclusionMode {
     /// Include L1 messages based on block depth.
     BlockDepth(u64),
