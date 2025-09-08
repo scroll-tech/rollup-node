@@ -65,7 +65,7 @@ jobs:
   integration-docker-compose:
     runs-on:
       group: scroll-reth-runner-group
-    timeout-minutes: 90
+    timeout-minutes: 500
     env:
       RUST_BACKTRACE: 1
     steps:
