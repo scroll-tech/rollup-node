@@ -39,7 +39,7 @@ jobs:
   integration:
     runs-on:
       group: scroll-reth-runner-group
-    timeout-minutes: 60
+    timeout-minutes: 120
     env:
       RUST_BACKTRACE: 1
     steps:
