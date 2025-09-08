@@ -306,7 +306,7 @@ impl ScrollRollupNodeConfig {
 
         // Construct the Sequencer.
         let chain_config = chain_spec.chain_config();
-        let (sequencer, block_time) = if self.sequencer_args.sequencer_enabled {
+        let (sequencer, block_time, auto_start) = if self.sequencer_args.sequencer_enabled {
             let args = &self.sequencer_args;
             let sequencer = Sequencer::new(
                 Arc::new(l1_messages_provider),
@@ -316,9 +316,9 @@ impl ScrollRollupNodeConfig {
                 0,
                 self.sequencer_args.l1_message_inclusion_mode,
             );
-            (Some(sequencer), (args.block_time != 0).then_some(args.block_time))
+            (Some(sequencer), (args.block_time != 0).then_some(args.block_time), args.auto_start)
         } else {
-            (None, None)
+            (None, None, false)
         };
 
         // Instantiate the signer
@@ -365,6 +365,7 @@ impl ScrollRollupNodeConfig {
             sequencer,
             signer,
             block_time,
+            auto_start,
             chain_orchestrator,
             l1_v2_message_queue_start_index,
         )
@@ -553,6 +554,9 @@ pub struct SequencerArgs {
     /// Enable the scroll block sequencer.
     #[arg(long = "sequencer.enabled", default_value_t = false)]
     pub sequencer_enabled: bool,
+    /// Whether the sequencer should start sequencing automatically on startup.
+    #[arg(long = "sequencer.auto-start", default_value_t = false)]
+    pub auto_start: bool,
     /// The block time for the sequencer.
     #[arg(long = "sequencer.block-time", id = "sequencer_block_time", value_name = "SEQUENCER_BLOCK_TIME", default_value_t = constants::DEFAULT_BLOCK_TIME)]
     pub block_time: u64,
