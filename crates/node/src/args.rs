@@ -261,6 +261,7 @@ impl ScrollRollupNodeConfig {
             fcs,
             self.engine_driver_args.sync_at_startup && !self.test && !chain_spec.is_dev_chain(),
             Duration::from_millis(self.sequencer_args.payload_building_duration),
+            self.sequencer_args.allow_empty_blocks,
         );
 
         // Create the consensus.
@@ -591,6 +592,14 @@ pub struct SequencerArgs {
         help = "L1 message inclusion mode. Use 'finalized' for finalized messages only, or 'depth:{number}' for block depth confirmation (e.g. 'depth:10')"
     )]
     pub l1_message_inclusion_mode: L1MessageInclusionMode,
+    /// Enable empty blocks.
+    #[arg(
+        long = "sequencer.allow-empty-blocks",
+        id = "sequencer_allow_empty_blocks",
+        value_name = "SEQUENCER_ALLOW_EMPTY_BLOCKS",
+        default_value_t = false
+    )]
+    pub allow_empty_blocks: bool,
 }
 
 /// The arguments for the signer.
