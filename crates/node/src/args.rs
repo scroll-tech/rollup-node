@@ -431,19 +431,14 @@ impl ConsensusArgs {
 }
 
 /// The consensus algorithm to use.
-#[derive(Debug, clap::ValueEnum, Clone, PartialEq, Eq)]
+#[derive(Debug, Default, clap::ValueEnum, Clone, PartialEq, Eq)]
 pub enum ConsensusAlgorithm {
     /// System contract consensus with an optional authorized signer. If the authorized signer is
     /// not provided the system will use the L1 provider to query the authorized signer from L1.
+    #[default]
     SystemContract,
     /// No-op consensus that does not validate blocks.
     Noop,
-}
-
-impl Default for ConsensusAlgorithm {
-    fn default() -> Self {
-        Self::SystemContract
-    }
 }
 
 /// The engine driver args.
