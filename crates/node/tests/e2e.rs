@@ -62,8 +62,10 @@ async fn can_bridge_l1_messages() -> eyre::Result<()> {
         chain_orchestrator_args: ChainOrchestratorArgs::default(),
         sequencer_args: SequencerArgs {
             sequencer_enabled: true,
+            auto_start: true,
             block_time: 0,
             l1_message_inclusion_mode: L1MessageInclusionMode::BlockDepth(0),
+            allow_empty_blocks: true,
             ..SequencerArgs::default()
         },
         beacon_provider_args: BeaconProviderArgs {
@@ -156,9 +158,11 @@ async fn can_sequence_and_gossip_blocks() {
         chain_orchestrator_args: ChainOrchestratorArgs::default(),
         sequencer_args: SequencerArgs {
             sequencer_enabled: true,
+            auto_start: true,
             block_time: 0,
             l1_message_inclusion_mode: L1MessageInclusionMode::BlockDepth(0),
             payload_building_duration: 1000,
+            allow_empty_blocks: true,
             ..SequencerArgs::default()
         },
         beacon_provider_args: BeaconProviderArgs {
@@ -253,9 +257,11 @@ async fn can_penalize_peer_for_invalid_block() {
         engine_driver_args: EngineDriverArgs::default(),
         sequencer_args: SequencerArgs {
             sequencer_enabled: true,
+            auto_start: true,
             block_time: 0,
             l1_message_inclusion_mode: L1MessageInclusionMode::BlockDepth(0),
             payload_building_duration: 1000,
+            allow_empty_blocks: true,
             ..SequencerArgs::default()
         },
         beacon_provider_args: BeaconProviderArgs {

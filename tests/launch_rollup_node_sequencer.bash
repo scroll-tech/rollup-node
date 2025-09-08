@@ -15,6 +15,8 @@ exec rollup-node node --chain /l2reth/l2reth-genesis-e2e.json --datadir=/l2reth 
   --ws --ws.addr=0.0.0.0 --ws.port=8546 --ws.api admin,debug,eth,net,trace,txpool,web3,rpc,reth,ots,flashbots,miner,mev \
   --log.stdout.format log-fmt -vvv \
   --sequencer.enabled \
+  --sequencer.auto-start \
+  --sequencer.allow-empty-blocks \
   --signer.key-file /l2reth/sequencer-key \
   --sequencer.block-time 1000 \
   --sequencer.payload-building-duration 800 \

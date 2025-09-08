@@ -53,6 +53,8 @@ pub struct EngineDriver<EC, CS, P> {
     metrics: EngineDriverMetrics,
     /// The waker to notify when the engine driver should be polled.
     waker: AtomicWaker,
+    /// Whether to allow empty blocks.
+    allow_empty_blocks: bool,
 }
 
 impl<EC, CS, P> EngineDriver<EC, CS, P>
@@ -69,6 +71,7 @@ where
         fcs: ForkchoiceState,
         sync_at_start_up: bool,
         block_building_duration: Duration,
+        allow_empty_blocks: bool,
     ) -> Self {
         Self {
             client,
@@ -85,6 +88,7 @@ where
             engine_future: None,
             metrics: EngineDriverMetrics::default(),
             waker: AtomicWaker::new(),
+            allow_empty_blocks,
         }
     }
 
@@ -312,6 +316,12 @@ where
 
                 match result {
                     Ok(block) => {
+                        // Skip block if no transactions are present in block.
+                        if !self.allow_empty_blocks && block.body.transactions.is_empty() {
+                            tracing::trace!(target: "scroll::engine", "no transactions in block");
+                            return None;
+                        }
+
                         // Update the unsafe block info and return the block
                         let block_info = BlockInfo::new(block.number, block.hash_slow());
                         tracing::trace!(target: "scroll::engine", ?block_info, "updating unsafe block info from new payload");
@@ -531,8 +541,15 @@ mod tests {
             ForkchoiceState::from_block_info(BlockInfo { number: 0, hash: Default::default() });
         let duration = Duration::from_secs(2);
 
-        let mut driver =
-            EngineDriver::new(client, chain_spec, None::<ScrollRootProvider>, fcs, false, duration);
+        let mut driver = EngineDriver::new(
+            client,
+            chain_spec,
+            None::<ScrollRootProvider>,
+            fcs,
+            false,
+            duration,
+            true,
+        );
 
         // Initially, it should be false
         assert!(!driver.is_payload_building_in_progress());
@@ -559,6 +576,7 @@ mod tests {
             fcs,
             false,
             duration,
+            true,
         );
 
         // Initially, it should be false
