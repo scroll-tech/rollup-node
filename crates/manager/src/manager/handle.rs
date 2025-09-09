@@ -1,27 +1,33 @@
 use super::{RollupManagerCommand, RollupManagerEvent};
+use crate::manager::metrics::HandleMetrics;
 use reth_network_api::FullNetwork;
 use reth_scroll_node::ScrollNetworkPrimitives;
 use reth_tokio_util::EventStream;
 use rollup_node_primitives::BlockInfo;
 use scroll_network::ScrollNetworkHandle;
 use tokio::sync::{mpsc, oneshot};
+use tracing::error;
 
 /// The handle used to send commands to the rollup manager.
 #[derive(Debug, Clone)]
 pub struct RollupManagerHandle<N: FullNetwork<Primitives = ScrollNetworkPrimitives>> {
     /// The channel used to send commands to the rollup manager.
     to_manager_tx: mpsc::Sender<RollupManagerCommand<N>>,
+    handle_metrics: HandleMetrics,
 }
 
 impl<N: FullNetwork<Primitives = ScrollNetworkPrimitives>> RollupManagerHandle<N> {
     /// Create a new rollup manager handle.
-    pub const fn new(to_manager_tx: mpsc::Sender<RollupManagerCommand<N>>) -> Self {
-        Self { to_manager_tx }
+    pub fn new(to_manager_tx: mpsc::Sender<RollupManagerCommand<N>>) -> Self {
+        Self { to_manager_tx, handle_metrics: HandleMetrics::default() }
     }
 
     /// Sends a command to the rollup manager.
     pub async fn send_command(&self, command: RollupManagerCommand<N>) {
-        let _ = self.to_manager_tx.send(command).await;
+        if let Err(err) = self.to_manager_tx.send(command).await {
+            self.handle_metrics.handle_send_command_failed.increment(1);
+            error!(target: "rollup::manager::handle", "Failed to send command to rollup manager: {}", err);
+        }
     }
 
     /// Sends a command to the rollup manager to build a block.

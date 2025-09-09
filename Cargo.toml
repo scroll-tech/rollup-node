@@ -211,7 +211,6 @@ revm = { git = "https://github.com/scroll-tech/revm" }
 op-revm = { git = "https://github.com/scroll-tech/revm" }
 
 # [patch."https://github.com/scroll-tech/reth.git"]
-# reth crates
 # reth-chainspec = { path = "../reth/crates/chainspec" }
 # reth-e2e-test-utils = { path = "../reth/crates/e2e-test-utils" }
 # reth-eth-wire-types = { path = "../reth/crates/net/eth-wire-types" }
@@ -245,8 +244,6 @@ op-revm = { git = "https://github.com/scroll-tech/revm" }
 # reth-cli-util = { path = "../reth/crates/cli/util" }
 # reth-engine-local = { path = "../reth/crates/engine/local" }
 # reth-eth-wire = { path = "../reth/crates/net/eth-wire" }
-
-# scroll-alloy crates
 # scroll-alloy-consensus = { path = "../reth/crates/scroll/alloy/consensus" }
 # scroll-alloy-hardforks = { path = "../reth/crates/scroll/alloy/hardforks" }
 # scroll-alloy-network = { path = "../reth/crates/scroll/alloy/network" }
@@ -254,8 +251,6 @@ op-revm = { git = "https://github.com/scroll-tech/revm" }
 # scroll-alloy-rpc-types-engine = { path = "../reth/crates/scroll/alloy/rpc-types-engine" }
 # scroll-alloy-evm = { path = "../reth/crates/scroll/alloy/evm" }
 # scroll-alloy-rpc-types = { path = "../reth/crates/scroll/alloy/rpc-types" }
-
-# reth-scroll crates
 # reth-scroll-chainspec = { path = "../reth/crates/scroll/chainspec" }
 # reth-scroll-engine-primitives = { path = "../reth/crates/scroll/engine-primitives" }
 # reth-scroll-forks = { path = "../reth/crates/scroll/hardforks" }
