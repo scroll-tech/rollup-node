@@ -175,6 +175,7 @@ where
         sequencer: Option<Sequencer<L1MP>>,
         signer: Option<SignerHandle>,
         block_time: Option<u64>,
+        auto_start: bool,
         chain_orchestrator: ChainOrchestrator<CS, <N as BlockDownloaderProvider>::Client, P>,
         l1_v2_message_queue_start_index: u64,
     ) -> (Self, RollupManagerHandle<N>) {
@@ -193,7 +194,11 @@ where
             event_sender: None,
             sequencer,
             signer,
-            block_building_trigger: block_time.map(delayed_interval),
+            block_building_trigger: if auto_start {
+                block_time.map(delayed_interval)
+            } else {
+                None
+            },
             block_time_config: block_time,
         };
         (rnm, RollupManagerHandle::new(handle_tx))
@@ -202,7 +207,7 @@ where
     /// Returns a new event listener for the rollup node manager.
     pub fn event_listener(&mut self) -> EventStream<RollupManagerEvent> {
         if let Some(event_sender) = &self.event_sender {
-            return event_sender.new_listener()
+            return event_sender.new_listener();
         };
 
         let event_sender = EventSender::new(EVENT_CHANNEL_SIZE);
@@ -269,7 +274,7 @@ where
                 // // push the batch info into the derivation pipeline.
                 // self.derivation_pipeline.push_batch(batch_info, l1_block_number);
             }
-            ChainOrchestratorEvent::BatchFinalized(batch_info, ..) => {
+            ChainOrchestratorEvent::BatchFinalized(block_number, finalized_batches) => {
                 // Uncomment once we implement issue #273.
                 // // update the fcs on new finalized block.
                 // if let Some(finalized_block) = finalized_block {
@@ -277,9 +282,8 @@ where
                 // }
                 // Remove once we implement issue #273.
                 // Update the derivation pipeline on new finalized batch.
-                #[allow(clippy::collapsible_match)]
-                if let Some(batch_info) = batch_info {
-                    self.derivation_pipeline.push_batch(batch_info.inner, batch_info.number);
+                for batch_info in finalized_batches {
+                    self.derivation_pipeline.push_batch(batch_info, block_number);
                 }
             }
             ChainOrchestratorEvent::L1BlockFinalized(l1_block_number, finalized_batches, ..) => {

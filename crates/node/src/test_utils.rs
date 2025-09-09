@@ -185,6 +185,7 @@ pub fn default_sequencer_test_scroll_rollup_node_config() -> ScrollRollupNodeCon
         },
         sequencer_args: SequencerArgs {
             sequencer_enabled: true,
+            auto_start: true,
             block_time: 0,
             payload_building_duration: 40,
             fee_recipient: Default::default(),
