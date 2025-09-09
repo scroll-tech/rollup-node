@@ -56,6 +56,8 @@ futures.workspace = true
 tokio-stream.workspace = true
 tokio.workspace = true
 tracing.workspace = true
+metrics.workspace = true
+metrics-derive.workspace = true
 
 [dev-dependencies]
 alloy-consensus.workspace = true
