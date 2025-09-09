@@ -92,9 +92,17 @@ pr: lint test docs
 docker:
 	docker build -t scrolltech/rollup-node:latest . -f Dockerfile
 
+.PHONY: docker-nightly
+docker-nightly:
+	docker build -t scrolltech/rollup-node:latest-nightly --build-arg CARGO_FEATURES=js-trace . -f Dockerfile
+
 .PHONY: docker-multiarch
 docker-multiarch:
 	docker buildx build --platform linux/amd64,linux/arm64 -t scrolltech/rollup-node:latest . -f Dockerfile
+
+.PHONY: docker-multiarch-nightly
+docker-multiarch-nightly:
+	docker buildx build --platform linux/amd64,linux/arm64 -t scrolltech/rollup-node:latest-nightly --build-arg CARGO_FEATURES=js-trace . -f Dockerfile
 
 .PHONY: docker-setup-buildx
 docker-setup-buildx:
