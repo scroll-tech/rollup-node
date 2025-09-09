@@ -26,7 +26,7 @@ impl<N: FullNetwork<Primitives = ScrollNetworkPrimitives>> RollupManagerHandle<N
     pub async fn send_command(&self, command: RollupManagerCommand<N>) {
         if let Err(err) = self.to_manager_tx.send(command).await {
             self.handle_metrics.handle_send_command_failed.increment(1);
-            error!("Failed to send command to rollup manager: {}", err);
+error!(target: "rollup::manager::handle", "Failed to send command to rollup manager: {}", err);
         }
     }
 
