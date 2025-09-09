@@ -6,21 +6,35 @@ use std::{
     time::{Duration, SystemTime, UNIX_EPOCH},
 };
 
+/// A wrapper that combines a provider with its human-readable name for testing
+pub struct NamedProvider {
+    pub provider: Box<dyn Provider<Scroll>>,
+    pub name: &'static str,
+}
+
+impl NamedProvider {
+    pub fn new(provider: Box<dyn Provider<Scroll>>, name: &'static str) -> Self {
+        Self { provider, name }
+    }
+}
+
+/// The sequencer node RPC URL for the Docker Compose environment.
+const RN_SEQUENCER_RPC_URL: &str = "http://localhost:8545";
+
+/// The follower node RPC URL for the Docker Compose environment.
+const RN_FOLLOWER_RPC_URL: &str = "http://localhost:8546";
+
+/// The l2geth node RPC URL for the Docker Compose environment.
+const L2GETH_SEQUENCER_RPC_URL: &str = "http://localhost:8547";
+
+const L2GETH_FOLLOWER_RPC_URL: &str = "http://localhost:8548";
+
 pub struct DockerComposeEnv {
     project_name: String,
     compose_file: String,
 }
 
 impl DockerComposeEnv {
-    /// The sequencer node RPC URL for the Docker Compose environment.
-    const SEQUENCER_RPC_URL: &str = "http://localhost:8545";
-
-    /// The follower node RPC URL for the Docker Compose environment.
-    const FOLLOWER_RPC_URL: &str = "http://localhost:8547";
-
-    /// The l2geth node RPC URL for the Docker Compose environment.
-    const L2GETH_RPC_URL: &str = "http://localhost:8549";
-
     // ===== CONSTRUCTOR AND LIFECYCLE =====
 
     /// Create a new DockerComposeEnv and wait for all services to be ready
@@ -41,9 +55,10 @@ impl DockerComposeEnv {
 
         // Wait for all services to be ready
         tracing::info!("⏳ Waiting for services to be ready...");
-        env.wait_for_sequencer_ready().await?;
-        env.wait_for_follower_ready().await?;
-        env.wait_for_l2geth_ready().await?;
+        Self::wait_for_l2_node_ready(RN_SEQUENCER_RPC_URL, 30).await?;
+        Self::wait_for_l2_node_ready(RN_FOLLOWER_RPC_URL, 30).await?;
+        Self::wait_for_l2_node_ready(L2GETH_SEQUENCER_RPC_URL, 30).await?;
+        Self::wait_for_l2_node_ready(L2GETH_FOLLOWER_RPC_URL, 30).await?;
 
         tracing::info!("✅ All services are ready!");
         Ok(env)
@@ -61,8 +76,8 @@ impl DockerComposeEnv {
                 project_name,
                 "up",
                 "-d",
-                "--force-recreate",
-                "--build",
+                // "--force-recreate",
+                // "--build",
             ])
             .stdout(std::process::Stdio::piped())
             .stderr(std::process::Stdio::piped())
@@ -100,8 +115,6 @@ impl DockerComposeEnv {
                 "compose",
                 "-f",
                 compose_file,
-                "-p",
-                project_name,
                 "down",
                 "--volumes",
                 "--remove-orphans",
@@ -110,25 +123,56 @@ impl DockerComposeEnv {
             ])
             .output();
 
+        let _result = Command::new("docker")
+            .args(["compose", "rm", "--force", "--volumes", "--stop"])
+            .output();
+
         tracing::info!("✅ Cleanup completed");
     }
 
-    // ===== READINESS CHECKS =====
+    // ===== PROVIDER FACTORIES =====
 
-    /// Wait for sequencer to be ready
-    async fn wait_for_sequencer_ready(&self) -> Result<()> {
-        Self::wait_for_l2_node_ready(Self::SEQUENCER_RPC_URL, 30).await
+    /// Get a configured sequencer provider
+    pub async fn get_rn_sequencer_provider(&self) -> Result<NamedProvider> {
+        let provider = ProviderBuilder::<_, _, Scroll>::default()
+            .with_recommended_fillers()
+            .connect(RN_SEQUENCER_RPC_URL)
+            .await
+            .map_err(|e| eyre::eyre!("Failed to connect to RN sequencer: {}", e))?;
+        Ok(NamedProvider::new(Box::new(provider), "RN Sequencer"))
     }
 
-    /// Wait for follower to be ready
-    async fn wait_for_follower_ready(&self) -> Result<()> {
-        Self::wait_for_l2_node_ready(Self::FOLLOWER_RPC_URL, 30).await
+    /// Get a configured follower provider
+    pub async fn get_rn_follower_provider(&self) -> Result<NamedProvider> {
+        let provider = ProviderBuilder::<_, _, Scroll>::default()
+            .with_recommended_fillers()
+            .connect(RN_FOLLOWER_RPC_URL)
+            .await
+            .map_err(|e| eyre::eyre!("Failed to connect to RN follower: {}", e))?;
+        Ok(NamedProvider::new(Box::new(provider), "RN Follower"))
     }
 
-    /// Wait for l2geth to be ready
-    async fn wait_for_l2geth_ready(&self) -> Result<()> {
-        Self::wait_for_l2_node_ready(Self::L2GETH_RPC_URL, 30).await // Same timeout as others
+    /// Get a configured l2geth sequencer provider
+    pub async fn get_l2geth_sequencer_provider(&self) -> Result<NamedProvider> {
+        let provider = ProviderBuilder::<_, _, Scroll>::default()
+            .with_recommended_fillers()
+            .connect(L2GETH_SEQUENCER_RPC_URL)
+            .await
+            .map_err(|e| eyre::eyre!("Failed to connect to l2geth sequencer: {}", e))?;
+        Ok(NamedProvider::new(Box::new(provider), "L2Geth Sequencer"))
     }
+
+    /// Get a configured l2geth follower provider
+    pub async fn get_l2geth_follower_provider(&self) -> Result<NamedProvider> {
+        let provider = ProviderBuilder::<_, _, Scroll>::default()
+            .with_recommended_fillers()
+            .connect(L2GETH_FOLLOWER_RPC_URL)
+            .await
+            .map_err(|e| eyre::eyre!("Failed to connect to l2geth follower: {}", e))?;
+        Ok(NamedProvider::new(Box::new(provider), "L2Geth Follower"))
+    }
+
+    // ===== UTILITIES =====
 
     /// Wait for L2 node to be ready
     async fn wait_for_l2_node_ready(provider_url: &str, max_retries: u32) -> Result<()> {
@@ -161,37 +205,6 @@ impl DockerComposeEnv {
             "L2 node failed to become ready after {max_retries} attempts, url: {provider_url}"
         );
     }
-
-    // ===== PROVIDER FACTORIES =====
-
-    /// Get a configured sequencer provider
-    pub async fn get_sequencer_provider(&self) -> Result<impl Provider<Scroll>> {
-        ProviderBuilder::<_, _, Scroll>::default()
-            .with_recommended_fillers()
-            .connect(Self::SEQUENCER_RPC_URL)
-            .await
-            .map_err(|e| eyre::eyre!("Failed to connect to sequencer: {}", e))
-    }
-
-    /// Get a configured follower provider
-    pub async fn get_follower_provider(&self) -> Result<impl Provider<Scroll>> {
-        ProviderBuilder::<_, _, Scroll>::default()
-            .with_recommended_fillers()
-            .connect(Self::FOLLOWER_RPC_URL)
-            .await
-            .map_err(|e| eyre::eyre!("Failed to connect to follower: {}", e))
-    }
-
-    /// Get a configured l2geth provider
-    pub async fn get_l2geth_provider(&self) -> Result<impl Provider<Scroll>> {
-        ProviderBuilder::<_, _, Scroll>::default()
-            .with_recommended_fillers()
-            .connect(Self::L2GETH_RPC_URL)
-            .await
-            .map_err(|e| eyre::eyre!("Failed to connect to l2geth: {}", e))
-    }
-
-    // ===== UTILITIES =====
 
     /// Show logs for all containers
     fn show_all_container_logs(compose_file: &str, project_name: &str) {
