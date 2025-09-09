@@ -261,6 +261,7 @@ impl ScrollRollupNodeConfig {
             fcs,
             self.engine_driver_args.sync_at_startup && !self.test && !chain_spec.is_dev_chain(),
             Duration::from_millis(self.sequencer_args.payload_building_duration),
+            self.sequencer_args.allow_empty_blocks,
         );
 
         // Create the consensus.
@@ -306,7 +307,7 @@ impl ScrollRollupNodeConfig {
 
         // Construct the Sequencer.
         let chain_config = chain_spec.chain_config();
-        let (sequencer, block_time) = if self.sequencer_args.sequencer_enabled {
+        let (sequencer, block_time, auto_start) = if self.sequencer_args.sequencer_enabled {
             let args = &self.sequencer_args;
             let sequencer = Sequencer::new(
                 Arc::new(l1_messages_provider),
@@ -316,9 +317,9 @@ impl ScrollRollupNodeConfig {
                 0,
                 self.sequencer_args.l1_message_inclusion_mode,
             );
-            (Some(sequencer), (args.block_time != 0).then_some(args.block_time))
+            (Some(sequencer), (args.block_time != 0).then_some(args.block_time), args.auto_start)
         } else {
-            (None, None)
+            (None, None, false)
         };
 
         // Instantiate the signer
@@ -365,6 +366,7 @@ impl ScrollRollupNodeConfig {
             sequencer,
             signer,
             block_time,
+            auto_start,
             chain_orchestrator,
             l1_v2_message_queue_start_index,
         )
@@ -430,19 +432,14 @@ impl ConsensusArgs {
 }
 
 /// The consensus algorithm to use.
-#[derive(Debug, clap::ValueEnum, Clone, PartialEq, Eq)]
+#[derive(Debug, Default, clap::ValueEnum, Clone, PartialEq, Eq)]
 pub enum ConsensusAlgorithm {
     /// System contract consensus with an optional authorized signer. If the authorized signer is
     /// not provided the system will use the L1 provider to query the authorized signer from L1.
+    #[default]
     SystemContract,
     /// No-op consensus that does not validate blocks.
     Noop,
-}
-
-impl Default for ConsensusAlgorithm {
-    fn default() -> Self {
-        Self::SystemContract
-    }
 }
 
 /// The engine driver args.
@@ -553,6 +550,9 @@ pub struct SequencerArgs {
     /// Enable the scroll block sequencer.
     #[arg(long = "sequencer.enabled", default_value_t = false)]
     pub sequencer_enabled: bool,
+    /// Whether the sequencer should start sequencing automatically on startup.
+    #[arg(long = "sequencer.auto-start", default_value_t = false)]
+    pub auto_start: bool,
     /// The block time for the sequencer.
     #[arg(long = "sequencer.block-time", id = "sequencer_block_time", value_name = "SEQUENCER_BLOCK_TIME", default_value_t = constants::DEFAULT_BLOCK_TIME)]
     pub block_time: u64,
@@ -572,6 +572,14 @@ pub struct SequencerArgs {
         help = "L1 message inclusion mode. Use 'finalized' for finalized messages only, or 'depth:{number}' for block depth confirmation (e.g. 'depth:10')"
     )]
     pub l1_message_inclusion_mode: L1MessageInclusionMode,
+    /// Enable empty blocks.
+    #[arg(
+        long = "sequencer.allow-empty-blocks",
+        id = "sequencer_allow_empty_blocks",
+        value_name = "SEQUENCER_ALLOW_EMPTY_BLOCKS",
+        default_value_t = false
+    )]
+    pub allow_empty_blocks: bool,
 }
 
 /// The arguments for the signer.

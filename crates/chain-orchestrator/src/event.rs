@@ -2,9 +2,7 @@ use alloy_consensus::Header;
 use alloy_primitives::{Signature, B256};
 use reth_network_peers::PeerId;
 use reth_scroll_primitives::ScrollBlock;
-use rollup_node_primitives::{
-    BatchInfo, BlockInfo, ChainImport, L2BlockInfoWithL1Messages, WithFinalizedBlockNumber,
-};
+use rollup_node_primitives::{BatchInfo, BlockInfo, ChainImport, L2BlockInfoWithL1Messages};
 
 /// An event emitted by the `ChainOrchestrator`.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -40,9 +38,8 @@ pub enum ChainOrchestratorEvent {
         /// The safe L2 block info.
         safe_head: Option<BlockInfo>,
     },
-    /// A batch has been finalized returning an optional finalized L2 block. Also returns a
-    /// [`BatchInfo`] if the finalized event occurred in a finalized L1 block.
-    BatchFinalized(Option<WithFinalizedBlockNumber<BatchInfo>>, Option<BlockInfo>),
+    /// A batch has been finalized returning a list of finalized batches.
+    BatchFinalized(u64, Vec<BatchInfo>),
     /// An L1 block has been finalized returning the L1 block number and the list of finalized
     /// batches.
     L1BlockFinalized(u64, Vec<BatchInfo>),
