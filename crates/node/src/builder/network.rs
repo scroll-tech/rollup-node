@@ -4,7 +4,7 @@ use reth_eth_wire_types::BasicNetworkPrimitives;
 use reth_network::{
     config::NetworkMode,
     protocol::{RlpxSubProtocol, RlpxSubProtocols},
-    transform::header::HeaderTransform,
+    transform::header::{HeaderResponseTransform, HeaderTransform},
     NetworkConfig, NetworkHandle, NetworkManager, PeersInfo,
 };
 use reth_node_api::TxTy;
@@ -116,7 +116,7 @@ where
         };
 
         let network = NetworkManager::builder(config).await?;
-        let handle = ctx.start_network(network, pool, Some(Box::new(request_transform)));
+        let handle = ctx.start_network(network, pool, Some(Arc::new(request_transform)));
         info!(target: "reth::cli", enode=%handle.local_node_record(), "P2P networking initialized");
         Ok(handle)
     }
@@ -135,8 +135,6 @@ pub(crate) enum HeaderTransformError {
     InvalidSigner(Address),
     /// Signature recovery failed
     RecoveryFailed,
-    /// No tokio runtime available
-    NoRuntimeAvailable,
     /// Database operation failed
     DatabaseError(String),
 }
@@ -147,9 +145,6 @@ impl fmt::Display for HeaderTransformError {
             Self::InvalidSignature => write!(f, "Invalid signature length, expected 65 bytes"),
             Self::InvalidSigner(signer) => write!(f, "Invalid signer, not authorized: {}", signer),
             Self::RecoveryFailed => write!(f, "Failed to recover signer from signature"),
-            Self::NoRuntimeAvailable => {
-                write!(f, "No tokio runtime available during signature storage")
-            }
             Self::DatabaseError(msg) => write!(f, "Database error: {}", msg),
         }
     }
@@ -242,38 +237,30 @@ impl<ChainSpec: EthChainSpec + ScrollHardforks + Debug + Send + Sync + 'static>
     }
 }
 
+#[async_trait::async_trait]
 impl<H: BlockHeader, ChainSpec: EthChainSpec + ScrollHardforks + Debug + Send + Sync>
-    HeaderTransform<H> for ScrollRequestHeaderTransform<ChainSpec>
+    HeaderResponseTransform<H> for ScrollRequestHeaderTransform<ChainSpec>
 {
-    fn map(&self, mut header: H) -> H {
+    async fn map(&self, mut header: H) -> H {
         if !self.chain_spec.is_euclid_v2_active_at_timestamp(header.timestamp()) {
             return header;
         }
 
         // read the signature from the rollup node.
-        let signature = tokio::task::block_in_place(|| {
-            if let Ok(handle) = tokio::runtime::Handle::try_current() {
-                match handle.block_on(async { self.db.get_signature(header.hash_slow()).await }) {
-                    Ok(sig) => sig,
-                    Err(e) => {
-                        warn!(target: "scroll::network::request_header_transform",
-                            "Failed to get block signature from database, header hash: {:?}, error: {}",
-                            header.hash_slow(),
-                            HeaderTransformError::DatabaseError(e.to_string())
-                        );
-                        None
-                    }
-                }
-            } else {
-                warn!(
-                    target: "scroll::network::request_header_transform",
+        let block_hash = header.hash_slow();
+        let signature = self
+            .db
+            .get_signature(block_hash)
+            .await
+            .inspect_err(|e| {
+                warn!(target: "scroll::network::request_header_transform",
                     "Failed to get block signature from database, header hash: {:?}, error: {}",
                     header.hash_slow(),
-                    HeaderTransformError::NoRuntimeAvailable
-                );
-                None
-            }
-        });
+                    HeaderTransformError::DatabaseError(e.to_string())
+                )
+            })
+            .ok()
+            .flatten();
 
         // If we have a signature in the database and it matches configured signer then add it
         // to the extra data field

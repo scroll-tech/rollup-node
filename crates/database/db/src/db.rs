@@ -14,10 +14,10 @@ use sea_orm::{
 const BUSY_TIMEOUT_SECS: u64 = 5;
 
 /// The maximum number of connections in the database connection pool.
-const MAX_CONNECTIONS: u32 = 500;
+const MAX_CONNECTIONS: u32 = 10;
 
 /// The minimum number of connections in the database connection pool.
-const MIN_CONNECTIONS: u32 = 25;
+const MIN_CONNECTIONS: u32 = 5;
 
 /// The timeout for acquiring a connection from the pool.
 const ACQUIRE_TIMEOUT_SECS: u64 = 5;

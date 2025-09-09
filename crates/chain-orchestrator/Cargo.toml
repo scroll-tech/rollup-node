@@ -32,7 +32,7 @@ scroll-network.workspace = true
 
 # reth
 reth-chainspec.workspace = true
-reth-network-p2p = { git = "https://github.com/scroll-tech/reth.git", default-features = false }
+reth-network-p2p = { git = "https://github.com/scroll-tech/reth.git", branch = "feat/async-header-response-transform", default-features = false }
 reth-network-peers.workspace = true
 reth-primitives-traits.workspace = true
 

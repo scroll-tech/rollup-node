@@ -193,7 +193,7 @@ async fn test_should_consolidate_after_optimistic_sync() -> eyre::Result<()> {
             sequencer_url: None,
             signer_address: None,
         },
-        database_args: DatabaseArgs { path: Some(PathBuf::from("sqlite::memory:")) },
+        database_args: DatabaseArgs::default(),
         l1_provider_args: L1ProviderArgs::default(),
         engine_driver_args: EngineDriverArgs::default(),
         chain_orchestrator_args: ChainOrchestratorArgs::default(),
