@@ -556,6 +556,7 @@ impl<
                         self.database.clone(),
                         index,
                         block_number,
+                        self.l1_finalized_block_number.clone(),
                     )),
                 ))
             }
@@ -695,9 +696,19 @@ impl<
         database: Arc<Database>,
         batch_index: u64,
         block_number: u64,
+        finalized_block_number: Arc<AtomicU64>,
     ) -> Result<Option<ChainOrchestratorEvent>, ChainOrchestratorError> {
         // finalize all batches up to `batch_index`.
         database.finalize_batches_up_to_index(batch_index, block_number).await?;
+
+        // Get all unprocessed batches that have been finalized by this L1 block finalization.
+        let finalized_block_number = finalized_block_number.load(Ordering::Relaxed);
+        if finalized_block_number >= block_number {
+            let finalized_batches = database
+                .fetch_and_update_unprocessed_finalized_batches(finalized_block_number)
+                .await?;
+            return Ok(Some(ChainOrchestratorEvent::BatchFinalized(block_number, finalized_batches)))
+        }
 
         Ok(None)
     }
