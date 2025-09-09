@@ -29,7 +29,7 @@ const ACQUIRE_TIMEOUT_SECS: u64 = 5;
 /// operations defined in [`crate::DatabaseOperations`]. Atomic operations can be performed using
 /// the [`Database::tx`] method which returns a [`DatabaseTransaction`] that also implements the
 /// [`DatabaseConnectionProvider`] trait and also the [`crate::DatabaseOperations`] trait.
-#[derive(Debug, Default)]
+#[derive(Debug)]
 pub struct Database {
     /// The underlying database connection.
     connection: DatabaseConnection,
