@@ -310,7 +310,7 @@ impl ScrollRollupNodeConfig {
 
         // Construct the Sequencer.
         let chain_config = chain_spec.chain_config();
-        let (sequencer, block_time) = if self.sequencer_args.sequencer_enabled {
+        let (sequencer, block_time, auto_start) = if self.sequencer_args.sequencer_enabled {
             let args = &self.sequencer_args;
             let sequencer = Sequencer::new(
                 Arc::new(l1_messages_provider),
@@ -320,9 +320,9 @@ impl ScrollRollupNodeConfig {
                 0,
                 self.sequencer_args.l1_message_inclusion_mode,
             );
-            (Some(sequencer), (args.block_time != 0).then_some(args.block_time))
+            (Some(sequencer), (args.block_time != 0).then_some(args.block_time), args.auto_start)
         } else {
-            (None, None)
+            (None, None, false)
         };
 
         // Instantiate the signer
@@ -369,6 +369,7 @@ impl ScrollRollupNodeConfig {
             sequencer,
             signer,
             block_time,
+            auto_start,
             chain_orchestrator,
             l1_v2_message_queue_start_index,
         )
@@ -496,11 +497,35 @@ pub struct NetworkArgs {
         value_name = "NETWORK_SEQUENCER_URL"
     )]
     pub sequencer_url: Option<String>,
+    /// The valid signer address for the network.
+    #[arg(long = "network.valid_signer", value_name = "VALID_SIGNER")]
+    pub signer_address: Option<Address>,
 }
 
 impl Default for NetworkArgs {
     fn default() -> Self {
-        Self { enable_eth_scroll_wire_bridge: true, enable_scroll_wire: true, sequencer_url: None }
+        Self {
+            enable_eth_scroll_wire_bridge: true,
+            enable_scroll_wire: true,
+            sequencer_url: None,
+            signer_address: None,
+        }
+    }
+}
+
+impl NetworkArgs {
+    /// Get the default authorized signer address for the given chain.
+    pub const fn default_authorized_signer(chain: Option<NamedChain>) -> Option<Address> {
+        match chain {
+            Some(NamedChain::Scroll) => Some(constants::SCROLL_MAINNET_SIGNER),
+            Some(NamedChain::ScrollSepolia) => Some(constants::SCROLL_SEPOLIA_SIGNER),
+            _ => None,
+        }
+    }
+
+    /// Get the effective signer address, using the configured signer or falling back to default.
+    pub fn effective_signer(&self, chain: Option<NamedChain>) -> Option<Address> {
+        self.signer_address.or_else(|| Self::default_authorized_signer(chain))
     }
 }
 
@@ -553,6 +578,9 @@ pub struct SequencerArgs {
     /// Enable the scroll block sequencer.
     #[arg(long = "sequencer.enabled", default_value_t = false)]
     pub sequencer_enabled: bool,
+    /// Whether the sequencer should start sequencing automatically on startup.
+    #[arg(long = "sequencer.auto-start", default_value_t = false)]
+    pub auto_start: bool,
     /// The block time for the sequencer.
     #[arg(long = "sequencer.block-time", id = "sequencer_block_time", value_name = "SEQUENCER_BLOCK_TIME", default_value_t = constants::DEFAULT_BLOCK_TIME)]
     pub block_time: u64,
@@ -701,6 +729,48 @@ const fn l1_v2_message_queue_start_index(chain: Option<NamedChain>) -> u64 {
 mod tests {
     use super::*;
     use std::path::PathBuf;
+
+    #[test]
+    fn test_network_args_default_authorized_signer() {
+        // Test Scroll mainnet
+        let mainnet_signer = NetworkArgs::default_authorized_signer(Some(NamedChain::Scroll));
+        assert_eq!(mainnet_signer, Some(constants::SCROLL_MAINNET_SIGNER));
+
+        // Test Scroll Sepolia
+        let sepolia_signer =
+            NetworkArgs::default_authorized_signer(Some(NamedChain::ScrollSepolia));
+        assert_eq!(sepolia_signer, Some(constants::SCROLL_SEPOLIA_SIGNER));
+
+        // Test other chains
+        let other_signer = NetworkArgs::default_authorized_signer(Some(NamedChain::Mainnet));
+        assert_eq!(other_signer, None);
+
+        // Test None chain
+        let none_signer = NetworkArgs::default_authorized_signer(None);
+        assert_eq!(none_signer, None);
+    }
+
+    #[test]
+    fn test_network_args_effective_signer() {
+        let custom_signer = Address::new([0x11; 20]);
+
+        // Test with configured signer
+        let network_args =
+            NetworkArgs { signer_address: Some(custom_signer), ..Default::default() };
+        assert_eq!(network_args.effective_signer(Some(NamedChain::Scroll)), Some(custom_signer));
+
+        // Test without configured signer, fallback to default
+        let network_args_default = NetworkArgs::default();
+        assert_eq!(
+            network_args_default.effective_signer(Some(NamedChain::Scroll)),
+            Some(constants::SCROLL_MAINNET_SIGNER)
+        );
+        assert_eq!(
+            network_args_default.effective_signer(Some(NamedChain::ScrollSepolia)),
+            Some(constants::SCROLL_SEPOLIA_SIGNER)
+        );
+        assert_eq!(network_args_default.effective_signer(Some(NamedChain::Mainnet)), None);
+    }
 
     #[test]
     fn test_validate_sequencer_enabled_without_any_signer_fails() {

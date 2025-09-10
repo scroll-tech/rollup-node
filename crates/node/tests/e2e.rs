@@ -61,6 +61,7 @@ async fn can_bridge_l1_messages() -> eyre::Result<()> {
         chain_orchestrator_args: ChainOrchestratorArgs::default(),
         sequencer_args: SequencerArgs {
             sequencer_enabled: true,
+            auto_start: true,
             block_time: 0,
             l1_message_inclusion_mode: L1MessageInclusionMode::BlockDepth(0),
             allow_empty_blocks: true,
@@ -146,6 +147,7 @@ async fn can_sequence_and_gossip_blocks() {
             enable_eth_scroll_wire_bridge: true,
             enable_scroll_wire: true,
             sequencer_url: None,
+            signer_address: None,
         },
         database_args: DatabaseArgs { path: Some(PathBuf::from("sqlite::memory:")) },
         l1_provider_args: L1ProviderArgs::default(),
@@ -153,6 +155,7 @@ async fn can_sequence_and_gossip_blocks() {
         chain_orchestrator_args: ChainOrchestratorArgs::default(),
         sequencer_args: SequencerArgs {
             sequencer_enabled: true,
+            auto_start: true,
             block_time: 0,
             l1_message_inclusion_mode: L1MessageInclusionMode::BlockDepth(0),
             payload_building_duration: 1000,
@@ -242,12 +245,14 @@ async fn can_penalize_peer_for_invalid_block() {
             enable_eth_scroll_wire_bridge: true,
             enable_scroll_wire: true,
             sequencer_url: None,
+            signer_address: None,
         },
         database_args: DatabaseArgs { path: Some(PathBuf::from("sqlite::memory:")) },
         l1_provider_args: L1ProviderArgs::default(),
         engine_driver_args: EngineDriverArgs::default(),
         sequencer_args: SequencerArgs {
             sequencer_enabled: true,
+            auto_start: true,
             block_time: 0,
             l1_message_inclusion_mode: L1MessageInclusionMode::BlockDepth(0),
             payload_building_duration: 1000,

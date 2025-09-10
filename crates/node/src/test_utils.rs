@@ -141,7 +141,7 @@ pub fn default_test_scroll_rollup_node_config() -> ScrollRollupNodeConfig {
     ScrollRollupNodeConfig {
         test: true,
         network_args: crate::args::NetworkArgs::default(),
-        database_args: DatabaseArgs { path: Some(PathBuf::from("sqlite::memory:")) },
+        database_args: DatabaseArgs::default(),
         l1_provider_args: L1ProviderArgs::default(),
         engine_driver_args: EngineDriverArgs { sync_at_startup: true },
         chain_orchestrator_args: ChainOrchestratorArgs {
@@ -153,10 +153,7 @@ pub fn default_test_scroll_rollup_node_config() -> ScrollRollupNodeConfig {
             allow_empty_blocks: true,
             ..Default::default()
         },
-        beacon_provider_args: BeaconProviderArgs {
-            mock: true,
-            ..Default::default()
-        },
+        beacon_provider_args: BeaconProviderArgs { mock: true, ..Default::default() },
         signer_args: Default::default(),
         gas_price_oracle_args: GasPriceOracleArgs::default(),
         consensus_args: ConsensusArgs::noop(),
@@ -184,6 +181,7 @@ pub fn default_sequencer_test_scroll_rollup_node_config() -> ScrollRollupNodeCon
         },
         sequencer_args: SequencerArgs {
             sequencer_enabled: true,
+            auto_start: true,
             block_time: 0,
             payload_building_duration: 40,
             fee_recipient: Default::default(),

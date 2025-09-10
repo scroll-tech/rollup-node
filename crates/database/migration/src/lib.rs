@@ -9,6 +9,7 @@ mod m20250616_223947_add_metadata;
 mod m20250825_093350_remove_unsafe_l2_blocks;
 mod m20250829_042803_add_table_indexes;
 mod m20250901_102341_add_commit_batch_processed_column;
+mod m20250904_175949_block_signature;
 mod migration_info;
 pub use migration_info::{
     MigrationInfo, ScrollDevMigrationInfo, ScrollMainnetMigrationInfo, ScrollSepoliaMigrationInfo,
@@ -29,6 +30,7 @@ impl<MI: MigrationInfo + Send + Sync + 'static> MigratorTrait for Migrator<MI> {
             Box::new(m20250825_093350_remove_unsafe_l2_blocks::Migration),
             Box::new(m20250829_042803_add_table_indexes::Migration),
             Box::new(m20250901_102341_add_commit_batch_processed_column::Migration),
+            Box::new(m20250904_175949_block_signature::Migration),
         ]
     }
 }

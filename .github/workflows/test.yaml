@@ -14,7 +14,8 @@ env:
 
 jobs:
   unit:
-    runs-on: ubuntu-latest
+    runs-on:
+      group: scroll-reth-runner-group
     timeout-minutes: 60
     env:
       RUST_BACKTRACE: 1
@@ -34,7 +35,8 @@ jobs:
         run: cargo nextest run --all-features --workspace --locked -E '!kind(test)'
 
   integration:
-    runs-on: ubuntu-latest
+    runs-on:
+      group: scroll-reth-runner-group
     timeout-minutes: 60
     env:
       RUST_BACKTRACE: 1
@@ -57,7 +59,8 @@ jobs:
             -- --skip test_should_consolidate_to_block_15k
 
   integration-docker-compose:
-    runs-on: ubuntu-latest
+    runs-on:
+      group: scroll-reth-runner-group
     timeout-minutes: 90
     env:
       RUST_BACKTRACE: 1
