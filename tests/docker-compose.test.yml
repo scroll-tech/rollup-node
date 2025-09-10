@@ -17,7 +17,7 @@ services:
   rollup-node-sequencer:
     build:
       context: ../
-      dockerfile: Dockerfile
+      dockerfile: Dockerfile.test
     container_name: rollup-node-sequencer
     entrypoint: ["bash", "/launch_rollup_node_sequencer.bash"]
     environment:
@@ -36,7 +36,7 @@ services:
   rollup-node-follower:
     build:
       context: ../
-      dockerfile: Dockerfile
+      dockerfile: Dockerfile.test
     container_name: rollup-node-follower
     entrypoint: ["bash", "/launch_rollup_node_follower.bash"]
     environment:

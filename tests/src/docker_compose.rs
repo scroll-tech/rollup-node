@@ -115,16 +115,18 @@ impl DockerComposeEnv {
                 "compose",
                 "-f",
                 compose_file,
+                "-p",
+                project_name,
                 "down",
                 "--volumes",
                 "--remove-orphans",
                 "--timeout",
-                "30",
+                "3",
             ])
             .output();
 
         let _result = Command::new("docker")
-            .args(["compose", "rm", "--force", "--volumes", "--stop"])
+            .args(["compose", "-f", compose_file, "rm", "--force", "--volumes", "--stop"])
             .output();
 
         tracing::info!("✅ Cleanup completed");
