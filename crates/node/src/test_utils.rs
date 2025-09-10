@@ -142,7 +142,7 @@ pub fn default_test_scroll_rollup_node_config() -> ScrollRollupNodeConfig {
     ScrollRollupNodeConfig {
         test: true,
         network_args: crate::args::NetworkArgs::default(),
-        database_args: DatabaseArgs { path: Some(PathBuf::from("sqlite::memory:")) },
+        database_args: DatabaseArgs::default(),
         l1_provider_args: L1ProviderArgs::default(),
         engine_driver_args: EngineDriverArgs { sync_at_startup: true },
         chain_orchestrator_args: ChainOrchestratorArgs {

@@ -42,7 +42,7 @@ use tokio_stream::wrappers::ReceiverStream;
 use tracing::{error, info, trace, warn};
 
 use rollup_node_providers::{L1MessageProvider, L1Provider};
-use scroll_db::{Database, DatabaseError};
+use scroll_db::{Database, DatabaseError, DatabaseOperations};
 use scroll_derivation_pipeline::DerivationPipeline;
 
 mod budget;
@@ -116,6 +116,8 @@ pub struct RollupNodeManager<
     signer: Option<SignerHandle>,
     /// The trigger for the block building process.
     block_building_trigger: Option<Interval>,
+    /// A connection to the database.
+    database: Arc<Database>,
     /// The original block time configuration for restoring automatic sequencing.
     block_time_config: Option<u64>,
     // metrics for the rollup node manager.
@@ -187,7 +189,7 @@ where
     ) -> (Self, RollupManagerHandle<N>) {
         let (handle_tx, handle_rx) = mpsc::channel(EVENT_CHANNEL_SIZE);
         let derivation_pipeline =
-            DerivationPipeline::new(l1_provider, database, l1_v2_message_queue_start_index);
+            DerivationPipeline::new(l1_provider, database.clone(), l1_v2_message_queue_start_index);
         let rnm = Self {
             handle_rx,
             chain_spec,
@@ -205,6 +207,7 @@ where
             } else {
                 None
             },
+            database,
             block_time_config: block_time,
             metrics: RollupNodeManagerMetrics::default(),
         };
@@ -246,7 +249,28 @@ where
                 result: Err(err.into()),
             });
         } else {
-            self.chain.handle_block_from_peer(block_with_peer);
+            self.chain.handle_block_from_peer(block_with_peer.clone());
+
+            // TODO: remove this once we deprecate l2geth.
+            // Store the block signature in the database
+            let db = self.database.clone();
+            let block_hash = block_with_peer.block.hash_slow();
+            let signature = block_with_peer.signature;
+            tokio::spawn(async move {
+                if let Err(err) = db.insert_signature(block_hash, signature).await {
+                    tracing::warn!(
+                        target: "scroll::node::manager",
+                        %block_hash, sig=%signature, error=?err,
+                        "Failed to store block signature; execution client already persisted the block"
+                    );
+                } else {
+                    tracing::trace!(
+                        target: "scroll::node::manager",
+                        %block_hash, sig=%signature,
+                        "Persisted block signature to database"
+                    );
+                }
+            });
         }
     }
 
@@ -644,6 +668,26 @@ where
                             SignerEvent::SignedBlock { block: block.clone(), signature },
                         ));
                     }
+
+                    // TODO: remove this once we deprecate l2geth.
+                    // Store the block signature in the database
+                    let db = this.database.clone();
+                    let block_hash = block.hash_slow();
+                    tokio::spawn(async move {
+                        if let Err(err) = db.insert_signature(block_hash, signature).await {
+                            tracing::warn!(
+                                target: "scroll::node::manager",
+                                %block_hash, sig=%signature, error=?err,
+                                "Failed to store block signature; execution client already persisted the block"
+                            );
+                        } else {
+                            tracing::trace!(
+                                target: "scroll::node::manager",
+                                %block_hash, sig=%signature,
+                                "Persisted block signature to database"
+                            );
+                        }
+                    });
 
                     this.chain.handle_sequenced_block(NewBlockWithPeer {
                         peer_id: Default::default(),

@@ -33,6 +33,7 @@ scroll-alloy-hardforks.workspace = true
 scroll-alloy-network.workspace = true
 scroll-alloy-provider.workspace = true
 
+reth-primitives-traits.workspace = true
 reth-scroll-engine-primitives.workspace = true
 reth-scroll-evm = { git = "https://github.com/scroll-tech/reth.git" }
 reth-scroll-cli = { git = "https://github.com/scroll-tech/reth.git" }
@@ -91,6 +92,7 @@ scroll-network.workspace = true
 auto_impl.workspace = true
 clap = { workspace = true, features = ["derive", "env"] }
 eyre.workspace = true
+futures.workspace = true
 jsonrpsee = { version = "0.25.1", features = ["server", "client", "macros"] }
 reqwest.workspace = true
 tokio.workspace = true

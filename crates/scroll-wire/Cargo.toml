@@ -21,6 +21,7 @@ reth-network-api.workspace = true
 
 # scroll
 reth-scroll-primitives = { workspace = true }
+rollup-node-signer.workspace = true
 
 # misc
 futures.workspace = true

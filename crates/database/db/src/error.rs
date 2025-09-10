@@ -15,6 +15,9 @@ pub enum DatabaseError {
     /// The block was not found in database.
     #[error("no block for id {0}")]
     BlockNotFound(BlockId),
+    /// A generic error occurred.
+    #[error("parse signature error: {0}")]
+    ParseSignatureError(String),
     /// The L1 message was not found in database.
     #[error("L1 message at index [{0}] not found in database")]
     L1MessageNotFound(L1MessageStart),

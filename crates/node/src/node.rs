@@ -1,6 +1,6 @@
 //! Node specific implementations for Scroll rollup node.
 
-use crate::{args::ScrollRollupNodeConfig, constants};
+use crate::{args::ScrollRollupNodeConfig, builder::network::ScrollNetworkBuilder, constants};
 use std::time::Duration;
 
 use super::add_ons::ScrollRollupNodeAddOns;
@@ -11,8 +11,8 @@ use reth_node_builder::{
     FullNodeTypes, Node, NodeAdapter, NodeComponentsBuilder,
 };
 use reth_scroll_node::{
-    ScrollConsensusBuilder, ScrollExecutorBuilder, ScrollNetworkBuilder, ScrollNode,
-    ScrollPayloadBuilderBuilder, ScrollPoolBuilder,
+    ScrollConsensusBuilder, ScrollExecutorBuilder, ScrollNode, ScrollPayloadBuilderBuilder,
+    ScrollPoolBuilder,
 };
 use scroll_wire::{ScrollWireConfig, ScrollWireEvent, ScrollWireProtocolHandler};
 use std::sync::Arc;
@@ -70,7 +70,9 @@ where
             }))
             .network(
                 ScrollNetworkBuilder::new()
-                    .with_sub_protocol(scroll_wire_handler.into_rlpx_sub_protocol()),
+                    .with_sub_protocol(scroll_wire_handler.into_rlpx_sub_protocol())
+                    .with_database_path(self.config.database_args.path.clone())
+                    .with_signer(self.config.network_args.signer_address),
             )
     }
 
