@@ -38,7 +38,7 @@ pub trait BlobProvider: Sync + Send {
 #[derive(Debug, Clone)]
 pub struct BlobProvidersBuilder {
     /// Beacon client blob source.
-    pub beacon: Option<reqwest::Url>,
+    pub beacon: Option<Vec<reqwest::Url>>,
     /// AWS S3 blob source.
     pub s3: Option<reqwest::Url>,
     /// Anvil sequencer blob source.
@@ -52,16 +52,20 @@ impl BlobProvidersBuilder {
     pub async fn build(&self) -> eyre::Result<BlobProviders> {
         if self.mock {
             return Ok(BlobProviders::new(
-                None,
+                vec![],
                 vec![Arc::new(MockBeaconProvider::default()) as Arc<dyn BlobProvider>],
             ));
         }
 
-        let beacon_provider = if let Some(beacon) = &self.beacon {
-            Some(Arc::new(BeaconClientProvider::new_http(beacon.clone()).await)
-                as Arc<dyn BlobProvider>)
+        let beacon_providers = if let Some(beacon_urls) = &self.beacon {
+            let mut providers = Vec::new();
+            for url in beacon_urls {
+                providers.push(Arc::new(BeaconClientProvider::new_http(url.clone()).await)
+                    as Arc<dyn BlobProvider>);
+            }
+            providers
         } else {
-            None
+            Vec::new()
         };
 
         let mut backup_providers: Vec<Arc<dyn BlobProvider>> = vec![];
@@ -73,31 +77,34 @@ impl BlobProvidersBuilder {
             backup_providers.push(Arc::new(AnvilBlobProvider::new_http(anvil.clone())) as Arc<dyn BlobProvider>);
         }
 
-        if beacon_provider.is_none() && backup_providers.is_empty() {
+        if beacon_providers.is_empty() && backup_providers.is_empty() {
             return Err(eyre::eyre!("No blob providers available"));
         }
 
-        Ok(BlobProviders::new(beacon_provider, backup_providers))
+        Ok(BlobProviders::new(beacon_providers, backup_providers))
     }
 }
 
 /// A blob provider that implements round-robin load balancing across multiple providers.
 #[derive(Clone)]
 pub struct BlobProviders {
-    /// beacon provider
-    beacon_provider: Option<Arc<dyn BlobProvider>>,
-    /// The list of underlying blob providers.
+    /// beacon providers
+    beacon_providers: Vec<Arc<dyn BlobProvider>>,
+    /// The list of underlying backup blob providers.
     backup_providers: Vec<Arc<dyn BlobProvider>>,
-    /// Atomic counter for round-robin selection.
-    counter: Arc<AtomicUsize>,
+    /// Atomic counter for round-robin selection for beacon providers.
+    beacon_counter: Arc<AtomicUsize>,
+    /// Atomic counter for round-robin selection for backup providers.
+    backup_counter: Arc<AtomicUsize>,
 }
 
 impl std::fmt::Debug for BlobProviders {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("BlobProviders")
-            .field("has_beacon_provider", &self.beacon_provider.is_some())
+            .field("beacon_providers_count", &self.beacon_providers.len())
             .field("backup_providers_count", &self.backup_providers.len())
-            .field("counter", &self.counter.load(Ordering::Relaxed))
+            .field("beacon_counter", &self.beacon_counter.load(Ordering::Relaxed))
+            .field("backup_counter", &self.backup_counter.load(Ordering::Relaxed))
             .finish()
     }
 }
@@ -105,10 +112,15 @@ impl std::fmt::Debug for BlobProviders {
 impl BlobProviders {
     /// Creates a new round-robin blob provider.
     pub fn new(
-        beacon_provider: Option<Arc<dyn BlobProvider>>,
+        beacon_providers: Vec<Arc<dyn BlobProvider>>,
         backup_providers: Vec<Arc<dyn BlobProvider>>,
     ) -> Self {
-        Self { beacon_provider, backup_providers, counter: Arc::new(AtomicUsize::new(0)) }
+        Self {
+            beacon_providers,
+            backup_providers,
+            beacon_counter: Arc::new(AtomicUsize::new(0)),
+            backup_counter: Arc::new(AtomicUsize::new(0)),
+        }
     }
 }
 
@@ -119,24 +131,40 @@ impl BlobProvider for BlobProviders {
         block_timestamp: u64,
         hash: B256,
     ) -> Result<Option<Arc<Blob>>, L1ProviderError> {
-        // Always try the beacon provider first
-        if let Some(beacon_provider) = &self.beacon_provider {
-            match beacon_provider.blob(block_timestamp, hash).await {
-                Ok(blob) => return Ok(blob),
-                Err(_err) => {
-                    debug!(target: "scroll::providers", ?hash, ?block_timestamp, "Beacon provider failed, trying backup providers");
+        // First try beacon providers in round-robin order
+        if !self.beacon_providers.is_empty() {
+            let start_index =
+                self.beacon_counter.load(Ordering::Relaxed) % self.beacon_providers.len();
+
+            for i in 0..self.beacon_providers.len() {
+                let provider_index = (start_index + i) % self.beacon_providers.len();
+                let provider = &self.beacon_providers[provider_index];
+
+                match provider.blob(block_timestamp, hash).await {
+                    Ok(blob) => {
+                        // Update counter to start from next provider next time if we found the blob
+                        if blob.is_some() {
+                            self.beacon_counter.store(provider_index + 1, Ordering::Relaxed);
+                        }
+                        return Ok(blob);
+                    }
+                    Err(err) => {
+                        debug!(target: "scroll::providers", ?hash, ?block_timestamp, ?provider_index, ?err, "beacon provider failed to fetch blob");
+                    }
                 }
             }
+
+            debug!(target: "scroll::providers", ?hash, ?block_timestamp, "All beacon providers failed, trying backup providers");
         }
 
-        // Try each provider in round-robin order, starting from the next provider
+        // Try backup providers in round-robin order
         if self.backup_providers.is_empty() {
             // All providers failed and no backup providers available
-            warn!(target: "scroll::providers", ?hash, ?block_timestamp, "All beacon providers failed to fetch blob");
+            warn!(target: "scroll::providers", ?hash, ?block_timestamp, "All providers failed to fetch blob");
             return Err(L1ProviderError::Other("All blob providers failed"));
         }
 
-        let start_index = self.counter.load(Ordering::Relaxed) % self.backup_providers.len();
+        let start_index = self.backup_counter.load(Ordering::Relaxed) % self.backup_providers.len();
 
         for i in 0..self.backup_providers.len() {
             let provider_index = (start_index + i) % self.backup_providers.len();
@@ -144,20 +172,20 @@ impl BlobProvider for BlobProviders {
 
             match provider.blob(block_timestamp, hash).await {
                 Ok(blob) => {
-                    // Update counter to start from this provider next time if we found the blob
+                    // Update counter to start from next provider next time if we found the blob
                     if blob.is_some() {
-                        self.counter.store(provider_index + 1, Ordering::Relaxed);
+                        self.backup_counter.store(provider_index + 1, Ordering::Relaxed);
                     }
                     return Ok(blob);
                 }
                 Err(err) => {
-                    debug!(target: "scroll::providers", ?hash, ?block_timestamp, ?provider_index, ?err, "backup beacon provider failed to fetch blob");
+                    debug!(target: "scroll::providers", ?hash, ?block_timestamp, ?provider_index, ?err, "backup provider failed to fetch blob");
                 }
             }
         }
 
         // All providers failed
-        warn!(target: "scroll::providers", ?hash, ?block_timestamp, "All beacon providers failed to fetch blob");
+        warn!(target: "scroll::providers", ?hash, ?block_timestamp, "All providers failed to fetch blob");
         Err(L1ProviderError::Other("All blob providers failed"))
     }
 }
@@ -199,7 +227,7 @@ mod tests {
     #[tokio::test]
     async fn test_blob_providers_with_backup() {
         let providers = BlobProviders::new(
-            None,
+            vec![],
             vec![
                 Arc::new(MockBeaconProvider::default()) as Arc<dyn BlobProvider>,
                 Arc::new(MockBeaconProvider::default()) as Arc<dyn BlobProvider>,
@@ -215,9 +243,9 @@ mod tests {
 
     #[tokio::test]
     async fn test_blob_providers_beacon_priority() {
-        // Test that beacon provider is always tried first
+        // Test that beacon providers are tried first
         let providers = BlobProviders::new(
-            Some(Arc::new(MockBeaconProvider::default()) as Arc<dyn BlobProvider>),
+            vec![Arc::new(MockBeaconProvider::default()) as Arc<dyn BlobProvider>],
             vec![
                 Arc::new(MockBeaconProvider::default()) as Arc<dyn BlobProvider>,
                 Arc::new(MockBeaconProvider::default()) as Arc<dyn BlobProvider>,
@@ -232,7 +260,7 @@ mod tests {
     async fn test_blob_providers_round_robin() {
         // Create a provider with only backup providers to test round-robin
         let providers = BlobProviders::new(
-            None,
+            vec![],
             vec![
                 Arc::new(MockBeaconProvider::default()) as Arc<dyn BlobProvider>,
                 Arc::new(MockBeaconProvider::default()) as Arc<dyn BlobProvider>,
@@ -249,7 +277,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_blob_providers_empty_fails() {
-        let providers = BlobProviders::new(None, vec![]);
+        let providers = BlobProviders::new(vec![], vec![]);
 
         // Should fail when no providers are available
         let result = providers.blob(0, B256::ZERO).await;
@@ -278,7 +306,7 @@ mod tests {
     #[tokio::test]
     async fn test_blob_providers_clone() {
         let providers = BlobProviders::new(
-            Some(Arc::new(MockBeaconProvider::default()) as Arc<dyn BlobProvider>),
+            vec![Arc::new(MockBeaconProvider::default()) as Arc<dyn BlobProvider>],
             vec![Arc::new(MockBeaconProvider::default()) as Arc<dyn BlobProvider>],
         );
 
@@ -296,7 +324,7 @@ mod tests {
     #[tokio::test]
     async fn test_blob_providers_debug_format() {
         let providers = BlobProviders::new(
-            Some(Arc::new(MockBeaconProvider::default()) as Arc<dyn BlobProvider>),
+            vec![Arc::new(MockBeaconProvider::default()) as Arc<dyn BlobProvider>],
             vec![
                 Arc::new(MockBeaconProvider::default()) as Arc<dyn BlobProvider>,
                 Arc::new(MockBeaconProvider::default()) as Arc<dyn BlobProvider>,
@@ -305,7 +333,7 @@ mod tests {
 
         let debug_str = format!("{:?}", providers);
         assert!(debug_str.contains("BlobProviders"));
-        assert!(debug_str.contains("has_beacon_provider"));
+        assert!(debug_str.contains("beacon_providers_count"));
         assert!(debug_str.contains("backup_providers_count"));
     }
 }

@@ -11,7 +11,7 @@ use reth_scroll_node::test_utils::setup;
 use rollup_node::{
     constants::SCROLL_GAS_LIMIT,
     test_utils::{default_test_scroll_rollup_node_config, setup_engine},
-    BeaconProviderArgs, ChainOrchestratorArgs, ConsensusArgs, DatabaseArgs, EngineDriverArgs,
+    BlobProviderArgs, ChainOrchestratorArgs, ConsensusArgs, DatabaseArgs, EngineDriverArgs,
     GasPriceOracleArgs, L1ProviderArgs, NetworkArgs, ScrollRollupNodeConfig, SequencerArgs,
     SignerArgs,
 };
@@ -509,7 +509,7 @@ async fn can_sequence_blocks_with_private_key_file() -> eyre::Result<()> {
             allow_empty_blocks: true,
             ..SequencerArgs::default()
         },
-        beacon_provider_args: BeaconProviderArgs { mock: true, ..Default::default() },
+        blob_provider_args: BlobProviderArgs { mock: true, ..Default::default() },
         signer_args: SignerArgs {
             key_file: Some(temp_file.path().to_path_buf()),
             aws_kms_key_id: None,
@@ -599,7 +599,7 @@ async fn can_sequence_blocks_with_hex_key_file_without_prefix() -> eyre::Result<
             allow_empty_blocks: true,
             ..SequencerArgs::default()
         },
-        beacon_provider_args: BeaconProviderArgs { mock: true, ..Default::default() },
+        blob_provider_args: BlobProviderArgs { mock: true, ..Default::default() },
         signer_args: SignerArgs {
             key_file: Some(temp_file.path().to_path_buf()),
             aws_kms_key_id: None,

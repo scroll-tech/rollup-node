@@ -61,9 +61,9 @@ pub struct ScrollRollupNodeConfig {
     /// Engine driver args.
     #[command(flatten)]
     pub engine_driver_args: EngineDriverArgs,
-    /// The beacon provider arguments.
+    /// The blob provider arguments.
     #[command(flatten)]
-    pub beacon_provider_args: BeaconProviderArgs,
+    pub blob_provider_args: BlobProviderArgs,
     /// The L1 provider arguments
     #[command(flatten)]
     pub l1_provider_args: L1ProviderArgs,
@@ -298,10 +298,10 @@ impl ScrollRollupNodeConfig {
         // Construct the l1 provider.
         let l1_messages_provider = DatabaseL1MessageProvider::new(db.clone(), 0);
         let blob_providers_builder = BlobProvidersBuilder {
-            beacon: self.beacon_provider_args.beacon_node_url,
-            s3: self.beacon_provider_args.s3_url,
-            anvil: self.beacon_provider_args.anvil_url,
-            mock: self.beacon_provider_args.mock,
+            beacon: self.blob_provider_args.beacon_node_urls,
+            s3: self.blob_provider_args.s3_url,
+            anvil: self.blob_provider_args.anvil_url,
+            mock: self.blob_provider_args.mock,
         };
         let blob_provider =
             blob_providers_builder.build().await.expect("failed to construct L1 blob provider");
@@ -548,27 +548,31 @@ pub struct L1ProviderArgs {
 
 /// The arguments for the Beacon provider.
 #[derive(Debug, Default, Clone, clap::Args)]
-pub struct BeaconProviderArgs {
-    /// The URL for the beacon node blob provider.
-    #[arg(long = "beacon.beacon_node_url", id = "beacon_node_url", value_name = "BEACON_NODE_URL")]
-    pub beacon_node_url: Option<reqwest::Url>,
+pub struct BlobProviderArgs {
+    /// The URLs for the beacon node blob provider.
+    #[arg(
+        long = "blob.beacon_node_urls",
+        id = "blob_beacon_node_urls",
+        value_name = "BLOB_BEACON_NODE_URLS"
+    )]
+    pub beacon_node_urls: Option<Vec<reqwest::Url>>,
     /// The URL for the s3 blob provider.
-    #[arg(long = "beacon.s3_url", id = "beacon_s3_url", value_name = "BEACON_S3_URL")]
+    #[arg(long = "blob.s3_url", id = "blob_s3_url", value_name = "BLOB_S3_URL")]
     pub s3_url: Option<reqwest::Url>,
     /// The URL for the anvil blob provider.
-    #[arg(long = "beacon.anvil_url", id = "anvil_url", value_name = "ANVIL_URL")]
+    #[arg(long = "blob.anvil_url", id = "blob_anvil_url", value_name = "BLOB_ANVIL_URL")]
     pub anvil_url: Option<reqwest::Url>,
     /// Enable the mock blob source.
-    #[arg(long = "beacon.mock", default_value_t = false)]
+    #[arg(long = "blob.mock")]
     pub mock: bool,
     /// The compute units per second for the provider.
-    #[arg(long = "beacon.cups", id = "beacon_compute_units_per_second", value_name = "BEACON_COMPUTE_UNITS_PER_SECOND", default_value_t = constants::PROVIDER_COMPUTE_UNITS_PER_SECOND)]
+    #[arg(long = "blob.cups", id = "blob_compute_units_per_second", value_name = "BLOB_COMPUTE_UNITS_PER_SECOND", default_value_t = constants::PROVIDER_COMPUTE_UNITS_PER_SECOND)]
     pub compute_units_per_second: u64,
     /// The max amount of retries for the provider.
-    #[arg(long = "beacon.max-retries", id = "beacon_max_retries", value_name = "BEACON_MAX_RETRIES", default_value_t = constants::PROVIDER_MAX_RETRIES)]
+    #[arg(long = "blob.max-retries", id = "blob_max_retries", value_name = "BLOB_MAX_RETRIES", default_value_t = constants::PROVIDER_MAX_RETRIES)]
     pub max_retries: u32,
     /// The initial backoff for the provider.
-    #[arg(long = "beacon.initial-backoff", id = "beacon_initial_backoff", value_name = "BEACON_INITIAL_BACKOFF", default_value_t = constants::PROVIDER_INITIAL_BACKOFF)]
+    #[arg(long = "blob.initial-backoff", id = "blob_initial_backoff", value_name = "BLOB_INITIAL_BACKOFF", default_value_t = constants::PROVIDER_INITIAL_BACKOFF)]
     pub initial_backoff: u64,
 }
 
@@ -782,7 +786,7 @@ mod tests {
             engine_driver_args: EngineDriverArgs::default(),
             chain_orchestrator_args: ChainOrchestratorArgs::default(),
             l1_provider_args: L1ProviderArgs::default(),
-            beacon_provider_args: BeaconProviderArgs::default(),
+            blob_provider_args: BlobProviderArgs::default(),
             network_args: NetworkArgs::default(),
             gas_price_oracle_args: GasPriceOracleArgs::default(),
             consensus_args: ConsensusArgs {
@@ -812,7 +816,7 @@ mod tests {
             engine_driver_args: EngineDriverArgs::default(),
             chain_orchestrator_args: ChainOrchestratorArgs::default(),
             l1_provider_args: L1ProviderArgs::default(),
-            beacon_provider_args: BeaconProviderArgs::default(),
+            blob_provider_args: BlobProviderArgs::default(),
             network_args: NetworkArgs::default(),
             gas_price_oracle_args: GasPriceOracleArgs::default(),
             consensus_args: ConsensusArgs {
@@ -840,7 +844,7 @@ mod tests {
             chain_orchestrator_args: ChainOrchestratorArgs::default(),
             engine_driver_args: EngineDriverArgs::default(),
             l1_provider_args: L1ProviderArgs::default(),
-            beacon_provider_args: BeaconProviderArgs::default(),
+            blob_provider_args: BlobProviderArgs::default(),
             network_args: NetworkArgs::default(),
             gas_price_oracle_args: GasPriceOracleArgs::default(),
             consensus_args: ConsensusArgs::noop(),
@@ -863,7 +867,7 @@ mod tests {
             engine_driver_args: EngineDriverArgs::default(),
             chain_orchestrator_args: ChainOrchestratorArgs::default(),
             l1_provider_args: L1ProviderArgs::default(),
-            beacon_provider_args: BeaconProviderArgs::default(),
+            blob_provider_args: BlobProviderArgs::default(),
             network_args: NetworkArgs::default(),
             gas_price_oracle_args: GasPriceOracleArgs::default(),
             consensus_args: ConsensusArgs::noop(),
@@ -882,7 +886,7 @@ mod tests {
             engine_driver_args: EngineDriverArgs::default(),
             chain_orchestrator_args: ChainOrchestratorArgs::default(),
             l1_provider_args: L1ProviderArgs::default(),
-            beacon_provider_args: BeaconProviderArgs::default(),
+            blob_provider_args: BlobProviderArgs::default(),
             network_args: NetworkArgs::default(),
             gas_price_oracle_args: GasPriceOracleArgs::default(),
             consensus_args: ConsensusArgs::noop(),
