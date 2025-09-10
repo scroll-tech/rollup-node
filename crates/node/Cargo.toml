@@ -28,37 +28,37 @@ alloy-signer = "1.0.9"
 alloy-transport.workspace = true
 
 scroll-alloy-consensus.workspace = true
-scroll-alloy-evm = { git = "https://github.com/scroll-tech/reth.git", branch = "feat/async-header-response-transform" }
+scroll-alloy-evm = { git = "https://github.com/scroll-tech/reth.git" }
 scroll-alloy-hardforks.workspace = true
 scroll-alloy-network.workspace = true
 scroll-alloy-provider.workspace = true
 
 reth-primitives-traits.workspace = true
 reth-scroll-engine-primitives.workspace = true
-reth-scroll-evm = { git = "https://github.com/scroll-tech/reth.git", branch = "feat/async-header-response-transform" }
-reth-scroll-cli = { git = "https://github.com/scroll-tech/reth.git", branch = "feat/async-header-response-transform" }
+reth-scroll-evm = { git = "https://github.com/scroll-tech/reth.git" }
+reth-scroll-cli = { git = "https://github.com/scroll-tech/reth.git" }
 reth-scroll-primitives.workspace = true
 reth-scroll-chainspec.workspace = true
 reth-scroll-node.workspace = true
-reth-scroll-rpc = { git = "https://github.com/scroll-tech/reth.git", branch = "feat/async-header-response-transform" }
+reth-scroll-rpc = { git = "https://github.com/scroll-tech/reth.git" }
 
 reth-chainspec.workspace = true
-reth-cli-util = { git = "https://github.com/scroll-tech/reth.git", branch = "feat/async-header-response-transform" }
+reth-cli-util = { git = "https://github.com/scroll-tech/reth.git" }
 reth-eth-wire-types.workspace = true
-reth-evm = { git = "https://github.com/scroll-tech/reth.git", branch = "feat/async-header-response-transform" }
+reth-evm = { git = "https://github.com/scroll-tech/reth.git" }
 reth-node-builder.workspace = true
-reth-node-api = { git = "https://github.com/scroll-tech/reth.git", branch = "feat/async-header-response-transform", default-features = false }
+reth-node-api = { git = "https://github.com/scroll-tech/reth.git", default-features = false }
 reth-node-core.workspace = true
-reth-node-types = { git = "https://github.com/scroll-tech/reth.git", branch = "feat/async-header-response-transform", default-features = false }
+reth-node-types = { git = "https://github.com/scroll-tech/reth.git", default-features = false }
 reth-network.workspace = true
 reth-network-api.workspace = true
-reth-revm = { git = "https://github.com/scroll-tech/reth.git", branch = "feat/async-header-response-transform", default-features = false }
-reth-rpc-api = { git = "https://github.com/scroll-tech/reth.git", branch = "feat/async-header-response-transform", default-features = false }
-reth-rpc-eth-api = { git = "https://github.com/scroll-tech/reth.git", branch = "feat/async-header-response-transform", default-features = false }
-reth-rpc-eth-types = { git = "https://github.com/scroll-tech/reth.git", branch = "feat/async-header-response-transform", default-features = false }
+reth-revm = { git = "https://github.com/scroll-tech/reth.git", default-features = false }
+reth-rpc-api = { git = "https://github.com/scroll-tech/reth.git", default-features = false }
+reth-rpc-eth-api = { git = "https://github.com/scroll-tech/reth.git", default-features = false }
+reth-rpc-eth-types = { git = "https://github.com/scroll-tech/reth.git", default-features = false }
 reth-tasks.workspace = true
-reth-transaction-pool = { git = "https://github.com/scroll-tech/reth.git", branch = "feat/async-header-response-transform", default-features = false }
-reth-trie-db = { git = "https://github.com/scroll-tech/reth.git", branch = "feat/async-header-response-transform", default-features = false }
+reth-transaction-pool = { git = "https://github.com/scroll-tech/reth.git", default-features = false }
+reth-trie-db = { git = "https://github.com/scroll-tech/reth.git", default-features = false }
 
 # rollup node
 rollup-node-chain-orchestrator.workspace = true
@@ -76,12 +76,12 @@ aws-sdk-kms = "1.76.0"
 # test-utils
 alloy-rpc-types-engine = { workspace = true, optional = true }
 reth-e2e-test-utils = { workspace = true, optional = true }
-reth-engine-local = { git = "https://github.com/scroll-tech/reth.git", branch = "feat/async-header-response-transform", default-features = false, optional = true }
+reth-engine-local = { git = "https://github.com/scroll-tech/reth.git", default-features = false, optional = true }
 reth-provider = { workspace = true, optional = true }
 reth-rpc-server-types = { workspace = true, optional = true }
 scroll-alloy-rpc-types-engine = { workspace = true, optional = true }
 scroll-derivation-pipeline = { workspace = true, optional = true }
-scroll-alloy-rpc-types = { git = "https://github.com/scroll-tech/reth.git", branch = "feat/async-header-response-transform", default-features = false }
+scroll-alloy-rpc-types = { git = "https://github.com/scroll-tech/reth.git", default-features = false }
 
 scroll-db.workspace = true
 scroll-engine.workspace = true
