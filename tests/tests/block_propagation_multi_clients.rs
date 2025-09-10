@@ -17,7 +17,7 @@ async fn test_docker_block_propagation_to_both_clients() -> Result<()> {
 
     let nodes = [&rn_sequencer, &rn_follower, &l2geth_sequencer, &l2geth_follower];
 
-    // TODO: Enable block production on l2geth sequencer
+    // Enable block production on l2geth sequencer
     utils::miner_start(&l2geth_sequencer).await?;
 
     // Wait for all nodes to be at block 10

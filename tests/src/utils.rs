@@ -4,11 +4,8 @@ use std::time::Duration;
 
 use crate::docker_compose::NamedProvider;
 
-// use rollup_node::RollupNodeExtApiClient;
-
 /// Enable automatic sequencing on a rollup node
 pub async fn enable_automatic_sequencing(provider: &NamedProvider) -> Result<bool> {
-    // TODO: RollupNodeExtApiClient::enable_automatic_sequencing(&provider.client()).await?;
     provider
         .provider
         .client()
