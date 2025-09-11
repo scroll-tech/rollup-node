@@ -65,7 +65,7 @@ const EVENT_CHANNEL_SIZE: usize = 100;
 
 /// The maximum capacity of the pending futures queue in the chain orchestrator for acceptance of
 /// new events from the L1 notification channel.
-const CHAIN_ORCHESTRATOR_MAX_PENDING_FUTURES: usize = 5000;
+const CHAIN_ORCHESTRATOR_MAX_PENDING_FUTURES: usize = 20;
 
 /// The maximum number of pending futures in the engine driver for acceptance of new events from the
 /// L1 notification channel.
