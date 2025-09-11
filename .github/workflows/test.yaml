@@ -92,7 +92,7 @@ jobs:
           df -h
       - name: Run Docker Compose integration tests
         run: |
-          cargo nextest run --all-features --workspace --locked \
+          RUST_LOG=trace cargo nextest run --all-features --workspace --locked \
             --no-tests=pass -E 'test(docker)' --test-threads=1 \
             --failure-output immediate \
             --success-output never \
