@@ -52,7 +52,7 @@ pub async fn miner_stop(provider: &NamedProvider) -> Result<()> {
 /// * `Ok(())` if all nodes reach the target block within the timeout
 /// * `Err` if timeout is reached or any provider call fails
 pub async fn wait_for_block(nodes: &[&NamedProvider], target_block: u64) -> Result<()> {
-    let timeout_duration = Duration::from_secs(60);
+    let timeout_duration = Duration::from_secs(30);
     let timeout_secs = timeout_duration.as_secs();
 
     tracing::info!(
@@ -62,7 +62,7 @@ pub async fn wait_for_block(nodes: &[&NamedProvider], target_block: u64) -> Resu
         timeout_secs
     );
 
-    for i in 0..timeout_secs {
+    for i in 0..timeout_secs * 2 {
         let mut all_synced = true;
         let mut node_statuses = Vec::new();
 
@@ -84,8 +84,8 @@ pub async fn wait_for_block(nodes: &[&NamedProvider], target_block: u64) -> Resu
         }
 
         // Log progress every 5 seconds
-        if i % 5 == 0 {
-            tracing::info!("Progress check ({}s elapsed):", i);
+        if i % 10 == 0 {
+            tracing::info!("Progress check ({}s elapsed):", i / 2);
             for (name, block) in node_statuses {
                 tracing::info!(
                     "  - {}: block {} / {} {}",
@@ -97,7 +97,7 @@ pub async fn wait_for_block(nodes: &[&NamedProvider], target_block: u64) -> Resu
             }
         }
 
-        tokio::time::sleep(Duration::from_secs(1)).await;
+        tokio::time::sleep(Duration::from_millis(500)).await;
     }
 
     eyre::bail!(
@@ -157,4 +157,69 @@ pub async fn assert_blocks_match(nodes: &[&NamedProvider], block_number: u64) ->
     );
 
     Ok(())
+}
+
+pub async fn assert_latest_block(nodes: &[&NamedProvider], expected_block: u64) -> Result<u64> {
+    if nodes.is_empty() {
+        return Ok(0);
+    }
+
+    // Verify all nodes have the expected latest block
+    for node in nodes {
+        let block_number = node.provider.get_block_number().await?;
+        assert_eq!(
+            block_number, expected_block,
+            "{} is at block {}, expected {}",
+            node.name, block_number, expected_block
+        );
+    }
+
+    assert_blocks_match(nodes, expected_block).await?;
+
+    tracing::info!(
+        "✅ All {} nodes are at the expected latest block and hashes match",
+        nodes.len()
+    );
+
+    Ok(expected_block)
+}
+
+/// Add a peer to the node's peer set via admin API
+pub async fn admin_add_peer(provider: &NamedProvider, enode: &str) -> Result<bool> {
+    provider
+        .provider
+        .client()
+        .request("admin_addPeer", (enode,))
+        .await
+        .map_err(|e| eyre::eyre!("Failed to add peer {}: {}", enode, e))
+}
+
+/// Remove a peer from the node's peer set via admin API
+pub async fn admin_remove_peer(provider: &NamedProvider, enode: &str) -> Result<bool> {
+    provider
+        .provider
+        .client()
+        .request("admin_removePeer", (enode,))
+        .await
+        .map_err(|e| eyre::eyre!("Failed to remove peer {}: {}", enode, e))
+}
+
+/// Add a trusted peer to the node's trusted peer set via admin API
+pub async fn admin_add_trusted_peer(provider: &NamedProvider, enode: &str) -> Result<bool> {
+    provider
+        .provider
+        .client()
+        .request("admin_addTrustedPeer", (enode,))
+        .await
+        .map_err(|e| eyre::eyre!("Failed to add trusted peer {}: {}", enode, e))
+}
+
+/// Remove a trusted peer from the node's trusted peer set via admin API
+pub async fn admin_remove_trusted_peer(provider: &NamedProvider, enode: &str) -> Result<bool> {
+    provider
+        .provider
+        .client()
+        .request("admin_removeTrustedPeer", (enode,))
+        .await
+        .map_err(|e| eyre::eyre!("Failed to remove trusted peer {}: {}", enode, e))
 }
