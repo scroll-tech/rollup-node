@@ -1,0 +1,14 @@
+# exclude everything
+*
+
+# include source files
+!/bin
+!/crates
+!/testing
+!book.toml
+!Cargo.lock
+!Cargo.toml
+!Cross.toml
+!deny.toml
+!Makefile
+

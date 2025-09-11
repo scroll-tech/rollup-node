@@ -211,6 +211,8 @@ impl ScrollRollupNodeConfig {
             db.insert_genesis_block(genesis_hash)
                 .await
                 .expect("failed to insert genesis block (custom chain)");
+
+            tracing::info!(target: "scroll::node::args", ?genesis_hash, "Overwriting genesis hash for custom chain");
         }
 
         // Wrap the database in an Arc

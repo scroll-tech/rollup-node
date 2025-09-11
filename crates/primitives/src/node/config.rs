@@ -96,27 +96,59 @@ impl NodeConfig {
             return Ok(Self::from_named_chain(named_chain));
         }
 
+        // Note: It is important to make sure the chain id is not a named chain accidentally.
+        //       For example, a custom `chain id=1337` will be treated as a named chain as it
+        //       matches the dev chain. https://github.com/scroll-tech/rollup-node/issues/303
         // If not a named chain, extract the configuration from the chain spec
         let config = chain_spec.chain_config();
 
         let genesis = chain_spec.genesis();
-        let l1_message_queue_v2_deployment_block = genesis
+
+        // let l1_message_queue_v2_deployment_block = genesis
+        //     .config
+        //     .extra_fields
+        //     .get("scroll")
+        //     .and_then(|scroll| scroll.get("l1Config"))
+        //     .and_then(|l1_config| l1_config.get("l1MessageQueueV2DeploymentBlock"))
+        //     .and_then(|v| v.as_u64())
+        //     .ok_or_else(|| eyre::eyre!("Invalid or missing 'l1MessageQueueV2DeploymentBlock'"))?;
+
+        let start_l1_block = genesis
             .config
             .extra_fields
             .get("scroll")
             .and_then(|scroll| scroll.get("l1Config"))
-            .and_then(|l1_config| l1_config.get("l1MessageQueueV2DeploymentBlock"))
+            .and_then(|l1_config| l1_config.get("startL1Block"))
             .and_then(|v| v.as_u64())
-            .ok_or_else(|| eyre::eyre!("Invalid or missing 'l1MessageQueueV2DeploymentBlock'"))?;
+            .ok_or_else(|| eyre::eyre!("Invalid or missing 'startL1Block'"))?;
+
+        let system_contract_address = genesis
+            .config
+            .extra_fields
+            .get("scroll")
+            .and_then(|scroll| scroll.get("l1Config"))
+            .and_then(|l1_config| l1_config.get("systemContractAddress"))
+            .and_then(|v| v.as_str())
+            .and_then(|s| s.parse().ok())
+            .ok_or_else(|| eyre::eyre!("Invalid or missing 'systemContractAddress'"))?;
+
+        // TODO:
+        // - config.l1_config.l2_system_config_address is not used here.
+        // - start_l1_block is not present currently in the config.
+        // - system_contract_address is not extracted from the config in https://github.com/scroll-tech/reth/blob/scroll/crates/scroll/chainspec/src/genesis.rs#L20
+        // - do we need: l1_message_queue_v2_deployment_block? maybe instead we could use
+        //   v2_message_queue_starting_index
+        // - ultimately we want to make sure all relevant config is extracted from `ScrollChainInfo`
+        //   and not partially here. see https://github.com/scroll-tech/rollup-node/issues/303
 
         Ok(Self {
             address_book: ScrollAddressBook {
                 rollup_node_contract_address: config.l1_config.scroll_chain_address,
                 v1_message_queue_address: config.l1_config.l1_message_queue_address,
                 v2_message_queue_address: config.l1_config.l1_message_queue_v2_address,
-                system_contract_address: config.l1_config.l2_system_config_address,
+                system_contract_address,
             },
-            start_l1_block: l1_message_queue_v2_deployment_block,
+            start_l1_block,
         })
     }
 
