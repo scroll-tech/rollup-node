@@ -1310,9 +1310,10 @@ async fn test_custom_genesis_block_production_and_propagation() -> eyre::Result<
                     "l1MessageQueueAddress": "0x0d7E906BD9cAFa154b048cFa766Cc1E54E39AF9B",
                     "l1MessageQueueV2Address": "0x000000000000000000000000000000000003dead",
                     "scrollChainAddress": "0x000000000000000000000000000000000003dead",
-                    "l2SystemConfigAddress": "0x000000000000000000000000000000000003dead",
+                    "l2SystemConfigAddress": "0x0000000000000000000000000000000dddd3dead",
+                    "systemContractAddress": "0x110000000000000000000000000000000003dead",
                     "numL1MessagesPerBlock": 10,
-                    "l1MessageQueueV2DeploymentBlock": 12345
+                    "startL1Block": 12345
                 }
             }
         },

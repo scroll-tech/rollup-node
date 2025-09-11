@@ -12781,7 +12781,10 @@ dependencies = [
  "alloy-rpc-types-eth",
  "eyre",
  "getrandom 0.2.16",
+ "reth-tracing",
  "scroll-alloy-network",
+ "serde",
+ "serde_json",
  "tokio",
  "tracing",
 ]

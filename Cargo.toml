@@ -123,7 +123,7 @@ alloy-consensus = { version = "1.0.13", default-features = false }
 alloy-eips = { version = "1.0.13", default-features = false }
 alloy-json-rpc = { version = "1.0.13", default-features = false }
 alloy-network = { version = "1.0.13", default-features = false }
-alloy-primitives = { version = "1.2.0", default-features = false }
+alloy-primitives = { version = "1.3.1", default-features = false }
 alloy-provider = { version = "1.0.13", default-features = false }
 alloy-rpc-client = { version = "1.0.13", default-features = false }
 alloy-rpc-types-engine = { version = "1.0.13", default-features = false }
@@ -185,7 +185,7 @@ scroll-wire = { path = "crates/scroll-wire" }
 scroll-migration = { path = "crates/database/migration" }
 
 # misc
-arbitrary = { version = "1.4", default-features = false }
+arbitrary = { version = "1.4", default-features = false, features = ["derive"] }
 async-trait = "0.1"
 auto_impl = "1.2"
 bitvec = { version = "1.0", default-features = false }
