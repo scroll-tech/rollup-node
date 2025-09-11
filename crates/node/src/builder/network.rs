@@ -10,13 +10,12 @@ use reth_network::{
 use reth_node_api::TxTy;
 use reth_node_builder::{components::NetworkBuilder, BuilderContext, FullNodeTypes};
 use reth_node_types::NodeTypes;
-use reth_primitives_traits::BlockHeader;
+use reth_primitives_traits::{BlockHeader, Header};
 use reth_scroll_chainspec::ScrollChainSpec;
 use reth_scroll_primitives::ScrollPrimitives;
 use reth_transaction_pool::{PoolTransaction, TransactionPool};
 use rollup_node_primitives::sig_encode_hash;
 use rollup_node_signer::SignatureAsBytes;
-use reth_primitives_traits::Header;
 use scroll_alloy_hardforks::ScrollHardforks;
 use scroll_db::{Database, DatabaseOperations};
 use std::{fmt, fmt::Debug, path::PathBuf, sync::Arc};
