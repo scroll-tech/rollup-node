@@ -289,8 +289,7 @@ fn recover_and_verify_signer(
     authorized_signer: Option<Address>,
 ) -> Result<Address, HeaderTransformError> {
     // Recover signer from signature
-    let signer = signature
-        .recover_address_from_prehash(&hash)
+    let signer = reth_primitives_traits::crypto::secp256k1::recover_signer(signature, hash)
         .map_err(|_| HeaderTransformError::RecoveryFailed)?;
 
     // Verify signer is authorized
