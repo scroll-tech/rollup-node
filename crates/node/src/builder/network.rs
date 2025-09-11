@@ -14,6 +14,7 @@ use reth_primitives_traits::BlockHeader;
 use reth_scroll_chainspec::ScrollChainSpec;
 use reth_scroll_primitives::ScrollPrimitives;
 use reth_transaction_pool::{PoolTransaction, TransactionPool};
+use rollup_node_primitives::sig_encode_hash;
 use rollup_node_signer::SignatureAsBytes;
 use scroll_alloy_hardforks::ScrollHardforks;
 use scroll_db::{Database, DatabaseOperations};
@@ -187,8 +188,9 @@ impl<H: BlockHeader, ChainSpec: EthChainSpec + ScrollHardforks + Debug + Send + 
         if let Err(err) = self.validate_and_store_signature(&mut header, self.signer) {
             debug!(
                 target: "scroll::network::response_header_transform",
-                "Header signature persistence failed, header hash: {:?}, error: {}",
-                header.hash_slow(), err
+                "Header signature persistence failed, block number: {:?}, header hash: {:?}, error: {}",
+                header.number(),
+                sig_encode_hash(&header), err
             );
         }
 
@@ -204,12 +206,13 @@ impl<ChainSpec: ScrollHardforks + Debug + Send + Sync> ScrollHeaderTransform<Cha
     ) -> Result<(), HeaderTransformError> {
         let signature_bytes = std::mem::take(header.extra_data_mut());
         let signature = parse_65b_signature(&signature_bytes)?;
+        let hash = sig_encode_hash(header);
 
         // Recover and verify signer
-        recover_and_verify_signer(&signature, header.hash_slow(), authorized_signer)?;
+        recover_and_verify_signer(&signature, hash, authorized_signer)?;
 
         // Store signature in database
-        persist_signature(self.db.clone(), header.hash_slow(), signature);
+        persist_signature(self.db.clone(), hash, signature);
 
         Ok(())
     }
@@ -247,15 +250,16 @@ impl<H: BlockHeader, ChainSpec: EthChainSpec + ScrollHardforks + Debug + Send + 
         }
 
         // read the signature from the rollup node.
-        let block_hash = header.hash_slow();
+        let block_hash = sig_encode_hash(&header);
         let signature = self
             .db
             .get_signature(block_hash)
             .await
             .inspect_err(|e| {
                 warn!(target: "scroll::network::request_header_transform",
-                    "Failed to get block signature from database, header hash: {:?}, error: {}",
-                    header.hash_slow(),
+                    "Failed to get block signature from database, block number: {:?}, header hash: {:?}, error: {}",
+                    header.number(),
+                    block_hash,
                     HeaderTransformError::DatabaseError(e.to_string())
                 )
             })
@@ -265,11 +269,12 @@ impl<H: BlockHeader, ChainSpec: EthChainSpec + ScrollHardforks + Debug + Send + 
         // If we have a signature in the database and it matches configured signer then add it
         // to the extra data field
         if let Some(sig) = signature {
-            if let Err(err) = recover_and_verify_signer(&sig, header.hash_slow(), self.signer) {
+            if let Err(err) = recover_and_verify_signer(&sig, block_hash, self.signer) {
                 warn!(
                 target: "scroll::network::request_header_transform",
-                    "Found invalid signature(different from the hardcoded signer) for header hash: {:?}, sig: {:?}, error: {}",
-                    header.hash_slow(),
+                    "Found invalid signature(different from the hardcoded signer) for block number: {:?}, header hash: {:?}, sig: {:?}, error: {}",
+                    header.number(),
+                    block_hash,
                     sig.to_string(),
                     err
                 );

@@ -558,7 +558,7 @@ async fn can_sequence_blocks_with_private_key_file() -> eyre::Result<()> {
         signature,
     })) = sequencer_events.next().await
     {
-        let hash = sig_encode_hash(&signed_block);
+        let hash = sig_encode_hash(&signed_block.header);
         let recovered_address = signature.recover_address_from_prehash(&hash)?;
         assert_eq!(recovered_address, expected_address);
     } else {
@@ -652,7 +652,7 @@ async fn can_sequence_blocks_with_hex_key_file_without_prefix() -> eyre::Result<
             signature,
         }) = event
         {
-            let hash = sig_encode_hash(&signed_block);
+            let hash = sig_encode_hash(&signed_block.header);
             let recovered_address = signature.recover_address_from_prehash(&hash)?;
             assert_eq!(recovered_address, expected_address);
             break;
