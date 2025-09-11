@@ -15,7 +15,7 @@ pub fn sign_block(
     Box::pin(async move {
         // TODO: Are we happy to sign the hash directly or do we want to use EIP-191
         // (`signer.sign_message`)?
-        let hash = sig_encode_hash(&block.header);
+        let hash = sig_encode_hash(&block);
         let signature = signer.sign_hash(&hash).await?;
         Ok(SignerEvent::SignedBlock { block, signature })
     })

@@ -383,7 +383,7 @@ async fn can_penalize_peer_for_invalid_signature() -> eyre::Result<()> {
         assert_eq!(block0.hash_slow(), block_with_peer.block.hash_slow());
 
         // Verify the signature is from the authorized signer
-        let hash = sig_encode_hash(&block_with_peer.block.header);
+        let hash = sig_encode_hash(&block_with_peer.block);
         let recovered = block_with_peer.signature.recover_address_from_prehash(&hash).unwrap();
         assert_eq!(recovered, authorized_address, "Block should be signed by authorized signer");
     } else {
@@ -408,7 +408,7 @@ async fn can_penalize_peer_for_invalid_signature() -> eyre::Result<()> {
     block1.header.timestamp += 1;
 
     // Sign the block with the unauthorized signer
-    let block_hash = sig_encode_hash(&block1.header);
+    let block_hash = sig_encode_hash(&block1);
     let unauthorized_signature = unauthorized_signer.sign_hash(&block_hash).await.unwrap();
 
     // Send the block with invalid signature from node0 to node1
@@ -420,7 +420,7 @@ async fn can_penalize_peer_for_invalid_signature() -> eyre::Result<()> {
             assert_eq!(block1.hash_slow(), block_with_peer.block.hash_slow());
 
             // Verify the signature is from the unauthorized signer
-            let hash = sig_encode_hash(&block_with_peer.block.header);
+            let hash = sig_encode_hash(&block_with_peer.block);
             let recovered = block_with_peer.signature.recover_address_from_prehash(&hash).unwrap();
             return recovered == unauthorized_signer.address();
         }
@@ -1712,7 +1712,7 @@ async fn signer_rotation() -> eyre::Result<()> {
             |event| {
                 if let RollupManagerEvent::NewBlockReceived(block) = event {
                     let signature = block.signature;
-                    let hash = sig_encode_hash(&block.block.header);
+                    let hash = sig_encode_hash(&block.block);
                     // Verify that the block is signed by the first sequencer.
                     let recovered_address = signature.recover_address_from_prehash(&hash).unwrap();
                     recovered_address == signer_1_address
@@ -1760,7 +1760,7 @@ async fn signer_rotation() -> eyre::Result<()> {
         |event| {
             if let RollupManagerEvent::NewBlockReceived(block) = event {
                 let signature = block.signature;
-                let hash = sig_encode_hash(&block.block.header);
+                let hash = sig_encode_hash(&block.block);
                 let recovered_address = signature.recover_address_from_prehash(&hash).unwrap();
                 // Verify that the block is signed by the second sequencer.
                 recovered_address == signer_2_address
