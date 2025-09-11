@@ -1,5 +1,5 @@
 /// The budget for the L1 notification channel.
-pub(crate) const L1_NOTIFICATION_CHANNEL_BUDGET: u32 = 10;
+pub(crate) const L1_NOTIFICATION_CHANNEL_BUDGET: u32 = 5;
 
 /// Polls the given stream. Breaks with `true` if there maybe is more work.
 #[macro_export]
