@@ -250,17 +250,17 @@ impl<H: BlockHeader, ChainSpec: EthChainSpec + ScrollHardforks + Debug + Send + 
         }
 
         // read the signature from the rollup node.
-        let block_hash = sig_encode_hash(&header_to_alloy(&header));
+        let hash = sig_encode_hash(&header_to_alloy(&header));
 
         let signature = self
             .db
-            .get_signature(block_hash)
+            .get_signature(hash)
             .await
             .inspect_err(|e| {
                 warn!(target: "scroll::network::request_header_transform",
                     "Failed to get block signature from database, block number: {:?}, header hash: {:?}, error: {}",
                     header.number(),
-                    block_hash,
+                    hash,
                     HeaderTransformError::DatabaseError(e.to_string())
                 )
             })
@@ -270,12 +270,12 @@ impl<H: BlockHeader, ChainSpec: EthChainSpec + ScrollHardforks + Debug + Send + 
         // If we have a signature in the database and it matches configured signer then add it
         // to the extra data field
         if let Some(sig) = signature {
-            if let Err(err) = recover_and_verify_signer(&sig, block_hash, self.signer) {
+            if let Err(err) = recover_and_verify_signer(&sig, hash, self.signer) {
                 warn!(
                 target: "scroll::network::request_header_transform",
                     "Found invalid signature(different from the hardcoded signer) for block number: {:?}, header hash: {:?}, sig: {:?}, error: {}",
                     header.number(),
-                    block_hash,
+                    hash,
                     sig.to_string(),
                     err
                 );
