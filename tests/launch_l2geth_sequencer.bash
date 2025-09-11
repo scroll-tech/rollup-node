@@ -22,5 +22,6 @@ exec geth --datadir=/l2geth \
   --l1.endpoint "http://l1-node:8545" --l1.confirmations finalized --l1.sync.startblock 0 \
   --gcmode archive --cache.noprefetch --cache.snapshot=0 --snapshot=false \
   --nat extip:0.0.0.0 \
+  --gossip.enablebroadcasttoall \
   --unlock "0xb674ff99cca262c99d3eab5b32796a99188543da" --password "/l2geth/keystore/password.txt" --allow-insecure-unlock \
-  --miner.allowempty 
+  --miner.allowempty --miner.gaslimit 30000000
