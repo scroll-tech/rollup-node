@@ -4,7 +4,8 @@ ARG CARGO_FEATURES=""
 
 # Install basic packages
 RUN apt-get update && apt-get -y upgrade && apt-get install -y libclang-dev pkg-config
-RUN cargo install cargo-chef --locked --version  0.1.71
+RUN cargo install cargo-chef sccache --locked
+ENV RUSTC_WRAPPER=sccache SCCACHE_DIR=/sccache
 
 FROM chef AS planner
 WORKDIR /app
@@ -23,17 +24,20 @@ RUN mkdir -p tests/src && \
     echo 'name = "tests"' >> tests/Cargo.toml && \
     echo 'path = "src/lib.rs"' >> tests/Cargo.toml && \
     echo 'pub fn dummy() {}' > tests/src/lib.rs
-RUN --mount=type=cache,target=/usr/local/cargo/registry \
-    cargo chef prepare --recipe-path /recipe.json
+RUN cargo chef prepare --recipe-path /recipe.json
 
 FROM chef AS builder
 WORKDIR /app
 COPY --from=planner /recipe.json recipe.json
 RUN --mount=type=cache,target=/usr/local/cargo/registry \
+    --mount=type=cache,target=/usr/local/cargo/git \
+    --mount=type=cache,target=$SCCACHE_DIR,sharing=locked \
     cargo chef cook --release --recipe-path recipe.json
 
 COPY . .
 RUN --mount=type=cache,target=/usr/local/cargo/registry \
+    --mount=type=cache,target=/usr/local/cargo/git \
+    --mount=type=cache,target=$SCCACHE_DIR,sharing=locked \
     cargo build ${CARGO_FEATURES:+--features $CARGO_FEATURES} --release --target-dir=/app-target
 
 # Release
