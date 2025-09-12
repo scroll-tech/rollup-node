@@ -23,6 +23,7 @@
     "feynmanTime": 0,
     "systemContract": {
       "period": 1,
+      "blocks_per_second": 2,
       "system_contract_address": "0x55B150d210356452e4E79cCb6B778b4e1B167091",
       "system_contract_slot": "0x0000000000000000000000000000000000000000000000000000000000000067"
     },
