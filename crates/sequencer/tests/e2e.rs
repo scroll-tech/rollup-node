@@ -517,6 +517,7 @@ async fn can_sequence_blocks_with_private_key_file() -> eyre::Result<()> {
         },
         gas_price_oracle_args: GasPriceOracleArgs::default(),
         consensus_args: ConsensusArgs::noop(),
+        database: None,
     };
 
     let (nodes, _tasks, wallet) =
@@ -607,6 +608,7 @@ async fn can_sequence_blocks_with_hex_key_file_without_prefix() -> eyre::Result<
         },
         gas_price_oracle_args: GasPriceOracleArgs::default(),
         consensus_args: ConsensusArgs::noop(),
+        database: None,
     };
 
     let (nodes, _tasks, wallet) =
