@@ -25,6 +25,7 @@ reth-tokio-util.workspace = true
 reth-scroll-chainspec.workspace = true
 reth-scroll-node.workspace = true
 reth-scroll-primitives.workspace = true
+rollup-node-primitives.workspace = true
 scroll-alloy-hardforks.workspace = true
 scroll-wire.workspace = true
 

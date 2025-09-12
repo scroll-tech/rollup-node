@@ -4,7 +4,7 @@ use super::{
     BlockImportOutcome, BlockValidation, NetworkHandleMessage, NetworkManagerEvent,
     NewBlockWithPeer, ScrollNetworkHandle,
 };
-use alloy_primitives::{FixedBytes, Signature, B256, U128};
+use alloy_primitives::{Address, FixedBytes, Signature, B256, U128};
 use futures::{FutureExt, Stream, StreamExt};
 use reth_chainspec::EthChainSpec;
 use reth_eth_wire_types::NewBlock as EthWireNewBlock;
@@ -17,6 +17,7 @@ use reth_scroll_node::ScrollNetworkPrimitives;
 use reth_scroll_primitives::ScrollBlock;
 use reth_storage_api::BlockNumReader as BlockNumReaderT;
 use reth_tokio_util::EventStream;
+use rollup_node_primitives::sig_encode_hash;
 use scroll_alloy_hardforks::ScrollHardforks;
 use scroll_wire::{
     NewBlock, ScrollWireConfig, ScrollWireEvent, ScrollWireManager, ScrollWireProtocolHandler,
@@ -59,6 +60,8 @@ pub struct ScrollNetworkManager<N, CS> {
     pub blocks_seen: LruCache<(B256, Signature)>,
     /// The constant value that must be added to the block number to get the total difficulty.
     td_constant: U128,
+    /// The authorized signer for the network.
+    authorized_signer: Option<Address>,
 }
 
 impl<CS: ScrollHardforks + EthChainSpec + Send + Sync + 'static>
@@ -72,6 +75,7 @@ impl<CS: ScrollHardforks + EthChainSpec + Send + Sync + 'static>
         scroll_wire_config: ScrollWireConfig,
         eth_wire_listener: Option<EventStream<RethNewBlockWithPeer<ScrollBlock>>>,
         td_constant: U128,
+        authorized_signer: Option<Address>,
     ) -> Self {
         // Create the scroll-wire protocol handler.
         let (scroll_wire_handler, events) = ScrollWireProtocolHandler::new(scroll_wire_config);
@@ -105,6 +109,7 @@ impl<CS: ScrollHardforks + EthChainSpec + Send + Sync + 'static>
             blocks_seen,
             eth_wire_listener,
             td_constant,
+            authorized_signer,
         }
     }
 }
@@ -124,6 +129,7 @@ impl<
         events: UnboundedReceiver<ScrollWireEvent>,
         eth_wire_listener: Option<EventStream<RethNewBlockWithPeer<ScrollBlock>>>,
         td_constant: U128,
+        authorized_signer: Option<Address>,
     ) -> Self {
         // Create the channel for sending messages to the network manager from the network handle.
         let (to_manager_tx, from_handle_rx) = mpsc::unbounded_channel();
@@ -143,6 +149,7 @@ impl<
             blocks_seen,
             eth_wire_listener,
             td_constant,
+            authorized_signer,
         }
     }
 
@@ -169,13 +176,37 @@ impl<
             .filter_map(|(peer_id, blocks)| (!blocks.contains(&hash)).then_some(*peer_id))
             .collect();
 
-        let eth_wire_new_block = {
-            let td = compute_td(self.td_constant, block.block.header.number);
-            let mut eth_wire_block = block.block.clone();
-            eth_wire_block.header.extra_data = block.signature.clone().into();
-            EthWireNewBlock { block: eth_wire_block, td }
+        // TODO: remove this once we deprecate l2geth.
+        // Determine if we should announce via eth wire
+        let should_announce_eth_wire = if let Some(authorized_signer) = self.authorized_signer {
+            // Only announce if the block signature matches the authorized signer
+            let sig_hash = sig_encode_hash(&block.block.header);
+            if let Ok(signature) = Signature::from_raw(&block.signature) {
+                if let Ok(recovered_signer) =
+                    reth_primitives_traits::crypto::secp256k1::recover_signer(&signature, sig_hash)
+                {
+                    authorized_signer == recovered_signer
+                } else {
+                    false
+                }
+            } else {
+                false
+            }
+        } else {
+            // If no authorized signer is set, always announce
+            true
         };
-        self.inner_network_handle().eth_wire_announce_block(eth_wire_new_block, hash);
+
+        // Announce via eth wire if allowed
+        if should_announce_eth_wire {
+            let eth_wire_new_block = {
+                let td = compute_td(self.td_constant, block.block.header.number);
+                let mut eth_wire_block = block.block.clone();
+                eth_wire_block.header.extra_data = block.signature.clone().into();
+                EthWireNewBlock { block: eth_wire_block, td }
+            };
+            self.inner_network_handle().eth_wire_announce_block(eth_wire_new_block, hash);
+        }
 
         // Announce block to the filtered set of peers
         for peer_id in peers {

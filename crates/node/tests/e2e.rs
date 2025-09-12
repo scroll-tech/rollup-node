@@ -746,6 +746,7 @@ async fn can_bridge_blocks() {
         scroll_wire_config,
         None,
         Default::default(),
+        None,
     )
     .await;
     let scroll_network_handle = scroll_network.handle();
