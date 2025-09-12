@@ -82,9 +82,10 @@ where
 
         let span = span!(Level::INFO, "node", idx);
         let _enter = span.enter();
-        let node = ScrollRollupNode::new(scroll_node_config.clone());
-        let NodeHandle { node, node_exit_future: _ } = NodeBuilder::new(node_config.clone())
-            .testing_node(exec.clone())
+        let testing_node = NodeBuilder::new(node_config.clone()).testing_node(exec.clone());
+        let testing_config = testing_node.config().clone();
+        let node = ScrollRollupNode::new(scroll_node_config.clone(), testing_config).await;
+        let NodeHandle { node, node_exit_future: _ } = testing_node
             .with_types_and_provider::<ScrollRollupNode, BlockchainProvider<_>>()
             .with_components(node.components_builder())
             .with_add_ons(node.add_ons())
@@ -161,6 +162,7 @@ pub fn default_test_scroll_rollup_node_config() -> ScrollRollupNodeConfig {
         signer_args: Default::default(),
         gas_price_oracle_args: GasPriceOracleArgs::default(),
         consensus_args: ConsensusArgs::noop(),
+        database: None,
     }
 }
 
@@ -199,5 +201,6 @@ pub fn default_sequencer_test_scroll_rollup_node_config() -> ScrollRollupNodeCon
         signer_args: Default::default(),
         gas_price_oracle_args: GasPriceOracleArgs::default(),
         consensus_args: ConsensusArgs::noop(),
+        database: None,
     }
 }
