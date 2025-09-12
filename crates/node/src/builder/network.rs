@@ -206,13 +206,12 @@ impl<ChainSpec: ScrollHardforks + Debug + Send + Sync> ScrollHeaderTransform<Cha
     ) -> Result<(), HeaderTransformError> {
         let signature_bytes = std::mem::take(header.extra_data_mut());
         let signature = parse_65b_signature(&signature_bytes)?;
-        let hash = sig_encode_hash(&header_to_alloy(header));
 
         // Recover and verify signer
-        recover_and_verify_signer(&signature, hash, authorized_signer)?;
+        recover_and_verify_signer(&signature, header, authorized_signer)?;
 
         // Store signature in database
-        persist_signature(self.db.clone(), hash, signature);
+        persist_signature(self.db.clone(), header.hash_slow(), signature);
 
         Ok(())
     }
@@ -250,7 +249,7 @@ impl<H: BlockHeader, ChainSpec: EthChainSpec + ScrollHardforks + Debug + Send + 
         }
 
         // read the signature from the rollup node.
-        let hash = sig_encode_hash(&header_to_alloy(&header));
+        let hash = header.hash_slow();
 
         let signature = self
             .db
@@ -270,10 +269,11 @@ impl<H: BlockHeader, ChainSpec: EthChainSpec + ScrollHardforks + Debug + Send + 
         // If we have a signature in the database and it matches configured signer then add it
         // to the extra data field
         if let Some(sig) = signature {
-            if let Err(err) = recover_and_verify_signer(&sig, hash, self.signer) {
+            if let Err(err) = recover_and_verify_signer(&sig, &header, self.signer) {
                 warn!(
                 target: "scroll::network::request_header_transform",
-                    "Found invalid signature(different from the hardcoded signer) for block number: {:?}, header hash: {:?}, sig: {:?}, error: {}",
+                    "Found invalid signature(different from the hardcoded signer={:?}) for block number: {:?}, header hash: {:?}, sig: {:?}, error: {}",
+                    self.signer,
                     header.number(),
                     hash,
                     sig.to_string(),
@@ -282,6 +282,13 @@ impl<H: BlockHeader, ChainSpec: EthChainSpec + ScrollHardforks + Debug + Send + 
             } else {
                 *header.extra_data_mut() = sig.sig_as_bytes().into();
             }
+        } else {
+            debug!(
+                target: "scroll::network::request_header_transform",
+                "No signature found in database for block number: {:?}, header hash: {:?}",
+                header.number(),
+                hash,
+            );
         }
 
         header
@@ -289,11 +296,13 @@ impl<H: BlockHeader, ChainSpec: EthChainSpec + ScrollHardforks + Debug + Send + 
 }
 
 /// Recover signer from signature and verify authorization.
-fn recover_and_verify_signer(
+fn recover_and_verify_signer<H: BlockHeader>(
     signature: &Signature,
-    hash: B256,
+    header: &H,
     authorized_signer: Option<Address>,
 ) -> Result<Address, HeaderTransformError> {
+    let hash = sig_encode_hash(&header_to_alloy(header));
+
     // Recover signer from signature
     let signer = reth_primitives_traits::crypto::secp256k1::recover_signer(signature, hash)
         .map_err(|_| HeaderTransformError::RecoveryFailed)?;
