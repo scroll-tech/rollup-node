@@ -1,7 +1,6 @@
 services:
   l1-node:
     image: ghcr.io/foundry-rs/foundry:latest
-    container_name: l1-node
     entrypoint: [ "bash", "/launch_l1.bash" ]
     ports:
       - "8544:8545"
@@ -18,7 +17,6 @@ services:
     build:
       context: ../
       dockerfile: Dockerfile.test
-    container_name: rollup-node-sequencer
     entrypoint: ["bash", "/launch_rollup_node_sequencer.bash"]
     environment:
       - RUST_LOG=info
@@ -37,7 +35,6 @@ services:
     build:
       context: ../
       dockerfile: Dockerfile.test
-    container_name: rollup-node-follower
     entrypoint: ["bash", "/launch_rollup_node_follower.bash"]
     environment:
       - RUST_LOG=info
@@ -55,7 +52,6 @@ services:
   l2geth-sequencer:
     image: scrolltech/l2geth:scroll-v5.9.4
     platform: linux/amd64
-    container_name: l2geth-sequencer
     entrypoint: ["bash", "/launch_l2geth.bash"]
     ports:
       - "8547:8545"    # JSON-RPC
@@ -71,7 +67,6 @@ services:
   l2geth-follower:
     image: scrolltech/l2geth:scroll-v5.9.4
     platform: linux/amd64
-    container_name: l2geth-follower
     entrypoint: ["bash", "/launch_l2geth.bash"]
     ports:
       - "8548:8545"    # JSON-RPC

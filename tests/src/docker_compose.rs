@@ -5,6 +5,10 @@ use std::{
     process::Command,
     time::{Duration, SystemTime, UNIX_EPOCH},
 };
+use tokio::{
+    io::{AsyncBufReadExt, BufReader},
+    process::Command as TokioCommand,
+};
 
 /// A wrapper that combines a provider with its human-readable name for testing
 pub struct NamedProvider {
@@ -52,6 +56,9 @@ impl DockerComposeEnv {
 
         // Start the environment
         let env = Self::start_environment(&compose_file, &project_name)?;
+
+        // Start streaming logs in the background
+        let _ = Self::stream_container_logs(&compose_file, &project_name).await;
 
         // Wait for all services to be ready
         tracing::info!("⏳ Waiting for services to be ready...");
@@ -206,6 +213,45 @@ impl DockerComposeEnv {
         eyre::bail!(
             "L2 node failed to become ready after {max_retries} attempts, url: {provider_url}"
         );
+    }
+
+    /// Stream logs from all containers in the background to the `docker-compose` target aat trace
+    /// level.
+    async fn stream_container_logs(compose_file: &str, project_name: &str) -> eyre::Result<()> {
+        let mut child = TokioCommand::new("docker")
+            .args([
+                "compose",
+                "-f",
+                compose_file,
+                "-p",
+                project_name,
+                "logs",
+                "-f",         // follow mode
+                "--no-color", // avoid ANSI mess
+            ])
+            .stdout(std::process::Stdio::piped())
+            .stderr(std::process::Stdio::piped())
+            .spawn()?;
+
+        if let Some(stdout) = child.stdout.take() {
+            let mut reader = BufReader::new(stdout).lines();
+            tokio::spawn(async move {
+                while let Ok(Some(line)) = reader.next_line().await {
+                    tracing::trace!(target: "docker-compose", "{}", line);
+                }
+            });
+        }
+
+        if let Some(stderr) = child.stderr.take() {
+            let mut reader = BufReader::new(stderr).lines();
+            tokio::spawn(async move {
+                while let Ok(Some(line)) = reader.next_line().await {
+                    tracing::trace!(target: "docker-compose", "{}", line);
+                }
+            });
+        }
+
+        Ok(())
     }
 
     /// Show logs for all containers

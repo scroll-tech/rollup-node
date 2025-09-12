@@ -98,5 +98,5 @@ jobs:
             --success-output never \
             --verbose
         env:
-          RUST_LOG: debug
+          RUST_LOG: trace
           RUST_BACKTRACE: full
