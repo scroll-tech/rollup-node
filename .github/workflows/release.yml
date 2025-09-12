@@ -75,6 +75,6 @@ jobs:
         tags: ${{ steps.meta-nightly.outputs.tags }}
         labels: ${{ steps.meta-nightly.outputs.labels }}
         build-args: |
-          CARGO_FEATURES=js-trace
+          CARGO_FEATURES=js-tracer
         cache-from: type=gha,scope=${{ github.workflow }}-nightly
         cache-to: type=gha,scope=${{ github.workflow }}-nightly
