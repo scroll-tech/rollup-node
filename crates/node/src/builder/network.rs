@@ -182,9 +182,9 @@ impl<H: BlockHeader, ChainSpec: EthChainSpec + ScrollHardforks + Debug + Send + 
         if !self.chain_spec.is_euclid_v2_active_at_timestamp(header.timestamp()) {
             return header;
         }
+        
         // TODO: remove this once we deprecated l2geth
         // Validate and process signature
-
         if let Err(err) = self.validate_and_store_signature(&mut header, self.signer) {
             debug!(
                 target: "scroll::network::response_header_transform",
