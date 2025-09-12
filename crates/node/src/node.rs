@@ -36,7 +36,11 @@ impl ScrollRollupNode {
             .validate()
             .map_err(|e| eyre::eyre!("Configuration validation failed: {}", e))
             .expect("Configuration validation failed");
-        config.hydrate(node_config).await.expect("Configuration hydration failed");
+        config
+            .hydrate(node_config)
+            .await
+            .map_err(|e| eyre::eyre!("Configuration hydration failed: {}", e))
+            .expect("Configuration hydration failed");
 
         Self { config, scroll_wire_events: Arc::new(Mutex::new(None)) }
     }

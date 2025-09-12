@@ -133,7 +133,6 @@ impl ScrollRollupNodeConfig {
             let path = db_path.join("scroll.db?mode=rwc");
             "sqlite://".to_string() + &*path.to_string_lossy()
         };
-        println!("Using database at: {database_path}");
         let db = Database::new(&database_path).await?;
         self.database = Some(Arc::new(db));
         Ok(())

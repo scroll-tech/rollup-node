@@ -350,7 +350,7 @@ async fn can_build_blocks_with_finalized_l1_messages() {
     const BLOCK_BUILDING_DURATION: Duration = tokio::time::Duration::from_millis(0);
     // setup a test node
     let (mut nodes, _tasks, wallet) =
-        setup_engine(default_test_scroll_rollup_node_config(), 1, chain_spec, true, false)
+        setup_engine(default_test_scroll_rollup_node_config(), 1, chain_spec, false, false)
             .await
             .unwrap();
     let node = nodes.pop().unwrap();

@@ -34,7 +34,7 @@ pub struct ScrollNetworkBuilder {
 }
 
 impl ScrollNetworkBuilder {
-    /// Create a new [`ScrollNetworkBuilder`] with default configuration.
+    /// Create a new [`ScrollNetworkBuilder`] with provided rollup node database.
     pub fn new(rollup_node_db: Arc<Database>) -> Self {
         Self { scroll_sub_protocols: RlpxSubProtocols::default(), rollup_node_db, signer: None }
     }
