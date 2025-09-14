@@ -11627,6 +11627,7 @@ dependencies = [
  "reth-testing-utils",
  "rollup-node-primitives",
  "rollup-node-providers",
+ "rollup-node-signer",
  "scroll-alloy-consensus",
  "scroll-alloy-hardforks",
  "scroll-alloy-network",
