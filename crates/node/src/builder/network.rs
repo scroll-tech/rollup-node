@@ -174,7 +174,7 @@ impl<H: BlockHeader, ChainSpec: EthChainSpec + ScrollHardforks + Debug + Send + 
                 target: "scroll::network::response_header_transform",
                 "Header signature persistence failed, block number: {:?}, header hash: {:?}, error: {}",
                 header.number(),
-                sig_encode_hash(&header_to_alloy(&header)), err
+                header.hash_slow(), err
             );
         }
 
