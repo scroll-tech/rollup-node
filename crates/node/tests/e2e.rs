@@ -75,6 +75,7 @@ async fn can_bridge_l1_messages() -> eyre::Result<()> {
         signer_args: Default::default(),
         gas_price_oracle_args: GasPriceOracleArgs::default(),
         consensus_args: ConsensusArgs::noop(),
+        database: None,
     };
     let (mut nodes, _tasks, _wallet) = setup_engine(node_args, 1, chain_spec, false, false).await?;
     let node = nodes.pop().unwrap();
@@ -173,6 +174,7 @@ async fn can_sequence_and_gossip_blocks() {
         signer_args: Default::default(),
         gas_price_oracle_args: GasPriceOracleArgs::default(),
         consensus_args: ConsensusArgs::noop(),
+        database: None,
     };
 
     let (nodes, _tasks, wallet) =
@@ -274,6 +276,7 @@ async fn can_penalize_peer_for_invalid_block() {
         gas_price_oracle_args: GasPriceOracleArgs::default(),
         consensus_args: ConsensusArgs::noop(),
         chain_orchestrator_args: ChainOrchestratorArgs::default(),
+        database: None,
     };
 
     let (nodes, _tasks, _) =
@@ -829,12 +832,12 @@ async fn graceful_shutdown_consolidates_most_recent_batch_on_startup() -> eyre::
     let mut config = default_test_scroll_rollup_node_config();
     let path = node.inner.config.datadir().db().join("scroll.db?mode=rwc");
     let path = PathBuf::from("sqlite://".to_string() + &*path.to_string_lossy());
-    config.database_args.path = Some(path.clone());
     config.beacon_provider_args.url = Some(
         "http://dummy:8545"
             .parse()
             .expect("valid url that will not be used as test batches use calldata"),
     );
+    config.hydrate(node.inner.config.clone()).await?;
 
     let (_, events) = ScrollWireProtocolHandler::new(ScrollWireConfig::new(true));
     let (rnm, handle, l1_notification_tx) = config
