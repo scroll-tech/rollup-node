@@ -149,9 +149,6 @@ async fn test_heterogeneous_client_sync_and_sequencer_handoff() -> Result<()> {
     //  l2geth_sequencer -> rn_sequencer
     utils::admin_add_peer(&l2geth_follower, &env.rn_sequencer_enode()?).await?;
     utils::admin_add_peer(&l2geth_sequencer, &env.rn_sequencer_enode()?).await?;
-    // TODO: only temporarily until eth-wire broadcast of RN is fixed. Until then we need to connect
-    // l2geth follower to l2geth sequencer to get the blocks
-    utils::admin_add_peer(&l2geth_follower, &env.l2geth_sequencer_enode()?).await?;
 
     // Wait for all nodes to reach the same block again
     let target_block = target_block + 10;
@@ -165,12 +162,10 @@ async fn test_heterogeneous_client_sync_and_sequencer_handoff() -> Result<()> {
     utils::wait_for_block(&nodes, latest_block).await?;
     utils::assert_blocks_match(&nodes, latest_block).await?;
 
-    utils::admin_remove_peer(&l2geth_follower, &env.l2geth_sequencer_enode()?).await?; // TODO: only temporarily until eth-wire broadcast of RN is fixed
-
     // start sequencing on l2geth sequencer again and make sure all nodes reach the same block in
     // the end
     utils::miner_start(&l2geth_sequencer).await?;
-    let target_block = latest_block + 10;
+    let target_block = latest_block + 20;
     utils::wait_for_block(&nodes, target_block).await?;
     assert_blocks_match(&nodes, target_block).await?;
 
