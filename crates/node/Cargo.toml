@@ -28,37 +28,37 @@ alloy-signer = "1.0.9"
 alloy-transport.workspace = true
 
 scroll-alloy-consensus.workspace = true
-scroll-alloy-evm = { git = "https://github.com/scroll-tech/reth.git" }
+scroll-alloy-evm.workspace = true
 scroll-alloy-hardforks.workspace = true
 scroll-alloy-network.workspace = true
 scroll-alloy-provider.workspace = true
 
 reth-primitives-traits.workspace = true
 reth-scroll-engine-primitives.workspace = true
-reth-scroll-evm = { git = "https://github.com/scroll-tech/reth.git" }
-reth-scroll-cli = { git = "https://github.com/scroll-tech/reth.git" }
+reth-scroll-evm.workspace = true
+reth-scroll-cli.workspace = true
 reth-scroll-primitives.workspace = true
 reth-scroll-chainspec.workspace = true
 reth-scroll-node.workspace = true
-reth-scroll-rpc = { git = "https://github.com/scroll-tech/reth.git" }
+reth-scroll-rpc.workspace = true
 
 reth-chainspec.workspace = true
-reth-cli-util = { git = "https://github.com/scroll-tech/reth.git" }
+reth-cli-util.workspace = true
 reth-eth-wire-types.workspace = true
-reth-evm = { git = "https://github.com/scroll-tech/reth.git" }
+reth-evm.workspace = true
 reth-node-builder.workspace = true
-reth-node-api = { git = "https://github.com/scroll-tech/reth.git", default-features = false }
+reth-node-api.workspace = true
 reth-node-core.workspace = true
-reth-node-types = { git = "https://github.com/scroll-tech/reth.git", default-features = false }
+reth-node-types.workspace = true
 reth-network.workspace = true
 reth-network-api.workspace = true
-reth-revm = { git = "https://github.com/scroll-tech/reth.git", default-features = false }
-reth-rpc-api = { git = "https://github.com/scroll-tech/reth.git", default-features = false }
-reth-rpc-eth-api = { git = "https://github.com/scroll-tech/reth.git", default-features = false }
-reth-rpc-eth-types = { git = "https://github.com/scroll-tech/reth.git", default-features = false }
+reth-revm.workspace = true
+reth-rpc-api.workspace = true
+reth-rpc-eth-api.workspace = true
+reth-rpc-eth-types.workspace = true
 reth-tasks.workspace = true
-reth-transaction-pool = { git = "https://github.com/scroll-tech/reth.git", default-features = false }
-reth-trie-db = { git = "https://github.com/scroll-tech/reth.git", default-features = false }
+reth-transaction-pool.workspace = true
+reth-trie-db.workspace = true
 
 # rollup node
 rollup-node-chain-orchestrator.workspace = true
@@ -76,12 +76,12 @@ aws-sdk-kms = "1.76.0"
 # test-utils
 alloy-rpc-types-engine = { workspace = true, optional = true }
 reth-e2e-test-utils = { workspace = true, optional = true }
-reth-engine-local = { git = "https://github.com/scroll-tech/reth.git", default-features = false, optional = true }
+reth-engine-local = { workspace = true, optional = true }
 reth-provider = { workspace = true, optional = true }
 reth-rpc-server-types = { workspace = true, optional = true }
 scroll-alloy-rpc-types-engine = { workspace = true, optional = true }
 scroll-derivation-pipeline = { workspace = true, optional = true }
-scroll-alloy-rpc-types = { git = "https://github.com/scroll-tech/reth.git", default-features = false }
+scroll-alloy-rpc-types.workspace = true
 
 scroll-db.workspace = true
 scroll-engine.workspace = true
