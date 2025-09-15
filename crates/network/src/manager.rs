@@ -175,11 +175,12 @@ impl<
             eth_wire_block.header.extra_data = block.signature.clone().into();
             EthWireNewBlock { block: eth_wire_block, td }
         };
+        trace!(target: "scroll::network::manager", block_number = eth_wire_new_block.block.header.number, block_hash = %hash, signature = eth_wire_new_block.block.header.extra_data.to_string(), "Announcing new block to network, also via eth-wire");
         self.inner_network_handle().eth_wire_announce_block(eth_wire_new_block, hash);
 
         // Announce block to the filtered set of peers
         for peer_id in peers {
-            trace!(target: "scroll::network::manager", peer_id = %peer_id, block_hash = %hash, "Announcing new block to peer");
+            trace!(target: "scroll::network::manager", peer_id = %peer_id, block_number = %block.block.header.number, block_hash = %hash, "Announcing new block to peer");
             self.scroll_wire.announce_block(peer_id, &block, hash);
         }
     }
@@ -284,7 +285,7 @@ impl<
             if self.blocks_seen.contains(&(block_hash, signature)) {
                 return None;
             }
-            trace!(target: "scroll::bridge::import", peer_id = %peer_id, block_hash = %block_hash, "Received new block from eth-wire protocol");
+            trace!(target: "scroll::bridge::import", peer_id = %peer_id, block_hash = %block_hash, signature = %signature.to_string(), extra_data = %extra_data.to_string(), "Received new block from eth-wire protocol");
 
             // Update the state of the peer cache i.e. peer has seen this block.
             self.scroll_wire
