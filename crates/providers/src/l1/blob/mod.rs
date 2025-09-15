@@ -20,7 +20,7 @@ use std::sync::{
 
 use alloy_eips::eip4844::Blob;
 use alloy_primitives::B256;
-use tracing::{debug, warn};
+use tracing::{debug, info, warn};
 
 /// An instance of the trait can be used to fetch L1 blob data.
 #[async_trait::async_trait]
@@ -51,6 +51,7 @@ impl BlobProvidersBuilder {
     /// Returns an [`BlobProviders`].
     pub async fn build(&self) -> eyre::Result<BlobProviders> {
         if self.mock {
+            info!(target: "scroll::providers", "Running with mock blob provider - all other blob provider configurations are ignored");
             return Ok(BlobProviders::new(
                 vec![],
                 vec![Arc::new(MockBeaconProvider::default()) as Arc<dyn BlobProvider>],
@@ -122,6 +123,40 @@ impl BlobProviders {
             backup_counter: Arc::new(AtomicUsize::new(0)),
         }
     }
+
+    /// Try providers in round-robin order and return the first successful blob found.
+    async fn try_providers(
+        &self,
+        providers: &[Arc<dyn BlobProvider>],
+        counter: &AtomicUsize,
+        provider_type: &str,
+        block_timestamp: u64,
+        hash: B256,
+    ) -> Result<Option<Arc<Blob>>, L1ProviderError> {
+        if providers.is_empty() {
+            return Err(L1ProviderError::Other("No providers available"));
+        }
+
+        let start_index = counter.load(Ordering::Relaxed) % providers.len();
+
+        for i in 0..providers.len() {
+            let provider_index = (start_index + i) % providers.len();
+            let provider = &providers[provider_index];
+
+            match provider.blob(block_timestamp, hash).await {
+                Ok(blob) => {
+                    return Ok(blob);
+                }
+                Err(err) => {
+                    debug!(target: "scroll::providers", ?hash, ?block_timestamp, ?provider_index, ?err, provider_type, "provider failed to fetch blob");
+                    counter.store(provider_index + 1, Ordering::Relaxed);
+                }
+            }
+        }
+
+        // All providers tried, none had the blob (but some may have responded successfully)
+        Ok(None)
+    }
 }
 
 #[async_trait::async_trait]
@@ -131,55 +166,40 @@ impl BlobProvider for BlobProviders {
         block_timestamp: u64,
         hash: B256,
     ) -> Result<Option<Arc<Blob>>, L1ProviderError> {
-        // First try beacon providers in round-robin order
+        // First try beacon providers
         if !self.beacon_providers.is_empty() {
-            let start_index =
-                self.beacon_counter.load(Ordering::Relaxed) % self.beacon_providers.len();
-
-            for i in 0..self.beacon_providers.len() {
-                let provider_index = (start_index + i) % self.beacon_providers.len();
-                let provider = &self.beacon_providers[provider_index];
-
-                match provider.blob(block_timestamp, hash).await {
-                    Ok(blob) => {
-                        // Update counter to start from next provider next time if we found the blob
-                        if blob.is_some() {
-                            self.beacon_counter.store(provider_index + 1, Ordering::Relaxed);
-                        }
-                        return Ok(blob);
-                    }
-                    Err(err) => {
-                        debug!(target: "scroll::providers", ?hash, ?block_timestamp, ?provider_index, ?err, "beacon provider failed to fetch blob");
-                    }
+            match self
+                .try_providers(
+                    &self.beacon_providers,
+                    &self.beacon_counter,
+                    "beacon",
+                    block_timestamp,
+                    hash,
+                )
+                .await
+            {
+                Ok(blob) => return Ok(blob),
+                Err(err) => {
+                    debug!(target: "scroll::providers", ?hash, ?block_timestamp, ?err, "All beacon providers failed, trying backup providers");
                 }
             }
-
-            debug!(target: "scroll::providers", ?hash, ?block_timestamp, "All beacon providers failed, trying backup providers");
         }
 
-        // Try backup providers in round-robin order
-        if self.backup_providers.is_empty() {
-            // All providers failed and no backup providers available
-            warn!(target: "scroll::providers", ?hash, ?block_timestamp, "All providers failed to fetch blob");
-            return Err(L1ProviderError::Other("All blob providers failed"));
-        }
-
-        let start_index = self.backup_counter.load(Ordering::Relaxed) % self.backup_providers.len();
-
-        for i in 0..self.backup_providers.len() {
-            let provider_index = (start_index + i) % self.backup_providers.len();
-            let provider = &self.backup_providers[provider_index];
-
-            match provider.blob(block_timestamp, hash).await {
-                Ok(blob) => {
-                    // Update counter to start from next provider next time if we found the blob
-                    if blob.is_some() {
-                        self.backup_counter.store(provider_index + 1, Ordering::Relaxed);
-                    }
-                    return Ok(blob);
-                }
+        // Try backup providers
+        if !self.backup_providers.is_empty() {
+            match self
+                .try_providers(
+                    &self.backup_providers,
+                    &self.backup_counter,
+                    "backup",
+                    block_timestamp,
+                    hash,
+                )
+                .await
+            {
+                Ok(blob) => return Ok(blob),
                 Err(err) => {
-                    debug!(target: "scroll::providers", ?hash, ?block_timestamp, ?provider_index, ?err, "backup provider failed to fetch blob");
+                    debug!(target: "scroll::providers", ?hash, ?block_timestamp, ?err, "All backup providers failed");
                 }
             }
         }
