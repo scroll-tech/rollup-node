@@ -1,12 +1,12 @@
 use super::{payload::block_matches_attributes, EngineDriverError};
 use crate::{api::*, ForkchoiceState};
 
+use alloy_primitives::bytes::Bytes;
 use alloy_provider::Provider;
 use alloy_rpc_types_engine::{
     ExecutionData, ExecutionPayloadV1, ForkchoiceState as AlloyForkchoiceState, ForkchoiceUpdated,
     PayloadStatusEnum,
 };
-use alloy_primitives::bytes::Bytes;
 use eyre::Result;
 use reth_scroll_engine_primitives::try_into_block;
 use reth_scroll_primitives::ScrollBlock;
