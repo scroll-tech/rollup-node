@@ -847,9 +847,7 @@ impl<
                 Poll::Ready(result) => match result {
                     Ok(None) => {}
                     Ok(Some(event)) => return Poll::Ready(Some(Ok(event))),
-                    Err(e) => {
-                        return Poll::Ready(Some(Err(e)));
-                    }
+                    Err(e) => return Poll::Ready(Some(Err(e))),
                 },
                 Poll::Pending => {
                     self.pending_futures.push_front(action);
