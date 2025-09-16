@@ -31,6 +31,7 @@ use std::{
 };
 use strum::IntoEnumIterator;
 use tokio::sync::Mutex;
+use tracing::{debug, warn};
 
 mod action;
 use action::{ChainOrchestratorFuture, PendingChainOrchestratorFuture};
@@ -790,7 +791,18 @@ impl<
                 Poll::Ready(result) => match result {
                     Ok(None) => {}
                     Ok(Some(event)) => return Poll::Ready(Some(Ok(event))),
-                    Err(e) => return Poll::Ready(Some(Err(e))),
+                    Err(e) => {
+                        // Check if this is a transient error that can be retried
+                        if e.can_retry() {
+                            warn!(target: "scroll::chain_orchestrator", error = %e, "Transient error occurred, retrying future immediately");
+                            // Put the future back at the front of the queue to retry immediately
+                            self.pending_futures.push_front(action);
+                            // Continue processing other futures instead of returning the error
+                            continue;
+                        }
+                        debug!(target: "scroll::chain_orchestrator", error = %e, "Non-retryable error, returning immediately");
+                        return Poll::Ready(Some(Err(e)));
+                    }
                 },
                 Poll::Pending => {
                     self.pending_futures.push_front(action);
