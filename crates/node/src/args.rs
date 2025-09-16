@@ -30,8 +30,7 @@ use rollup_node_manager::{
 };
 use rollup_node_primitives::{BlockInfo, NodeConfig};
 use rollup_node_providers::{
-    BlobSource, DatabaseL1MessageProvider, FullL1Provider, L1MessageProvider, L1Provider,
-    SystemContractProvider,
+    BlobSource, FullL1Provider, L1MessageProvider, L1Provider, SystemContractProvider,
 };
 use rollup_node_sequencer::{L1MessageInclusionMode, Sequencer};
 use rollup_node_watcher::{L1Notification, L1Watcher};
@@ -316,7 +315,7 @@ impl ScrollRollupNodeConfig {
             };
 
         // Construct the l1 provider.
-        let l1_messages_provider = DatabaseL1MessageProvider::new(db.clone(), 0);
+        let l1_messages_provider = db.clone();
         let blob_provider = self
             .beacon_provider_args
             .blob_source
@@ -336,6 +335,8 @@ impl ScrollRollupNodeConfig {
                 chain_config.l1_config.num_l1_messages_per_block,
                 0,
                 self.sequencer_args.l1_message_inclusion_mode,
+                // TODO: update with correct start value.
+                0,
             );
             (Some(sequencer), (args.block_time != 0).then_some(args.block_time), args.auto_start)
         } else {

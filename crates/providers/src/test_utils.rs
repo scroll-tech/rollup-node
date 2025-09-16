@@ -5,6 +5,7 @@ use std::{collections::HashMap, sync::Arc};
 
 use alloy_eips::eip4844::Blob;
 use alloy_primitives::B256;
+use futures::Stream;
 use rollup_node_primitives::L1MessageEnvelope;
 
 /// Implementation of the [`crate::L1Provider`] that never returns blobs.
@@ -31,18 +32,27 @@ impl<P: L1MessageProvider + Sync> BlobProvider for MockL1Provider<P> {
 impl<P: L1MessageProvider + Send + Sync> L1MessageProvider for MockL1Provider<P> {
     type Error = P::Error;
 
-    async fn get_l1_message_with_block_number(
+    async fn take_n_messages_from_index(
         &self,
-    ) -> Result<Option<L1MessageEnvelope>, Self::Error> {
-        self.l1_messages_provider.get_l1_message_with_block_number().await
+        start_index: u64,
+        n: u64,
+    ) -> Result<Vec<L1MessageEnvelope>, Self::Error> {
+        self.l1_messages_provider.take_n_messages_from_index(start_index, n).await
     }
-    fn set_queue_index_cursor(&self, index: u64) {
-        self.l1_messages_provider.set_queue_index_cursor(index);
+
+    async fn iter_messages_from_index(
+        &self,
+        start_index: u64,
+    ) -> Result<impl Stream<Item = Result<L1MessageEnvelope, Self::Error>> + Send, Self::Error>
+    {
+        self.l1_messages_provider.iter_messages_from_index(start_index).await
     }
-    async fn set_hash_cursor(&self, hash: B256) {
-        self.l1_messages_provider.set_hash_cursor(hash).await
-    }
-    fn increment_cursor(&self) {
-        self.l1_messages_provider.increment_cursor()
+
+    async fn iter_messages_from_queue_hash(
+        &self,
+        queue_hash: B256,
+    ) -> Result<impl Stream<Item = Result<L1MessageEnvelope, Self::Error>> + Send, Self::Error>
+    {
+        self.l1_messages_provider.iter_messages_from_queue_hash(queue_hash).await
     }
 }

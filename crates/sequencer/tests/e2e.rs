@@ -17,7 +17,7 @@ use rollup_node::{
 };
 use rollup_node_manager::RollupManagerEvent;
 use rollup_node_primitives::{sig_encode_hash, BlockInfo, L1MessageEnvelope};
-use rollup_node_providers::{BlobSource, DatabaseL1MessageProvider, ScrollRootProvider};
+use rollup_node_providers::{BlobSource, ScrollRootProvider};
 use rollup_node_sequencer::{L1MessageInclusionMode, Sequencer};
 use rollup_node_signer::SignerEvent;
 use scroll_alloy_consensus::TxL1Message;
@@ -70,7 +70,7 @@ async fn skip_block_with_no_transactions() {
 
     // create a test database
     let database = Arc::new(setup_test_db().await);
-    let provider = Arc::new(DatabaseL1MessageProvider::new(database.clone(), 0));
+    let provider = database.clone();
 
     // create a sequencer
     let mut sequencer = Sequencer::new(
@@ -80,6 +80,7 @@ async fn skip_block_with_no_transactions() {
         4,
         1,
         L1MessageInclusionMode::BlockDepth(0),
+        0,
     );
 
     // send a new payload attributes request.
@@ -126,7 +127,7 @@ async fn can_build_blocks() {
 
     // create a test database
     let database = Arc::new(setup_test_db().await);
-    let provider = Arc::new(DatabaseL1MessageProvider::new(database.clone(), 0));
+    let provider = database.clone();
 
     // create a sequencer
     let mut sequencer = Sequencer::new(
@@ -136,6 +137,7 @@ async fn can_build_blocks() {
         4,
         1,
         L1MessageInclusionMode::BlockDepth(0),
+        0,
     );
 
     // add a transaction to the pool
@@ -253,7 +255,7 @@ async fn can_build_blocks_with_delayed_l1_messages() {
 
     // create a test database
     let database = Arc::new(setup_test_db().await);
-    let provider = Arc::new(DatabaseL1MessageProvider::new(database.clone(), 0));
+    let provider = database.clone();
 
     // create a sequencer
     let mut sequencer = Sequencer::new(
@@ -263,6 +265,7 @@ async fn can_build_blocks_with_delayed_l1_messages() {
         4,
         0,
         L1MessageInclusionMode::BlockDepth(L1_MESSAGE_DELAY),
+        0,
     );
 
     // now lets add an L1 message to the database (this transaction should not be included until the
@@ -379,7 +382,7 @@ async fn can_build_blocks_with_finalized_l1_messages() {
 
     // create a test database
     let database = Arc::new(setup_test_db().await);
-    let provider = Arc::new(DatabaseL1MessageProvider::new(database.clone(), 0));
+    let provider = database.clone();
 
     // create a sequencer with Finalized mode
     let mut sequencer = Sequencer::new(
@@ -389,6 +392,7 @@ async fn can_build_blocks_with_finalized_l1_messages() {
         4,
         5, // current L1 block number
         L1MessageInclusionMode::Finalized,
+        0,
     );
 
     // set L1 finalized block number to 2
@@ -880,7 +884,7 @@ async fn should_limit_l1_message_cumulative_gas() {
 
     // create a test database
     let database = Arc::new(setup_test_db().await);
-    let provider = Arc::new(DatabaseL1MessageProvider::new(database.clone(), 0));
+    let provider = database.clone();
 
     // create a sequencer with Finalized mode
     let mut sequencer = Sequencer::new(
@@ -890,6 +894,7 @@ async fn should_limit_l1_message_cumulative_gas() {
         4,
         5, // current L1 block number
         L1MessageInclusionMode::Finalized,
+        0,
     );
     sequencer.set_l1_finalized_block_number(1);
 

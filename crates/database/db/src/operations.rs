@@ -248,10 +248,10 @@ pub trait DatabaseOperations: DatabaseConnectionProvider {
 
     /// Get an iterator over all [`L1MessageEnvelope`]s in the database starting from the provided
     /// `start` point.
-    async fn get_l1_messages<'a>(
-        &'a self,
+    async fn get_l1_messages(
+        &self,
         start: Option<L1MessageStart>,
-    ) -> Result<impl Stream<Item = Result<L1MessageEnvelope, DatabaseError>> + 'a, DatabaseError>
+    ) -> Result<impl Stream<Item = Result<L1MessageEnvelope, DatabaseError>> + Send, DatabaseError>
     {
         let queue_index = match start {
             Some(L1MessageStart::Index(i)) => i,
@@ -273,6 +273,38 @@ pub trait DatabaseOperations: DatabaseConnectionProvider {
             .stream(self.get_connection())
             .await?
             .map(|res| Ok(res.map(Into::into)?)))
+    }
+
+    /// Takes up to n [`L1MessageEnvelope`]s in the database starting from the provided `start`
+    /// point.
+    async fn get_n_l1_messages(
+        &self,
+        start: Option<L1MessageStart>,
+        n: u64,
+    ) -> Result<Vec<L1MessageEnvelope>, DatabaseError> {
+        let queue_index = match start {
+            Some(L1MessageStart::Index(i)) => i,
+            Some(L1MessageStart::Hash(ref h)) => {
+                // Lookup message by hash
+                let record = models::l1_message::Entity::find()
+                    .filter(models::l1_message::Column::Hash.eq(h.to_vec()))
+                    .one(self.get_connection())
+                    .await?
+                    .ok_or_else(|| DatabaseError::L1MessageNotFound(L1MessageStart::Hash(*h)))?;
+
+                record.queue_index as u64
+            }
+            None => 0,
+        };
+
+        Ok(models::l1_message::Entity::find()
+            .filter(models::l1_message::Column::QueueIndex.gte(queue_index))
+            .limit(Some(n))
+            .all(self.get_connection())
+            .await?
+            .into_iter()
+            .map(Into::<L1MessageEnvelope>::into)
+            .collect())
     }
 
     /// Get the extra data for the provided block number.

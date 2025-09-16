@@ -8,15 +8,14 @@ use alloy_primitives::{address, b256, bytes, U256};
 use criterion::{criterion_group, criterion_main, Criterion};
 use futures::StreamExt;
 use rollup_node_primitives::{BatchCommitData, BatchInfo, L1MessageEnvelope};
-use rollup_node_providers::{test_utils::MockL1Provider, DatabaseL1MessageProvider};
+use rollup_node_providers::test_utils::MockL1Provider;
 use scroll_alloy_consensus::TxL1Message;
 use scroll_codec::decoding::test_utils::read_to_bytes;
 use scroll_db::{test_utils::setup_test_db, Database, DatabaseOperations};
 use scroll_derivation_pipeline::DerivationPipeline;
 use tokio::runtime::{Handle, Runtime};
 
-async fn setup_pipeline(
-) -> DerivationPipeline<MockL1Provider<DatabaseL1MessageProvider<Arc<Database>>>> {
+async fn setup_pipeline() -> DerivationPipeline<MockL1Provider<Arc<Database>>> {
     // load batch data in the db.
     let db = Arc::new(setup_test_db().await);
     let raw_calldata = read_to_bytes("./testdata/calldata_v0.bin").unwrap();
@@ -65,7 +64,7 @@ async fn setup_pipeline(
     }
 
     // construct the pipeline.
-    let l1_messages_provider = DatabaseL1MessageProvider::new(db.clone(), 0);
+    let l1_messages_provider = db.clone();
     let mock_l1_provider = MockL1Provider { l1_messages_provider, blobs: HashMap::new() };
     DerivationPipeline::new(mock_l1_provider, db, u64::MAX)
 }
