@@ -20,8 +20,9 @@ fn main() {
     if let Err(err) = Cli::<ScrollChainSpecParser, ScrollRollupNodeConfig>::parse().run(
         |builder, args| async move {
             info!(target: "reth::cli", "Launching node");
+            let config = builder.config().clone();
             let handle = builder
-                .node(ScrollRollupNode::new(args))
+                .node(ScrollRollupNode::new(args, config).await)
                 .launch_with_fn(|builder| {
                     info!(target: "reth::cli", config = ?builder.config().chain.config, "Running with config");
 

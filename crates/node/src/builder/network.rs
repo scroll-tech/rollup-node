@@ -18,41 +18,31 @@ use rollup_node_primitives::sig_encode_hash;
 use rollup_node_signer::SignatureAsBytes;
 use scroll_alloy_hardforks::ScrollHardforks;
 use scroll_db::{Database, DatabaseOperations};
-use std::{fmt, fmt::Debug, path::PathBuf, sync::Arc};
+use std::{fmt, fmt::Debug, sync::Arc};
 use tracing::{debug, info, trace, warn};
 
 use crate::args::NetworkArgs;
 
 /// The network builder for Scroll.
-#[derive(Debug, Default)]
+#[derive(Debug)]
 pub struct ScrollNetworkBuilder {
     /// Additional `RLPx` sub-protocols to be added to the network.
     scroll_sub_protocols: RlpxSubProtocols,
     /// A reference to the rollup-node `Database`.
-    rollup_node_db_path: Option<PathBuf>,
+    rollup_node_db: Arc<Database>,
     /// The address for which we should persist and serve signatures for.
     signer: Option<Address>,
 }
 
 impl ScrollNetworkBuilder {
-    /// Create a new [`ScrollNetworkBuilder`] with default configuration.
-    pub fn new() -> Self {
-        Self {
-            scroll_sub_protocols: RlpxSubProtocols::default(),
-            rollup_node_db_path: None,
-            signer: None,
-        }
+    /// Create a new [`ScrollNetworkBuilder`] with provided rollup node database.
+    pub fn new(rollup_node_db: Arc<Database>) -> Self {
+        Self { scroll_sub_protocols: RlpxSubProtocols::default(), rollup_node_db, signer: None }
     }
 
     /// Add a scroll sub-protocol to the network builder.
     pub fn with_sub_protocol(mut self, protocol: RlpxSubProtocol) -> Self {
         self.scroll_sub_protocols.push(protocol);
-        self
-    }
-
-    /// Add a scroll sub-protocol to the network builder.
-    pub fn with_database_path(mut self, db_path: Option<PathBuf>) -> Self {
-        self.rollup_node_db_path = db_path;
         self
     }
 
@@ -83,18 +73,6 @@ where
         ctx: &BuilderContext<Node>,
         pool: Pool,
     ) -> eyre::Result<Self::Network> {
-        // initialize the rollup node database.
-        let db_path = ctx.config().datadir().db();
-        let database_path = if let Some(database_path) = self.rollup_node_db_path {
-            database_path.to_string_lossy().to_string()
-        } else {
-            // append the path using strings as using `join(...)` overwrites "sqlite://"
-            // if the path is absolute.
-            let path = db_path.join("scroll.db?mode=rwc");
-            "sqlite://".to_string() + &*path.to_string_lossy()
-        };
-        let db = Arc::new(Database::new(&database_path).await?);
-
         // get the header transform.
         let chain_spec = ctx.chain_spec();
         let authorized_signer = if self.signer.is_none() {
@@ -102,10 +80,16 @@ where
         } else {
             self.signer
         };
-        let transform =
-            ScrollHeaderTransform::new(chain_spec.clone(), db.clone(), authorized_signer);
-        let request_transform =
-            ScrollRequestHeaderTransform::new(chain_spec, db.clone(), authorized_signer);
+        let transform = ScrollHeaderTransform::new(
+            chain_spec.clone(),
+            self.rollup_node_db.clone(),
+            authorized_signer,
+        );
+        let request_transform = ScrollRequestHeaderTransform::new(
+            chain_spec,
+            self.rollup_node_db.clone(),
+            authorized_signer,
+        );
 
         // set the network mode to work.
         let config = ctx.network_config()?;

@@ -18,9 +18,11 @@ use aws_sdk_kms::config::BehaviorVersion;
 use reth_chainspec::EthChainSpec;
 use reth_network::NetworkProtocols;
 use reth_network_api::FullNetwork;
-use reth_node_builder::rpc::RethRpcServerHandles;
+use reth_node_builder::{rpc::RethRpcServerHandles, NodeConfig as RethNodeConfig};
 use reth_node_core::primitives::BlockHeader;
-use reth_scroll_chainspec::{ChainConfig, ScrollChainConfig, SCROLL_FEE_VAULT_ADDRESS};
+use reth_scroll_chainspec::{
+    ChainConfig, ScrollChainConfig, ScrollChainSpec, SCROLL_FEE_VAULT_ADDRESS,
+};
 use reth_scroll_node::ScrollNetworkPrimitives;
 use rollup_node_chain_orchestrator::ChainOrchestrator;
 use rollup_node_manager::{
@@ -79,6 +81,9 @@ pub struct ScrollRollupNodeConfig {
     /// The gas price oracle args
     #[command(flatten)]
     pub gas_price_oracle_args: GasPriceOracleArgs,
+    /// The database connection (not parsed via CLI but hydrated after validation).
+    #[arg(skip)]
+    pub database: Option<Arc<Database>>,
 }
 
 impl ScrollRollupNodeConfig {
@@ -110,6 +115,26 @@ impl ScrollRollupNodeConfig {
             return Err("System contract consensus requires either an authorized signer or a L1 provider URL".to_string());
         }
 
+        Ok(())
+    }
+
+    /// Hydrate the config by initializing the database connection.
+    pub async fn hydrate(
+        &mut self,
+        node_config: RethNodeConfig<ScrollChainSpec>,
+    ) -> eyre::Result<()> {
+        // Instantiate the database
+        let db_path = node_config.datadir().db();
+        let database_path = if let Some(database_path) = &self.database_args.path {
+            database_path.to_string_lossy().to_string()
+        } else {
+            // append the path using strings as using `join(...)` overwrites "sqlite://"
+            // if the path is absolute.
+            let path = db_path.join("scroll.db?mode=rwc");
+            "sqlite://".to_string() + &*path.to_string_lossy()
+        };
+        let db = Database::new(&database_path).await?;
+        self.database = Some(Arc::new(db));
         Ok(())
     }
 }
@@ -175,17 +200,8 @@ impl ScrollRollupNodeConfig {
             .expect("failed to create payload provider");
         let l2_provider = Arc::new(l2_provider);
 
-        // Instantiate the database
-        let db_path = ctx.datadir;
-        let database_path = if let Some(database_path) = self.database_args.path {
-            database_path.to_string_lossy().to_string()
-        } else {
-            // append the path using strings as using `join(...)` overwrites "sqlite://"
-            // if the path is absolute.
-            let path = db_path.join("scroll.db?mode=rwc");
-            "sqlite://".to_string() + &*path.to_string_lossy()
-        };
-        let db = Database::new(&database_path).await?;
+        // Fetch the database from the hydrated config.
+        let db = self.database.clone().expect("should hydrate config before build");
 
         // Run the database migrations
         if let Some(named) = chain_spec.chain().named() {
@@ -214,9 +230,6 @@ impl ScrollRollupNodeConfig {
 
             tracing::info!(target: "scroll::node::args", ?genesis_hash, "Overwriting genesis hash for custom chain");
         }
-
-        // Wrap the database in an Arc
-        let db = Arc::new(db);
 
         let chain_spec_fcs = || {
             ForkchoiceState::head_from_chain_spec(chain_spec.clone())
@@ -787,6 +800,7 @@ mod tests {
                 algorithm: ConsensusAlgorithm::SystemContract,
                 authorized_signer: None,
             },
+            database: None,
         };
 
         let result = config.validate();
@@ -817,6 +831,7 @@ mod tests {
                 algorithm: ConsensusAlgorithm::SystemContract,
                 authorized_signer: None,
             },
+            database: None,
         };
 
         let result = config.validate();
@@ -842,6 +857,7 @@ mod tests {
             network_args: NetworkArgs::default(),
             gas_price_oracle_args: GasPriceOracleArgs::default(),
             consensus_args: ConsensusArgs::noop(),
+            database: None,
         };
 
         assert!(config.validate().is_ok());
@@ -865,6 +881,7 @@ mod tests {
             network_args: NetworkArgs::default(),
             gas_price_oracle_args: GasPriceOracleArgs::default(),
             consensus_args: ConsensusArgs::noop(),
+            database: None,
         };
 
         assert!(config.validate().is_ok());
@@ -884,6 +901,7 @@ mod tests {
             network_args: NetworkArgs::default(),
             gas_price_oracle_args: GasPriceOracleArgs::default(),
             consensus_args: ConsensusArgs::noop(),
+            database: None,
         };
 
         assert!(config.validate().is_ok());
