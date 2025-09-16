@@ -250,12 +250,17 @@ impl ScrollRollupNodeConfig {
             .network_args
             .enable_eth_scroll_wire_bridge
             .then_some(ctx.network.eth_wire_block_listener().await?);
+
+        // TODO: remove this once we deprecate l2geth.
+        let authorized_signer = self.network_args.effective_signer(chain_spec.chain().named());
+
         let scroll_network_manager = ScrollNetworkManager::from_parts(
             chain_spec.clone(),
             ctx.network.clone(),
             events,
             eth_wire_listener,
             td_constant(chain_spec.chain().named()),
+            authorized_signer,
         );
 
         // On startup we replay the latest batch of blocks from the database as such we set the safe
