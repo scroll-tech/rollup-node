@@ -37,6 +37,7 @@ reth-scroll-engine-primitives = { git = "https://github.com/scroll-tech/reth.git
 # rollup-node
 rollup-node-primitives.workspace = true
 rollup-node-providers.workspace = true
+rollup-node-signer.workspace = true
 
 # scroll
 scroll-network.workspace = true
