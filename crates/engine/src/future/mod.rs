@@ -1,6 +1,7 @@
 use super::{payload::block_matches_attributes, EngineDriverError};
 use crate::{api::*, ForkchoiceState};
 
+use alloy_primitives::bytes::Bytes;
 use alloy_provider::Provider;
 use alloy_rpc_types_engine::{
     ExecutionData, ExecutionPayloadV1, ForkchoiceState as AlloyForkchoiceState, ForkchoiceUpdated,

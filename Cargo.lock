@@ -11691,6 +11691,7 @@ dependencies = [
  "reth-scroll-primitives",
  "reth-storage-api",
  "reth-tokio-util",
+ "rollup-node-primitives",
  "scroll-alloy-hardforks",
  "scroll-wire",
  "thiserror 2.0.16",
