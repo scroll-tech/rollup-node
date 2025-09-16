@@ -143,13 +143,15 @@ impl BlobProviders {
             let provider_index = (start_index + i) % providers.len();
             let provider = &providers[provider_index];
 
+            // update the counter to the next provider round-robin index.
+            counter.store(provider_index + 1, Ordering::Relaxed);
+
             match provider.blob(block_timestamp, hash).await {
                 Ok(blob) => {
                     return Ok(blob);
                 }
                 Err(err) => {
                     debug!(target: "scroll::providers", ?hash, ?block_timestamp, ?provider_index, ?err, provider_type, "provider failed to fetch blob");
-                    counter.store(provider_index + 1, Ordering::Relaxed);
                 }
             }
         }
