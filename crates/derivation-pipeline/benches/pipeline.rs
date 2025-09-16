@@ -11,7 +11,9 @@ use rollup_node_primitives::{BatchCommitData, BatchInfo, L1MessageEnvelope};
 use rollup_node_providers::{test_utils::MockL1Provider, DatabaseL1MessageProvider};
 use scroll_alloy_consensus::TxL1Message;
 use scroll_codec::decoding::test_utils::read_to_bytes;
-use scroll_db::{test_utils::setup_test_db, Database, DatabaseOperations};
+use scroll_db::{
+    test_utils::setup_test_db, Database, DatabaseTransactionProvider, DatabaseWriteOperations,
+};
 use scroll_derivation_pipeline::DerivationPipeline;
 use tokio::runtime::{Handle, Runtime};
 
@@ -29,7 +31,8 @@ async fn setup_pipeline(
         blob_versioned_hash: None,
         finalized_block_number: None,
     };
-    db.insert_batch(batch_data).await.unwrap();
+    let tx = db.tx_mut().await.unwrap();
+    tx.insert_batch(batch_data).await.unwrap();
 
     // load messages in db.
     let l1_messages = vec![
@@ -61,8 +64,9 @@ async fn setup_pipeline(
         },
     ];
     for message in l1_messages {
-        db.insert_l1_message(message).await.unwrap();
+        tx.insert_l1_message(message).await.unwrap();
     }
+    tx.commit().await.unwrap();
 
     // construct the pipeline.
     let l1_messages_provider = DatabaseL1MessageProvider::new(db.clone(), 0);

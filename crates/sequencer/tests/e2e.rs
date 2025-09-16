@@ -23,7 +23,7 @@ use rollup_node_signer::SignerEvent;
 use scroll_alloy_consensus::TxL1Message;
 use scroll_alloy_provider::ScrollAuthApiEngineClient;
 use scroll_alloy_rpc_types_engine::{BlockDataHint, ScrollPayloadAttributes};
-use scroll_db::{test_utils::setup_test_db, DatabaseOperations};
+use scroll_db::{test_utils::setup_test_db, DatabaseTransactionProvider, DatabaseWriteOperations};
 use scroll_engine::{EngineDriver, EngineDriverEvent, ForkchoiceState};
 use std::{
     io::Write,
@@ -190,7 +190,9 @@ async fn can_build_blocks() {
     };
     drop(wallet_lock);
     let l1_message_hash = l1_message.transaction.tx_hash();
-    database.insert_l1_message(l1_message).await.unwrap();
+    let tx = database.tx_mut().await.unwrap();
+    tx.insert_l1_message(l1_message).await.unwrap();
+    tx.commit().await.unwrap();
 
     // sleep 2 seconds (ethereum header timestamp has granularity of seconds and proceeding header
     // must have a greater timestamp than the last)
@@ -283,7 +285,9 @@ async fn can_build_blocks_with_delayed_l1_messages() {
     };
     drop(wallet_lock);
     let l1_message_hash = l1_message.transaction.tx_hash();
-    database.insert_l1_message(l1_message).await.unwrap();
+    let tx = database.tx_mut().await.unwrap();
+    tx.insert_l1_message(l1_message).await.unwrap();
+    tx.commit().await.unwrap();
 
     // add a transaction to the pool
     let mut wallet_lock = wallet.lock().await;
@@ -431,8 +435,10 @@ async fn can_build_blocks_with_finalized_l1_messages() {
     let finalized_message_hash = finalized_l1_message.transaction.tx_hash();
     let unfinalized_message_hash = unfinalized_l1_message.transaction.tx_hash();
 
-    database.insert_l1_message(finalized_l1_message).await.unwrap();
-    database.insert_l1_message(unfinalized_l1_message).await.unwrap();
+    let tx = database.tx_mut().await.unwrap();
+    tx.insert_l1_message(finalized_l1_message).await.unwrap();
+    tx.insert_l1_message(unfinalized_l1_message).await.unwrap();
+    tx.commit().await.unwrap();
 
     // build payload, should only include finalized message
     sequencer.build_payload_attributes();
@@ -923,9 +929,11 @@ async fn should_limit_l1_message_cumulative_gas() {
             },
         },
     ];
-    for tx in l1_messages {
-        database.insert_l1_message(tx).await.unwrap();
+    let tx = database.tx_mut().await.unwrap();
+    for l1_message in l1_messages {
+        tx.insert_l1_message(l1_message).await.unwrap();
     }
+    tx.commit().await.unwrap();
 
     // build payload, should only include first l1 message
     sequencer.build_payload_attributes();

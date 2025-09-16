@@ -16,7 +16,9 @@ use reth_scroll_primitives::ScrollPrimitives;
 use reth_transaction_pool::{PoolTransaction, TransactionPool};
 use rollup_node_signer::SignatureAsBytes;
 use scroll_alloy_hardforks::ScrollHardforks;
-use scroll_db::{Database, DatabaseOperations};
+use scroll_db::{
+    Database, DatabaseReadOperations, DatabaseTransactionProvider, DatabaseWriteOperations,
+};
 use std::{fmt, fmt::Debug, sync::Arc};
 use tracing::{debug, info, trace, warn};
 
@@ -232,19 +234,28 @@ impl<H: BlockHeader, ChainSpec: EthChainSpec + ScrollHardforks + Debug + Send + 
 
         // read the signature from the rollup node.
         let block_hash = header.hash_slow();
-        let signature = self
-            .db
-            .get_signature(block_hash)
-            .await
-            .inspect_err(|e| {
+        let signature = match self.db.tx().await {
+            Ok(tx) => tx
+                .get_signature(block_hash)
+                .await
+                .inspect_err(|e| {
+                    warn!(target: "scroll::network::request_header_transform",
+                        "Failed to get block signature from database, header hash: {:?}, error: {}",
+                        header.hash_slow(),
+                        HeaderTransformError::DatabaseError(e.to_string())
+                    )
+                })
+                .ok()
+                .flatten(),
+            Err(e) => {
                 warn!(target: "scroll::network::request_header_transform",
-                    "Failed to get block signature from database, header hash: {:?}, error: {}",
+                    "Failed to create database transaction to get block signature, header hash: {:?}, error: {}",
                     header.hash_slow(),
                     HeaderTransformError::DatabaseError(e.to_string())
-                )
-            })
-            .ok()
-            .flatten();
+                );
+                return header;
+            }
+        };
 
         // If we have a signature in the database and it matches configured signer then add it
         // to the extra data field
@@ -305,8 +316,18 @@ fn persist_signature(db: Arc<Database>, hash: B256, signature: Signature) {
             hash,
             signature.to_string()
         );
-        if let Err(e) = db.insert_signature(hash, signature).await {
-            warn!(target: "scroll::network::header_transform", "Failed to store signature in database: {:?}", e);
+        match db.tx_mut().await {
+            Ok(tx) => {
+                if let Err(e) = tx.insert_signature(hash, signature).await {
+                    warn!(target: "scroll::network::header_transform", "Failed to store signature in database: {:?}", e);
+                }
+                let _ = tx.commit().await.inspect_err(|e| {
+                    warn!(target: "scroll::network::header_transform", "Failed to commit signature to database: {:?}", e);
+                });
+            }
+            Err(e) => {
+                warn!(target: "scroll::network::header_transform", "Failed to create database transaction to store signature: {:?}", e);
+            }
         }
     });
 }
