@@ -1,6 +1,7 @@
 use super::{payload::block_matches_attributes, EngineDriverError};
 use crate::{api::*, ForkchoiceState};
 
+use alloy_primitives::bytes::Bytes;
 use alloy_provider::Provider;
 use alloy_rpc_types_engine::{
     ExecutionData, ExecutionPayloadV1, ForkchoiceState as AlloyForkchoiceState, ForkchoiceUpdated,
@@ -13,6 +14,7 @@ use rollup_node_primitives::{
     BatchInfo, BlockInfo, ChainImport, L2BlockInfoWithL1Messages, MeteredFuture,
     ScrollPayloadAttributesWithBatchInfo, WithBlockNumber,
 };
+use rollup_node_signer::SignatureAsBytes;
 use scroll_alloy_hardforks::ScrollHardforks;
 use scroll_alloy_network::Scroll;
 use scroll_alloy_provider::ScrollEngineApi;
@@ -236,7 +238,7 @@ where
             Some(BlockImportOutcome::valid_block(
                 peer_id,
                 head,
-                Into::<Vec<u8>>::into(signature).into(),
+                Bytes::copy_from_slice(&signature.sig_as_bytes()),
             )),
             PayloadStatusEnum::Valid,
         )),
