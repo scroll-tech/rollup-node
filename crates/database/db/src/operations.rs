@@ -218,7 +218,7 @@ pub trait DatabaseWriteOperations: WriteConnectionProvider + DatabaseReadOperati
                 .expect("Batch info must be present due to database query arguments");
             self.delete_batches_gt_batch_index(previous_batch_index).await?;
             let l2_block = self.get_highest_block_for_batch_hash(previous_batch.hash).await?;
-            (l2_block, Some(previous_batch.block_number + 1))
+            (l2_block, Some(previous_batch.block_number))
         } else {
             (None, None)
         };
