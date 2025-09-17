@@ -25,5 +25,5 @@ exec rollup-node node --chain /l2reth/l2reth-genesis-e2e.json --datadir=/l2reth 
   --p2p-secret-key /l2reth/nodekey \
   --trusted-peers enode://8fc4f6dfd0a2ebf56560d0b0ef5e60ad7bcb01e13f929eae53a4c77086d9c1e74eb8b8c8945035d25c6287afdd871f0d41b3fd7e189697decd0f13538d1ac620@l2geth-sequencer:30303 \
   --engine.sync-at-startup false \
-  --l1.url http://l1-node:8545
-
+  --l1.url http://l1-node:8545 \
+  --blob.mock
