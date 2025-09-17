@@ -15,8 +15,10 @@ use alloy_eips::eip2718::Encodable2718;
 use alloy_primitives::Address;
 use alloy_rpc_types_engine::PayloadAttributes;
 use futures::{task::AtomicWaker, Stream};
+use reth_scroll_primitives::ScrollBlock;
 use rollup_node_primitives::{L1MessageEnvelope, DEFAULT_BLOCK_DIFFICULTY};
 use rollup_node_providers::{L1MessageProvider, L1ProviderError};
+use scroll_alloy_consensus::ScrollTransaction;
 use scroll_alloy_rpc_types_engine::{BlockDataHint, ScrollPayloadAttributes};
 
 mod error;
@@ -186,6 +188,14 @@ where
     pub fn handle_new_l1_block(&mut self, block_number: u64) {
         self.l1_block_number = block_number;
     }
+
+    /// Handle new payload by updating the L1 messages queue index.
+    pub fn handle_new_payload(&mut self, block: &ScrollBlock) {
+        let queue_index = block.body.transactions.iter().filter_map(|tx| tx.queue_index()).max();
+        if let Some(queue_index) = queue_index {
+            self.l1_messages_queue_index = queue_index + 1;
+        }
+    }
 }
 
 /// A stream that produces payload attributes.
@@ -201,7 +211,8 @@ impl<SMP> Stream for Sequencer<SMP> {
                     self.payload_attributes_job = None;
                     Poll::Ready(Some(block))
                 }
-                Poll::Ready(Err(_)) => {
+                Poll::Ready(Err(err)) => {
+                    tracing::error!(target: "rollup_node::sequencer", "Error building payload attributes: {err}");
                     self.payload_attributes_job = None;
                     Poll::Ready(None)
                 }
@@ -227,24 +238,38 @@ async fn build_payload_attributes<P: L1MessageProvider + Unpin + Send + Sync + '
     l1_message_inclusion_mode: L1MessageInclusionMode,
     l1_messages_queue_index: u64,
 ) -> Result<ScrollPayloadAttributes, SequencerError> {
-    // Collect L1 messages to include in payload.
     let mut l1_messages = vec![];
     let mut cumulative_gas_used = 0;
+    let expected_index = l1_messages_queue_index;
+
+    // Collect L1 messages to include in payload.
     let db_l1_messages = provider
         .take_n_messages_from_index(l1_messages_queue_index, max_l1_messages)
         .await
         .map_err(Into::<L1ProviderError>::into)?;
+
     for msg in db_l1_messages {
-        if !take_l1_message(
+        // TODO (greg): we only check the DA limit on the execution node side. We should also check
+        // it here.
+        let fits_in_block = msg.transaction.gas_limit + cumulative_gas_used <= block_gas_limit;
+        let l1_inclusion_requirement_met = meets_l1_inclusion_requirement(
             &msg,
             l1_message_inclusion_mode,
             current_l1_block_number,
             l1_finalized_block_number,
-            cumulative_gas_used,
-            block_gas_limit,
-        ) {
+        );
+        if !fits_in_block || !l1_inclusion_requirement_met {
             break;
         }
+
+        // Defensively ensure L1 messages are contiguous.
+        if msg.transaction.queue_index != expected_index {
+            return Err(SequencerError::NonContiguousL1Messages {
+                expected: expected_index,
+                got: msg.transaction.queue_index,
+            });
+        }
+
         cumulative_gas_used += msg.transaction.gas_limit;
         l1_messages.push(msg.transaction.encoded_2718().into());
     }
@@ -263,27 +288,19 @@ async fn build_payload_attributes<P: L1MessageProvider + Unpin + Send + Sync + '
     })
 }
 
-const fn take_l1_message(
+/// Returns true if the L1 message should be included in the payload based on the inclusion mode,
+/// the current L1 block number and the L1 finalized block number.
+const fn meets_l1_inclusion_requirement(
     l1_msg: &L1MessageEnvelope,
     inclusion_mode: L1MessageInclusionMode,
     current_l1_block_number: u64,
     l1_finalized_block_number: u64,
-    cumulative_gas_used: u64,
-    block_gas_limit: u64,
 ) -> bool {
     match inclusion_mode {
         L1MessageInclusionMode::BlockDepth(depth) => {
-            let is_deep_enough = l1_msg.l1_block_number + depth <= current_l1_block_number;
-            let fits_in_block =
-                l1_msg.transaction.gas_limit + cumulative_gas_used <= block_gas_limit;
-            is_deep_enough && fits_in_block
+            l1_msg.l1_block_number + depth <= current_l1_block_number
         }
-        L1MessageInclusionMode::Finalized => {
-            let is_finalized = l1_msg.l1_block_number <= l1_finalized_block_number;
-            let fits_in_block =
-                l1_msg.transaction.gas_limit + cumulative_gas_used <= block_gas_limit;
-            is_finalized && fits_in_block
-        }
+        L1MessageInclusionMode::Finalized => l1_msg.l1_block_number <= l1_finalized_block_number,
     }
 }
 
@@ -307,7 +324,7 @@ mod tests {
     #[test]
     fn test_l1_message_predicate() {
         // block depth not met.
-        assert!(!take_l1_message(
+        assert!(!meets_l1_inclusion_requirement(
             &L1MessageEnvelope {
                 transaction: Default::default(),
                 l1_block_number: 10,
@@ -317,12 +334,10 @@ mod tests {
             L1MessageInclusionMode::BlockDepth(5),
             10,
             10,
-            0,
-            0
         ));
 
-        // block depth met and doesn't fit in block.
-        assert!(!take_l1_message(
+        // block depth met.
+        assert!(meets_l1_inclusion_requirement(
             &L1MessageEnvelope {
                 transaction: TxL1Message { gas_limit: 1, ..Default::default() },
                 l1_block_number: 5,
@@ -332,42 +347,23 @@ mod tests {
             L1MessageInclusionMode::BlockDepth(5),
             10,
             10,
-            10,
-            10
-        ));
-
-        // block depth met and fits in block.
-        assert!(take_l1_message(
-            &L1MessageEnvelope {
-                transaction: TxL1Message { gas_limit: 1, ..Default::default() },
-                l1_block_number: 5,
-                l2_block_number: None,
-                queue_hash: None,
-            },
-            L1MessageInclusionMode::BlockDepth(5),
-            10,
-            10,
-            9,
-            10
         ));
 
         // not finalized.
-        assert!(!take_l1_message(
+        assert!(!meets_l1_inclusion_requirement(
             &L1MessageEnvelope {
                 transaction: TxL1Message { gas_limit: 1, ..Default::default() },
-                l1_block_number: 5,
+                l1_block_number: 15,
                 l2_block_number: None,
                 queue_hash: None,
             },
             L1MessageInclusionMode::Finalized,
             10,
             10,
-            0,
-            0
         ));
 
-        // finalized and doesn't fit in block.
-        assert!(!take_l1_message(
+        // finalized.
+        assert!(meets_l1_inclusion_requirement(
             &L1MessageEnvelope {
                 transaction: TxL1Message { gas_limit: 1, ..Default::default() },
                 l1_block_number: 10,
@@ -377,23 +373,6 @@ mod tests {
             L1MessageInclusionMode::Finalized,
             10,
             10,
-            10,
-            10
-        ));
-
-        // finalized and fits in block.
-        assert!(take_l1_message(
-            &L1MessageEnvelope {
-                transaction: TxL1Message { gas_limit: 1, ..Default::default() },
-                l1_block_number: 10,
-                l2_block_number: None,
-                queue_hash: None,
-            },
-            L1MessageInclusionMode::Finalized,
-            10,
-            10,
-            9,
-            10
         ));
     }
 }

@@ -10982,6 +10982,7 @@ dependencies = [
  "reth-node-core",
  "reth-scroll-chainspec",
  "reth-scroll-node",
+ "reth-scroll-primitives",
  "reth-tracing",
  "rollup-node",
  "rollup-node-manager",

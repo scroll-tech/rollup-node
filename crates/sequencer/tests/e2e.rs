@@ -456,6 +456,9 @@ async fn can_build_blocks_with_finalized_l1_messages() {
     // ensure unfinalized message is not included
     assert!(!block.body.transactions.iter().any(|tx| tx.tx_hash() == &unfinalized_message_hash));
 
+    // Handle the build block with the sequencer in order to update L1 message queue index.
+    sequencer.handle_new_payload(&block);
+
     // update finalized block number to 3, now both messages should be available
     sequencer.set_l1_finalized_block_number(3);
 
@@ -484,16 +487,15 @@ async fn can_sequence_blocks_with_private_key_file() -> eyre::Result<()> {
     reth_tracing::init_test_tracing();
 
     // Create temporary private key file
-    let mut temp_file = NamedTempFile::new().unwrap();
+    let mut temp_file = NamedTempFile::new()?;
     let private_key_hex = "0x1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef";
-    temp_file.write_all(private_key_hex.as_bytes()).unwrap();
-    temp_file.flush().unwrap();
+    temp_file.write_all(private_key_hex.as_bytes())?;
+    temp_file.flush()?;
 
     // Create expected signer
     let expected_key_bytes =
-        hex::decode("1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef").unwrap();
-    let expected_signer =
-        alloy_signer_local::PrivateKeySigner::from_slice(&expected_key_bytes).unwrap();
+        hex::decode("1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef")?;
+    let expected_signer = alloy_signer_local::PrivateKeySigner::from_slice(&expected_key_bytes)?;
     let expected_address = expected_signer.address();
 
     let chain_spec = (*SCROLL_DEV).clone();

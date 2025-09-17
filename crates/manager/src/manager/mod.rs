@@ -457,6 +457,11 @@ where
                     let _ = signer.sign_block(payload.clone()).inspect_err(|err| error!(target: "scroll::node::manager", ?err, "Failed to send new payload to signer"));
                 }
 
+                self.sequencer
+                    .as_mut()
+                    .expect("Sequencer must be enabled to build payload")
+                    .handle_new_payload(&payload);
+
                 if let Some(event_sender) = self.event_sender.as_ref() {
                     event_sender.notify(RollupManagerEvent::BlockSequenced(payload));
                 }
