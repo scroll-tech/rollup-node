@@ -30,8 +30,7 @@ use rollup_node_manager::{
 };
 use rollup_node_primitives::{BlockInfo, NodeConfig};
 use rollup_node_providers::{
-    BlobProvidersBuilder, FullL1Provider, L1MessageProvider, L1Provider,
-    SystemContractProvider,
+    BlobProvidersBuilder, FullL1Provider, L1MessageProvider, L1Provider, SystemContractProvider,
 };
 use rollup_node_sequencer::{L1MessageInclusionMode, Sequencer};
 use rollup_node_watcher::{L1Notification, L1Watcher};
