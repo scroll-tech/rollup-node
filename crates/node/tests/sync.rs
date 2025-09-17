@@ -14,13 +14,12 @@ use rollup_node::{
         default_sequencer_test_scroll_rollup_node_config, default_test_scroll_rollup_node_config,
         setup_engine,
     },
-    BeaconProviderArgs, ChainOrchestratorArgs, ConsensusArgs, DatabaseArgs, EngineDriverArgs,
+    BlobProviderArgs, ChainOrchestratorArgs, ConsensusArgs, DatabaseArgs, EngineDriverArgs,
     GasPriceOracleArgs, L1ProviderArgs, NetworkArgs, ScrollRollupNodeConfig, SequencerArgs,
 };
 use rollup_node_chain_orchestrator::ChainOrchestratorEvent;
 use rollup_node_manager::RollupManagerEvent;
 use rollup_node_primitives::BlockInfo;
-use rollup_node_providers::BlobSource;
 use rollup_node_sequencer::L1MessageInclusionMode;
 use rollup_node_watcher::L1Notification;
 use scroll_alloy_consensus::TxL1Message;
@@ -63,12 +62,12 @@ async fn test_should_consolidate_to_block_15k() -> eyre::Result<()> {
             allow_empty_blocks: true,
             ..Default::default()
         },
-        beacon_provider_args: BeaconProviderArgs {
-            url: Some(Url::parse("https://eth-beacon-chain.drpc.org/rest/")?),
+        blob_provider_args: BlobProviderArgs {
+            beacon_node_urls: Some(vec![Url::parse("https://eth-beacon-chain.drpc.org/rest/")?]),
             compute_units_per_second: 100,
             max_retries: 10,
             initial_backoff: 100,
-            blob_source: BlobSource::Beacon,
+            ..Default::default()
         },
         signer_args: Default::default(),
         gas_price_oracle_args: GasPriceOracleArgs::default(),
@@ -206,10 +205,7 @@ async fn test_should_consolidate_after_optimistic_sync() -> eyre::Result<()> {
             allow_empty_blocks: true,
             ..SequencerArgs::default()
         },
-        beacon_provider_args: BeaconProviderArgs {
-            blob_source: BlobSource::Mock,
-            ..Default::default()
-        },
+        blob_provider_args: BlobProviderArgs { mock: true, ..Default::default() },
         signer_args: Default::default(),
         gas_price_oracle_args: GasPriceOracleArgs::default(),
         consensus_args: ConsensusArgs::noop(),
@@ -457,10 +453,7 @@ async fn test_consolidation() -> eyre::Result<()> {
             allow_empty_blocks: true,
             ..SequencerArgs::default()
         },
-        beacon_provider_args: BeaconProviderArgs {
-            blob_source: BlobSource::Mock,
-            ..Default::default()
-        },
+        blob_provider_args: BlobProviderArgs { mock: true, ..Default::default() },
         signer_args: Default::default(),
         gas_price_oracle_args: GasPriceOracleArgs::default(),
         consensus_args: ConsensusArgs::noop(),
@@ -632,10 +625,7 @@ async fn test_chain_orchestrator_shallow_reorg_with_gap() -> eyre::Result<()> {
             allow_empty_blocks: true,
             ..SequencerArgs::default()
         },
-        beacon_provider_args: BeaconProviderArgs {
-            blob_source: BlobSource::Mock,
-            ..Default::default()
-        },
+        blob_provider_args: BlobProviderArgs { mock: true, ..Default::default() },
         signer_args: Default::default(),
         gas_price_oracle_args: GasPriceOracleArgs::default(),
         consensus_args: ConsensusArgs::noop(),
