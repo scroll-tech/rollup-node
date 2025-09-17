@@ -97,7 +97,6 @@ where
 impl NodeTypes for ScrollRollupNode {
     type Primitives = <ScrollNode as NodeTypes>::Primitives;
     type ChainSpec = <ScrollNode as NodeTypes>::ChainSpec;
-    type StateCommitment = <ScrollNode as NodeTypes>::StateCommitment;
     type Storage = <ScrollNode as NodeTypes>::Storage;
     type Payload = <ScrollNode as NodeTypes>::Payload;
 }
