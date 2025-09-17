@@ -30,7 +30,7 @@ use rollup_node_primitives::{
 use rollup_node_providers::{BlockDataProvider, L1Provider};
 use scroll_alloy_rpc_types_engine::{BlockDataHint, ScrollPayloadAttributes};
 use scroll_codec::Codec;
-use scroll_db::{Database, DatabaseOperations};
+use scroll_db::{Database, DatabaseReadOperations, DatabaseTransactionProvider};
 use tokio::time::Interval;
 
 /// A future that resolves to a stream of [`ScrollPayloadAttributesWithBatchInfo`].
@@ -137,14 +137,15 @@ where
                 // get the batch commit data.
                 let index = info.inner.index;
                 let info = info.inner;
-                let batch = database
+                let tx = database.tx().await.map_err(|e| (info.clone(), e.into()))?;
+                let batch = tx
                     .get_batch_by_index(index)
                     .await
                     .map_err(|err| (info.clone(), err.into()))?
                     .ok_or((info.clone(), DerivationPipelineError::UnknownBatch(index)))?;
 
                 // derive the attributes and attach the corresponding batch info.
-                let attrs = derive(batch, provider, database, l1_v2_message_queue_start_index)
+                let attrs = derive(batch, provider, tx, l1_v2_message_queue_start_index)
                     .await
                     .map_err(|err| (info.clone(), err))?;
 
@@ -366,7 +367,9 @@ mod tests {
     use scroll_alloy_consensus::TxL1Message;
     use scroll_alloy_rpc_types_engine::BlockDataHint;
     use scroll_codec::decoding::test_utils::read_to_bytes;
-    use scroll_db::test_utils::setup_test_db;
+    use scroll_db::{
+        test_utils::setup_test_db, DatabaseTransactionProvider, DatabaseWriteOperations,
+    };
     use std::collections::HashMap;
 
     struct Infallible;
@@ -486,9 +489,11 @@ mod tests {
             blob_versioned_hash: None,
             finalized_block_number: None,
         };
-        db.insert_batch(batch_data).await?;
+        let tx = db.tx_mut().await?;
+        tx.insert_batch(batch_data).await?;
         // load message in db, leaving a l1 message missing.
-        db.insert_l1_message(L1_MESSAGE_INDEX_33).await?;
+        tx.insert_l1_message(L1_MESSAGE_INDEX_33).await?;
+        tx.commit().await?;
 
         // construct the pipeline.
         let l1_messages_provider = db.clone();
@@ -501,7 +506,9 @@ mod tests {
         // in a separate task, add the second l1 message.
         tokio::task::spawn(async move {
             tokio::time::sleep(tokio::time::Duration::from_millis(10)).await;
-            db.insert_l1_message(L1_MESSAGE_INDEX_34).await.unwrap();
+            let tx = db.tx_mut().await.unwrap();
+            tx.insert_l1_message(L1_MESSAGE_INDEX_34).await.unwrap();
+            tx.commit().await.unwrap();
         });
 
         // pipeline should initially fail and recover once the task previously spawned loads the L1
@@ -550,12 +557,14 @@ mod tests {
             blob_versioned_hash: None,
             finalized_block_number: None,
         };
-        db.insert_batch(batch_data).await?;
+        let tx = db.tx_mut().await?;
+        tx.insert_batch(batch_data).await?;
         // load messages in db.
         let l1_messages = vec![L1_MESSAGE_INDEX_33, L1_MESSAGE_INDEX_34];
         for message in l1_messages {
-            db.insert_l1_message(message).await?;
+            tx.insert_l1_message(message).await?;
         }
+        tx.commit().await?;
 
         // construct the pipeline.
         let l1_messages_provider = db.clone();
@@ -611,9 +620,11 @@ mod tests {
             finalized_block_number: None,
         };
         let l1_messages = vec![L1_MESSAGE_INDEX_33, L1_MESSAGE_INDEX_34];
+        let tx = db.tx_mut().await?;
         for message in l1_messages {
-            db.insert_l1_message(message).await?;
+            tx.insert_l1_message(message).await?;
         }
+        tx.commit().await?;
 
         let l1_messages_provider = db.clone();
         let l1_provider = MockL1Provider { l1_messages_provider, blobs: HashMap::new() };
@@ -709,9 +720,11 @@ mod tests {
                 },
             },
         ];
+        let tx = db.tx_mut().await?;
         for message in l1_messages.clone() {
-            db.insert_l1_message(message).await?;
+            tx.insert_l1_message(message).await?;
         }
+        tx.commit().await?;
 
         let l1_messages_provider = db.clone();
         let l1_provider = MockL1Provider { l1_messages_provider, blobs: HashMap::new() };
@@ -763,9 +776,11 @@ mod tests {
             })
             .collect::<Vec<_>>();
 
+        let tx = db.tx_mut().await?;
         for message in l1_messages.clone() {
-            db.insert_l1_message(message).await?;
+            tx.insert_l1_message(message).await?;
         }
+        tx.commit().await?;
 
         let l1_messages_provider = db.clone();
         let l1_provider = MockL1Provider { l1_messages_provider, blobs: HashMap::new() };
@@ -872,9 +887,11 @@ mod tests {
                             },
                         },
                     ];
+                    let tx = db.tx_mut().await?;
                     for message in l1_messages {
-                        db.insert_l1_message(message).await?;
+                        tx.insert_l1_message(message).await?;
                     }
+                    tx.commit().await?;
 
                     let l1_messages_provider = db.clone();
                     let l1_provider = MockL1Provider {

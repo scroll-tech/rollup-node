@@ -42,7 +42,7 @@ use tokio_stream::wrappers::ReceiverStream;
 use tracing::{error, info, trace, warn};
 
 use rollup_node_providers::{L1MessageProvider, L1Provider};
-use scroll_db::{Database, DatabaseError, DatabaseOperations};
+use scroll_db::{Database, DatabaseError, DatabaseTransactionProvider, DatabaseWriteOperations};
 use scroll_derivation_pipeline::DerivationPipeline;
 
 mod budget;
@@ -257,7 +257,13 @@ where
             let block_hash = block_with_peer.block.hash_slow();
             let signature = block_with_peer.signature;
             tokio::spawn(async move {
-                if let Err(err) = db.insert_signature(block_hash, signature).await {
+                let tx = if let Ok(tx) = db.tx_mut().await {
+                    tx
+                } else {
+                    tracing::warn!(target: "scroll::node::manager", %block_hash, sig=%signature, "Failed to create database transaction");
+                    return;
+                };
+                if let Err(err) = tx.insert_signature(block_hash, signature).await {
                     tracing::warn!(
                         target: "scroll::node::manager",
                         %block_hash, sig=%signature, error=?err,
@@ -269,6 +275,9 @@ where
                         %block_hash, sig=%signature,
                         "Persisted block signature to database"
                     );
+                }
+                if let Err(err) = tx.commit().await {
+                    tracing::warn!(target: "scroll::node::manager", %block_hash, sig=%signature, error=?err, "Failed to commit database transaction");
                 }
             });
         }
@@ -679,7 +688,13 @@ where
                     let db = this.database.clone();
                     let block_hash = block.hash_slow();
                     tokio::spawn(async move {
-                        if let Err(err) = db.insert_signature(block_hash, signature).await {
+                        let tx = if let Ok(tx) = db.tx_mut().await {
+                            tx
+                        } else {
+                            tracing::warn!(target: "scroll::node::manager", %block_hash, sig=%signature, "Failed to create database transaction");
+                            return;
+                        };
+                        if let Err(err) = tx.insert_signature(block_hash, signature).await {
                             tracing::warn!(
                                 target: "scroll::node::manager",
                                 %block_hash, sig=%signature, error=?err,
@@ -691,6 +706,9 @@ where
                                 %block_hash, sig=%signature,
                                 "Persisted block signature to database"
                             );
+                        }
+                        if let Err(err) = tx.commit().await {
+                            tracing::warn!(target: "scroll::node::manager", %block_hash, sig=%signature, error=?err, "Failed to commit database transaction");
                         }
                     });
 

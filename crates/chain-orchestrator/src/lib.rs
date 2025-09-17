@@ -5,7 +5,7 @@ use alloy_consensus::Header;
 use alloy_eips::{BlockHashOrNumber, Encodable2718};
 use alloy_primitives::{b256, keccak256, B256};
 use alloy_provider::Provider;
-use futures::{task::AtomicWaker, Stream, StreamExt, TryStreamExt};
+use futures::{pin_mut, task::AtomicWaker, Stream, StreamExt, TryStreamExt};
 use reth_chainspec::EthChainSpec;
 use reth_network_p2p::{BlockClient, BodiesClient};
 use reth_scroll_primitives::ScrollBlock;
@@ -17,7 +17,10 @@ use rollup_node_watcher::L1Notification;
 use scroll_alloy_consensus::TxL1Message;
 use scroll_alloy_hardforks::ScrollHardforks;
 use scroll_alloy_network::Scroll;
-use scroll_db::{Database, DatabaseError, DatabaseOperations, L1MessageStart, UnwindResult};
+use scroll_db::{
+    Database, DatabaseError, DatabaseReadOperations, DatabaseTransactionProvider,
+    DatabaseWriteOperations, L1MessageStart, UnwindResult,
+};
 use scroll_network::NewBlockWithPeer;
 use std::{
     collections::{HashMap, VecDeque},
@@ -208,7 +211,9 @@ impl<
         let database = ctx.database.clone();
         let block_info: L2BlockInfoWithL1Messages = (&block_with_peer.block).into();
         Self::do_handle_block_from_peer(ctx, block_with_peer).await?;
-        database.update_l1_messages_with_l2_block(block_info.clone()).await?;
+        let tx = database.tx_mut().await?;
+        tx.update_l1_messages_with_l2_block(block_info.clone()).await?;
+        tx.commit().await?;
         Ok(ChainOrchestratorEvent::L2ChainCommitted(block_info, None, true))
     }
 
@@ -287,8 +292,10 @@ impl<
         let mut received_chain_headers = VecDeque::from(vec![received_block.header.clone()]);
 
         // We should never have a re-org that is deeper than the current safe head.
+        let tx = database.tx().await?;
         let (latest_safe_block, _) =
-            database.get_latest_safe_l2_info().await?.expect("safe block must exist");
+            tx.get_latest_safe_l2_info().await?.expect("safe block must exist");
+        drop(tx);
 
         // We search for the re-org index in the in-memory chain.
         const BATCH_FETCH_SIZE: usize = 50;
@@ -404,7 +411,7 @@ impl<
 
         // If we are not in optimistic mode, we validate the L1 messages in the new blocks.
         if !*optimistic_mode.lock().await {
-            validate_l1_messages(&new_blocks, database.clone()).await?;
+            validate_l1_messages(&new_blocks, &database).await?;
         }
 
         match reorg_index {
@@ -448,9 +455,11 @@ impl<
             ChainOrchestratorItem::InsertConsolidatedL2Blocks,
             Box::pin(async move {
                 let head = block_infos.last().expect("block info must not be empty").clone();
+                let tx = database.tx_mut().await?;
                 for block in block_infos {
-                    database.insert_block(block, batch_info).await?;
+                    tx.insert_block(block, batch_info).await?;
                 }
+                tx.commit().await?;
                 Result::<_, ChainOrchestratorError>::Ok(Some(
                     ChainOrchestratorEvent::L2ConsolidatedBlockCommitted(head),
                 ))
@@ -494,7 +503,9 @@ impl<
 
                 // Insert the blocks into the database.
                 let head = block_info.last().expect("block info must not be empty").clone();
-                database.update_l1_messages_from_l2_blocks(block_info).await?;
+                let tx = database.tx_mut().await?;
+                tx.update_l1_messages_from_l2_blocks(block_info).await?;
+                tx.commit().await?;
 
                 Result::<_, ChainOrchestratorError>::Ok(Some(
                     ChainOrchestratorEvent::L2ChainCommitted(head, None, consolidated),
@@ -578,7 +589,7 @@ impl<
         l2_client: Arc<P>,
         current_chain: Arc<Mutex<Chain>>,
     ) -> Result<Option<ChainOrchestratorEvent>, ChainOrchestratorError> {
-        let txn = database.tx().await?;
+        let txn = database.tx_mut().await?;
         let UnwindResult { l1_block_number, queue_index, l2_head_block_number, l2_safe_block_info } =
             txn.unwind(chain_spec.genesis_hash(), l1_block_number).await?;
         txn.commit().await?;
@@ -612,12 +623,16 @@ impl<
         block_number: u64,
         l1_block_number: Arc<AtomicU64>,
     ) -> Result<Option<ChainOrchestratorEvent>, ChainOrchestratorError> {
+        let tx = database.tx_mut().await?;
+
         // Set the latest finalized L1 block in the database.
-        database.set_latest_finalized_l1_block_number(block_number).await?;
+        tx.set_latest_finalized_l1_block_number(block_number).await?;
 
         // Get all unprocessed batches that have been finalized by this L1 block finalization.
         let finalized_batches =
-            database.fetch_and_update_unprocessed_finalized_batches(block_number).await?;
+            tx.fetch_and_update_unprocessed_finalized_batches(block_number).await?;
+
+        tx.commit().await?;
 
         // Update the chain orchestrator L1 block number.
         l1_block_number.store(block_number, Ordering::Relaxed);
@@ -639,18 +654,17 @@ impl<
         let l1_message = L1MessageEnvelope::new(l1_message, l1_block_number, None, queue_hash);
 
         // Perform a consistency check to ensure the previous L1 message exists in the database.
+        let tx = database.tx_mut().await?;
         if l1_message.transaction.queue_index > 0 &&
-            database
-                .get_l1_message_by_index(l1_message.transaction.queue_index - 1)
-                .await?
-                .is_none()
+            tx.get_l1_message_by_index(l1_message.transaction.queue_index - 1).await?.is_none()
         {
             return Err(ChainOrchestratorError::L1MessageQueueGap(
                 l1_message.transaction.queue_index,
             ))
         }
 
-        database.insert_l1_message(l1_message).await?;
+        tx.insert_l1_message(l1_message).await?;
+        tx.commit().await?;
         Ok(Some(event))
     }
 
@@ -659,21 +673,21 @@ impl<
         database: Arc<Database>,
         batch: BatchCommitData,
     ) -> Result<Option<ChainOrchestratorEvent>, ChainOrchestratorError> {
-        let txn = database.tx().await?;
+        let tx = database.tx_mut().await?;
         let prev_batch_index = batch.index - 1;
 
         // Perform a consistency check to ensure the previous commit batch exists in the database.
-        if txn.get_batch_by_index(prev_batch_index).await?.is_none() {
+        if tx.get_batch_by_index(prev_batch_index).await?.is_none() {
             return Err(ChainOrchestratorError::BatchCommitGap(batch.index))
         }
 
         // remove any batches with an index greater than the previous batch.
-        let affected = txn.delete_batches_gt_batch_index(prev_batch_index).await?;
+        let affected = tx.delete_batches_gt_batch_index(prev_batch_index).await?;
 
         // handle the case of a batch revert.
         let new_safe_head = if affected > 0 {
-            txn.delete_l2_blocks_gt_batch_index(prev_batch_index).await?;
-            txn.get_highest_block_for_batch_index(prev_batch_index).await?
+            tx.delete_l2_blocks_gt_batch_index(prev_batch_index).await?;
+            tx.get_highest_block_for_batch_index(prev_batch_index).await?
         } else {
             None
         };
@@ -685,8 +699,8 @@ impl<
         };
 
         // insert the batch and commit the transaction.
-        txn.insert_batch(batch).await?;
-        txn.commit().await?;
+        tx.insert_batch(batch).await?;
+        tx.commit().await?;
 
         Ok(Some(event))
     }
@@ -698,18 +712,21 @@ impl<
         block_number: u64,
         finalized_block_number: Arc<AtomicU64>,
     ) -> Result<Option<ChainOrchestratorEvent>, ChainOrchestratorError> {
+        let tx = database.tx_mut().await?;
+
         // finalize all batches up to `batch_index`.
-        database.finalize_batches_up_to_index(batch_index, block_number).await?;
+        tx.finalize_batches_up_to_index(batch_index, block_number).await?;
 
         // Get all unprocessed batches that have been finalized by this L1 block finalization.
         let finalized_block_number = finalized_block_number.load(Ordering::Relaxed);
         if finalized_block_number >= block_number {
-            let finalized_batches = database
-                .fetch_and_update_unprocessed_finalized_batches(finalized_block_number)
-                .await?;
+            let finalized_batches =
+                tx.fetch_and_update_unprocessed_finalized_batches(finalized_block_number).await?;
+            tx.commit().await?;
             return Ok(Some(ChainOrchestratorEvent::BatchFinalized(block_number, finalized_batches)))
         }
 
+        tx.commit().await?;
         Ok(None)
     }
 }
@@ -732,7 +749,8 @@ async fn compute_l1_message_queue_hash(
         Some(keccak256(input) & L1_MESSAGE_QUEUE_HASH_MASK)
     } else if l1_message.queue_index > l1_v2_message_queue_start_index {
         let index = l1_message.queue_index - 1;
-        let mut input = database
+        let tx = database.tx().await?;
+        let mut input = tx
             .get_l1_message_by_index(index)
             .await?
             .map(|m| m.queue_hash)
@@ -754,7 +772,9 @@ async fn init_chain_from_db<P: Provider<Scroll> + 'static>(
 ) -> Result<BoundedVec<Header>, ChainOrchestratorError> {
     let blocks = {
         let mut blocks = Vec::with_capacity(chain_buffer_size);
-        let mut blocks_stream = database.get_l2_blocks().await?.take(chain_buffer_size);
+        let tx = database.tx().await?;
+        let blocks_stream = tx.get_l2_blocks().await?.take(chain_buffer_size);
+        pin_mut!(blocks_stream);
         while let Some(block_info) = blocks_stream.try_next().await? {
             let header = l2_client
                 .get_block_by_hash(block_info.hash)
@@ -849,7 +869,9 @@ async fn consolidate_chain<P: Provider<Scroll> + 'static>(
 
     // Fetch the safe head from the database. We use this as a trust anchor to reconcile the chain
     // back to.
-    let safe_head = database.get_latest_safe_l2_info().await?.expect("safe head must exist").0;
+    let tx = database.tx().await?;
+    let safe_head = tx.get_latest_safe_l2_info().await?.expect("safe head must exist").0;
+    drop(tx);
 
     // If the in-memory chain contains the safe head, we check if the safe hash from the
     // database (L1 consolidation) matches the in-memory value. If it does not match, we return an
@@ -899,7 +921,7 @@ async fn consolidate_chain<P: Provider<Scroll> + 'static>(
     // TODO: modify `validate_l1_messages` to accept any type that can provide an iterator over
     // `&ScrollBlock` instead of requiring a `Vec<ScrollBlock>`.
     let blocks_to_consolidate: Vec<ScrollBlock> = blocks_to_consolidate.into_iter().collect();
-    validate_l1_messages(&blocks_to_consolidate, database.clone()).await?;
+    validate_l1_messages(&blocks_to_consolidate, &database).await?;
 
     // Set the chain which has now been consolidated.
     *current_chain.lock().await = chain;
@@ -930,7 +952,7 @@ async fn fetch_blocks_from_network<BC: BlockClient<Block = ScrollBlock> + Send +
 /// L1.
 async fn validate_l1_messages(
     blocks: &[ScrollBlock],
-    database: Arc<Database>,
+    database: &Arc<Database>,
 ) -> Result<(), ChainOrchestratorError> {
     let l1_message_hashes = blocks
         .iter()
@@ -948,9 +970,10 @@ async fn validate_l1_messages(
     // TODO: instead of using `l1_message_hashes.first().map(|tx| L1MessageStart::Hash(*tx))` to
     // determine the start of the L1 message stream, we should use a more robust method to determine
     // the start of the L1 message stream.
-    let mut l1_message_stream = database
-        .get_l1_messages(l1_message_hashes.first().map(|tx| L1MessageStart::Hash(*tx)))
-        .await?;
+    let tx = database.tx().await?;
+    let l1_message_stream =
+        tx.get_l1_messages(l1_message_hashes.first().map(|tx| L1MessageStart::Hash(*tx))).await?;
+    pin_mut!(l1_message_stream);
 
     for message_hash in l1_message_hashes {
         // Get the expected L1 message from the database.
@@ -1184,7 +1207,9 @@ mod test {
         // Insert a batch commit in the database to satisfy the chain orchestrator consistency
         // checks
         let batch_0 = BatchCommitData { index: 0, ..Arbitrary::arbitrary(&mut u).unwrap() };
-        db.insert_batch(batch_0).await.unwrap();
+        let tx = db.tx_mut().await.unwrap();
+        tx.insert_batch(batch_0).await.unwrap();
+        tx.commit().await.unwrap();
 
         let batch_1 = BatchCommitData { index: 1, ..Arbitrary::arbitrary(&mut u).unwrap() };
         chain_orchestrator.handle_l1_notification(L1Notification::BatchCommit(batch_1.clone()));
@@ -1201,7 +1226,8 @@ mod test {
             _ => panic!("Expected BatchCommitIndexed event"),
         }
 
-        let batch_commit_result = db.get_batch_by_index(batch_1.index).await.unwrap().unwrap();
+        let tx = db.tx().await.unwrap();
+        let batch_commit_result = tx.get_batch_by_index(batch_1.index).await.unwrap().unwrap();
         assert_eq!(batch_1, batch_commit_result);
     }
 
@@ -1222,7 +1248,9 @@ mod test {
             calldata: Arc::new(vec![].into()),
             ..Arbitrary::arbitrary(&mut u).unwrap()
         };
-        db.insert_batch(batch_0).await.unwrap();
+        let tx = db.tx_mut().await.unwrap();
+        tx.insert_batch(batch_0).await.unwrap();
+        tx.commit().await.unwrap();
 
         // Create sequential batches
         let batch_1 = BatchCommitData {
@@ -1323,15 +1351,16 @@ mod test {
         }
 
         // Verify batch 102 was deleted
-        let batch_102 = db.get_batch_by_index(102).await.unwrap();
+        let tx = db.tx().await.unwrap();
+        let batch_102 = tx.get_batch_by_index(102).await.unwrap();
         assert!(batch_102.is_none());
 
         // Verify batch 101 was replaced with new data
-        let updated_batch_101 = db.get_batch_by_index(101).await.unwrap().unwrap();
+        let updated_batch_101 = tx.get_batch_by_index(101).await.unwrap().unwrap();
         assert_eq!(updated_batch_101, new_batch_2);
 
         // Verify batch 100 still exists
-        let batch_100 = db.get_batch_by_index(100).await.unwrap();
+        let batch_100 = tx.get_batch_by_index(100).await.unwrap();
         assert!(batch_100.is_some());
     }
 
@@ -1356,7 +1385,9 @@ mod test {
             },
             ..Arbitrary::arbitrary(&mut u).unwrap()
         };
-        db.insert_l1_message(message_0).await.unwrap();
+        let tx = db.tx_mut().await.unwrap();
+        tx.insert_l1_message(message_0).await.unwrap();
+        tx.commit().await.unwrap();
 
         let message_1 = TxL1Message {
             queue_index: TEST_L1_MESSAGE_QUEUE_INDEX_BOUNDARY - 1,
@@ -1371,8 +1402,9 @@ mod test {
 
         let _ = chain_orchestrator.next().await;
 
+        let tx = db.tx().await.unwrap();
         let l1_message_result =
-            db.get_l1_message_by_index(message_1.queue_index).await.unwrap().unwrap();
+            tx.get_l1_message_by_index(message_1.queue_index).await.unwrap().unwrap();
         let l1_message = L1MessageEnvelope::new(message_1, block_number, None, None);
 
         assert_eq!(l1_message, l1_message_result);
@@ -1394,7 +1426,9 @@ mod test {
             l2_block_number: None,
             queue_hash: None,
         };
-        db.insert_l1_message(message).await.unwrap();
+        let tx = db.tx_mut().await.unwrap();
+        tx.insert_l1_message(message).await.unwrap();
+        tx.commit().await.unwrap();
 
         // insert the previous L1 message in database.
         chain_orchestrator.handle_l1_notification(L1Notification::L1Message {
@@ -1424,8 +1458,9 @@ mod test {
 
         let _ = chain_orchestrator.next().await.unwrap().unwrap();
 
+        let tx = db.tx().await.unwrap();
         let l1_message_result =
-            db.get_l1_message_by_index(message.queue_index).await.unwrap().unwrap();
+            tx.get_l1_message_by_index(message.queue_index).await.unwrap().unwrap();
 
         assert_eq!(
             b256!("b2331b9010aac89f012d648fccc1f0a9aa5ef7b7b2afe21be297dd1a00000000"),
@@ -1447,7 +1482,8 @@ mod test {
         // orchestrator
         let batch_0 =
             BatchCommitData { index: 0, block_number: 0, ..Arbitrary::arbitrary(&mut u).unwrap() };
-        db.insert_batch(batch_0).await.unwrap();
+        let tx = db.tx_mut().await.unwrap();
+        tx.insert_batch(batch_0).await.unwrap();
 
         // Insert l1 message into the database to satisfy the consistency checks in the chain
         // orchestrator
@@ -1457,7 +1493,8 @@ mod test {
             l2_block_number: None,
             transaction: TxL1Message { queue_index: 0, ..Arbitrary::arbitrary(&mut u).unwrap() },
         };
-        db.insert_l1_message(l1_message).await.unwrap();
+        tx.insert_l1_message(l1_message).await.unwrap();
+        tx.commit().await.unwrap();
 
         // Generate a 3 random batch inputs and set their block numbers
         let mut batch_commit_block_1 = BatchCommitData::arbitrary(&mut u).unwrap();
@@ -1527,16 +1564,18 @@ mod test {
             chain_orchestrator.next().await.unwrap().unwrap();
         }
 
+        let tx = db.tx().await.unwrap();
+
         // Check that the batch input at block 30 is deleted
         let batch_commits =
-            db.get_batches().await.unwrap().map(|res| res.unwrap()).collect::<Vec<_>>().await;
+            tx.get_batches().await.unwrap().map(|res| res.unwrap()).collect::<Vec<_>>().await;
 
         assert_eq!(3, batch_commits.len());
         assert!(batch_commits.contains(&batch_commit_block_1));
         assert!(batch_commits.contains(&batch_commit_block_2));
 
         // check that the L1 message at block 30 is deleted
-        let l1_messages = db
+        let l1_messages = tx
             .get_l1_messages(None)
             .await
             .unwrap()
