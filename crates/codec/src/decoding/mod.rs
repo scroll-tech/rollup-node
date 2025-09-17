@@ -33,7 +33,7 @@ pub mod v4;
 pub mod v7;
 
 /// Decoded payload.
-pub(crate) mod payload;
+pub mod payload;
 
 /// Tests utils.
 #[cfg(any(test, feature = "test-utils"))]

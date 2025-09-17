@@ -486,10 +486,10 @@ pub trait DatabaseReadOperations: ReadConnectionProvider + Sync {
 
     /// Get an iterator over all [`L1MessageEnvelope`]s in the database starting from the provided
     /// `start` point.
-    async fn get_l1_messages(
-        &self,
+    async fn get_l1_messages<'a>(
+        &'a self,
         start: Option<L1MessageStart>,
-    ) -> Result<impl Stream<Item = Result<L1MessageEnvelope, DatabaseError>>, DatabaseError>
+    ) -> Result<impl Stream<Item = Result<L1MessageEnvelope, DatabaseError>> + 'a, DatabaseError>
     {
         let queue_index = match start {
             Some(L1MessageStart::Index(i)) => i,

@@ -22,14 +22,14 @@ use core::{
     pin::Pin,
     task::{Context, Poll, Waker},
 };
-use futures::{FutureExt, Stream, StreamExt};
+use futures::{FutureExt, Stream};
 use rollup_node_primitives::{
     BatchCommitData, BatchInfo, L1MessageEnvelope, ScrollPayloadAttributesWithBatchInfo,
     WithBlockNumber, WithFinalizedBatchInfo, WithFinalizedBlockNumber,
 };
 use rollup_node_providers::{BlockDataProvider, L1Provider};
 use scroll_alloy_rpc_types_engine::{BlockDataHint, ScrollPayloadAttributes};
-use scroll_codec::Codec;
+use scroll_codec::{decoding::payload::PayloadData, Codec};
 use scroll_db::{Database, DatabaseReadOperations, DatabaseTransactionProvider};
 use tokio::time::Interval;
 
@@ -267,32 +267,10 @@ pub async fn derive<L1P: L1Provider + Sync + Send, L2P: BlockDataProvider + Sync
     let decoded = Codec::decode(&data)?;
 
     // set the cursor for the l1 provider.
-    let data = &decoded.data;
-    let mut l1_messages_stream: Pin<Box<dyn Stream<Item = Result<L1MessageEnvelope, _>> + Send>> =
-        if let Some(index) = data.queue_index_start() {
-            Box::pin(l1_provider.iter_messages_from_index(index).await.map_err(Into::into)?)
-        } else if let Some(hash) = data.prev_l1_message_queue_hash() {
-            // If the message queue hash is zero then we should use the V2 L1 message queue start
-            // index. We must apply this branch logic because we do not have a L1
-            // message associated with a queue hash of ZERO (we only compute a queue
-            // hash for the first L1 message of the V2 contract).
-            if hash == &B256::ZERO {
-                Box::pin(
-                    l1_provider
-                        .iter_messages_from_index(l1_v2_message_queue_start_index)
-                        .await
-                        .map_err(Into::into)?,
-                )
-            } else {
-                let stream =
-                    l1_provider.iter_messages_from_queue_hash(*hash).await.map_err(Into::into)?;
-                // we skip the first l1 message, as we are interested in the one starting after
-                // prev_l1_message_queue_hash.
-                Box::pin(stream.skip(1))
-            }
-        } else {
-            return Err(DerivationPipelineError::MissingL1MessageQueueCursor)
-        };
+    let payload_data = &decoded.data;
+    let mut l1_messages_iter =
+        iter_l1_messages_from_payload(&l1_provider, payload_data, l1_v2_message_queue_start_index)
+            .await?;
 
     let skipped_l1_messages = decoded.data.skipped_l1_message_bitmap.clone().unwrap_or_default();
     let mut skipped_l1_messages = skipped_l1_messages.into_iter();
@@ -304,15 +282,13 @@ pub async fn derive<L1P: L1Provider + Sync + Send, L2P: BlockDataProvider + Sync
         for _ in 0..block.context.num_l1_messages {
             // check if the next l1 message should be skipped.
             if matches!(skipped_l1_messages.next(), Some(bit) if bit) {
-                let _ = l1_messages_stream.next().await;
+                let _ = l1_messages_iter.next();
                 continue;
             }
 
-            let l1_message = l1_messages_stream
+            let l1_message = l1_messages_iter
                 .next()
-                .await
-                .ok_or(DerivationPipelineError::MissingL1Message(block.clone()))?
-                .map_err(Into::into)?;
+                .ok_or(DerivationPipelineError::MissingL1Message(block.clone()))?;
             let mut bytes = Vec::with_capacity(l1_message.transaction.eip2718_encoded_length());
             l1_message.transaction.eip2718_encode(&mut bytes);
             txs.push(bytes.into());
@@ -352,6 +328,48 @@ fn delayed_interval(interval: u64) -> Interval {
     let mut interval = tokio::time::interval(tokio::time::Duration::from_millis(interval));
     interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
     interval
+}
+
+/// Returns an iterator over L1 messages from the `PayloadData`.
+async fn iter_l1_messages_from_payload<L1P: L1Provider>(
+    provider: &L1P,
+    data: &PayloadData,
+    l1_v2_message_queue_start_index: u64,
+) -> Result<Box<dyn Iterator<Item = L1MessageEnvelope> + Send>, DerivationPipelineError> {
+    let total_l1_messages = data.blocks.iter().map(|b| b.context.num_l1_messages as u64).sum();
+
+    if let Some(index) = data.queue_index_start() {
+        Ok(Box::new(
+            provider
+                .take_n_messages_from_index(index, total_l1_messages)
+                .await
+                .map_err(Into::into)?
+                .into_iter(),
+        ))
+    } else if let Some(hash) = data.prev_l1_message_queue_hash() {
+        // If the message queue hash is zero then we should use the V2 L1 message queue start
+        // index. We must apply this branch logic because we do not have a L1
+        // message associated with a queue hash of ZERO (we only compute a queue
+        // hash for the first L1 message of the V2 contract).
+        let iter = if hash == &B256::ZERO {
+            provider
+                .take_n_messages_from_index(l1_v2_message_queue_start_index, total_l1_messages)
+                .await
+                .map_err(Into::into)?
+        } else {
+            let mut messages = provider
+                .take_n_messages_from_hash(*hash, total_l1_messages)
+                .await
+                .map_err(Into::into)?;
+            // we skip the first l1 message, as we are interested in the one starting after
+            // prev_l1_message_queue_hash.
+            messages.pop();
+            messages
+        };
+        Ok(Box::new(iter.into_iter()))
+    } else {
+        Err(DerivationPipelineError::MissingL1MessageQueueCursor)
+    }
 }
 
 #[cfg(test)]

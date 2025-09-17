@@ -1,9 +1,10 @@
 use crate::L1ProviderError;
 
 use alloy_primitives::B256;
-use futures::Stream;
 use rollup_node_primitives::L1MessageEnvelope;
-use scroll_db::{DatabaseError, DatabaseOperations, L1MessageStart};
+use scroll_db::{
+    DatabaseError, DatabaseReadOperations, DatabaseTransactionProvider, L1MessageStart,
+};
 
 /// An instance of the trait can provide L1 messages iterators.
 #[async_trait::async_trait]
@@ -11,32 +12,43 @@ pub trait L1MessageProvider: Send + Sync {
     /// The error type for the provider.
     type Error: Into<L1ProviderError> + Send;
 
-    /// Returns the next `n` L1 messages starting from the given index.
-    /// Required in the sequencer because of <https://github.com/rust-lang/rust/issues/100013>,
-    /// which seems to disallow using `iter_messages_from_index` and collecting `n` items from it.
+    /// Returns the next `n` L1 messages starting from the given index. The `Stream` solution using
+    /// `get_l1_messages` would be more elegant, but captures the lifetime of `self`, which prevents
+    /// us from implementing `L1MessageProvider` for `T: DatabaseTransactionProvider` (because we
+    /// end up returning a `Stream` referencing a local variable). Another solution would be to
+    /// implement `ReadConnectionProvider` for `Arc<Database>` but goes against the current pattern
+    /// of using `Tx` or `TxMut` to access the database.
+    ///
+    /// Because we know the exact amount of messages we want to fetch in the sequencer or derivation
+    /// pipeline, we prefer a solution which allows us to use `T: DatabaseTransactionProvider` and
+    /// avoid capturing the lifetime of `self`.
     async fn take_n_messages_from_index(
         &self,
         start_index: u64,
         n: u64,
     ) -> Result<Vec<L1MessageEnvelope>, Self::Error>;
 
-    /// Returns a stream of L1 messages starting from the given index.
-    async fn iter_messages_from_index(
-        &self,
-        start_index: u64,
-    ) -> Result<impl Stream<Item = Result<L1MessageEnvelope, Self::Error>> + Send, Self::Error>;
-
-    /// Returns a stream of L1 messages starting from the given queue hash.
-    async fn iter_messages_from_queue_hash(
+    /// Returns the next `n` L1 messages starting from the given queue hash. The `Stream` solution
+    /// using `get_l1_messages` would be more elegant, but captures the lifetime of `self`,
+    /// which prevents us from implementing `L1MessageProvider` for `T: DatabaseTransactionProvider`
+    /// (because we end up returning a `Stream` referencing a local variable). Another solution
+    /// would be to implement `ReadConnectionProvider` for `Arc<Database>` but goes against the
+    /// current pattern of using `Tx` or `TxMut` to access the database.
+    ///
+    /// Because we know the exact amount of messages we want to fetch in the sequencer or derivation
+    /// pipeline, we prefer a solution which allows us to use `T: DatabaseTransactionProvider`
+    /// and avoid capturing the lifetime of `self`.
+    async fn take_n_messages_from_hash(
         &self,
         queue_hash: B256,
-    ) -> Result<impl Stream<Item = Result<L1MessageEnvelope, Self::Error>> + Send, Self::Error>;
+        n: u64,
+    ) -> Result<Vec<L1MessageEnvelope>, Self::Error>;
 }
 
 #[async_trait::async_trait]
 impl<T> L1MessageProvider for T
 where
-    T: DatabaseOperations + Send + Sync,
+    T: DatabaseTransactionProvider + Send + Sync,
 {
     type Error = DatabaseError;
 
@@ -45,22 +57,16 @@ where
         start_index: u64,
         n: u64,
     ) -> Result<Vec<L1MessageEnvelope>, Self::Error> {
-        self.get_n_l1_messages(Some(L1MessageStart::Index(start_index)), n).await
+        let tx = self.tx().await?;
+        tx.get_n_l1_messages(Some(L1MessageStart::Index(start_index)), n).await
     }
 
-    async fn iter_messages_from_index(
-        &self,
-        start_index: u64,
-    ) -> Result<impl Stream<Item = Result<L1MessageEnvelope, Self::Error>> + Send, Self::Error>
-    {
-        self.get_l1_messages(Some(L1MessageStart::Index(start_index))).await
-    }
-
-    async fn iter_messages_from_queue_hash(
+    async fn take_n_messages_from_hash(
         &self,
         queue_hash: B256,
-    ) -> Result<impl Stream<Item = Result<L1MessageEnvelope, Self::Error>> + Send, Self::Error>
-    {
-        self.get_l1_messages(Some(L1MessageStart::Hash(queue_hash))).await
+        n: u64,
+    ) -> Result<Vec<L1MessageEnvelope>, Self::Error> {
+        let tx = self.tx().await?;
+        tx.get_n_l1_messages(Some(L1MessageStart::Hash(queue_hash)), n).await
     }
 }

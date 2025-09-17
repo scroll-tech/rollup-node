@@ -5,7 +5,6 @@ use std::{collections::HashMap, sync::Arc};
 
 use alloy_eips::eip4844::Blob;
 use alloy_primitives::B256;
-use futures::Stream;
 use rollup_node_primitives::L1MessageEnvelope;
 
 /// Implementation of the [`crate::L1Provider`] that never returns blobs.
@@ -40,19 +39,11 @@ impl<P: L1MessageProvider + Send + Sync> L1MessageProvider for MockL1Provider<P>
         self.l1_messages_provider.take_n_messages_from_index(start_index, n).await
     }
 
-    async fn iter_messages_from_index(
-        &self,
-        start_index: u64,
-    ) -> Result<impl Stream<Item = Result<L1MessageEnvelope, Self::Error>> + Send, Self::Error>
-    {
-        self.l1_messages_provider.iter_messages_from_index(start_index).await
-    }
-
-    async fn iter_messages_from_queue_hash(
+    async fn take_n_messages_from_hash(
         &self,
         queue_hash: B256,
-    ) -> Result<impl Stream<Item = Result<L1MessageEnvelope, Self::Error>> + Send, Self::Error>
-    {
-        self.l1_messages_provider.iter_messages_from_queue_hash(queue_hash).await
+        n: u64,
+    ) -> Result<Vec<L1MessageEnvelope>, Self::Error> {
+        self.l1_messages_provider.take_n_messages_from_hash(queue_hash, n).await
     }
 }
