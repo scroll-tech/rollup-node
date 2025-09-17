@@ -489,7 +489,7 @@ pub trait DatabaseReadOperations: ReadConnectionProvider + Sync {
     async fn get_l1_messages(
         &self,
         start: Option<L1MessageStart>,
-    ) -> Result<impl Stream<Item = Result<L1MessageEnvelope, DatabaseError>> + Send, DatabaseError>
+    ) -> Result<impl Stream<Item = Result<L1MessageEnvelope, DatabaseError>>, DatabaseError>
     {
         let queue_index = match start {
             Some(L1MessageStart::Index(i)) => i,
