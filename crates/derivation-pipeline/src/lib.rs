@@ -330,7 +330,15 @@ fn delayed_interval(interval: u64) -> Interval {
     interval
 }
 
-/// Returns an iterator over L1 messages from the `PayloadData`.
+/// Returns an iterator over L1 messages from the `PayloadData`. If the `PayloadData` returns a
+/// `prev_l1_message_queue_hash` of zero, uses the `l1_v2_message_queue_start_index` to fetch
+/// messages from the L1 provider.
+///
+/// # Errors
+///
+/// Propagates any error from the L1 provider.
+/// Returns an error if the retrieved number of L1 messages does not match the expected number from
+/// the payload data.
 async fn iter_l1_messages_from_payload<L1P: L1Provider>(
     provider: &L1P,
     data: &PayloadData,
@@ -338,38 +346,41 @@ async fn iter_l1_messages_from_payload<L1P: L1Provider>(
 ) -> Result<Box<dyn Iterator<Item = L1MessageEnvelope> + Send>, DerivationPipelineError> {
     let total_l1_messages = data.blocks.iter().map(|b| b.context.num_l1_messages as u64).sum();
 
-    if let Some(index) = data.queue_index_start() {
-        Ok(Box::new(
-            provider
-                .take_n_messages_from_index(index, total_l1_messages)
-                .await
-                .map_err(Into::into)?
-                .into_iter(),
-        ))
+    let messages = if let Some(index) = data.queue_index_start() {
+        provider.take_n_messages_from_index(index, total_l1_messages).await.map_err(Into::into)?
     } else if let Some(hash) = data.prev_l1_message_queue_hash() {
         // If the message queue hash is zero then we should use the V2 L1 message queue start
         // index. We must apply this branch logic because we do not have a L1
         // message associated with a queue hash of ZERO (we only compute a queue
         // hash for the first L1 message of the V2 contract).
-        let iter = if hash == &B256::ZERO {
+        if hash == &B256::ZERO {
             provider
                 .take_n_messages_from_index(l1_v2_message_queue_start_index, total_l1_messages)
                 .await
                 .map_err(Into::into)?
         } else {
             let mut messages = provider
-                .take_n_messages_from_hash(*hash, total_l1_messages)
+                .take_n_messages_from_hash(*hash, total_l1_messages + 1)
                 .await
                 .map_err(Into::into)?;
             // we skip the first l1 message, as we are interested in the one starting after
             // prev_l1_message_queue_hash.
             messages.pop();
             messages
-        };
-        Ok(Box::new(iter.into_iter()))
+        }
     } else {
-        Err(DerivationPipelineError::MissingL1MessageQueueCursor)
+        return Err(DerivationPipelineError::MissingL1MessageQueueCursor)
+    };
+
+    // Check we received the expected amount of L1 messages.
+    if messages.len() as u64 != total_l1_messages {
+        return Err(DerivationPipelineError::InvalidL1MessagesCount {
+            expected: total_l1_messages,
+            got: messages.len() as u64,
+        })
     }
+
+    Ok(Box::new(messages.into_iter()))
 }
 
 #[cfg(test)]

@@ -193,7 +193,11 @@ where
     pub fn handle_new_payload(&mut self, block: &ScrollBlock) {
         let queue_index = block.body.transactions.iter().filter_map(|tx| tx.queue_index()).max();
         if let Some(queue_index) = queue_index {
-            self.l1_messages_queue_index = queue_index + 1;
+            // only update the queue index if it has advanced
+            if queue_index + 1 > self.l1_messages_queue_index {
+                tracing::trace!(target: "rollup_node::sequencer", "Advancing L1 messages queue index from {} to {}", self.l1_messages_queue_index, queue_index + 1);
+                self.l1_messages_queue_index = queue_index + 1;
+            }
         }
     }
 }

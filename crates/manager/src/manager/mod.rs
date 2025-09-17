@@ -454,6 +454,9 @@ where
         match event {
             EngineDriverEvent::BlockImportOutcome(outcome) => {
                 if let Some(block) = outcome.block() {
+                    if let Some(sequencer) = self.sequencer.as_mut() {
+                        sequencer.handle_new_payload(&block);
+                    }
                     if let Some(event_sender) = self.event_sender.as_ref() {
                         event_sender.notify(RollupManagerEvent::BlockImported(block.clone()));
                     }
