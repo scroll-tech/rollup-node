@@ -1,7 +1,7 @@
 use crate::L1ProviderError;
 
 use scroll_alloy_rpc_types_engine::BlockDataHint;
-use scroll_db::{DatabaseConnectionProvider, DatabaseError, DatabaseOperations};
+use scroll_db::{DatabaseError, DatabaseReadOperations, ReadConnectionProvider};
 
 /// Trait implementers can return block data.
 #[async_trait::async_trait]
@@ -16,7 +16,7 @@ pub trait BlockDataProvider {
 #[async_trait::async_trait]
 impl<T> BlockDataProvider for T
 where
-    T: DatabaseConnectionProvider + Sync,
+    T: ReadConnectionProvider + Sync,
 {
     type Error = DatabaseError;
 

@@ -1,5 +1,4 @@
 /// The [`DatabaseConnectionProvider`] trait provides a way to get a connection to the database.
-/// This is implemented by the [`crate::Database`] and [`crate::DatabaseTransaction`] types.
 #[auto_impl::auto_impl(Arc)]
 pub trait DatabaseConnectionProvider {
     /// The type of the database connection.
@@ -9,3 +8,9 @@ pub trait DatabaseConnectionProvider {
     /// `StreamTrait` traits.
     fn get_connection(&self) -> &Self::Connection;
 }
+
+/// A trait for providing read-only access to the database.
+pub trait ReadConnectionProvider: DatabaseConnectionProvider {}
+
+/// A trait for providing read and write access to the database.
+pub trait WriteConnectionProvider: ReadConnectionProvider {}

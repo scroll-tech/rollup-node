@@ -38,7 +38,9 @@ use rollup_node_watcher::{L1Notification, L1Watcher};
 use scroll_alloy_hardforks::ScrollHardforks;
 use scroll_alloy_network::Scroll;
 use scroll_alloy_provider::{ScrollAuthApiEngineClient, ScrollEngineApi};
-use scroll_db::{Database, DatabaseConnectionProvider, DatabaseOperations};
+use scroll_db::{
+    Database, DatabaseConnectionProvider, DatabaseTransactionProvider, DatabaseWriteOperations,
+};
 use scroll_engine::{genesis_hash_from_chain_spec, EngineDriver, ForkchoiceState};
 use scroll_migration::traits::ScrollMigrator;
 use scroll_network::ScrollNetworkManager;
@@ -224,9 +226,11 @@ impl ScrollRollupNodeConfig {
 
             // insert the custom chain genesis hash into the database
             let genesis_hash = chain_spec.genesis_hash();
-            db.insert_genesis_block(genesis_hash)
+            let tx = db.tx_mut().await?;
+            tx.insert_genesis_block(genesis_hash)
                 .await
                 .expect("failed to insert genesis block (custom chain)");
+            tx.commit().await?;
 
             tracing::info!(target: "scroll::node::args", ?genesis_hash, "Overwriting genesis hash for custom chain");
         }
@@ -262,8 +266,10 @@ impl ScrollRollupNodeConfig {
         // On startup we replay the latest batch of blocks from the database as such we set the safe
         // block hash to the latest block hash associated with the previous consolidated
         // batch in the database.
+        let tx = db.tx_mut().await?;
         let (startup_safe_block, l1_start_block_number) =
-            db.prepare_on_startup(chain_spec.genesis_hash()).await?;
+            tx.prepare_on_startup(chain_spec.genesis_hash()).await?;
+        tx.commit().await?;
         if let Some(block_info) = startup_safe_block {
             fcs.update_safe_block_info(block_info);
         } else {

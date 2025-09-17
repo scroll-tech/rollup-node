@@ -1,4 +1,5 @@
 use super::*;
+use scroll_db::DatabaseTransactionProvider;
 use std::sync::{
     atomic::{AtomicU64, Ordering},
     Arc,
@@ -40,7 +41,7 @@ impl<DB: Clone> Clone for DatabaseL1MessageProvider<DB> {
 }
 
 #[async_trait::async_trait]
-impl<DB: DatabaseConnectionProvider + Send + Sync> L1MessageProvider
+impl<DB: DatabaseTransactionProvider + Send + Sync> L1MessageProvider
     for DatabaseL1MessageProvider<DB>
 {
     type Error = L1ProviderError;
@@ -49,14 +50,16 @@ impl<DB: DatabaseConnectionProvider + Send + Sync> L1MessageProvider
         &self,
     ) -> Result<Option<L1MessageEnvelope>, Self::Error> {
         if let Some(hash) = self.queue_hash.lock().await.take() {
-            let message = self.database_connection.get_l1_message_by_hash(hash).await?;
+            let tx = self.database_connection.tx().await?;
+            let message = tx.get_l1_message_by_hash(hash).await?;
             if let Some(message) = &message {
                 self.index.store(message.transaction.queue_index, Ordering::Relaxed);
             }
             Ok(message)
         } else {
             let index = self.index.load(Ordering::Relaxed);
-            Ok(self.database_connection.get_l1_message_by_index(index).await?)
+            let tx = self.database_connection.tx().await?;
+            Ok(tx.get_l1_message_by_index(index).await?)
         }
     }
 
