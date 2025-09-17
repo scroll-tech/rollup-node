@@ -118,6 +118,7 @@ impl DatabaseTransactionProvider for Arc<Database> {
     }
 }
 
+#[cfg(feature = "test-utils")]
 impl DatabaseConnectionProvider for Database {
     type Connection = DatabaseConnection;
 
