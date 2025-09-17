@@ -13,4 +13,5 @@ exec rollup-node node --chain /l2reth/l2reth-genesis-e2e.json --datadir=/l2reth 
   --builder.gaslimit=30000000 \
   --rpc.max-connections=5000 \
   --engine.sync-at-startup false \
-  --l1.url http://l1-node:8545
+  --l1.url http://l1-node:8545 \
+  --blob.mock

@@ -38,6 +38,7 @@ reqwest = { workspace = true, features = ["json"] }
 serde = { workspace = true, features = ["derive"] }
 thiserror.workspace = true
 tokio = { workspace = true, default-features = false }
+tracing.workspace = true
 
 [dev-dependencies]
 scroll-db = { workspace = true, features = ["test-utils"] }

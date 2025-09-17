@@ -11,19 +11,19 @@ use reth_scroll_node::test_utils::setup;
 use rollup_node::{
     constants::SCROLL_GAS_LIMIT,
     test_utils::{default_test_scroll_rollup_node_config, setup_engine},
-    BeaconProviderArgs, ChainOrchestratorArgs, ConsensusArgs, DatabaseArgs, EngineDriverArgs,
+    BlobProviderArgs, ChainOrchestratorArgs, ConsensusArgs, DatabaseArgs, EngineDriverArgs,
     GasPriceOracleArgs, L1ProviderArgs, NetworkArgs, ScrollRollupNodeConfig, SequencerArgs,
     SignerArgs,
 };
 use rollup_node_manager::RollupManagerEvent;
 use rollup_node_primitives::{sig_encode_hash, BlockInfo, L1MessageEnvelope};
-use rollup_node_providers::{BlobSource, DatabaseL1MessageProvider, ScrollRootProvider};
+use rollup_node_providers::{DatabaseL1MessageProvider, ScrollRootProvider};
 use rollup_node_sequencer::{L1MessageInclusionMode, Sequencer};
 use rollup_node_signer::SignerEvent;
 use scroll_alloy_consensus::TxL1Message;
 use scroll_alloy_provider::ScrollAuthApiEngineClient;
 use scroll_alloy_rpc_types_engine::{BlockDataHint, ScrollPayloadAttributes};
-use scroll_db::{test_utils::setup_test_db, DatabaseOperations};
+use scroll_db::{test_utils::setup_test_db, DatabaseTransactionProvider, DatabaseWriteOperations};
 use scroll_engine::{EngineDriver, EngineDriverEvent, ForkchoiceState};
 use std::{
     io::Write,
@@ -190,7 +190,9 @@ async fn can_build_blocks() {
     };
     drop(wallet_lock);
     let l1_message_hash = l1_message.transaction.tx_hash();
-    database.insert_l1_message(l1_message).await.unwrap();
+    let tx = database.tx_mut().await.unwrap();
+    tx.insert_l1_message(l1_message).await.unwrap();
+    tx.commit().await.unwrap();
 
     // sleep 2 seconds (ethereum header timestamp has granularity of seconds and proceeding header
     // must have a greater timestamp than the last)
@@ -283,7 +285,9 @@ async fn can_build_blocks_with_delayed_l1_messages() {
     };
     drop(wallet_lock);
     let l1_message_hash = l1_message.transaction.tx_hash();
-    database.insert_l1_message(l1_message).await.unwrap();
+    let tx = database.tx_mut().await.unwrap();
+    tx.insert_l1_message(l1_message).await.unwrap();
+    tx.commit().await.unwrap();
 
     // add a transaction to the pool
     let mut wallet_lock = wallet.lock().await;
@@ -431,8 +435,10 @@ async fn can_build_blocks_with_finalized_l1_messages() {
     let finalized_message_hash = finalized_l1_message.transaction.tx_hash();
     let unfinalized_message_hash = unfinalized_l1_message.transaction.tx_hash();
 
-    database.insert_l1_message(finalized_l1_message).await.unwrap();
-    database.insert_l1_message(unfinalized_l1_message).await.unwrap();
+    let tx = database.tx_mut().await.unwrap();
+    tx.insert_l1_message(finalized_l1_message).await.unwrap();
+    tx.insert_l1_message(unfinalized_l1_message).await.unwrap();
+    tx.commit().await.unwrap();
 
     // build payload, should only include finalized message
     sequencer.build_payload_attributes();
@@ -509,10 +515,7 @@ async fn can_sequence_blocks_with_private_key_file() -> eyre::Result<()> {
             allow_empty_blocks: true,
             ..SequencerArgs::default()
         },
-        beacon_provider_args: BeaconProviderArgs {
-            blob_source: BlobSource::Mock,
-            ..Default::default()
-        },
+        blob_provider_args: BlobProviderArgs { mock: true, ..Default::default() },
         signer_args: SignerArgs {
             key_file: Some(temp_file.path().to_path_buf()),
             aws_kms_key_id: None,
@@ -603,10 +606,7 @@ async fn can_sequence_blocks_with_hex_key_file_without_prefix() -> eyre::Result<
             allow_empty_blocks: true,
             ..SequencerArgs::default()
         },
-        beacon_provider_args: BeaconProviderArgs {
-            blob_source: BlobSource::Mock,
-            ..Default::default()
-        },
+        blob_provider_args: BlobProviderArgs { mock: true, ..Default::default() },
         signer_args: SignerArgs {
             key_file: Some(temp_file.path().to_path_buf()),
             aws_kms_key_id: None,
@@ -923,9 +923,11 @@ async fn should_limit_l1_message_cumulative_gas() {
             },
         },
     ];
-    for tx in l1_messages {
-        database.insert_l1_message(tx).await.unwrap();
+    let tx = database.tx_mut().await.unwrap();
+    for l1_message in l1_messages {
+        tx.insert_l1_message(l1_message).await.unwrap();
     }
+    tx.commit().await.unwrap();
 
     // build payload, should only include first l1 message
     sequencer.build_payload_attributes();

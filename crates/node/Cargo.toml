@@ -23,8 +23,8 @@ alloy-primitives.workspace = true
 alloy-provider.workspace = true
 alloy-rpc-client.workspace = true
 alloy-signer-local.workspace = true
-alloy-signer-aws = "1.0.9"
-alloy-signer = "1.0.9"
+alloy-signer-aws = "1.0.30"
+alloy-signer = "1.0.30"
 alloy-transport.workspace = true
 
 scroll-alloy-consensus.workspace = true
@@ -93,7 +93,7 @@ auto_impl.workspace = true
 clap = { workspace = true, features = ["derive", "env"] }
 eyre.workspace = true
 futures.workspace = true
-jsonrpsee = { version = "0.25.1", features = ["server", "client", "macros"] }
+jsonrpsee = { version = "0.26.0", features = ["server", "client", "macros"] }
 reqwest.workspace = true
 tokio.workspace = true
 tracing.workspace = true

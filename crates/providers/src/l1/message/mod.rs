@@ -3,7 +3,7 @@ use crate::L1ProviderError;
 use alloy_primitives::B256;
 use rollup_node_primitives::L1MessageEnvelope;
 use scroll_alloy_consensus::TxL1Message;
-use scroll_db::{DatabaseConnectionProvider, DatabaseOperations};
+use scroll_db::DatabaseReadOperations;
 
 mod database;
 pub use database::DatabaseL1MessageProvider;
