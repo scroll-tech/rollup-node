@@ -80,8 +80,8 @@ impl DockerComposeEnv {
                 project_name,
                 "up",
                 "-d",
-                "--force-recreate",
-                "--build",
+                // "--force-recreate",
+                // "--build",
             ])
             .stdout(std::process::Stdio::piped())
             .stderr(std::process::Stdio::piped())
@@ -258,6 +258,11 @@ impl DockerComposeEnv {
         Ok(())
     }
 
+    /// Construct the full container name using Docker Compose naming pattern
+    fn get_full_container_name(&self, service_name: &str) -> String {
+        format!("{}-{}-1", self.project_name, service_name)
+    }
+
     /// Get the IP address of a container within the project network
     fn get_container_ip(&self, container_name: &str) -> Result<String> {
         let output = Command::new("docker")
@@ -288,13 +293,13 @@ impl DockerComposeEnv {
 
     /// Get the rollup node sequencer enode URL with resolved IP address
     pub fn rn_sequencer_enode(&self) -> Result<String> {
-        let ip = self.get_container_ip("rollup-node-sequencer")?;
+        let ip = self.get_container_ip(&self.get_full_container_name("rollup-node-sequencer"))?;
         Ok(RN_SEQUENCER_ENODE.replace("{IP}", &ip))
     }
 
     /// Get the l2geth sequencer enode URL with resolved IP address
     pub fn l2geth_sequencer_enode(&self) -> Result<String> {
-        let ip = self.get_container_ip("l2geth-sequencer")?;
+        let ip = self.get_container_ip(&self.get_full_container_name("l2geth-sequencer"))?;
         Ok(L2GETH_SEQEUNCER_ENODE.replace("{IP}", &ip))
     }
 
