@@ -3,8 +3,8 @@
 use crate::{ConsensusArgs, RollupNodeGasPriceOracleArgs};
 
 use super::{
-    BlobProviderArgs, ChainOrchestratorArgs, RollupNodeDatabaseArgs, EngineDriverArgs, L1ProviderArgs,
-    RpcArgs, ScrollRollupNode, ScrollRollupNodeConfig, SequencerArgs,
+    BlobProviderArgs, ChainOrchestratorArgs, EngineDriverArgs, L1ProviderArgs,
+    RollupNodeDatabaseArgs, RpcArgs, ScrollRollupNode, ScrollRollupNodeConfig, SequencerArgs,
 };
 use alloy_primitives::Bytes;
 use reth_chainspec::EthChainSpec;
@@ -175,7 +175,9 @@ pub fn default_sequencer_test_scroll_rollup_node_config() -> ScrollRollupNodeCon
     ScrollRollupNodeConfig {
         test: true,
         network_args: crate::args::RollupNodeNetworkArgs::default(),
-        database_args: RollupNodeDatabaseArgs { rn_db_path: Some(PathBuf::from("sqlite::memory:")) },
+        database_args: RollupNodeDatabaseArgs {
+            rn_db_path: Some(PathBuf::from("sqlite::memory:")),
+        },
         l1_provider_args: L1ProviderArgs::default(),
         engine_driver_args: EngineDriverArgs { sync_at_startup: true },
         chain_orchestrator_args: ChainOrchestratorArgs {

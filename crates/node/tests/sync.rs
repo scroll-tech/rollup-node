@@ -14,9 +14,9 @@ use rollup_node::{
         default_sequencer_test_scroll_rollup_node_config, default_test_scroll_rollup_node_config,
         setup_engine,
     },
-    BlobProviderArgs, ChainOrchestratorArgs, ConsensusArgs, RollupNodeDatabaseArgs, EngineDriverArgs,
-    RollupNodeGasPriceOracleArgs, L1ProviderArgs, RollupNodeNetworkArgs, RpcArgs, ScrollRollupNodeConfig,
-    SequencerArgs,
+    BlobProviderArgs, ChainOrchestratorArgs, ConsensusArgs, EngineDriverArgs, L1ProviderArgs,
+    RollupNodeDatabaseArgs, RollupNodeGasPriceOracleArgs, RollupNodeNetworkArgs, RpcArgs,
+    ScrollRollupNodeConfig, SequencerArgs,
 };
 use rollup_node_chain_orchestrator::ChainOrchestratorEvent;
 use rollup_node_manager::RollupManagerEvent;
@@ -444,7 +444,9 @@ async fn test_consolidation() -> eyre::Result<()> {
             sequencer_url: None,
             signer_address: None,
         },
-        database_args: RollupNodeDatabaseArgs { rn_db_path: Some(PathBuf::from("sqlite::memory:")) },
+        database_args: RollupNodeDatabaseArgs {
+            rn_db_path: Some(PathBuf::from("sqlite::memory:")),
+        },
         l1_provider_args: L1ProviderArgs::default(),
         engine_driver_args: EngineDriverArgs::default(),
         chain_orchestrator_args: ChainOrchestratorArgs::default(),
@@ -617,7 +619,9 @@ async fn test_chain_orchestrator_shallow_reorg_with_gap() -> eyre::Result<()> {
             enable_scroll_wire: true,
             ..Default::default()
         },
-        database_args: RollupNodeDatabaseArgs { rn_db_path: Some(PathBuf::from("sqlite::memory:")) },
+        database_args: RollupNodeDatabaseArgs {
+            rn_db_path: Some(PathBuf::from("sqlite::memory:")),
+        },
         l1_provider_args: L1ProviderArgs::default(),
         engine_driver_args: EngineDriverArgs::default(),
         chain_orchestrator_args: ChainOrchestratorArgs::default(),

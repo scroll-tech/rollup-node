@@ -674,7 +674,7 @@ pub struct SignerArgs {
 #[derive(Debug, Default, Clone, clap::Args)]
 pub struct RpcArgs {
     /// A boolean to represent if the rollup node rpc should be enabled.
-    #[arg(long = "rpc.rollup-node", help = "Enable the rollup node namespace RPC")]
+    #[arg(long = "rpc.rollup-node", help = "Enable the rollup node RPC namespace")]
     pub enabled: bool,
 }
 
