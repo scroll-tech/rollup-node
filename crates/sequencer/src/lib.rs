@@ -197,6 +197,8 @@ where
             if queue_index + 1 > self.l1_messages_queue_index {
                 tracing::trace!(target: "rollup_node::sequencer", "Advancing L1 messages queue index from {} to {}", self.l1_messages_queue_index, queue_index + 1);
                 self.l1_messages_queue_index = queue_index + 1;
+            } else {
+                tracing::warn!(target: "rollup_node::sequencer", "Skipping L1 messages queue index update, current index is {}, new payload has max index {}", self.l1_messages_queue_index, queue_index);
             }
         }
     }
@@ -248,7 +250,7 @@ async fn build_payload_attributes<P: L1MessageProvider + Unpin + Send + Sync + '
 
     // Collect L1 messages to include in payload.
     let db_l1_messages = provider
-        .take_n_messages_from_index(l1_messages_queue_index, max_l1_messages)
+        .get_n_messages(l1_messages_queue_index.into(), max_l1_messages)
         .await
         .map_err(Into::<L1ProviderError>::into)?;
 
