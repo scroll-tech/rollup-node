@@ -1,10 +1,10 @@
 //! This crate contains utilities for running end-to-end tests for the scroll reth node.
 
-use crate::{ConsensusArgs, GasPriceOracleArgs};
+use crate::{ConsensusArgs, RollupNodeGasPriceOracleArgs};
 
 use super::{
-    BlobProviderArgs, ChainOrchestratorArgs, DatabaseArgs, EngineDriverArgs, L1ProviderArgs,
-    ScrollRollupNode, ScrollRollupNodeConfig, SequencerArgs,
+    BlobProviderArgs, ChainOrchestratorArgs, RollupNodeDatabaseArgs, EngineDriverArgs, L1ProviderArgs,
+    RpcArgs, ScrollRollupNode, ScrollRollupNodeConfig, SequencerArgs,
 };
 use alloy_primitives::Bytes;
 use reth_chainspec::EthChainSpec;
@@ -141,8 +141,8 @@ pub async fn generate_tx(wallet: Arc<Mutex<Wallet>>) -> Bytes {
 pub fn default_test_scroll_rollup_node_config() -> ScrollRollupNodeConfig {
     ScrollRollupNodeConfig {
         test: true,
-        network_args: crate::args::NetworkArgs::default(),
-        database_args: DatabaseArgs::default(),
+        network_args: crate::args::RollupNodeNetworkArgs::default(),
+        database_args: RollupNodeDatabaseArgs::default(),
         l1_provider_args: L1ProviderArgs::default(),
         engine_driver_args: EngineDriverArgs { sync_at_startup: true },
         chain_orchestrator_args: ChainOrchestratorArgs {
@@ -156,9 +156,10 @@ pub fn default_test_scroll_rollup_node_config() -> ScrollRollupNodeConfig {
         },
         blob_provider_args: BlobProviderArgs { mock: true, ..Default::default() },
         signer_args: Default::default(),
-        gas_price_oracle_args: GasPriceOracleArgs::default(),
+        gas_price_oracle_args: RollupNodeGasPriceOracleArgs::default(),
         consensus_args: ConsensusArgs::noop(),
         database: None,
+        rpc_args: RpcArgs { enabled: true },
     }
 }
 
@@ -173,8 +174,8 @@ pub fn default_test_scroll_rollup_node_config() -> ScrollRollupNodeConfig {
 pub fn default_sequencer_test_scroll_rollup_node_config() -> ScrollRollupNodeConfig {
     ScrollRollupNodeConfig {
         test: true,
-        network_args: crate::args::NetworkArgs::default(),
-        database_args: DatabaseArgs { path: Some(PathBuf::from("sqlite::memory:")) },
+        network_args: crate::args::RollupNodeNetworkArgs::default(),
+        database_args: RollupNodeDatabaseArgs { rn_db_path: Some(PathBuf::from("sqlite::memory:")) },
         l1_provider_args: L1ProviderArgs::default(),
         engine_driver_args: EngineDriverArgs { sync_at_startup: true },
         chain_orchestrator_args: ChainOrchestratorArgs {
@@ -192,8 +193,9 @@ pub fn default_sequencer_test_scroll_rollup_node_config() -> ScrollRollupNodeCon
         },
         blob_provider_args: BlobProviderArgs { mock: true, ..Default::default() },
         signer_args: Default::default(),
-        gas_price_oracle_args: GasPriceOracleArgs::default(),
+        gas_price_oracle_args: RollupNodeGasPriceOracleArgs::default(),
         consensus_args: ConsensusArgs::noop(),
         database: None,
+        rpc_args: RpcArgs { enabled: true },
     }
 }

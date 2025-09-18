@@ -14,8 +14,9 @@ use rollup_node::{
         default_sequencer_test_scroll_rollup_node_config, default_test_scroll_rollup_node_config,
         setup_engine,
     },
-    BlobProviderArgs, ChainOrchestratorArgs, ConsensusArgs, DatabaseArgs, EngineDriverArgs,
-    GasPriceOracleArgs, L1ProviderArgs, NetworkArgs, ScrollRollupNodeConfig, SequencerArgs,
+    BlobProviderArgs, ChainOrchestratorArgs, ConsensusArgs, RollupNodeDatabaseArgs, EngineDriverArgs,
+    RollupNodeGasPriceOracleArgs, L1ProviderArgs, RollupNodeNetworkArgs, RpcArgs, ScrollRollupNodeConfig,
+    SequencerArgs,
 };
 use rollup_node_chain_orchestrator::ChainOrchestratorEvent;
 use rollup_node_manager::RollupManagerEvent;
@@ -39,13 +40,13 @@ async fn test_should_consolidate_to_block_15k() -> eyre::Result<()> {
 
     let node_config = ScrollRollupNodeConfig {
         test: false,
-        network_args: NetworkArgs {
+        network_args: RollupNodeNetworkArgs {
             enable_eth_scroll_wire_bridge: false,
             enable_scroll_wire: false,
             sequencer_url: None,
             signer_address: None,
         },
-        database_args: DatabaseArgs::default(),
+        database_args: RollupNodeDatabaseArgs::default(),
         chain_orchestrator_args: ChainOrchestratorArgs {
             optimistic_sync_trigger: 100,
             ..Default::default()
@@ -70,9 +71,10 @@ async fn test_should_consolidate_to_block_15k() -> eyre::Result<()> {
             ..Default::default()
         },
         signer_args: Default::default(),
-        gas_price_oracle_args: GasPriceOracleArgs::default(),
+        gas_price_oracle_args: RollupNodeGasPriceOracleArgs::default(),
         consensus_args: ConsensusArgs::noop(),
         database: None,
+        rpc_args: RpcArgs::default(),
     };
 
     let chain_spec = (*SCROLL_SEPOLIA).clone();
@@ -187,13 +189,13 @@ async fn test_should_consolidate_after_optimistic_sync() -> eyre::Result<()> {
     let node_config = default_test_scroll_rollup_node_config();
     let sequencer_node_config = ScrollRollupNodeConfig {
         test: true,
-        network_args: NetworkArgs {
+        network_args: RollupNodeNetworkArgs {
             enable_eth_scroll_wire_bridge: true,
             enable_scroll_wire: true,
             sequencer_url: None,
             signer_address: None,
         },
-        database_args: DatabaseArgs::default(),
+        database_args: RollupNodeDatabaseArgs::default(),
         l1_provider_args: L1ProviderArgs::default(),
         engine_driver_args: EngineDriverArgs::default(),
         chain_orchestrator_args: ChainOrchestratorArgs::default(),
@@ -207,9 +209,10 @@ async fn test_should_consolidate_after_optimistic_sync() -> eyre::Result<()> {
         },
         blob_provider_args: BlobProviderArgs { mock: true, ..Default::default() },
         signer_args: Default::default(),
-        gas_price_oracle_args: GasPriceOracleArgs::default(),
+        gas_price_oracle_args: RollupNodeGasPriceOracleArgs::default(),
         consensus_args: ConsensusArgs::noop(),
         database: None,
+        rpc_args: RpcArgs::default(),
     };
 
     // Create the chain spec for scroll dev with Feynman activated and a test genesis.
@@ -435,13 +438,13 @@ async fn test_consolidation() -> eyre::Result<()> {
     let node_config = default_test_scroll_rollup_node_config();
     let sequencer_node_config = ScrollRollupNodeConfig {
         test: true,
-        network_args: NetworkArgs {
+        network_args: RollupNodeNetworkArgs {
             enable_eth_scroll_wire_bridge: true,
             enable_scroll_wire: true,
             sequencer_url: None,
             signer_address: None,
         },
-        database_args: DatabaseArgs { path: Some(PathBuf::from("sqlite::memory:")) },
+        database_args: RollupNodeDatabaseArgs { rn_db_path: Some(PathBuf::from("sqlite::memory:")) },
         l1_provider_args: L1ProviderArgs::default(),
         engine_driver_args: EngineDriverArgs::default(),
         chain_orchestrator_args: ChainOrchestratorArgs::default(),
@@ -455,9 +458,10 @@ async fn test_consolidation() -> eyre::Result<()> {
         },
         blob_provider_args: BlobProviderArgs { mock: true, ..Default::default() },
         signer_args: Default::default(),
-        gas_price_oracle_args: GasPriceOracleArgs::default(),
+        gas_price_oracle_args: RollupNodeGasPriceOracleArgs::default(),
         consensus_args: ConsensusArgs::noop(),
         database: None,
+        rpc_args: RpcArgs::default(),
     };
 
     // Create the chain spec for scroll dev with Feynman activated and a test genesis.
@@ -608,12 +612,12 @@ async fn test_chain_orchestrator_shallow_reorg_with_gap() -> eyre::Result<()> {
     let node_config = default_test_scroll_rollup_node_config();
     let sequencer_node_config = ScrollRollupNodeConfig {
         test: true,
-        network_args: NetworkArgs {
+        network_args: RollupNodeNetworkArgs {
             enable_eth_scroll_wire_bridge: false,
             enable_scroll_wire: true,
             ..Default::default()
         },
-        database_args: DatabaseArgs { path: Some(PathBuf::from("sqlite::memory:")) },
+        database_args: RollupNodeDatabaseArgs { rn_db_path: Some(PathBuf::from("sqlite::memory:")) },
         l1_provider_args: L1ProviderArgs::default(),
         engine_driver_args: EngineDriverArgs::default(),
         chain_orchestrator_args: ChainOrchestratorArgs::default(),
@@ -627,9 +631,10 @@ async fn test_chain_orchestrator_shallow_reorg_with_gap() -> eyre::Result<()> {
         },
         blob_provider_args: BlobProviderArgs { mock: true, ..Default::default() },
         signer_args: Default::default(),
-        gas_price_oracle_args: GasPriceOracleArgs::default(),
+        gas_price_oracle_args: RollupNodeGasPriceOracleArgs::default(),
         consensus_args: ConsensusArgs::noop(),
         database: None,
+        rpc_args: RpcArgs::default(),
     };
 
     // Create the chain spec for scroll dev with Feynman activated and a test genesis.
