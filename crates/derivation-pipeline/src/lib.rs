@@ -190,6 +190,11 @@ where
         self.metrics.batch_queue_size.set(self.batch_queue.len() as f64);
         self.metrics.payload_attributes_queue_size.set(self.attributes_queue.len() as f64);
     }
+
+    /// Returns the size of the batch queue.
+    pub fn batch_queue_size(&self) -> usize {
+        self.batch_queue.len()
+    }
 }
 
 impl<P> Stream for DerivationPipeline<P>
