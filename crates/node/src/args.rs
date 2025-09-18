@@ -342,7 +342,9 @@ impl ScrollRollupNodeConfig {
                 Arc::new(l1_messages_provider),
                 args.fee_recipient,
                 ctx.block_gas_limit,
-                chain_config.l1_config.num_l1_messages_per_block,
+                self.sequencer_args
+                    .max_l1_messages
+                    .unwrap_or(chain_config.l1_config.num_l1_messages_per_block),
                 0,
                 self.sequencer_args.l1_message_inclusion_mode,
             );
@@ -638,6 +640,13 @@ pub struct SequencerArgs {
         default_value_t = false
     )]
     pub allow_empty_blocks: bool,
+    /// The maximum number of L1 messages to include per L2 block.
+    #[arg(
+        long = "sequencer.max-l1-messages",
+        id = "sequencer_max_l1_messages",
+        value_name = "SEQUENCER_MAX_L1_MESSAGES"
+    )]
+    pub max_l1_messages: Option<u64>,
 }
 
 /// The arguments for the signer.
