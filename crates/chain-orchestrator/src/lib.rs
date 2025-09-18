@@ -48,35 +48,7 @@ pub use metrics::{ChainOrchestratorItem, ChainOrchestratorMetrics};
 const L1_MESSAGE_QUEUE_HASH_MASK: B256 =
     b256!("ffffffffffffffffffffffffffffffffffffffffffffffffffffffff00000000");
 
-/// Delay between retry attempts in milliseconds
-const RETRY_DELAY_MS: u64 = 500;
-
 type Chain = BoundedVec<Header>;
-
-/// Retry a future indefinitely for transient errors with constant delay
-async fn retry_with_backoff<F, Fut, T>(mut operation: F) -> Result<T, ChainOrchestratorError>
-where
-    F: FnMut() -> Fut,
-    Fut: std::future::Future<Output = Result<T, ChainOrchestratorError>>,
-{
-    let mut attempts = 0;
-    loop {
-        match operation().await {
-            Ok(result) => return Ok(result),
-            Err(e) if e.can_retry() => {
-                attempts += 1;
-                tracing::debug!(
-                    target: "scroll::chain_orchestrator",
-                    error = %e,
-                    attempt = attempts,
-                    "Retrying operation due to transient error"
-                );
-                tokio::time::sleep(tokio::time::Duration::from_millis(RETRY_DELAY_MS)).await;
-            }
-            Err(e) => return Err(e),
-        }
-    }
-}
 
 /// The [`ChainOrchestrator`] is responsible for orchestrating the progression of the L2 chain
 /// based on data consolidated from L1 and the data received over the p2p network.
@@ -640,20 +612,17 @@ impl<
         block_number: u64,
         l1_block_number: Arc<AtomicU64>,
     ) -> Result<Option<ChainOrchestratorEvent>, ChainOrchestratorError> {
-        retry_with_backoff(|| async {
-            // Set the latest finalized L1 block in the database.
-            database.set_latest_finalized_l1_block_number(block_number).await?;
+        // Set the latest finalized L1 block in the database.
+        database.set_latest_finalized_l1_block_number(block_number).await?;
 
-            // Get all unprocessed batches that have been finalized by this L1 block finalization.
-            let finalized_batches =
-                database.fetch_and_update_unprocessed_finalized_batches(block_number).await?;
+        // Get all unprocessed batches that have been finalized by this L1 block finalization.
+        let finalized_batches =
+            database.fetch_and_update_unprocessed_finalized_batches(block_number).await?;
 
-            // Update the chain orchestrator L1 block number.
-            l1_block_number.store(block_number, Ordering::Relaxed);
+        // Update the chain orchestrator L1 block number.
+        l1_block_number.store(block_number, Ordering::Relaxed);
 
-            Ok(Some(ChainOrchestratorEvent::L1BlockFinalized(block_number, finalized_batches)))
-        })
-        .await
+        Ok(Some(ChainOrchestratorEvent::L1BlockFinalized(block_number, finalized_batches)))
     }
 
     /// Handles an L1 message by inserting it into the database.
@@ -663,38 +632,26 @@ impl<
         l1_message: TxL1Message,
         l1_block_number: u64,
     ) -> Result<Option<ChainOrchestratorEvent>, ChainOrchestratorError> {
-        retry_with_backoff(|| {
-            let l1_message = l1_message.clone();
-            let database = database.clone();
-            async move {
-                let event = ChainOrchestratorEvent::L1MessageCommitted(l1_message.queue_index);
-                let queue_hash = compute_l1_message_queue_hash(
-                    &database,
-                    &l1_message,
-                    l1_v2_message_queue_start_index,
-                )
+        let event = ChainOrchestratorEvent::L1MessageCommitted(l1_message.queue_index);
+        let queue_hash =
+            compute_l1_message_queue_hash(&database, &l1_message, l1_v2_message_queue_start_index)
                 .await?;
-                let l1_message_envelope =
-                    L1MessageEnvelope::new(l1_message, l1_block_number, None, queue_hash);
+        let l1_message = L1MessageEnvelope::new(l1_message, l1_block_number, None, queue_hash);
 
-                // Perform a consistency check to ensure the previous L1 message exists in the
-                // database.
-                if l1_message_envelope.transaction.queue_index > 0 &&
-                    database
-                        .get_l1_message_by_index(l1_message_envelope.transaction.queue_index - 1)
-                        .await?
-                        .is_none()
-                {
-                    return Err(ChainOrchestratorError::L1MessageQueueGap(
-                        l1_message_envelope.transaction.queue_index,
-                    ))
-                }
+        // Perform a consistency check to ensure the previous L1 message exists in the database.
+        if l1_message.transaction.queue_index > 0 &&
+            database
+                .get_l1_message_by_index(l1_message.transaction.queue_index - 1)
+                .await?
+                .is_none()
+        {
+            return Err(ChainOrchestratorError::L1MessageQueueGap(
+                l1_message.transaction.queue_index,
+            ))
+        }
 
-                database.insert_l1_message(l1_message_envelope).await?;
-                Ok(Some(event))
-            }
-        })
-        .await
+        database.insert_l1_message(l1_message).await?;
+        Ok(Some(event))
     }
 
     /// Handles a batch input by inserting it into the database.
@@ -702,44 +659,36 @@ impl<
         database: Arc<Database>,
         batch: BatchCommitData,
     ) -> Result<Option<ChainOrchestratorEvent>, ChainOrchestratorError> {
-        retry_with_backoff(|| {
-            let database = database.clone();
-            let batch = batch.clone();
-            async move {
-                let txn = database.tx().await?;
-                let prev_batch_index = batch.index - 1;
+        let txn = database.tx().await?;
+        let prev_batch_index = batch.index - 1;
 
-                // Perform a consistency check to ensure the previous commit batch exists in the
-                // database.
-                if txn.get_batch_by_index(prev_batch_index).await?.is_none() {
-                    return Err(ChainOrchestratorError::BatchCommitGap(batch.index))
-                }
+        // Perform a consistency check to ensure the previous commit batch exists in the database.
+        if txn.get_batch_by_index(prev_batch_index).await?.is_none() {
+            return Err(ChainOrchestratorError::BatchCommitGap(batch.index))
+        }
 
-                // remove any batches with an index greater than the previous batch.
-                let affected = txn.delete_batches_gt_batch_index(prev_batch_index).await?;
+        // remove any batches with an index greater than the previous batch.
+        let affected = txn.delete_batches_gt_batch_index(prev_batch_index).await?;
 
-                // handle the case of a batch revert.
-                let new_safe_head = if affected > 0 {
-                    txn.delete_l2_blocks_gt_batch_index(prev_batch_index).await?;
-                    txn.get_highest_block_for_batch_index(prev_batch_index).await?
-                } else {
-                    None
-                };
+        // handle the case of a batch revert.
+        let new_safe_head = if affected > 0 {
+            txn.delete_l2_blocks_gt_batch_index(prev_batch_index).await?;
+            txn.get_highest_block_for_batch_index(prev_batch_index).await?
+        } else {
+            None
+        };
 
-                let event = ChainOrchestratorEvent::BatchCommitIndexed {
-                    batch_info: BatchInfo::new(batch.index, batch.hash),
-                    l1_block_number: batch.block_number,
-                    safe_head: new_safe_head,
-                };
+        let event = ChainOrchestratorEvent::BatchCommitIndexed {
+            batch_info: BatchInfo::new(batch.index, batch.hash),
+            l1_block_number: batch.block_number,
+            safe_head: new_safe_head,
+        };
 
-                // insert the batch and commit the transaction.
-                txn.insert_batch(batch).await?;
-                txn.commit().await?;
+        // insert the batch and commit the transaction.
+        txn.insert_batch(batch).await?;
+        txn.commit().await?;
 
-                Ok(Some(event))
-            }
-        })
-        .await
+        Ok(Some(event))
     }
 
     /// Handles a batch finalization event by updating the batch input in the database.
@@ -749,25 +698,19 @@ impl<
         block_number: u64,
         finalized_block_number: Arc<AtomicU64>,
     ) -> Result<Option<ChainOrchestratorEvent>, ChainOrchestratorError> {
-        retry_with_backoff(|| async {
-            // finalize all batches up to `batch_index`.
-            database.finalize_batches_up_to_index(batch_index, block_number).await?;
+        // finalize all batches up to `batch_index`.
+        database.finalize_batches_up_to_index(batch_index, block_number).await?;
 
-            // Get all unprocessed batches that have been finalized by this L1 block finalization.
-            let finalized_block_number_val = finalized_block_number.load(Ordering::Relaxed);
-            if finalized_block_number_val >= block_number {
-                let finalized_batches = database
-                    .fetch_and_update_unprocessed_finalized_batches(finalized_block_number_val)
-                    .await?;
-                return Ok(Some(ChainOrchestratorEvent::BatchFinalized(
-                    block_number,
-                    finalized_batches,
-                )))
-            }
+        // Get all unprocessed batches that have been finalized by this L1 block finalization.
+        let finalized_block_number = finalized_block_number.load(Ordering::Relaxed);
+        if finalized_block_number >= block_number {
+            let finalized_batches = database
+                .fetch_and_update_unprocessed_finalized_batches(finalized_block_number)
+                .await?;
+            return Ok(Some(ChainOrchestratorEvent::BatchFinalized(block_number, finalized_batches)))
+        }
 
-            Ok(None)
-        })
-        .await
+        Ok(None)
     }
 }
 
@@ -1226,48 +1169,6 @@ mod test {
             .unwrap(),
             db,
         )
-    }
-
-    #[tokio::test]
-    async fn test_retry_with_backoff() {
-        use std::sync::atomic::{AtomicU32, Ordering};
-
-        // Test successful operation on first try
-        let result = retry_with_backoff(|| async { Ok::<i32, ChainOrchestratorError>(42) }).await;
-        assert_eq!(result.unwrap(), 42);
-
-        // Test retry on transient errors with eventual success
-        let attempt_count = Arc::new(AtomicU32::new(0));
-        let attempt_count_clone = attempt_count.clone();
-
-        let result = retry_with_backoff(move || {
-            let count = attempt_count_clone.fetch_add(1, Ordering::SeqCst);
-            async move {
-                if count < 5 {
-                    // Fail with a retryable error the first 5 times
-                    Err(ChainOrchestratorError::DatabaseError(
-                        scroll_db::DatabaseError::ParseSignatureError(
-                            "test transient error".to_string(),
-                        ),
-                    ))
-                } else {
-                    // Succeed on the 6th attempt
-                    Ok::<i32, ChainOrchestratorError>(100)
-                }
-            }
-        })
-        .await;
-
-        assert_eq!(result.unwrap(), 100);
-        assert_eq!(attempt_count.load(Ordering::SeqCst), 6); // Should have tried 6 times
-
-        // Test non-retryable error (should fail immediately)
-        let result = retry_with_backoff(|| async {
-            Err::<i32, ChainOrchestratorError>(ChainOrchestratorError::ChainInconsistency)
-        })
-        .await;
-
-        assert!(matches!(result, Err(ChainOrchestratorError::ChainInconsistency)));
     }
 
     #[tokio::test]

@@ -52,10 +52,3 @@ pub enum ChainOrchestratorError {
     #[error("An error occurred while making a JSON-RPC request to the EN: {0}")]
     RpcError(#[from] RpcError<TransportErrorKind>),
 }
-
-impl ChainOrchestratorError {
-    /// Returns true if this error represents a transient condition that can be retried.
-    pub const fn can_retry(&self) -> bool {
-        matches!(self, Self::DatabaseError(_) | Self::NetworkRequestError(_) | Self::RpcError(_))
-    }
-}

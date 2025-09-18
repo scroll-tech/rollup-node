@@ -3,7 +3,7 @@
 use crate::{ConsensusArgs, GasPriceOracleArgs};
 
 use super::{
-    BlobProviderArgs, ChainOrchestratorArgs, DatabaseArgs, EngineDriverArgs, L1ProviderArgs,
+    BeaconProviderArgs, ChainOrchestratorArgs, DatabaseArgs, EngineDriverArgs, L1ProviderArgs,
     ScrollRollupNode, ScrollRollupNodeConfig, SequencerArgs,
 };
 use alloy_primitives::Bytes;
@@ -21,6 +21,7 @@ use reth_node_core::args::{DiscoveryArgs, NetworkArgs, RpcServerArgs, TxPoolArgs
 use reth_provider::providers::BlockchainProvider;
 use reth_rpc_server_types::RpcModuleSelection;
 use reth_tasks::TaskManager;
+use rollup_node_providers::BlobSource;
 use rollup_node_sequencer::L1MessageInclusionMode;
 use std::{path::PathBuf, sync::Arc};
 use tokio::sync::Mutex;
@@ -154,7 +155,10 @@ pub fn default_test_scroll_rollup_node_config() -> ScrollRollupNodeConfig {
             allow_empty_blocks: true,
             ..Default::default()
         },
-        blob_provider_args: BlobProviderArgs { mock: true, ..Default::default() },
+        beacon_provider_args: BeaconProviderArgs {
+            blob_source: BlobSource::Mock,
+            ..Default::default()
+        },
         signer_args: Default::default(),
         gas_price_oracle_args: GasPriceOracleArgs::default(),
         consensus_args: ConsensusArgs::noop(),
@@ -190,7 +194,10 @@ pub fn default_sequencer_test_scroll_rollup_node_config() -> ScrollRollupNodeCon
             l1_message_inclusion_mode: L1MessageInclusionMode::BlockDepth(0),
             allow_empty_blocks: true,
         },
-        blob_provider_args: BlobProviderArgs { mock: true, ..Default::default() },
+        beacon_provider_args: BeaconProviderArgs {
+            blob_source: BlobSource::Mock,
+            ..Default::default()
+        },
         signer_args: Default::default(),
         gas_price_oracle_args: GasPriceOracleArgs::default(),
         consensus_args: ConsensusArgs::noop(),
