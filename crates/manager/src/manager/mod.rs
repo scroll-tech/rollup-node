@@ -71,6 +71,10 @@ const CHAIN_ORCHESTRATOR_MAX_PENDING_FUTURES: usize = 20;
 /// L1 notification channel.
 const ENGINE_MAX_PENDING_FUTURES: usize = 5000;
 
+/// The maximum number of pending batch commits in the derivation pipeline for acceptance of new
+/// events from the L1 notification channel.
+const DERIVATION_PIPELINE_MAX_PENDING_BATCHES: usize = 500;
+
 /// The main manager for the rollup node.
 ///
 /// This is an endless [`Future`] that drives the state of the entire network forward and includes
@@ -541,7 +545,9 @@ where
         let chain_orchestrator_has_capacity = self.chain.pending_futures_len() <
             CHAIN_ORCHESTRATOR_MAX_PENDING_FUTURES - L1_NOTIFICATION_CHANNEL_BUDGET as usize;
         let engine_has_capacity = self.engine.pending_futures_len() < ENGINE_MAX_PENDING_FUTURES;
-        chain_orchestrator_has_capacity && engine_has_capacity
+        let derivation_pipeline_has_capacity =
+            self.derivation_pipeline.batch_queue_size() < DERIVATION_PIPELINE_MAX_PENDING_BATCHES;
+        chain_orchestrator_has_capacity && engine_has_capacity && derivation_pipeline_has_capacity
     }
 }
 
