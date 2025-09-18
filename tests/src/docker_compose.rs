@@ -49,13 +49,13 @@ impl DockerComposeEnv {
         tracing::info!("🚀 Starting test environment: {project_name}");
 
         // Pre-cleanup existing containers to avoid conflicts
-        Self::cleanup(&compose_file, &project_name, false);
+        Self::cleanup(compose_file, &project_name, false);
 
         // Start the environment
         let env = Self::start_environment(compose_file, &project_name)?;
 
         // Start streaming logs in the background
-        let _ = Self::stream_container_logs(&compose_file, &project_name).await;
+        let _ = Self::stream_container_logs(compose_file, &project_name).await;
 
         // Wait for all services to be ready
         tracing::info!("⏳ Waiting for services to be ready...");
@@ -80,8 +80,8 @@ impl DockerComposeEnv {
                 project_name,
                 "up",
                 "-d",
-                // "--force-recreate",
-                // "--build",
+                "--force-recreate",
+                "--build",
             ])
             .stdout(std::process::Stdio::piped())
             .stderr(std::process::Stdio::piped())
