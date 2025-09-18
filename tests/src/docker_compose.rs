@@ -80,8 +80,8 @@ impl DockerComposeEnv {
                 project_name,
                 "up",
                 "-d",
-                // "--force-recreate",
-                // "--build",
+                "--force-recreate",
+                "--build",
             ])
             .stdout(std::process::Stdio::piped())
             .stderr(std::process::Stdio::piped())
