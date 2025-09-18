@@ -10923,6 +10923,7 @@ dependencies = [
  "async-trait",
  "auto_impl",
  "eyre",
+ "futures",
  "lru 0.13.0",
  "reqwest",
  "rollup-node-primitives",

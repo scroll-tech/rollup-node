@@ -513,38 +513,6 @@ pub trait DatabaseReadOperations: ReadConnectionProvider + Sync {
             .map(|res| Ok(res.map(Into::into)?)))
     }
 
-    /// Takes up to n [`L1MessageEnvelope`]s in the database starting from the provided `start`
-    /// point.
-    async fn get_n_l1_messages(
-        &self,
-        start: Option<L1MessageStart>,
-        n: u64,
-    ) -> Result<Vec<L1MessageEnvelope>, DatabaseError> {
-        let queue_index = match start {
-            Some(L1MessageStart::Index(i)) => i,
-            Some(L1MessageStart::Hash(ref h)) => {
-                // Lookup message by hash
-                let record = models::l1_message::Entity::find()
-                    .filter(models::l1_message::Column::Hash.eq(h.to_vec()))
-                    .one(self.get_connection())
-                    .await?
-                    .ok_or_else(|| DatabaseError::L1MessageNotFound(L1MessageStart::Hash(*h)))?;
-
-                record.queue_index as u64
-            }
-            None => 0,
-        };
-
-        Ok(models::l1_message::Entity::find()
-            .filter(models::l1_message::Column::QueueIndex.gte(queue_index))
-            .limit(Some(n))
-            .all(self.get_connection())
-            .await?
-            .into_iter()
-            .map(Into::<L1MessageEnvelope>::into)
-            .collect())
-    }
-
     /// Get the extra data for the provided block number.
     async fn get_l2_block_data_hint(
         &self,
@@ -696,6 +664,18 @@ impl fmt::Display for L1MessageStart {
             Self::Index(index) => write!(f, "Index({index})"),
             Self::Hash(hash) => write!(f, "Hash({hash:#x})"),
         }
+    }
+}
+
+impl From<u64> for L1MessageStart {
+    fn from(value: u64) -> Self {
+        Self::Index(value)
+    }
+}
+
+impl From<B256> for L1MessageStart {
+    fn from(value: B256) -> Self {
+        Self::Hash(value)
     }
 }
 

@@ -31,6 +31,7 @@ rollup-node-primitives.workspace = true
 async-trait.workspace = true
 auto_impl.workspace = true
 eyre.workspace = true
+futures.workspace = true
 lru = "0.13.0"
 reqwest = { workspace = true, features = ["json"] }
 serde = { workspace = true, features = ["derive"] }

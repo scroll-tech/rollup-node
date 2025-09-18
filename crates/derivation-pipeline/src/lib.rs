@@ -347,7 +347,7 @@ async fn iter_l1_messages_from_payload<L1P: L1Provider>(
     let total_l1_messages = data.blocks.iter().map(|b| b.context.num_l1_messages as u64).sum();
 
     let messages = if let Some(index) = data.queue_index_start() {
-        provider.take_n_messages_from_index(index, total_l1_messages).await.map_err(Into::into)?
+        provider.get_n_messages(index.into(), total_l1_messages).await.map_err(Into::into)?
     } else if let Some(hash) = data.prev_l1_message_queue_hash() {
         // If the message queue hash is zero then we should use the V2 L1 message queue start
         // index. We must apply this branch logic because we do not have a L1
@@ -355,12 +355,12 @@ async fn iter_l1_messages_from_payload<L1P: L1Provider>(
         // hash for the first L1 message of the V2 contract).
         if hash == &B256::ZERO {
             provider
-                .take_n_messages_from_index(l1_v2_message_queue_start_index, total_l1_messages)
+                .get_n_messages(l1_v2_message_queue_start_index.into(), total_l1_messages)
                 .await
                 .map_err(Into::into)?
         } else {
             let mut messages = provider
-                .take_n_messages_from_hash(*hash, total_l1_messages + 1)
+                .get_n_messages((*hash).into(), total_l1_messages + 1)
                 .await
                 .map_err(Into::into)?;
             // we skip the first l1 message, as we are interested in the one starting after
