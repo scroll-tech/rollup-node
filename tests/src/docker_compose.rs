@@ -31,7 +31,7 @@ const L2GETH_SEQUENCER_RPC_URL: &str = "http://localhost:8547";
 const L2GETH_FOLLOWER_RPC_URL: &str = "http://localhost:8548";
 
 const RN_SEQUENCER_ENODE: &str= "enode://e7f7e271f62bd2b697add14e6987419758c97e83b0478bd948f5f2d271495728e7edef5bd78ad65258ac910f28e86928ead0c42ee51f2a0168d8ca23ba939766@{IP}:30303";
-const L2GETH_SEQEUNCER_ENODE: &str = "enode://8fc4f6dfd0a2ebf56560d0b0ef5e60ad7bcb01e13f929eae53a4c77086d9c1e74eb8b8c8945035d25c6287afdd871f0d41b3fd7e189697decd0f13538d1ac620@{IP}:30303";
+const L2GETH_SEQUENCER_ENODE: &str = "enode://8fc4f6dfd0a2ebf56560d0b0ef5e60ad7bcb01e13f929eae53a4c77086d9c1e74eb8b8c8945035d25c6287afdd871f0d41b3fd7e189697decd0f13538d1ac620@{IP}:30303";
 
 pub struct DockerComposeEnv {
     project_name: String,
@@ -300,7 +300,7 @@ impl DockerComposeEnv {
     /// Get the l2geth sequencer enode URL with resolved IP address
     pub fn l2geth_sequencer_enode(&self) -> Result<String> {
         let ip = self.get_container_ip(&self.get_full_container_name("l2geth-sequencer"))?;
-        Ok(L2GETH_SEQEUNCER_ENODE.replace("{IP}", &ip))
+        Ok(L2GETH_SEQUENCER_ENODE.replace("{IP}", &ip))
     }
 
     /// Show logs for all containers
