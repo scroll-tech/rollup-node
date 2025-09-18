@@ -644,7 +644,8 @@ pub struct SequencerArgs {
     #[arg(
         long = "sequencer.max-l1-messages",
         id = "sequencer_max_l1_messages",
-        value_name = "SEQUENCER_MAX_L1_MESSAGES"
+        value_name = "SEQUENCER_MAX_L1_MESSAGES",
+        help = "The maximum number of L1 messages to include per L2 block. If not set, defaults to the value specified in the chain config."
     )]
     pub max_l1_messages: Option<u64>,
 }
