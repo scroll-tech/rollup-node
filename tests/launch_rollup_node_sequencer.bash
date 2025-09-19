@@ -10,7 +10,7 @@ echo -n "01c0d9156e199d89814d4b18e9eb64e25de3927f3f6d27b778177f3ff6b610ad" > /l2
 
 export RUST_LOG=sqlx=off,scroll=trace,reth=trace,rollup=trace,info
 
-exec rollup-node node --chain /l2reth/l2reth-genesis-e2e.json --datadir=/l2reth --metrics=0.0.0.0:6060 --network.scroll-wire --network.bridge \
+exec rollup-node node --chain /l2reth/l2reth-genesis-e2e.json --datadir=/l2reth --metrics=0.0.0.0:6060 \
   --http --http.addr=0.0.0.0 --http.port=8545 --http.corsdomain "*" --http.api admin,debug,eth,net,trace,txpool,web3,rpc,reth,ots,flashbots,miner,mev \
   --ws --ws.addr=0.0.0.0 --ws.port=8546 --ws.api admin,debug,eth,net,trace,txpool,web3,rpc,reth,ots,flashbots,miner,mev \
   --log.stdout.format log-fmt -vvv \
