@@ -4,7 +4,7 @@ ARG CARGO_FEATURES=""
 
 # Install basic packages
 RUN apt-get update && apt-get -y upgrade && apt-get install -y libclang-dev pkg-config
-RUN cargo install cargo-chef sccache --locked
+RUN cargo install cargo-chef --locked
 
 FROM chef AS planner
 WORKDIR /app
