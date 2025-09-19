@@ -15,8 +15,10 @@ use alloy_eips::eip2718::Encodable2718;
 use alloy_primitives::Address;
 use alloy_rpc_types_engine::PayloadAttributes;
 use futures::{task::AtomicWaker, Stream};
+use reth_scroll_primitives::ScrollBlock;
 use rollup_node_primitives::{L1MessageEnvelope, DEFAULT_BLOCK_DIFFICULTY};
-use rollup_node_providers::L1MessageProvider;
+use rollup_node_providers::{L1MessageProvider, L1ProviderError};
+use scroll_alloy_consensus::ScrollTransaction;
 use scroll_alloy_rpc_types_engine::{BlockDataHint, ScrollPayloadAttributes};
 
 mod error;
@@ -82,6 +84,8 @@ pub struct Sequencer<P> {
     l1_message_inclusion_mode: L1MessageInclusionMode,
     /// The inflight payload attributes job
     payload_attributes_job: Option<PayloadBuildingJobFuture>,
+    /// The current L1 messages queue index.
+    l1_messages_queue_index: u64,
     /// The sequencer metrics.
     metrics: SequencerMetrics,
     /// A waker to notify when the Sequencer should be polled.
@@ -100,6 +104,7 @@ where
         max_l1_messages_per_block: u64,
         l1_block_number: u64,
         l1_message_inclusion_mode: L1MessageInclusionMode,
+        l1_messages_queue_index: u64,
     ) -> Self {
         Self {
             provider,
@@ -109,6 +114,7 @@ where
             l1_block_number,
             l1_finalized_block_number: 0,
             l1_message_inclusion_mode,
+            l1_messages_queue_index,
             payload_attributes_job: None,
             metrics: SequencerMetrics::default(),
             waker: AtomicWaker::new(),
@@ -145,8 +151,9 @@ where
         let database = self.provider.clone();
         let block_gas_limit = self.block_gas_limit;
         let l1_block_number = self.l1_block_number;
-        let l1_message_inclusion_mode = self.l1_message_inclusion_mode;
         let l1_finalized_block_number = self.l1_finalized_block_number;
+        let l1_message_inclusion_mode = self.l1_message_inclusion_mode;
+        let l1_messages_queue_index = self.l1_messages_queue_index;
         let metrics = self.metrics.clone();
 
         self.payload_attributes_job = Some(Box::pin(async move {
@@ -159,6 +166,7 @@ where
                 l1_block_number,
                 l1_finalized_block_number,
                 l1_message_inclusion_mode,
+                l1_messages_queue_index,
             )
             .await;
             metrics.payload_attributes_building_duration.record(now.elapsed().as_secs_f64());
@@ -171,7 +179,7 @@ where
     /// Handle a reorg event.
     pub fn handle_reorg(&mut self, queue_index: Option<u64>, l1_block_number: u64) {
         if let Some(index) = queue_index {
-            self.provider.set_queue_index_cursor(index);
+            self.l1_messages_queue_index = index;
         }
         self.l1_block_number = l1_block_number;
     }
@@ -179,6 +187,20 @@ where
     /// Handle a new L1 block.
     pub fn handle_new_l1_block(&mut self, block_number: u64) {
         self.l1_block_number = block_number;
+    }
+
+    /// Handle new payload by updating the L1 messages queue index.
+    pub fn handle_new_payload(&mut self, block: &ScrollBlock) {
+        let queue_index = block.body.transactions.iter().filter_map(|tx| tx.queue_index()).max();
+        if let Some(queue_index) = queue_index {
+            // only update the queue index if it has advanced
+            if queue_index + 1 > self.l1_messages_queue_index {
+                tracing::trace!(target: "rollup_node::sequencer", "Advancing L1 messages queue index from {} to {}", self.l1_messages_queue_index, queue_index + 1);
+                self.l1_messages_queue_index = queue_index + 1;
+            } else {
+                tracing::warn!(target: "rollup_node::sequencer", "Skipping L1 messages queue index update, current index is {}, new payload has max index {}", self.l1_messages_queue_index, queue_index);
+            }
+        }
     }
 }
 
@@ -195,7 +217,8 @@ impl<SMP> Stream for Sequencer<SMP> {
                     self.payload_attributes_job = None;
                     Poll::Ready(Some(block))
                 }
-                Poll::Ready(Err(_)) => {
+                Poll::Ready(Err(err)) => {
+                    tracing::error!(target: "rollup_node::sequencer", "Error building payload attributes: {err}");
                     self.payload_attributes_job = None;
                     Poll::Ready(None)
                 }
@@ -210,6 +233,7 @@ impl<SMP> Stream for Sequencer<SMP> {
 /// Builds the payload attributes for the sequencer using the given L1 message provider.
 /// It collects the L1 messages to include in the payload and returns a `ScrollPayloadAttributes`
 /// instance.
+#[allow(clippy::too_many_arguments)]
 async fn build_payload_attributes<P: L1MessageProvider + Unpin + Send + Sync + 'static>(
     provider: Arc<P>,
     max_l1_messages: u64,
@@ -218,31 +242,42 @@ async fn build_payload_attributes<P: L1MessageProvider + Unpin + Send + Sync + '
     current_l1_block_number: u64,
     l1_finalized_block_number: u64,
     l1_message_inclusion_mode: L1MessageInclusionMode,
+    l1_messages_queue_index: u64,
 ) -> Result<ScrollPayloadAttributes, SequencerError> {
-    // Collect L1 messages to include in payload.
     let mut l1_messages = vec![];
     let mut cumulative_gas_used = 0;
-    for _ in 0..max_l1_messages {
-        let predicate = l1_message_predicate(
+    let expected_index = l1_messages_queue_index;
+
+    // Collect L1 messages to include in payload.
+    let db_l1_messages = provider
+        .get_n_messages(l1_messages_queue_index.into(), max_l1_messages)
+        .await
+        .map_err(Into::<L1ProviderError>::into)?;
+
+    for msg in db_l1_messages {
+        // TODO (greg): we only check the DA limit on the execution node side. We should also check
+        // it here.
+        let fits_in_block = msg.transaction.gas_limit + cumulative_gas_used <= block_gas_limit;
+        let l1_inclusion_requirement_met = meets_l1_inclusion_requirement(
+            &msg,
             l1_message_inclusion_mode,
             current_l1_block_number,
             l1_finalized_block_number,
-            cumulative_gas_used,
-            block_gas_limit,
         );
-        match provider
-            .next_l1_message_with_predicate(predicate.as_ref())
-            .await
-            .map_err(Into::into)?
-        {
-            Some(l1_message) => {
-                cumulative_gas_used += l1_message.gas_limit;
-                l1_messages.push(l1_message.encoded_2718().into());
-            }
-            None => {
-                break;
-            }
+        if !fits_in_block || !l1_inclusion_requirement_met {
+            break;
         }
+
+        // Defensively ensure L1 messages are contiguous.
+        if msg.transaction.queue_index != expected_index {
+            return Err(SequencerError::NonContiguousL1Messages {
+                expected: expected_index,
+                got: msg.transaction.queue_index,
+            });
+        }
+
+        cumulative_gas_used += msg.transaction.gas_limit;
+        l1_messages.push(msg.transaction.encoded_2718().into());
     }
 
     Ok(ScrollPayloadAttributes {
@@ -259,26 +294,19 @@ async fn build_payload_attributes<P: L1MessageProvider + Unpin + Send + Sync + '
     })
 }
 
-fn l1_message_predicate(
+/// Returns true if the L1 message should be included in the payload based on the inclusion mode,
+/// the current L1 block number and the L1 finalized block number.
+const fn meets_l1_inclusion_requirement(
+    l1_msg: &L1MessageEnvelope,
     inclusion_mode: L1MessageInclusionMode,
     current_l1_block_number: u64,
     l1_finalized_block_number: u64,
-    cumulative_gas_used: u64,
-    block_gas_limit: u64,
-) -> Box<dyn Fn(L1MessageEnvelope) -> bool + Send + Sync> {
+) -> bool {
     match inclusion_mode {
-        L1MessageInclusionMode::BlockDepth(depth) => Box::new(move |message: L1MessageEnvelope| {
-            let is_deep_enough = message.l1_block_number + depth <= current_l1_block_number;
-            let fits_in_block =
-                message.transaction.gas_limit + cumulative_gas_used <= block_gas_limit;
-            is_deep_enough && fits_in_block
-        }),
-        L1MessageInclusionMode::Finalized => Box::new(move |message: L1MessageEnvelope| {
-            let is_finalized = message.l1_block_number <= l1_finalized_block_number;
-            let fits_in_block =
-                message.transaction.gas_limit + cumulative_gas_used <= block_gas_limit;
-            is_finalized && fits_in_block
-        }),
+        L1MessageInclusionMode::BlockDepth(depth) => {
+            l1_msg.l1_block_number + depth <= current_l1_block_number
+        }
+        L1MessageInclusionMode::Finalized => l1_msg.l1_block_number <= l1_finalized_block_number,
     }
 }
 
@@ -302,57 +330,55 @@ mod tests {
     #[test]
     fn test_l1_message_predicate() {
         // block depth not met.
-        let predicate = l1_message_predicate(L1MessageInclusionMode::BlockDepth(5), 10, 10, 0, 0);
-        assert!(!predicate(L1MessageEnvelope {
-            transaction: Default::default(),
-            l1_block_number: 10,
-            l2_block_number: None,
-            queue_hash: None,
-        }));
+        assert!(!meets_l1_inclusion_requirement(
+            &L1MessageEnvelope {
+                transaction: Default::default(),
+                l1_block_number: 10,
+                l2_block_number: None,
+                queue_hash: None,
+            },
+            L1MessageInclusionMode::BlockDepth(5),
+            10,
+            10,
+        ));
 
-        // block depth met and doesn't fit in block.
-        let predicate = l1_message_predicate(L1MessageInclusionMode::BlockDepth(5), 10, 10, 10, 10);
-        assert!(!predicate(L1MessageEnvelope {
-            transaction: TxL1Message { gas_limit: 1, ..Default::default() },
-            l1_block_number: 5,
-            l2_block_number: None,
-            queue_hash: None,
-        }));
-
-        // block depth met and fits in block.
-        let predicate = l1_message_predicate(L1MessageInclusionMode::BlockDepth(5), 10, 10, 9, 10);
-        assert!(predicate(L1MessageEnvelope {
-            transaction: TxL1Message { gas_limit: 1, ..Default::default() },
-            l1_block_number: 5,
-            l2_block_number: None,
-            queue_hash: None,
-        }));
+        // block depth met.
+        assert!(meets_l1_inclusion_requirement(
+            &L1MessageEnvelope {
+                transaction: TxL1Message { gas_limit: 1, ..Default::default() },
+                l1_block_number: 5,
+                l2_block_number: None,
+                queue_hash: None,
+            },
+            L1MessageInclusionMode::BlockDepth(5),
+            10,
+            10,
+        ));
 
         // not finalized.
-        let predicate = l1_message_predicate(L1MessageInclusionMode::Finalized, 10, 10, 0, 0);
-        assert!(!predicate(L1MessageEnvelope {
-            transaction: TxL1Message { gas_limit: 1, ..Default::default() },
-            l1_block_number: 5,
-            l2_block_number: None,
-            queue_hash: None,
-        }));
+        assert!(!meets_l1_inclusion_requirement(
+            &L1MessageEnvelope {
+                transaction: TxL1Message { gas_limit: 1, ..Default::default() },
+                l1_block_number: 15,
+                l2_block_number: None,
+                queue_hash: None,
+            },
+            L1MessageInclusionMode::Finalized,
+            10,
+            10,
+        ));
 
-        // finalized and doesn't fit in block.
-        let predicate = l1_message_predicate(L1MessageInclusionMode::Finalized, 10, 10, 10, 10);
-        assert!(!predicate(L1MessageEnvelope {
-            transaction: TxL1Message { gas_limit: 1, ..Default::default() },
-            l1_block_number: 10,
-            l2_block_number: None,
-            queue_hash: None,
-        }));
-
-        // finalized and fits in block.
-        let predicate = l1_message_predicate(L1MessageInclusionMode::Finalized, 10, 10, 9, 10);
-        assert!(predicate(L1MessageEnvelope {
-            transaction: TxL1Message { gas_limit: 1, ..Default::default() },
-            l1_block_number: 10,
-            l2_block_number: None,
-            queue_hash: None,
-        }));
+        // finalized.
+        assert!(meets_l1_inclusion_requirement(
+            &L1MessageEnvelope {
+                transaction: TxL1Message { gas_limit: 1, ..Default::default() },
+                l1_block_number: 10,
+                l2_block_number: None,
+                queue_hash: None,
+            },
+            L1MessageInclusionMode::Finalized,
+            10,
+            10,
+        ));
     }
 }

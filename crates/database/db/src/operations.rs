@@ -667,6 +667,18 @@ impl fmt::Display for L1MessageStart {
     }
 }
 
+impl From<u64> for L1MessageStart {
+    fn from(value: u64) -> Self {
+        Self::Index(value)
+    }
+}
+
+impl From<B256> for L1MessageStart {
+    fn from(value: B256) -> Self {
+        Self::Hash(value)
+    }
+}
+
 /// The result of [`DatabaseWriteOperations::unwind`].
 #[derive(Debug)]
 pub struct UnwindResult {

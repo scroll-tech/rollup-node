@@ -17,7 +17,7 @@ use rollup_node::{
 };
 use rollup_node_manager::RollupManagerEvent;
 use rollup_node_primitives::{sig_encode_hash, BlockInfo, L1MessageEnvelope};
-use rollup_node_providers::{DatabaseL1MessageProvider, ScrollRootProvider};
+use rollup_node_providers::ScrollRootProvider;
 use rollup_node_sequencer::{L1MessageInclusionMode, Sequencer};
 use rollup_node_signer::SignerEvent;
 use scroll_alloy_consensus::TxL1Message;
@@ -70,7 +70,7 @@ async fn skip_block_with_no_transactions() {
 
     // create a test database
     let database = Arc::new(setup_test_db().await);
-    let provider = Arc::new(DatabaseL1MessageProvider::new(database.clone(), 0));
+    let provider = database.clone();
 
     // create a sequencer
     let mut sequencer = Sequencer::new(
@@ -80,6 +80,7 @@ async fn skip_block_with_no_transactions() {
         4,
         1,
         L1MessageInclusionMode::BlockDepth(0),
+        0,
     );
 
     // send a new payload attributes request.
@@ -126,7 +127,7 @@ async fn can_build_blocks() {
 
     // create a test database
     let database = Arc::new(setup_test_db().await);
-    let provider = Arc::new(DatabaseL1MessageProvider::new(database.clone(), 0));
+    let provider = database.clone();
 
     // create a sequencer
     let mut sequencer = Sequencer::new(
@@ -136,6 +137,7 @@ async fn can_build_blocks() {
         4,
         1,
         L1MessageInclusionMode::BlockDepth(0),
+        0,
     );
 
     // add a transaction to the pool
@@ -255,7 +257,7 @@ async fn can_build_blocks_with_delayed_l1_messages() {
 
     // create a test database
     let database = Arc::new(setup_test_db().await);
-    let provider = Arc::new(DatabaseL1MessageProvider::new(database.clone(), 0));
+    let provider = database.clone();
 
     // create a sequencer
     let mut sequencer = Sequencer::new(
@@ -265,6 +267,7 @@ async fn can_build_blocks_with_delayed_l1_messages() {
         4,
         0,
         L1MessageInclusionMode::BlockDepth(L1_MESSAGE_DELAY),
+        0,
     );
 
     // now lets add an L1 message to the database (this transaction should not be included until the
@@ -383,7 +386,7 @@ async fn can_build_blocks_with_finalized_l1_messages() {
 
     // create a test database
     let database = Arc::new(setup_test_db().await);
-    let provider = Arc::new(DatabaseL1MessageProvider::new(database.clone(), 0));
+    let provider = database.clone();
 
     // create a sequencer with Finalized mode
     let mut sequencer = Sequencer::new(
@@ -393,6 +396,7 @@ async fn can_build_blocks_with_finalized_l1_messages() {
         4,
         5, // current L1 block number
         L1MessageInclusionMode::Finalized,
+        0,
     );
 
     // set L1 finalized block number to 2
@@ -458,6 +462,9 @@ async fn can_build_blocks_with_finalized_l1_messages() {
     // ensure unfinalized message is not included
     assert!(!block.body.transactions.iter().any(|tx| tx.tx_hash() == &unfinalized_message_hash));
 
+    // Handle the build block with the sequencer in order to update L1 message queue index.
+    sequencer.handle_new_payload(&block);
+
     // update finalized block number to 3, now both messages should be available
     sequencer.set_l1_finalized_block_number(3);
 
@@ -486,16 +493,15 @@ async fn can_sequence_blocks_with_private_key_file() -> eyre::Result<()> {
     reth_tracing::init_test_tracing();
 
     // Create temporary private key file
-    let mut temp_file = NamedTempFile::new().unwrap();
+    let mut temp_file = NamedTempFile::new()?;
     let private_key_hex = "0x1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef";
-    temp_file.write_all(private_key_hex.as_bytes()).unwrap();
-    temp_file.flush().unwrap();
+    temp_file.write_all(private_key_hex.as_bytes())?;
+    temp_file.flush()?;
 
     // Create expected signer
     let expected_key_bytes =
-        hex::decode("1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef").unwrap();
-    let expected_signer =
-        alloy_signer_local::PrivateKeySigner::from_slice(&expected_key_bytes).unwrap();
+        hex::decode("1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef")?;
+    let expected_signer = alloy_signer_local::PrivateKeySigner::from_slice(&expected_key_bytes)?;
     let expected_address = expected_signer.address();
 
     let chain_spec = (*SCROLL_DEV).clone();
@@ -886,7 +892,7 @@ async fn should_limit_l1_message_cumulative_gas() {
 
     // create a test database
     let database = Arc::new(setup_test_db().await);
-    let provider = Arc::new(DatabaseL1MessageProvider::new(database.clone(), 0));
+    let provider = database.clone();
 
     // create a sequencer with Finalized mode
     let mut sequencer = Sequencer::new(
@@ -896,6 +902,7 @@ async fn should_limit_l1_message_cumulative_gas() {
         4,
         5, // current L1 block number
         L1MessageInclusionMode::Finalized,
+        0,
     );
     sequencer.set_l1_finalized_block_number(1);
 
