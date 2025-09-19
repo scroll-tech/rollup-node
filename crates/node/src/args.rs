@@ -39,7 +39,8 @@ use scroll_alloy_hardforks::ScrollHardforks;
 use scroll_alloy_network::Scroll;
 use scroll_alloy_provider::{ScrollAuthApiEngineClient, ScrollEngineApi};
 use scroll_db::{
-    Database, DatabaseConnectionProvider, DatabaseTransactionProvider, DatabaseWriteOperations,
+    Database, DatabaseConnectionProvider, DatabaseReadOperations, DatabaseTransactionProvider,
+    DatabaseWriteOperations,
 };
 use scroll_engine::{genesis_hash_from_chain_spec, EngineDriver, ForkchoiceState};
 use scroll_migration::traits::ScrollMigrator;
@@ -338,6 +339,9 @@ impl ScrollRollupNodeConfig {
 
         // Construct the Sequencer.
         let chain_config = chain_spec.chain_config();
+        let latest_l1_message = db.tx().await?.get_latest_executed_l1_message().await?;
+        let sequencer_l1_messages_queue_index =
+            latest_l1_message.map(|msg| msg.transaction.queue_index + 1).unwrap_or_default();
         let (sequencer, block_time, auto_start) = if self.sequencer_args.sequencer_enabled {
             let args = &self.sequencer_args;
             let sequencer = Sequencer::new(
@@ -349,8 +353,7 @@ impl ScrollRollupNodeConfig {
                     .unwrap_or(chain_config.l1_config.num_l1_messages_per_block),
                 0,
                 self.sequencer_args.l1_message_inclusion_mode,
-                // TODO (issue 169): update with correct start value.
-                0,
+                sequencer_l1_messages_queue_index,
             );
             (Some(sequencer), (args.block_time != 0).then_some(args.block_time), args.auto_start)
         } else {
