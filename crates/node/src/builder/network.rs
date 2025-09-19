@@ -23,7 +23,7 @@ use scroll_db::{
 use std::{fmt, fmt::Debug, sync::Arc};
 use tracing::{debug, info, trace, warn};
 
-use crate::args::NetworkArgs;
+use crate::args::RollupNodeNetworkArgs;
 
 /// The network builder for Scroll.
 #[derive(Debug)]
@@ -78,7 +78,7 @@ where
         // get the header transform.
         let chain_spec = ctx.chain_spec();
         let authorized_signer = if self.signer.is_none() {
-            NetworkArgs::default_authorized_signer(chain_spec.chain().named())
+            RollupNodeNetworkArgs::default_authorized_signer(chain_spec.chain().named())
         } else {
             self.signer
         };

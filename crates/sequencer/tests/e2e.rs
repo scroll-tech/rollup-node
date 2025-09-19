@@ -11,9 +11,9 @@ use reth_scroll_node::test_utils::setup;
 use rollup_node::{
     constants::SCROLL_GAS_LIMIT,
     test_utils::{default_test_scroll_rollup_node_config, setup_engine},
-    BlobProviderArgs, ChainOrchestratorArgs, ConsensusArgs, DatabaseArgs, EngineDriverArgs,
-    GasPriceOracleArgs, L1ProviderArgs, NetworkArgs, ScrollRollupNodeConfig, SequencerArgs,
-    SignerArgs,
+    BlobProviderArgs, ChainOrchestratorArgs, ConsensusArgs, EngineDriverArgs, L1ProviderArgs,
+    RollupNodeDatabaseArgs, RollupNodeGasPriceOracleArgs, RollupNodeNetworkArgs, RpcArgs,
+    ScrollRollupNodeConfig, SequencerArgs, SignerArgs,
 };
 use rollup_node_manager::RollupManagerEvent;
 use rollup_node_primitives::{sig_encode_hash, BlockInfo, L1MessageEnvelope};
@@ -501,8 +501,10 @@ async fn can_sequence_blocks_with_private_key_file() -> eyre::Result<()> {
     let chain_spec = (*SCROLL_DEV).clone();
     let rollup_manager_args = ScrollRollupNodeConfig {
         test: false, // disable test mode to enable real signing
-        network_args: NetworkArgs::default(),
-        database_args: DatabaseArgs { path: Some(PathBuf::from("sqlite::memory:")) },
+        network_args: RollupNodeNetworkArgs::default(),
+        database_args: RollupNodeDatabaseArgs {
+            rn_db_path: Some(PathBuf::from("sqlite::memory:")),
+        },
         l1_provider_args: L1ProviderArgs::default(),
         engine_driver_args: EngineDriverArgs::default(),
         chain_orchestrator_args: ChainOrchestratorArgs::default(),
@@ -521,9 +523,10 @@ async fn can_sequence_blocks_with_private_key_file() -> eyre::Result<()> {
             aws_kms_key_id: None,
             private_key: None,
         },
-        gas_price_oracle_args: GasPriceOracleArgs::default(),
+        gas_price_oracle_args: RollupNodeGasPriceOracleArgs::default(),
         consensus_args: ConsensusArgs::noop(),
         database: None,
+        rpc_args: RpcArgs::default(),
     };
 
     let (nodes, _tasks, wallet) =
@@ -592,8 +595,10 @@ async fn can_sequence_blocks_with_hex_key_file_without_prefix() -> eyre::Result<
     let chain_spec = (*SCROLL_DEV).clone();
     let rollup_manager_args = ScrollRollupNodeConfig {
         test: false, // disable test mode to enable real signing
-        network_args: NetworkArgs::default(),
-        database_args: DatabaseArgs { path: Some(PathBuf::from("sqlite::memory:")) },
+        network_args: RollupNodeNetworkArgs::default(),
+        database_args: RollupNodeDatabaseArgs {
+            rn_db_path: Some(PathBuf::from("sqlite::memory:")),
+        },
         l1_provider_args: L1ProviderArgs::default(),
         engine_driver_args: EngineDriverArgs::default(),
         chain_orchestrator_args: ChainOrchestratorArgs::default(),
@@ -612,9 +617,10 @@ async fn can_sequence_blocks_with_hex_key_file_without_prefix() -> eyre::Result<
             aws_kms_key_id: None,
             private_key: None,
         },
-        gas_price_oracle_args: GasPriceOracleArgs::default(),
+        gas_price_oracle_args: RollupNodeGasPriceOracleArgs::default(),
         consensus_args: ConsensusArgs::noop(),
         database: None,
+        rpc_args: RpcArgs::default(),
     };
 
     let (nodes, _tasks, wallet) =
