@@ -1,7 +1,7 @@
 use alloy_provider::{Provider, ProviderBuilder};
 use eyre::Result;
 use scroll_alloy_network::Scroll;
-use std::{fs, process::Command, time::Duration};
+use std::{fs, ops::Deref, process::Command, time::Duration};
 use tokio::{
     io::{AsyncBufReadExt, BufReader},
     process::Command as TokioCommand,
@@ -16,6 +16,14 @@ pub struct NamedProvider {
 impl NamedProvider {
     pub fn new(provider: Box<dyn Provider<Scroll>>, name: &'static str) -> Self {
         Self { provider, name }
+    }
+}
+
+impl Deref for NamedProvider {
+    type Target = dyn Provider<Scroll>;
+
+    fn deref(&self) -> &Self::Target {
+        self.provider.as_ref()
     }
 }
 

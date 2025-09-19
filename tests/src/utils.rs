@@ -7,7 +7,6 @@ use crate::docker_compose::NamedProvider;
 /// Enable automatic sequencing on a rollup node
 pub async fn enable_automatic_sequencing(provider: &NamedProvider) -> Result<bool> {
     provider
-        .provider
         .client()
         .request("rollupNode_enableAutomaticSequencing", ())
         .await
@@ -17,7 +16,6 @@ pub async fn enable_automatic_sequencing(provider: &NamedProvider) -> Result<boo
 /// Disable automatic sequencing on a rollup node
 pub async fn disable_automatic_sequencing(provider: &NamedProvider) -> Result<bool> {
     provider
-        .provider
         .client()
         .request("rollupNode_disableAutomaticSequencing", ())
         .await
@@ -26,7 +24,6 @@ pub async fn disable_automatic_sequencing(provider: &NamedProvider) -> Result<bo
 
 pub async fn miner_start(provider: &NamedProvider) -> Result<()> {
     provider
-        .provider
         .client()
         .request("miner_start", ())
         .await
@@ -35,7 +32,6 @@ pub async fn miner_start(provider: &NamedProvider) -> Result<()> {
 
 pub async fn miner_stop(provider: &NamedProvider) -> Result<()> {
     provider
-        .provider
         .client()
         .request("miner_stop", ())
         .await
@@ -67,7 +63,7 @@ pub async fn wait_for_block(nodes: &[&NamedProvider], target_block: u64) -> Resu
         let mut node_statuses = Vec::new();
 
         for node in nodes {
-            let current_block = node.provider.get_block_number().await?;
+            let current_block = node.get_block_number().await?;
             node_statuses.push((node.name, current_block));
 
             if current_block < target_block {
@@ -125,8 +121,7 @@ pub async fn assert_blocks_match(nodes: &[&NamedProvider], block_number: u64) ->
 
     // Fetch blocks from all nodes
     for node in nodes {
-        let block_opt =
-            node.provider.get_block_by_number(BlockNumberOrTag::Number(block_number)).await?;
+        let block_opt = node.get_block_by_number(BlockNumberOrTag::Number(block_number)).await?;
 
         let block = block_opt
             .ok_or_else(|| eyre::eyre!("{} block {} not found", node.name, block_number))?;
@@ -166,7 +161,7 @@ pub async fn assert_latest_block(nodes: &[&NamedProvider], expected_block: u64) 
 
     // Verify all nodes have the expected latest block
     for node in nodes {
-        let block_number = node.provider.get_block_number().await?;
+        let block_number = node.get_block_number().await?;
         assert_eq!(
             block_number, expected_block,
             "{} is at block {}, expected {}",
@@ -187,7 +182,6 @@ pub async fn assert_latest_block(nodes: &[&NamedProvider], expected_block: u64) 
 /// Add a peer to the node's peer set via admin API
 pub async fn admin_add_peer(provider: &NamedProvider, enode: &str) -> Result<bool> {
     provider
-        .provider
         .client()
         .request("admin_addPeer", (enode,))
         .await
@@ -197,7 +191,6 @@ pub async fn admin_add_peer(provider: &NamedProvider, enode: &str) -> Result<boo
 /// Remove a peer from the node's peer set via admin API
 pub async fn admin_remove_peer(provider: &NamedProvider, enode: &str) -> Result<bool> {
     provider
-        .provider
         .client()
         .request("admin_removePeer", (enode,))
         .await
@@ -207,7 +200,6 @@ pub async fn admin_remove_peer(provider: &NamedProvider, enode: &str) -> Result<
 /// Add a trusted peer to the node's trusted peer set via admin API
 pub async fn admin_add_trusted_peer(provider: &NamedProvider, enode: &str) -> Result<bool> {
     provider
-        .provider
         .client()
         .request("admin_addTrustedPeer", (enode,))
         .await
@@ -217,7 +209,6 @@ pub async fn admin_add_trusted_peer(provider: &NamedProvider, enode: &str) -> Re
 /// Remove a trusted peer from the node's trusted peer set via admin API
 pub async fn admin_remove_trusted_peer(provider: &NamedProvider, enode: &str) -> Result<bool> {
     provider
-        .provider
         .client()
         .request("admin_removeTrustedPeer", (enode,))
         .await

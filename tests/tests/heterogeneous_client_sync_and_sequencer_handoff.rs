@@ -71,7 +71,7 @@ async fn test_heterogeneous_client_sync_and_sequencer_handoff() -> Result<()> {
     utils::wait_for_block(&[&l2geth_sequencer], target_block).await?;
     utils::miner_stop(&l2geth_sequencer).await?;
 
-    let latest_block = l2geth_sequencer.provider.get_block_number().await?;
+    let latest_block = l2geth_sequencer.get_block_number().await?;
 
     // Wait for all l2geth nodes to reach the latest block
     utils::wait_for_block(&l2geth_nodes, latest_block).await?;
@@ -98,7 +98,7 @@ async fn test_heterogeneous_client_sync_and_sequencer_handoff() -> Result<()> {
     utils::wait_for_block(&nodes, target_block).await?;
 
     utils::miner_stop(&l2geth_sequencer).await?;
-    let latest_block = l2geth_sequencer.provider.get_block_number().await?;
+    let latest_block = l2geth_sequencer.get_block_number().await?;
     utils::wait_for_block(&nodes, latest_block).await?;
     utils::assert_blocks_match(&nodes, latest_block).await?;
     tracing::info!("✅ All nodes reached block {}", latest_block);
@@ -110,7 +110,7 @@ async fn test_heterogeneous_client_sync_and_sequencer_handoff() -> Result<()> {
     utils::wait_for_block(&nodes, target_block).await?;
 
     utils::disable_automatic_sequencing(&rn_sequencer).await?;
-    let latest_block = rn_sequencer.provider.get_block_number().await?;
+    let latest_block = rn_sequencer.get_block_number().await?;
     utils::wait_for_block(&nodes, latest_block).await?;
     utils::assert_blocks_match(&nodes, latest_block).await?;
     tracing::info!("✅ All nodes reached block {}", latest_block);
@@ -130,16 +130,16 @@ async fn test_heterogeneous_client_sync_and_sequencer_handoff() -> Result<()> {
 
     // Make sure l2geth nodes are still at the old block -> they need to sync once reconnected
     assert!(
-        l2geth_sequencer.provider.get_block_number().await? <= target_block + 1,
+        l2geth_sequencer.get_block_number().await? <= target_block + 1,
         "l2geth sequencer should be at most at block {}, but is at {}",
         target_block + 1,
-        l2geth_sequencer.provider.get_block_number().await?
+        l2geth_sequencer.get_block_number().await?
     );
     assert!(
-        l2geth_follower.provider.get_block_number().await? <= target_block + 1,
+        l2geth_follower.get_block_number().await? <= target_block + 1,
         "l2geth follower should be at most at block {}, but is at {}",
         target_block + 1,
-        l2geth_follower.provider.get_block_number().await?
+        l2geth_follower.get_block_number().await?
     );
 
     // Reconnect l2geth follower to l2geth sequencer and let them sync
@@ -157,7 +157,7 @@ async fn test_heterogeneous_client_sync_and_sequencer_handoff() -> Result<()> {
 
     // Disable sequencing on RN sequencer
     utils::disable_automatic_sequencing(&rn_sequencer).await?;
-    let latest_block = rn_sequencer.provider.get_block_number().await?;
+    let latest_block = rn_sequencer.get_block_number().await?;
     tracing::info!("Switched RN sequencing off at block {}", latest_block);
     utils::wait_for_block(&nodes, latest_block).await?;
     utils::assert_blocks_match(&nodes, latest_block).await?;
