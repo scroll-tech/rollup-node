@@ -192,6 +192,7 @@ pub fn default_sequencer_test_scroll_rollup_node_config() -> ScrollRollupNodeCon
             fee_recipient: Default::default(),
             l1_message_inclusion_mode: L1MessageInclusionMode::BlockDepth(0),
             allow_empty_blocks: true,
+            max_l1_messages: None,
         },
         blob_provider_args: BlobProviderArgs { mock: true, ..Default::default() },
         signer_args: Default::default(),
