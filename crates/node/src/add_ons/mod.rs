@@ -129,10 +129,12 @@ where
 
         let (tx, rx) = tokio::sync::oneshot::channel();
         let rollup_node_rpc_ext = RollupNodeRpcExt::<N::Network>::new(rx);
-        rpc_add_ons = rpc_add_ons.extend_rpc_modules(move |ctx| {
-            ctx.modules.merge_configured(rollup_node_rpc_ext.into_rpc())?;
-            Ok(())
-        });
+        if rollup_node_manager_addon.config().rpc_args.enabled {
+            rpc_add_ons = rpc_add_ons.extend_rpc_modules(move |ctx| {
+                ctx.modules.merge_configured(rollup_node_rpc_ext.into_rpc())?;
+                Ok(())
+            });
+        }
 
         let rpc_handle = rpc_add_ons.launch_add_ons_with(ctx.clone(), |_| Ok(())).await?;
         let (rollup_manager_handle, l1_watcher_tx) =
