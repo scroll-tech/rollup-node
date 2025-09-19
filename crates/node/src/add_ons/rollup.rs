@@ -45,6 +45,11 @@ impl RollupManagerAddOn {
         Self { config, scroll_wire_event }
     }
 
+    /// Returns a reference to the scroll rollup node config.
+    pub const fn config(&self) -> &ScrollRollupNodeConfig {
+        &self.config
+    }
+
     /// Launch the rollup node manager addon.
     pub async fn launch<N: FullNodeComponents, EthApi: EthApiTypes>(
         self,
