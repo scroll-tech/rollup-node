@@ -15,6 +15,7 @@ use alloy_signer_aws::AwsSigner;
 use alloy_signer_local::PrivateKeySigner;
 use alloy_transport::layers::RetryBackoffLayer;
 use aws_sdk_kms::config::BehaviorVersion;
+use clap::ArgAction;
 use reth_chainspec::EthChainSpec;
 use reth_network::NetworkProtocols;
 use reth_network_api::FullNetwork;
@@ -520,10 +521,10 @@ impl Default for ChainOrchestratorArgs {
 pub struct RollupNodeNetworkArgs {
     /// A bool to represent if new blocks should be bridged from the eth wire protocol to the
     /// scroll wire protocol.
-    #[arg(long = "network.bridge")]
+    #[arg(long = "network.bridge", default_value_t = true, action = ArgAction::Set)]
     pub enable_eth_scroll_wire_bridge: bool,
     /// A bool that represents if the scroll wire protocol should be enabled.
-    #[arg(long = "network.scroll-wire")]
+    #[arg(long = "network.scroll-wire", default_value_t = true, action = ArgAction::Set)]
     pub enable_scroll_wire: bool,
     /// The URL for the Sequencer RPC. (can be both HTTP and WS)
     #[arg(
