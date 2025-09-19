@@ -24,10 +24,10 @@ use rollup_node::{
         default_sequencer_test_scroll_rollup_node_config, default_test_scroll_rollup_node_config,
         generate_tx, setup_engine,
     },
-    BlobProviderArgs, ChainOrchestratorArgs, ConsensusAlgorithm, ConsensusArgs, DatabaseArgs,
-    EngineDriverArgs, GasPriceOracleArgs, L1ProviderArgs, NetworkArgs as ScrollNetworkArgs,
-    RollupNodeContext, RollupNodeExtApiClient, ScrollRollupNode, ScrollRollupNodeConfig,
-    SequencerArgs,
+    BlobProviderArgs, ChainOrchestratorArgs, ConsensusAlgorithm, ConsensusArgs, EngineDriverArgs,
+    L1ProviderArgs, RollupNodeContext, RollupNodeDatabaseArgs, RollupNodeExtApiClient,
+    RollupNodeGasPriceOracleArgs, RollupNodeNetworkArgs as ScrollNetworkArgs, RpcArgs,
+    ScrollRollupNode, ScrollRollupNodeConfig, SequencerArgs,
 };
 use rollup_node_chain_orchestrator::ChainOrchestratorEvent;
 use rollup_node_manager::{RollupManagerCommand, RollupManagerEvent};
@@ -55,7 +55,9 @@ async fn can_bridge_l1_messages() -> eyre::Result<()> {
     let node_args = ScrollRollupNodeConfig {
         test: true,
         network_args: ScrollNetworkArgs::default(),
-        database_args: DatabaseArgs { path: Some(PathBuf::from("sqlite::memory:")) },
+        database_args: RollupNodeDatabaseArgs {
+            rn_db_path: Some(PathBuf::from("sqlite::memory:")),
+        },
         l1_provider_args: L1ProviderArgs::default(),
         engine_driver_args: EngineDriverArgs::default(),
         chain_orchestrator_args: ChainOrchestratorArgs::default(),
@@ -69,9 +71,10 @@ async fn can_bridge_l1_messages() -> eyre::Result<()> {
         },
         blob_provider_args: BlobProviderArgs { mock: true, ..Default::default() },
         signer_args: Default::default(),
-        gas_price_oracle_args: GasPriceOracleArgs::default(),
+        gas_price_oracle_args: RollupNodeGasPriceOracleArgs::default(),
         consensus_args: ConsensusArgs::noop(),
         database: None,
+        rpc_args: RpcArgs::default(),
     };
     let (mut nodes, _tasks, _wallet) = setup_engine(node_args, 1, chain_spec, false, false).await?;
     let node = nodes.pop().unwrap();
@@ -150,7 +153,9 @@ async fn can_sequence_and_gossip_blocks() {
             sequencer_url: None,
             signer_address: None,
         },
-        database_args: DatabaseArgs { path: Some(PathBuf::from("sqlite::memory:")) },
+        database_args: RollupNodeDatabaseArgs {
+            rn_db_path: Some(PathBuf::from("sqlite::memory:")),
+        },
         l1_provider_args: L1ProviderArgs::default(),
         engine_driver_args: EngineDriverArgs::default(),
         chain_orchestrator_args: ChainOrchestratorArgs::default(),
@@ -165,9 +170,10 @@ async fn can_sequence_and_gossip_blocks() {
         },
         blob_provider_args: BlobProviderArgs { mock: true, ..Default::default() },
         signer_args: Default::default(),
-        gas_price_oracle_args: GasPriceOracleArgs::default(),
+        gas_price_oracle_args: RollupNodeGasPriceOracleArgs::default(),
         consensus_args: ConsensusArgs::noop(),
         database: None,
+        rpc_args: RpcArgs::default(),
     };
 
     let (nodes, _tasks, wallet) =
@@ -249,7 +255,9 @@ async fn can_penalize_peer_for_invalid_block() {
             sequencer_url: None,
             signer_address: None,
         },
-        database_args: DatabaseArgs { path: Some(PathBuf::from("sqlite::memory:")) },
+        database_args: RollupNodeDatabaseArgs {
+            rn_db_path: Some(PathBuf::from("sqlite::memory:")),
+        },
         l1_provider_args: L1ProviderArgs::default(),
         engine_driver_args: EngineDriverArgs::default(),
         sequencer_args: SequencerArgs {
@@ -263,10 +271,11 @@ async fn can_penalize_peer_for_invalid_block() {
         },
         blob_provider_args: BlobProviderArgs { mock: true, ..Default::default() },
         signer_args: Default::default(),
-        gas_price_oracle_args: GasPriceOracleArgs::default(),
+        gas_price_oracle_args: RollupNodeGasPriceOracleArgs::default(),
         consensus_args: ConsensusArgs::noop(),
         chain_orchestrator_args: ChainOrchestratorArgs::default(),
         database: None,
+        rpc_args: RpcArgs::default(),
     };
 
     let (nodes, _tasks, _) =

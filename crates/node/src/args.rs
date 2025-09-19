@@ -15,6 +15,7 @@ use alloy_signer_aws::AwsSigner;
 use alloy_signer_local::PrivateKeySigner;
 use alloy_transport::layers::RetryBackoffLayer;
 use aws_sdk_kms::config::BehaviorVersion;
+use clap::ArgAction;
 use reth_chainspec::EthChainSpec;
 use reth_network::NetworkProtocols;
 use reth_network_api::FullNetwork;
@@ -58,7 +59,7 @@ pub struct ScrollRollupNodeConfig {
     pub consensus_args: ConsensusArgs,
     /// Database args
     #[command(flatten)]
-    pub database_args: DatabaseArgs,
+    pub database_args: RollupNodeDatabaseArgs,
     /// Chain orchestrator args.
     #[command(flatten)]
     pub chain_orchestrator_args: ChainOrchestratorArgs,
@@ -76,13 +77,16 @@ pub struct ScrollRollupNodeConfig {
     pub sequencer_args: SequencerArgs,
     /// The network arguments
     #[command(flatten)]
-    pub network_args: NetworkArgs,
+    pub network_args: RollupNodeNetworkArgs,
+    /// The rpc arguments
+    #[command(flatten)]
+    pub rpc_args: RpcArgs,
     /// The signer arguments
     #[command(flatten)]
     pub signer_args: SignerArgs,
     /// The gas price oracle args
     #[command(flatten)]
-    pub gas_price_oracle_args: GasPriceOracleArgs,
+    pub gas_price_oracle_args: RollupNodeGasPriceOracleArgs,
     /// The database connection (not parsed via CLI but hydrated after validation).
     #[arg(skip)]
     pub database: Option<Arc<Database>>,
@@ -127,7 +131,7 @@ impl ScrollRollupNodeConfig {
     ) -> eyre::Result<()> {
         // Instantiate the database
         let db_path = node_config.datadir().db();
-        let database_path = if let Some(database_path) = &self.database_args.path {
+        let database_path = if let Some(database_path) = &self.database_args.rn_db_path {
             database_path.to_string_lossy().to_string()
         } else {
             // append the path using strings as using `join(...)` overwrites "sqlite://"
@@ -342,7 +346,9 @@ impl ScrollRollupNodeConfig {
                 Arc::new(l1_messages_provider),
                 args.fee_recipient,
                 ctx.block_gas_limit,
-                chain_config.l1_config.num_l1_messages_per_block,
+                self.sequencer_args
+                    .max_l1_messages
+                    .unwrap_or(chain_config.l1_config.num_l1_messages_per_block),
                 0,
                 self.sequencer_args.l1_message_inclusion_mode,
             );
@@ -406,10 +412,14 @@ impl ScrollRollupNodeConfig {
 
 /// The database arguments.
 #[derive(Debug, Default, Clone, clap::Args)]
-pub struct DatabaseArgs {
+pub struct RollupNodeDatabaseArgs {
     /// Database path
-    #[arg(long)]
-    pub path: Option<PathBuf>,
+    #[arg(
+        long = "rollup-node-db.path",
+        value_name = "DB_PATH",
+        help = "The database path for the rollup node database"
+    )]
+    pub rn_db_path: Option<PathBuf>,
 }
 
 /// The database arguments.
@@ -508,13 +518,13 @@ impl Default for ChainOrchestratorArgs {
 
 /// The network arguments.
 #[derive(Debug, Clone, clap::Args)]
-pub struct NetworkArgs {
+pub struct RollupNodeNetworkArgs {
     /// A bool to represent if new blocks should be bridged from the eth wire protocol to the
     /// scroll wire protocol.
-    #[arg(long = "network.bridge")]
+    #[arg(long = "network.bridge", default_value_t = true, action = ArgAction::Set)]
     pub enable_eth_scroll_wire_bridge: bool,
     /// A bool that represents if the scroll wire protocol should be enabled.
-    #[arg(long = "network.scroll-wire")]
+    #[arg(long = "network.scroll-wire", default_value_t = true, action = ArgAction::Set)]
     pub enable_scroll_wire: bool,
     /// The URL for the Sequencer RPC. (can be both HTTP and WS)
     #[arg(
@@ -528,7 +538,7 @@ pub struct NetworkArgs {
     pub signer_address: Option<Address>,
 }
 
-impl Default for NetworkArgs {
+impl Default for RollupNodeNetworkArgs {
     fn default() -> Self {
         Self {
             enable_eth_scroll_wire_bridge: true,
@@ -539,7 +549,7 @@ impl Default for NetworkArgs {
     }
 }
 
-impl NetworkArgs {
+impl RollupNodeNetworkArgs {
     /// Get the default authorized signer address for the given chain.
     pub const fn default_authorized_signer(chain: Option<NamedChain>) -> Option<Address> {
         match chain {
@@ -638,6 +648,14 @@ pub struct SequencerArgs {
         default_value_t = false
     )]
     pub allow_empty_blocks: bool,
+    /// The maximum number of L1 messages to include per L2 block.
+    #[arg(
+        long = "sequencer.max-l1-messages",
+        id = "sequencer_max_l1_messages",
+        value_name = "SEQUENCER_MAX_L1_MESSAGES",
+        help = "The maximum number of L1 messages to include per L2 block. If not set, defaults to the value specified in the chain config."
+    )]
+    pub max_l1_messages: Option<u64>,
 }
 
 /// The arguments for the signer.
@@ -661,6 +679,14 @@ pub struct SignerArgs {
 
     /// The private key signer, if any.
     pub private_key: Option<PrivateKeySigner>,
+}
+
+/// The arguments for the rpc.
+#[derive(Debug, Default, Clone, clap::Args)]
+pub struct RpcArgs {
+    /// A boolean to represent if the rollup node rpc should be enabled.
+    #[arg(long = "rpc.rollup-node", help = "Enable the rollup node RPC namespace")]
+    pub enabled: bool,
 }
 
 impl SignerArgs {
@@ -730,7 +756,7 @@ impl SignerArgs {
 
 /// The arguments for the sequencer.
 #[derive(Debug, Default, Clone, clap::Args)]
-pub struct GasPriceOracleArgs {
+pub struct RollupNodeGasPriceOracleArgs {
     /// Minimum suggested priority fee (tip) in wei, default `100`
     #[arg(long, default_value_t = 100)]
     #[arg(long = "gpo.default-suggest-priority-fee", id = "default_suggest_priority_fee", value_name = "DEFAULT_SUGGEST_PRIORITY_FEE", default_value_t = constants::DEFAULT_SUGGEST_PRIORITY_FEE)]
@@ -763,20 +789,22 @@ mod tests {
     #[test]
     fn test_network_args_default_authorized_signer() {
         // Test Scroll mainnet
-        let mainnet_signer = NetworkArgs::default_authorized_signer(Some(NamedChain::Scroll));
+        let mainnet_signer =
+            RollupNodeNetworkArgs::default_authorized_signer(Some(NamedChain::Scroll));
         assert_eq!(mainnet_signer, Some(constants::SCROLL_MAINNET_SIGNER));
 
         // Test Scroll Sepolia
         let sepolia_signer =
-            NetworkArgs::default_authorized_signer(Some(NamedChain::ScrollSepolia));
+            RollupNodeNetworkArgs::default_authorized_signer(Some(NamedChain::ScrollSepolia));
         assert_eq!(sepolia_signer, Some(constants::SCROLL_SEPOLIA_SIGNER));
 
         // Test other chains
-        let other_signer = NetworkArgs::default_authorized_signer(Some(NamedChain::Mainnet));
+        let other_signer =
+            RollupNodeNetworkArgs::default_authorized_signer(Some(NamedChain::Mainnet));
         assert_eq!(other_signer, None);
 
         // Test None chain
-        let none_signer = NetworkArgs::default_authorized_signer(None);
+        let none_signer = RollupNodeNetworkArgs::default_authorized_signer(None);
         assert_eq!(none_signer, None);
     }
 
@@ -786,11 +814,11 @@ mod tests {
 
         // Test with configured signer
         let network_args =
-            NetworkArgs { signer_address: Some(custom_signer), ..Default::default() };
+            RollupNodeNetworkArgs { signer_address: Some(custom_signer), ..Default::default() };
         assert_eq!(network_args.effective_signer(Some(NamedChain::Scroll)), Some(custom_signer));
 
         // Test without configured signer, fallback to default
-        let network_args_default = NetworkArgs::default();
+        let network_args_default = RollupNodeNetworkArgs::default();
         assert_eq!(
             network_args_default.effective_signer(Some(NamedChain::Scroll)),
             Some(constants::SCROLL_MAINNET_SIGNER)
@@ -808,18 +836,19 @@ mod tests {
             test: false,
             sequencer_args: SequencerArgs { sequencer_enabled: true, ..Default::default() },
             signer_args: SignerArgs { key_file: None, aws_kms_key_id: None, private_key: None },
-            database_args: DatabaseArgs::default(),
+            database_args: RollupNodeDatabaseArgs::default(),
             engine_driver_args: EngineDriverArgs::default(),
             chain_orchestrator_args: ChainOrchestratorArgs::default(),
             l1_provider_args: L1ProviderArgs::default(),
             blob_provider_args: BlobProviderArgs::default(),
-            network_args: NetworkArgs::default(),
-            gas_price_oracle_args: GasPriceOracleArgs::default(),
+            network_args: RollupNodeNetworkArgs::default(),
+            gas_price_oracle_args: RollupNodeGasPriceOracleArgs::default(),
             consensus_args: ConsensusArgs {
                 algorithm: ConsensusAlgorithm::SystemContract,
                 authorized_signer: None,
             },
             database: None,
+            rpc_args: RpcArgs::default(),
         };
 
         let result = config.validate();
@@ -839,18 +868,19 @@ mod tests {
                 aws_kms_key_id: Some("key-id".to_string()),
                 private_key: None,
             },
-            database_args: DatabaseArgs::default(),
+            database_args: RollupNodeDatabaseArgs::default(),
             engine_driver_args: EngineDriverArgs::default(),
             chain_orchestrator_args: ChainOrchestratorArgs::default(),
             l1_provider_args: L1ProviderArgs::default(),
             blob_provider_args: BlobProviderArgs::default(),
-            network_args: NetworkArgs::default(),
-            gas_price_oracle_args: GasPriceOracleArgs::default(),
+            network_args: RollupNodeNetworkArgs::default(),
+            gas_price_oracle_args: RollupNodeGasPriceOracleArgs::default(),
             consensus_args: ConsensusArgs {
                 algorithm: ConsensusAlgorithm::SystemContract,
                 authorized_signer: None,
             },
             database: None,
+            rpc_args: RpcArgs::default(),
         };
 
         let result = config.validate();
@@ -868,15 +898,16 @@ mod tests {
                 aws_kms_key_id: None,
                 private_key: None,
             },
-            database_args: DatabaseArgs::default(),
+            database_args: RollupNodeDatabaseArgs::default(),
             chain_orchestrator_args: ChainOrchestratorArgs::default(),
             engine_driver_args: EngineDriverArgs::default(),
             l1_provider_args: L1ProviderArgs::default(),
             blob_provider_args: BlobProviderArgs::default(),
-            network_args: NetworkArgs::default(),
-            gas_price_oracle_args: GasPriceOracleArgs::default(),
+            network_args: RollupNodeNetworkArgs::default(),
+            gas_price_oracle_args: RollupNodeGasPriceOracleArgs::default(),
             consensus_args: ConsensusArgs::noop(),
             database: None,
+            rpc_args: RpcArgs::default(),
         };
 
         assert!(config.validate().is_ok());
@@ -892,15 +923,16 @@ mod tests {
                 aws_kms_key_id: Some("key-id".to_string()),
                 private_key: None,
             },
-            database_args: DatabaseArgs::default(),
+            database_args: RollupNodeDatabaseArgs::default(),
             engine_driver_args: EngineDriverArgs::default(),
             chain_orchestrator_args: ChainOrchestratorArgs::default(),
             l1_provider_args: L1ProviderArgs::default(),
             blob_provider_args: BlobProviderArgs::default(),
-            network_args: NetworkArgs::default(),
-            gas_price_oracle_args: GasPriceOracleArgs::default(),
+            network_args: RollupNodeNetworkArgs::default(),
+            gas_price_oracle_args: RollupNodeGasPriceOracleArgs::default(),
             consensus_args: ConsensusArgs::noop(),
             database: None,
+            rpc_args: RpcArgs::default(),
         };
 
         assert!(config.validate().is_ok());
@@ -912,15 +944,16 @@ mod tests {
             test: false,
             sequencer_args: SequencerArgs { sequencer_enabled: false, ..Default::default() },
             signer_args: SignerArgs { key_file: None, aws_kms_key_id: None, private_key: None },
-            database_args: DatabaseArgs::default(),
+            database_args: RollupNodeDatabaseArgs::default(),
             engine_driver_args: EngineDriverArgs::default(),
             chain_orchestrator_args: ChainOrchestratorArgs::default(),
             l1_provider_args: L1ProviderArgs::default(),
             blob_provider_args: BlobProviderArgs::default(),
-            network_args: NetworkArgs::default(),
-            gas_price_oracle_args: GasPriceOracleArgs::default(),
+            network_args: RollupNodeNetworkArgs::default(),
+            gas_price_oracle_args: RollupNodeGasPriceOracleArgs::default(),
             consensus_args: ConsensusArgs::noop(),
             database: None,
+            rpc_args: RpcArgs::default(),
         };
 
         assert!(config.validate().is_ok());
