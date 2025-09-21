@@ -653,7 +653,7 @@ impl<
         l1_block_number: Arc<AtomicU64>,
     ) -> Result<Option<ChainOrchestratorEvent>, ChainOrchestratorError> {
         let finalized_batches =
-            retry_with_defaults("set_latest_finalized_l1_block_number", || async {
+            retry_with_defaults("handle_finalized", || async {
                 let tx = database.tx_mut().await?;
 
                 // Set the latest finalized L1 block in the database.
