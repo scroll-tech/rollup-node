@@ -24,12 +24,12 @@ use core::{
 };
 use futures::{FutureExt, Stream};
 use rollup_node_primitives::{
-    BatchCommitData, BatchInfo, ScrollPayloadAttributesWithBatchInfo, WithBlockNumber,
-    WithFinalizedBatchInfo, WithFinalizedBlockNumber,
+    BatchCommitData, BatchInfo, L1MessageEnvelope, ScrollPayloadAttributesWithBatchInfo,
+    WithBlockNumber, WithFinalizedBatchInfo, WithFinalizedBlockNumber,
 };
 use rollup_node_providers::{BlockDataProvider, L1Provider};
 use scroll_alloy_rpc_types_engine::{BlockDataHint, ScrollPayloadAttributes};
-use scroll_codec::Codec;
+use scroll_codec::{decoding::payload::PayloadData, Codec};
 use scroll_db::{Database, DatabaseReadOperations, DatabaseTransactionProvider};
 use tokio::time::Interval;
 
@@ -272,25 +272,10 @@ pub async fn derive<L1P: L1Provider + Sync + Send, L2P: BlockDataProvider + Sync
     let decoded = Codec::decode(&data)?;
 
     // set the cursor for the l1 provider.
-    let data = &decoded.data;
-    if let Some(index) = data.queue_index_start() {
-        l1_provider.set_queue_index_cursor(index);
-    } else if let Some(hash) = data.prev_l1_message_queue_hash() {
-        // If the message queue hash is zero then we should use the V2 L1 message queue start index.
-        // We must apply this branch logic because we do not have a L1 message associated with a
-        // queue hash of ZERO (we only compute a queue hash for the first L1 message of the V2
-        // contract).
-        if hash == &B256::ZERO {
-            l1_provider.set_queue_index_cursor(l1_v2_message_queue_start_index);
-        } else {
-            l1_provider.set_hash_cursor(*hash).await;
-            // we skip the first l1 message, as we are interested in the one starting after
-            // prev_l1_message_queue_hash.
-            let _ = l1_provider.next_l1_message().await.map_err(Into::into)?;
-        }
-    } else {
-        return Err(DerivationPipelineError::MissingL1MessageQueueCursor)
-    }
+    let payload_data = &decoded.data;
+    let mut l1_messages_iter =
+        iter_l1_messages_from_payload(&l1_provider, payload_data, l1_v2_message_queue_start_index)
+            .await?;
 
     let skipped_l1_messages = decoded.data.skipped_l1_message_bitmap.clone().unwrap_or_default();
     let mut skipped_l1_messages = skipped_l1_messages.into_iter();
@@ -302,18 +287,15 @@ pub async fn derive<L1P: L1Provider + Sync + Send, L2P: BlockDataProvider + Sync
         for _ in 0..block.context.num_l1_messages {
             // check if the next l1 message should be skipped.
             if matches!(skipped_l1_messages.next(), Some(bit) if bit) {
-                l1_provider.increment_cursor();
+                let _ = l1_messages_iter.next();
                 continue;
             }
 
-            // TODO: fetch L1 messages range.
-            let l1_message = l1_provider
-                .next_l1_message()
-                .await
-                .map_err(Into::into)?
+            let l1_message = l1_messages_iter
+                .next()
                 .ok_or(DerivationPipelineError::MissingL1Message(block.clone()))?;
-            let mut bytes = Vec::with_capacity(l1_message.eip2718_encoded_length());
-            l1_message.eip2718_encode(&mut bytes);
+            let mut bytes = Vec::with_capacity(l1_message.transaction.eip2718_encoded_length());
+            l1_message.transaction.eip2718_encode(&mut bytes);
             txs.push(bytes.into());
         }
 
@@ -353,6 +335,59 @@ fn delayed_interval(interval: u64) -> Interval {
     interval
 }
 
+/// Returns an iterator over L1 messages from the `PayloadData`. If the `PayloadData` returns a
+/// `prev_l1_message_queue_hash` of zero, uses the `l1_v2_message_queue_start_index` to fetch
+/// messages from the L1 provider.
+///
+/// # Errors
+///
+/// Propagates any error from the L1 provider.
+/// Returns an error if the retrieved number of L1 messages does not match the expected number from
+/// the payload data.
+async fn iter_l1_messages_from_payload<L1P: L1Provider>(
+    provider: &L1P,
+    data: &PayloadData,
+    l1_v2_message_queue_start_index: u64,
+) -> Result<Box<dyn Iterator<Item = L1MessageEnvelope> + Send>, DerivationPipelineError> {
+    let total_l1_messages = data.blocks.iter().map(|b| b.context.num_l1_messages as u64).sum();
+
+    let messages = if let Some(index) = data.queue_index_start() {
+        provider.get_n_messages(index.into(), total_l1_messages).await.map_err(Into::into)?
+    } else if let Some(hash) = data.prev_l1_message_queue_hash() {
+        // If the message queue hash is zero then we should use the V2 L1 message queue start
+        // index. We must apply this branch logic because we do not have a L1
+        // message associated with a queue hash of ZERO (we only compute a queue
+        // hash for the first L1 message of the V2 contract).
+        if hash == &B256::ZERO {
+            provider
+                .get_n_messages(l1_v2_message_queue_start_index.into(), total_l1_messages)
+                .await
+                .map_err(Into::into)?
+        } else {
+            let mut messages = provider
+                .get_n_messages((*hash).into(), total_l1_messages + 1)
+                .await
+                .map_err(Into::into)?;
+            // we skip the first l1 message, as we are interested in the one starting after
+            // prev_l1_message_queue_hash.
+            messages.pop();
+            messages
+        }
+    } else {
+        return Err(DerivationPipelineError::MissingL1MessageQueueCursor)
+    };
+
+    // Check we received the expected amount of L1 messages.
+    if messages.len() as u64 != total_l1_messages {
+        return Err(DerivationPipelineError::InvalidL1MessagesCount {
+            expected: total_l1_messages,
+            got: messages.len() as u64,
+        })
+    }
+
+    Ok(Box::new(messages.into_iter()))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -362,9 +397,7 @@ mod tests {
     use alloy_primitives::{address, b256, bytes, U256};
     use futures::StreamExt;
     use rollup_node_primitives::L1MessageEnvelope;
-    use rollup_node_providers::{
-        test_utils::MockL1Provider, DatabaseL1MessageProvider, L1ProviderError,
-    };
+    use rollup_node_providers::{test_utils::MockL1Provider, L1ProviderError};
     use scroll_alloy_consensus::TxL1Message;
     use scroll_alloy_rpc_types_engine::BlockDataHint;
     use scroll_codec::decoding::test_utils::read_to_bytes;
@@ -426,7 +459,7 @@ mod tests {
     async fn test_should_correctly_handle_batch_revert() -> eyre::Result<()> {
         // construct the pipeline.
         let db = Arc::new(setup_test_db().await);
-        let l1_messages_provider = DatabaseL1MessageProvider::new(db.clone(), 0);
+        let l1_messages_provider = db.clone();
         let mock_l1_provider = MockL1Provider { l1_messages_provider, blobs: HashMap::new() };
 
         let mut pipeline = DerivationPipeline {
@@ -497,7 +530,7 @@ mod tests {
         tx.commit().await?;
 
         // construct the pipeline.
-        let l1_messages_provider = DatabaseL1MessageProvider::new(db.clone(), 0);
+        let l1_messages_provider = db.clone();
         let mock_l1_provider = MockL1Provider { l1_messages_provider, blobs: HashMap::new() };
         let mut pipeline = DerivationPipeline::new(mock_l1_provider, db.clone(), u64::MAX);
 
@@ -568,7 +601,7 @@ mod tests {
         tx.commit().await?;
 
         // construct the pipeline.
-        let l1_messages_provider = DatabaseL1MessageProvider::new(db.clone(), 0);
+        let l1_messages_provider = db.clone();
         let mock_l1_provider = MockL1Provider { l1_messages_provider, blobs: HashMap::new() };
         let mut pipeline = DerivationPipeline::new(mock_l1_provider, db, u64::MAX);
 
@@ -627,7 +660,7 @@ mod tests {
         }
         tx.commit().await?;
 
-        let l1_messages_provider = DatabaseL1MessageProvider::new(db.clone(), 0);
+        let l1_messages_provider = db.clone();
         let l1_provider = MockL1Provider { l1_messages_provider, blobs: HashMap::new() };
         let l2_provider = MockL2Provider;
 
@@ -727,7 +760,7 @@ mod tests {
         }
         tx.commit().await?;
 
-        let l1_messages_provider = DatabaseL1MessageProvider::new(db.clone(), 0);
+        let l1_messages_provider = db.clone();
         let l1_provider = MockL1Provider { l1_messages_provider, blobs: HashMap::new() };
         let l2_provider = MockL2Provider;
 
@@ -783,7 +816,7 @@ mod tests {
         }
         tx.commit().await?;
 
-        let l1_messages_provider = DatabaseL1MessageProvider::new(db.clone(), 0);
+        let l1_messages_provider = db.clone();
         let l1_provider = MockL1Provider { l1_messages_provider, blobs: HashMap::new() };
         let l2_provider = MockL2Provider;
 
@@ -894,7 +927,7 @@ mod tests {
                     }
                     tx.commit().await?;
 
-                    let l1_messages_provider = DatabaseL1MessageProvider::new(db.clone(), 0);
+                    let l1_messages_provider = db.clone();
                     let l1_provider = MockL1Provider {
                         l1_messages_provider,
                         blobs: HashMap::from([(
@@ -928,8 +961,7 @@ mod tests {
         Ok(())
     }
 
-    async fn new_test_pipeline(
-    ) -> DerivationPipeline<MockL1Provider<DatabaseL1MessageProvider<Arc<Database>>>> {
+    async fn new_test_pipeline() -> DerivationPipeline<MockL1Provider<Arc<Database>>> {
         let initial_block = 200;
 
         let batches = (initial_block - 100..initial_block)
@@ -948,7 +980,7 @@ mod tests {
             .collect();
 
         let db = Arc::new(setup_test_db().await);
-        let l1_messages_provider = DatabaseL1MessageProvider::new(db.clone(), 0);
+        let l1_messages_provider = db.clone();
         let mock_l1_provider = MockL1Provider { l1_messages_provider, blobs: HashMap::new() };
 
         DerivationPipeline {
