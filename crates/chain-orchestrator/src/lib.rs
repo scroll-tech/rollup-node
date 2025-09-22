@@ -804,14 +804,16 @@ async fn compute_l1_message_queue_hash(
         Some(keccak256(input) & L1_MESSAGE_QUEUE_HASH_MASK)
     } else if l1_message.queue_index > l1_v2_message_queue_start_index {
         let index = l1_message.queue_index - 1;
-        let tx = database.tx().await?;
-        let mut input = tx
-            .get_l1_message_by_index(index)
-            .await?
-            .map(|m| m.queue_hash)
-            .ok_or(DatabaseError::L1MessageNotFound(L1MessageStart::Index(index)))?
-            .unwrap_or_default()
-            .to_vec();
+        let mut input = retry_with_defaults("get_l1_message_by_index", || async {
+            let tx = database.tx().await?;
+            let input = tx.get_l1_message_by_index(index).await?;
+            Ok::<_, DatabaseError>(input)
+        })
+        .await?
+        .map(|m| m.queue_hash)
+        .ok_or(DatabaseError::L1MessageNotFound(L1MessageStart::Index(index)))?
+        .unwrap_or_default()
+        .to_vec();
         input.append(&mut l1_message.tx_hash().to_vec());
         Some(keccak256(input) & L1_MESSAGE_QUEUE_HASH_MASK)
     } else {

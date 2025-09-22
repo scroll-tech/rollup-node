@@ -136,7 +136,7 @@ impl From<DatabaseConnection> for Database {
     }
 }
 
-#[cfg(all(test, feature = "test-utils"))]
+#[cfg(test)]
 mod test {
     use super::*;
     use crate::{
