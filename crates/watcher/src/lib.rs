@@ -653,7 +653,7 @@ where
 
         // skip a block for `from_block` since `self.current_block_number` is the last indexed
         // block.
-        filter = filter.from_block(self.current_block_number + 1).to_block(to_block);
+        filter = filter.from_block(self.current_block_number.saturating_add(1)).to_block(to_block);
 
         tracing::trace!(target: "scroll::watcher", ?filter, "fetching logs");
 
