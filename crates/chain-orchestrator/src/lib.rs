@@ -652,23 +652,22 @@ impl<
         block_number: u64,
         l1_block_number: Arc<AtomicU64>,
     ) -> Result<Option<ChainOrchestratorEvent>, ChainOrchestratorError> {
-        let finalized_batches =
-            retry_with_defaults("handle_finalized", || async {
-                let tx = database.tx_mut().await?;
+        let finalized_batches = retry_with_defaults("handle_finalized", || async {
+            let tx = database.tx_mut().await?;
 
-                // Set the latest finalized L1 block in the database.
-                tx.set_latest_finalized_l1_block_number(block_number).await?;
+            // Set the latest finalized L1 block in the database.
+            tx.set_latest_finalized_l1_block_number(block_number).await?;
 
-                // Get all unprocessed batches that have been finalized by this L1 block
-                // finalization.
-                let finalized_batches =
-                    tx.fetch_and_update_unprocessed_finalized_batches(block_number).await?;
+            // Get all unprocessed batches that have been finalized by this L1 block
+            // finalization.
+            let finalized_batches =
+                tx.fetch_and_update_unprocessed_finalized_batches(block_number).await?;
 
-                tx.commit().await?;
+            tx.commit().await?;
 
-                Ok::<_, DatabaseError>(finalized_batches)
-            })
-            .await?;
+            Ok::<_, DatabaseError>(finalized_batches)
+        })
+        .await?;
 
         // Update the chain orchestrator L1 block number.
         l1_block_number.store(block_number, Ordering::Relaxed);
