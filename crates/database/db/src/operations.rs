@@ -484,6 +484,19 @@ pub trait DatabaseReadOperations: ReadConnectionProvider + Sync {
             .map(|x| x.map(Into::into))?)
     }
 
+    /// Gets the latest L1 messages which has an associated L2 block number if any.
+    async fn get_latest_executed_l1_message(
+        &self,
+    ) -> Result<Option<L1MessageEnvelope>, DatabaseError> {
+        Ok(models::l1_message::Entity::find()
+            .filter(models::l1_message::Column::L2BlockNumber.is_not_null())
+            .order_by_desc(models::l1_message::Column::L2BlockNumber)
+            .order_by_desc(models::l1_message::Column::QueueIndex)
+            .one(self.get_connection())
+            .await?
+            .map(Into::into))
+    }
+
     /// Get an iterator over all [`L1MessageEnvelope`]s in the database starting from the provided
     /// `start` point.
     async fn get_l1_messages<'a>(
@@ -664,6 +677,18 @@ impl fmt::Display for L1MessageStart {
             Self::Index(index) => write!(f, "Index({index})"),
             Self::Hash(hash) => write!(f, "Hash({hash:#x})"),
         }
+    }
+}
+
+impl From<u64> for L1MessageStart {
+    fn from(value: u64) -> Self {
+        Self::Index(value)
+    }
+}
+
+impl From<B256> for L1MessageStart {
+    fn from(value: B256) -> Self {
+        Self::Hash(value)
     }
 }
 

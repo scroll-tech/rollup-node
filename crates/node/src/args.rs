@@ -31,8 +31,7 @@ use rollup_node_manager::{
 };
 use rollup_node_primitives::{BlockInfo, NodeConfig};
 use rollup_node_providers::{
-    BlobProvidersBuilder, DatabaseL1MessageProvider, FullL1Provider, L1MessageProvider, L1Provider,
-    SystemContractProvider,
+    BlobProvidersBuilder, FullL1Provider, L1MessageProvider, L1Provider, SystemContractProvider,
 };
 use rollup_node_sequencer::{L1MessageInclusionMode, Sequencer};
 use rollup_node_watcher::{L1Notification, L1Watcher};
@@ -40,7 +39,8 @@ use scroll_alloy_hardforks::ScrollHardforks;
 use scroll_alloy_network::Scroll;
 use scroll_alloy_provider::{ScrollAuthApiEngineClient, ScrollEngineApi};
 use scroll_db::{
-    Database, DatabaseConnectionProvider, DatabaseTransactionProvider, DatabaseWriteOperations,
+    Database, DatabaseConnectionProvider, DatabaseReadOperations, DatabaseTransactionProvider,
+    DatabaseWriteOperations,
 };
 use scroll_engine::{genesis_hash_from_chain_spec, EngineDriver, ForkchoiceState};
 use scroll_migration::traits::ScrollMigrator;
@@ -326,7 +326,7 @@ impl ScrollRollupNodeConfig {
             };
 
         // Construct the l1 provider.
-        let l1_messages_provider = DatabaseL1MessageProvider::new(db.clone(), 0);
+        let l1_messages_provider = db.clone();
         let blob_providers_builder = BlobProvidersBuilder {
             beacon: self.blob_provider_args.beacon_node_urls,
             s3: self.blob_provider_args.s3_url,
@@ -335,11 +335,13 @@ impl ScrollRollupNodeConfig {
         };
         let blob_provider =
             blob_providers_builder.build().await.expect("failed to construct L1 blob provider");
-
         let l1_provider = FullL1Provider::new(blob_provider, l1_messages_provider.clone()).await;
 
         // Construct the Sequencer.
         let chain_config = chain_spec.chain_config();
+        let latest_l1_message = db.tx().await?.get_latest_executed_l1_message().await?;
+        let sequencer_l1_messages_queue_index =
+            latest_l1_message.map(|msg| msg.transaction.queue_index + 1).unwrap_or_default();
         let (sequencer, block_time, auto_start) = if self.sequencer_args.sequencer_enabled {
             let args = &self.sequencer_args;
             let sequencer = Sequencer::new(
@@ -351,6 +353,7 @@ impl ScrollRollupNodeConfig {
                     .unwrap_or(chain_config.l1_config.num_l1_messages_per_block),
                 0,
                 self.sequencer_args.l1_message_inclusion_mode,
+                sequencer_l1_messages_queue_index,
             );
             (Some(sequencer), (args.block_time != 0).then_some(args.block_time), args.auto_start)
         } else {

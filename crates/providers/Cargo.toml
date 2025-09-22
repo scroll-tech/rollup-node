@@ -20,7 +20,6 @@ alloy-serde = { version = "0.15.5", default-features = false }
 alloy-transport.workspace = true
 
 # scroll
-scroll-alloy-consensus.workspace = true
 scroll-alloy-network.workspace = true
 scroll-alloy-rpc-types-engine.workspace = true
 scroll-db.workspace = true
@@ -31,8 +30,8 @@ rollup-node-primitives.workspace = true
 # misc
 async-trait.workspace = true
 auto_impl.workspace = true
-clap = { workspace = true, features = ["derive"] }
 eyre.workspace = true
+futures.workspace = true
 lru = "0.13.0"
 reqwest = { workspace = true, features = ["json"] }
 serde = { workspace = true, features = ["derive"] }
