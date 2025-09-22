@@ -18,8 +18,8 @@ use scroll_alloy_consensus::TxL1Message;
 use scroll_alloy_hardforks::ScrollHardforks;
 use scroll_alloy_network::Scroll;
 use scroll_db::{
-    retry_with_defaults, Database, DatabaseError, DatabaseReadOperations,
-    DatabaseTransactionProvider, DatabaseWriteOperations, L1MessageStart, UnwindResult,
+    Database, DatabaseError, DatabaseReadOperations, DatabaseTransactionProvider,
+    DatabaseWriteOperations, L1MessageStart, UnwindResult,
 };
 use scroll_network::NewBlockWithPeer;
 use std::{
@@ -46,6 +46,9 @@ pub use error::ChainOrchestratorError;
 
 mod metrics;
 pub use metrics::{ChainOrchestratorItem, ChainOrchestratorMetrics};
+
+mod retry;
+pub use retry::{retry_config, retry_operation_with_name, retry_with_defaults, RetryConfig};
 
 /// The mask used to mask the L1 message queue hash.
 const L1_MESSAGE_QUEUE_HASH_MASK: B256 =
@@ -257,9 +260,13 @@ impl<
                 tracing::trace!(target: "scroll::chain_orchestrator", number = ?(optimistic_headers.first().expect("chain can not be empty").number - 1), "fetching block");
                 let parent_hash =
                     optimistic_headers.first().expect("chain can not be empty").parent_hash;
-                let header = network_client
-                    .get_header(BlockHashOrNumber::Hash(parent_hash))
-                    .await?
+                let header = retry_with_defaults("network_client_get_header", || async {
+                    let header =
+                        network_client.get_header(BlockHashOrNumber::Hash(parent_hash)).await?;
+                    Ok::<_, ChainOrchestratorError>(header)
+                })
+                .await?;
+                let header = header
                     .into_data()
                     .ok_or(ChainOrchestratorError::MissingBlockHeader { hash: parent_hash })?;
                 optimistic_headers.push_front(header);
@@ -390,12 +397,16 @@ impl<
             }
 
             tracing::trace!(target: "scroll::chain_orchestrator", number = ?(received_chain_headers.front().expect("chain can not be empty").number - 1), "fetching block");
-            if let Some(header) = network_client
-                .get_header(BlockHashOrNumber::Hash(
-                    received_chain_headers.front().expect("chain can not be empty").parent_hash,
-                ))
-                .await?
-                .into_data()
+            if let Some(header) = retry_with_defaults("network_client_get_header", || async {
+                let header = network_client
+                    .get_header(BlockHashOrNumber::Hash(
+                        received_chain_headers.front().expect("chain can not be empty").parent_hash,
+                    ))
+                    .await?
+                    .into_data();
+                Ok::<_, ChainOrchestratorError>(header)
+            })
+            .await?
             {
                 received_chain_headers.push_front(header.clone());
             } else {

@@ -1,4 +1,4 @@
-//! Retry mechanism for database operations
+//! Configurable retry mechanism for database, network, and other fallible operations.
 
 use std::time::Duration;
 
@@ -28,7 +28,7 @@ pub const fn retry_config(
     RetryConfig { max_retries: Some(max_retries), initial_delay_ms, exponential_backoff }
 }
 
-/// Retry a database operation with operation name for better logging
+/// Retry a operation with operation name for better logging
 pub async fn retry_operation_with_name<F, Fut, T, E>(
     operation_name: &str,
     operation: F,
@@ -53,11 +53,11 @@ where
 
                 attempt += 1;
                 tracing::debug!(
-                    target: "scroll::db",
+                    target: "scroll::chain_orchestrator",
                     operation = operation_name,
                     error = ?error,
                     attempt = attempt,
-                    "Retrying database operation"
+                    "Retrying operation"
                 );
 
                 // Calculate delay for next retry

@@ -19,9 +19,6 @@ pub use operations::{
     DatabaseReadOperations, DatabaseWriteOperations, L1MessageStart, UnwindResult,
 };
 
-mod retry;
-pub use retry::{retry_config, retry_operation_with_name, retry_with_defaults, RetryConfig};
-
 mod transaction;
 pub use transaction::{DatabaseTransactionProvider, TXMut, TX};
 
