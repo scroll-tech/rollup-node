@@ -15,10 +15,10 @@ reth-chainspec.workspace = true
 reth-eth-wire-types.workspace = true
 reth-network.workspace = true
 reth-network-api.workspace = true
-reth-network-types = { git = "https://github.com/scroll-tech/reth.git", default-features = false }
+reth-network-types = { git = "https://github.com/scroll-tech/reth.git", branch = "feat/add-header-td", default-features = false }
 reth-network-peers.workspace = true
 reth-primitives-traits.workspace = true
-reth-storage-api = { git = "https://github.com/scroll-tech/reth.git", default-features = false }
+reth-storage-api = { git = "https://github.com/scroll-tech/reth.git", branch = "feat/add-header-td", default-features = false }
 reth-tokio-util.workspace = true
 
 # scroll
