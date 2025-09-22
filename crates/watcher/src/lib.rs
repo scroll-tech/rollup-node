@@ -569,7 +569,9 @@ where
                 .execution_provider
                 .get_block((current_block.number.saturating_sub(1)).into())
                 .await?
-                .ok_or_else(|| EthRequestError::MissingBlock(current_block.number.saturating_sub(1)))?;
+                .ok_or_else(|| {
+                    EthRequestError::MissingBlock(current_block.number.saturating_sub(1))
+                })?;
             chain.push(block.header.clone());
             current_block = block.header;
         };
