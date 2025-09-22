@@ -183,7 +183,7 @@ where
         let watcher = Self {
             execution_provider,
             unfinalized_blocks: BoundedVec::new(HEADER_CAPACITY),
-            current_block_number: start_block.unwrap_or(config.start_l1_block) - 1,
+            current_block_number: start_block.unwrap_or(config.start_l1_block).saturating_sub(1),
             l1_state,
             sender: tx,
             config,
@@ -344,7 +344,7 @@ where
                 .iter()
                 .zip(chain.iter())
                 .find(|(old, new)| old.hash != new.hash)
-                .map(|(old, _)| old.number - 1);
+                .map(|(old, _)| old.number.saturating_sub(1));
 
             // set the unfinalized chain.
             self.unfinalized_blocks = chain;
@@ -564,12 +564,14 @@ where
                 break (pos, chain);
             }
 
-            tracing::trace!(target: "scroll::watcher", number = ?(current_block.number - 1), "fetching block");
+            tracing::trace!(target: "scroll::watcher", number = ?(current_block.number.saturating_sub(1)), "fetching block");
             let block = self
                 .execution_provider
-                .get_block((current_block.number - 1).into())
+                .get_block((current_block.number.saturating_sub(1)).into())
                 .await?
-                .ok_or(EthRequestError::MissingBlock(current_block.number - 1))?;
+                .ok_or_else(|| {
+                    EthRequestError::MissingBlock(current_block.number.saturating_sub(1))
+                })?;
             chain.push(block.header.clone());
             current_block = block.header;
         };
@@ -653,7 +655,7 @@ where
 
         // skip a block for `from_block` since `self.current_block_number` is the last indexed
         // block.
-        filter = filter.from_block(self.current_block_number + 1).to_block(to_block);
+        filter = filter.from_block(self.current_block_number.saturating_add(1)).to_block(to_block);
 
         tracing::trace!(target: "scroll::watcher", ?filter, "fetching logs");
 
