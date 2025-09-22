@@ -16,6 +16,7 @@ use alloy_signer_local::PrivateKeySigner;
 use alloy_transport::layers::RetryBackoffLayer;
 use aws_sdk_kms::config::BehaviorVersion;
 use clap::ArgAction;
+use futures::StreamExt;
 use reth_chainspec::EthChainSpec;
 use reth_network::NetworkProtocols;
 use reth_network_api::FullNetwork;
@@ -243,7 +244,30 @@ impl ScrollRollupNodeConfig {
             ForkchoiceState::head_from_chain_spec(chain_spec.clone())
                 .expect("failed to derive forkchoice state from chain spec")
         };
-        let mut fcs = ForkchoiceState::from_db(db.clone()).await.unwrap_or_else(chain_spec_fcs);
+        let mut fcs =
+            ForkchoiceState::from_provider(&l2_provider).await.unwrap_or_else(chain_spec_fcs);
+
+        // Update the head block info from the database if available.
+        if let Some(latest_block) = db.tx().await?.get_l2_blocks().await?.next().await {
+            let latest_block = latest_block?;
+            fcs.update_head_block_info(latest_block);
+        }
+
+        // On startup we replay the latest batch of blocks from the database as such we set the safe
+        // block hash to the latest block hash associated with the previous consolidated
+        // batch in the database.
+        let tx = db.tx_mut().await?;
+        let (startup_safe_block, l1_start_block_number) =
+            tx.prepare_on_startup(chain_spec.genesis_hash()).await?;
+        tx.commit().await?;
+        if let Some(block_info) = startup_safe_block {
+            fcs.update_safe_block_info(block_info);
+        } else {
+            fcs.update_safe_block_info(BlockInfo {
+                hash: genesis_hash_from_chain_spec(chain_spec.clone()).unwrap(),
+                number: 0,
+            });
+        }
 
         let chain_spec = Arc::new(chain_spec.clone());
 
@@ -264,22 +288,6 @@ impl ScrollRollupNodeConfig {
             td_constant(chain_spec.chain().named()),
             authorized_signer,
         );
-
-        // On startup we replay the latest batch of blocks from the database as such we set the safe
-        // block hash to the latest block hash associated with the previous consolidated
-        // batch in the database.
-        let tx = db.tx_mut().await?;
-        let (startup_safe_block, l1_start_block_number) =
-            tx.prepare_on_startup(chain_spec.genesis_hash()).await?;
-        tx.commit().await?;
-        if let Some(block_info) = startup_safe_block {
-            fcs.update_safe_block_info(block_info);
-        } else {
-            fcs.update_safe_block_info(BlockInfo {
-                hash: genesis_hash_from_chain_spec(chain_spec.clone()).unwrap(),
-                number: 0,
-            });
-        }
 
         tracing::info!(target: "scroll::node::args", fcs = ?fcs, payload_building_duration = ?self.sequencer_args.payload_building_duration, "Starting engine driver");
         let engine = EngineDriver::new(
