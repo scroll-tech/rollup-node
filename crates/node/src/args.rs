@@ -243,9 +243,7 @@ impl ScrollRollupNodeConfig {
             ForkchoiceState::head_from_chain_spec(chain_spec.clone())
                 .expect("failed to derive forkchoice state from chain spec")
         };
-        let mut fcs = ForkchoiceState::head_from_provider(l2_provider.clone())
-            .await
-            .unwrap_or_else(chain_spec_fcs);
+        let mut fcs = ForkchoiceState::from_db(db.clone()).await.unwrap_or_else(chain_spec_fcs);
 
         let chain_spec = Arc::new(chain_spec.clone());
 

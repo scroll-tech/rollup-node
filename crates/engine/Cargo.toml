@@ -40,6 +40,7 @@ rollup-node-providers.workspace = true
 rollup-node-signer.workspace = true
 
 # scroll
+scroll-db.workspace = true
 scroll-network.workspace = true
 
 # misc

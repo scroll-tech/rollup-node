@@ -573,7 +573,9 @@ pub trait DatabaseReadOperations: ReadConnectionProvider + Sync {
             })?)
     }
 
-    /// Get the latest safe L2 ([`BlockInfo`], [`BatchInfo`]) from the database.
+    /// Get the latest safe/finalized L2 ([`BlockInfo`], [`BatchInfo`]) from the database. Until we
+    /// update the batch handling logic with issue #273, we don't differentiate between safe and
+    /// finalized l2 blocks.
     async fn get_latest_safe_l2_info(
         &self,
     ) -> Result<Option<(BlockInfo, BatchInfo)>, DatabaseError> {

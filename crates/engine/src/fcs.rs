@@ -3,11 +3,13 @@ use alloy_eips::{BlockId, BlockNumberOrTag};
 use alloy_primitives::{Sealable, B256};
 use alloy_provider::Provider;
 use alloy_rpc_types_engine::ForkchoiceState as AlloyForkchoiceState;
+use futures::StreamExt;
 use reth_chainspec::EthChainSpec;
 use reth_primitives_traits::BlockHeader;
 use reth_scroll_chainspec::{SCROLL_MAINNET_GENESIS_HASH, SCROLL_SEPOLIA_GENESIS_HASH};
 use rollup_node_primitives::BlockInfo;
 use scroll_alloy_network::Scroll;
+use scroll_db::{DatabaseReadOperations, DatabaseTransactionProvider};
 
 /// The fork choice state.
 ///
@@ -33,7 +35,7 @@ impl ForkchoiceState {
 
     /// Creates a new [`ForkchoiceState`] instance setting the `head`, `safe` and `finalized` block
     /// info to the provided `genesis` hash.
-    pub const fn head_from_genesis(genesis: B256) -> Self {
+    pub const fn from_genesis(genesis: B256) -> Self {
         Self::new(
             BlockInfo { hash: genesis, number: 0 },
             BlockInfo { hash: genesis, number: 0 },
@@ -43,7 +45,7 @@ impl ForkchoiceState {
 
     /// Creates a [`ForkchoiceState`] instance setting the `head`, `safe` and `finalized` hash to
     /// the appropriate genesis values by reading from the provider.
-    pub async fn head_from_provider<P: Provider<Scroll>>(provider: P) -> Option<Self> {
+    pub async fn from_provider<P: Provider<Scroll>>(provider: P) -> Option<Self> {
         let latest_block =
             provider.get_block(BlockId::Number(BlockNumberOrTag::Latest)).await.ok()??;
         let safe_block =
@@ -61,11 +63,21 @@ impl ForkchoiceState {
     }
 
     /// Creates a [`ForkchoiceState`] instance setting the `head`, `safe` and `finalized` hash to
+    /// the appropriate starting values by reading from the database.
+    pub async fn from_db<DB: DatabaseTransactionProvider>(db: DB) -> Option<Self> {
+        // TODO: important to add retry for these operations.
+        let tx = db.tx().await.ok()?;
+        let latest_l2_block = tx.get_l2_blocks().await.ok()?.next().await?.ok()?;
+        let (latest_safe_block, _) = tx.get_latest_safe_l2_info().await.ok()??;
+        Some(Self { head: latest_l2_block, safe: latest_safe_block, finalized: latest_safe_block })
+    }
+
+    /// Creates a [`ForkchoiceState`] instance setting the `head`, `safe` and `finalized` hash to
     /// the appropriate genesis values depending on the named chain.
     pub fn head_from_chain_spec<CS: EthChainSpec<Header: BlockHeader>>(
         chain_spec: CS,
     ) -> Option<Self> {
-        Some(Self::head_from_genesis(genesis_hash_from_chain_spec(chain_spec)?))
+        Some(Self::from_genesis(genesis_hash_from_chain_spec(chain_spec)?))
     }
 
     /// Updates the `head` block info.

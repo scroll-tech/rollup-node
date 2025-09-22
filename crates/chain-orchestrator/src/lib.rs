@@ -456,9 +456,7 @@ impl<
             Box::pin(async move {
                 let head = block_infos.last().expect("block info must not be empty").clone();
                 let tx = database.tx_mut().await?;
-                for block in block_infos {
-                    tx.insert_block(block, batch_info).await?;
-                }
+                tx.insert_blocks(block_infos, batch_info).await?;
                 tx.commit().await?;
                 Result::<_, ChainOrchestratorError>::Ok(Some(
                     ChainOrchestratorEvent::L2ConsolidatedBlockCommitted(head),
