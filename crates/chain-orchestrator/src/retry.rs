@@ -19,11 +19,6 @@ impl Default for Retry {
     }
 }
 
-/// A trait for errors that can indicate whether an operation can be retried.
-pub trait CanRetry {
-    fn can_retry(&self) -> bool;
-}
-
 impl Retry {
     /// Creates a new [`Retry`] with the specified parameters.
     pub const fn new(
@@ -77,6 +72,28 @@ impl Retry {
                     tokio::time::sleep(Duration::from_millis(delay_ms)).await;
                 }
             }
+        }
+    }
+}
+
+/// A trait for errors that can indicate whether an operation can be retried.
+pub trait CanRetry {
+    fn can_retry(&self) -> bool;
+}
+
+// Centralized retry classification impls
+impl CanRetry for scroll_db::DatabaseError {
+    fn can_retry(&self) -> bool {
+        matches!(self, Self::DatabaseError(_) | Self::SqlxError(_))
+    }
+}
+
+impl CanRetry for crate::error::ChainOrchestratorError {
+    fn can_retry(&self) -> bool {
+        match self {
+            Self::DatabaseError(db) => db.can_retry(),
+            Self::NetworkRequestError(_) | Self::RpcError(_) => true,
+            _ => false,
         }
     }
 }

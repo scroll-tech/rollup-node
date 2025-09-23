@@ -711,7 +711,7 @@ impl<
         let l1_message = L1MessageEnvelope::new(l1_message, l1_block_number, None, queue_hash);
 
         // Perform a consistency check to ensure the previous L1 message exists in the database.
-        let _ = Retry::default()
+        Retry::default()
             .retry("handle_l1_message", || async {
                 let tx = database.tx_mut().await?;
                 if l1_message.transaction.queue_index > 0 &&
@@ -728,7 +728,7 @@ impl<
                 tx.commit().await?;
                 Ok::<_, ChainOrchestratorError>(())
             })
-            .await;
+            .await?;
         Ok(Some(event))
     }
 
