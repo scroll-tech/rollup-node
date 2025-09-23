@@ -200,11 +200,21 @@ impl ScrollRollupNodeConfig {
             ProviderBuilder::new().connect_client(client)
         });
 
-        // Get a provider to the execution layer.
-        let l2_provider = rpc_server_handles
-            .rpc
-            .new_http_provider_for()
-            .expect("failed to create payload provider");
+        // Init a retry provider to the execution layer.
+        let retry_layer = RetryBackoffLayer::new(
+            constants::L2_PROVIDER_MAX_RETRIES,
+            constants::L2_PROVIDER_INITIAL_BACKOFF,
+            constants::PROVIDER_COMPUTE_UNITS_PER_SECOND,
+        );
+        let client = RpcClient::builder().layer(retry_layer).http(
+            rpc_server_handles
+                .rpc
+                .http_url()
+                .expect("failed to get l2 rpc url")
+                .parse()
+                .expect("invalid l2 rpc url"),
+        );
+        let l2_provider = ProviderBuilder::<_, _, Scroll>::default().connect_client(client);
         let l2_provider = Arc::new(l2_provider);
 
         // Fetch the database from the hydrated config.
@@ -584,10 +594,10 @@ pub struct L1ProviderArgs {
     #[arg(long = "l1.cups", id = "l1_compute_units_per_second", value_name = "L1_COMPUTE_UNITS_PER_SECOND", default_value_t = constants::PROVIDER_COMPUTE_UNITS_PER_SECOND)]
     pub compute_units_per_second: u64,
     /// The max amount of retries for the provider.
-    #[arg(long = "l1.max-retries", id = "l1_max_retries", value_name = "L1_MAX_RETRIES", default_value_t = constants::PROVIDER_MAX_RETRIES)]
+    #[arg(long = "l1.max-retries", id = "l1_max_retries", value_name = "L1_MAX_RETRIES", default_value_t = constants::L1_PROVIDER_MAX_RETRIES)]
     pub max_retries: u32,
     /// The initial backoff for the provider.
-    #[arg(long = "l1.initial-backoff", id = "l1_initial_backoff", value_name = "L1_INITIAL_BACKOFF", default_value_t = constants::PROVIDER_INITIAL_BACKOFF)]
+    #[arg(long = "l1.initial-backoff", id = "l1_initial_backoff", value_name = "L1_INITIAL_BACKOFF", default_value_t = constants::L1_PROVIDER_INITIAL_BACKOFF)]
     pub initial_backoff: u64,
 }
 
@@ -614,10 +624,10 @@ pub struct BlobProviderArgs {
     #[arg(long = "blob.cups", id = "blob_compute_units_per_second", value_name = "BLOB_COMPUTE_UNITS_PER_SECOND", default_value_t = constants::PROVIDER_COMPUTE_UNITS_PER_SECOND)]
     pub compute_units_per_second: u64,
     /// The max amount of retries for the provider.
-    #[arg(long = "blob.max-retries", id = "blob_max_retries", value_name = "BLOB_MAX_RETRIES", default_value_t = constants::PROVIDER_MAX_RETRIES)]
+    #[arg(long = "blob.max-retries", id = "blob_max_retries", value_name = "BLOB_MAX_RETRIES", default_value_t = constants::L1_PROVIDER_MAX_RETRIES)]
     pub max_retries: u32,
     /// The initial backoff for the provider.
-    #[arg(long = "blob.initial-backoff", id = "blob_initial_backoff", value_name = "BLOB_INITIAL_BACKOFF", default_value_t = constants::PROVIDER_INITIAL_BACKOFF)]
+    #[arg(long = "blob.initial-backoff", id = "blob_initial_backoff", value_name = "BLOB_INITIAL_BACKOFF", default_value_t = constants::L1_PROVIDER_INITIAL_BACKOFF)]
     pub initial_backoff: u64,
 }
 
