@@ -94,14 +94,7 @@ impl Database {
     #[cfg(feature = "test-utils")]
     pub async fn test(dir: tempfile::TempDir) -> Result<Self, DatabaseError> {
         let path = dir.path().join("test.db");
-        let mut db = Self::new_sqlite_with_pool_options(
-            path.to_str().unwrap(),
-            MAX_CONNECTIONS,
-            MIN_CONNECTIONS,
-            ACQUIRE_TIMEOUT_SECS,
-            BUSY_TIMEOUT_SECS,
-        )
-        .await?;
+        let mut db = Self::new(path.to_str().unwrap()).await?;
         db.tmp_dir = Some(dir);
         Ok(db)
     }
