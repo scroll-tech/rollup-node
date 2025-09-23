@@ -38,6 +38,10 @@ pub struct Database {
     write_lock: Arc<Mutex<()>>,
     /// The database metrics.
     metrics: DatabaseMetrics,
+    /// The temporary directory used for testing. We keep it here to ensure it lives as long as the
+    /// database instance as the temp directory is deleted when [`tempfile::TempDir`] is dropped.
+    #[cfg(feature = "test-utils")]
+    tmp_dir: Option<tempfile::TempDir>,
 }
 
 impl Database {
@@ -80,7 +84,26 @@ impl Database {
             connection: SqlxSqliteConnector::from_sqlx_sqlite_pool(sqlx_pool),
             write_lock: Arc::new(Mutex::new(())),
             metrics: DatabaseMetrics::default(),
+            #[cfg(feature = "test-utils")]
+            tmp_dir: None,
         })
+    }
+
+    /// Creates a new [`Database`] instance for testing purposes, using the provided temporary
+    /// directory to store the database files.
+    #[cfg(feature = "test-utils")]
+    pub async fn test(dir: tempfile::TempDir) -> Result<Self, DatabaseError> {
+        let path = dir.path().join("test.db");
+        let mut db = Self::new_sqlite_with_pool_options(
+            path.to_str().unwrap(),
+            MAX_CONNECTIONS,
+            MIN_CONNECTIONS,
+            ACQUIRE_TIMEOUT_SECS,
+            BUSY_TIMEOUT_SECS,
+        )
+        .await?;
+        db.tmp_dir = Some(dir);
+        Ok(db)
     }
 }
 
@@ -132,6 +155,8 @@ impl From<DatabaseConnection> for Database {
             connection,
             write_lock: Arc::new(Mutex::new(())),
             metrics: DatabaseMetrics::default(),
+            #[cfg(feature = "test-utils")]
+            tmp_dir: None,
         }
     }
 }
