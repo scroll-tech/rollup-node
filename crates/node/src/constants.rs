@@ -3,10 +3,16 @@
 use alloy_primitives::{address, Address, U128};
 
 /// The max retries for the L1 provider.
-pub(crate) const PROVIDER_MAX_RETRIES: u32 = 10;
+pub(crate) const L1_PROVIDER_MAX_RETRIES: u32 = 10;
 
 /// The initial backoff for the L1 provider.
-pub(crate) const PROVIDER_INITIAL_BACKOFF: u64 = 100;
+pub(crate) const L1_PROVIDER_INITIAL_BACKOFF: u64 = 100;
+
+/// The max retries for the L2 provider.
+pub(crate) const L2_PROVIDER_MAX_RETRIES: u32 = u32::MAX;
+
+/// The initial backoff for the L2 provider.
+pub(crate) const L2_PROVIDER_INITIAL_BACKOFF: u64 = 50;
 
 /// The default provider compute units per second.
 pub(crate) const PROVIDER_COMPUTE_UNITS_PER_SECOND: u64 = 10000;
