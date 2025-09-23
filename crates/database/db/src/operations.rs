@@ -71,7 +71,30 @@ pub trait DatabaseWriteOperations: WriteConnectionProvider + DatabaseReadOperati
     ) -> Result<(), DatabaseError> {
         tracing::trace!(target: "scroll::db", block_number, "Updating the latest finalized L1 block number in the database.");
         let metadata: models::metadata::ActiveModel =
-            Metadata { l1_finalized_block: block_number }.into();
+            Metadata { key: "l1_finalized_block".to_string(), value: block_number.to_string() }
+                .into();
+        Ok(models::metadata::Entity::insert(metadata)
+            .on_conflict(
+                OnConflict::column(models::metadata::Column::Key)
+                    .update_column(models::metadata::Column::Value)
+                    .to_owned(),
+            )
+            .exec(self.get_connection())
+            .await
+            .map(|_| ())?)
+    }
+
+    /// Set the latest sequenced L2 block info.
+    async fn set_latest_sequenced_block_info(
+        &self,
+        block_info: BlockInfo,
+    ) -> Result<(), DatabaseError> {
+        tracing::trace!(target: "scroll::db", ?block_info, "Updating the L2 sequenced block info in the database.");
+        let metadata: models::metadata::ActiveModel = Metadata {
+            key: "l2_sequenced_block".to_string(),
+            value: serde_json::to_string(&block_info)?,
+        }
+        .into();
         Ok(models::metadata::Entity::insert(metadata)
             .on_conflict(
                 OnConflict::column(models::metadata::Column::Key)
@@ -444,6 +467,18 @@ pub trait DatabaseReadOperations: ReadConnectionProvider + Sync {
             .one(self.get_connection())
             .await
             .map(|x| x.and_then(|x| x.parse::<u64>().ok()))?)
+    }
+
+    /// Get the latest sequenced L2 block info.
+    async fn get_latest_sequenced_block_info(&self) -> Result<Option<BlockInfo>, DatabaseError> {
+        Ok(models::metadata::Entity::find()
+            .filter(models::metadata::Column::Key.eq("l2_sequenced_block"))
+            .select_only()
+            .column(models::metadata::Column::Value)
+            .into_tuple::<String>()
+            .one(self.get_connection())
+            .await
+            .map(|x| x.and_then(|x| serde_json::from_str(&x).ok()))?)
     }
 
     /// Get an iterator over all [`BatchCommitData`]s in the database.

@@ -13,6 +13,9 @@ pub enum DatabaseError {
     /// A generic error occurred.
     #[error("parse signature error: {0}")]
     ParseSignatureError(String),
+    /// Failed to serde the metadata value.
+    #[error("failed to serde metadata value: {0}")]
+    MetadataSerdeError(#[from] serde_json::Error),
     /// The L1 message was not found in database.
     #[error("L1 message at index [{0}] not found in database")]
     L1MessageNotFound(L1MessageStart),

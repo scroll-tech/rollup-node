@@ -218,6 +218,7 @@ impl<
             .retry("update_l1_messages_with_l2_block", || async {
                 let tx = database.tx_mut().await?;
                 tx.update_l1_messages_with_l2_block(block_info.clone()).await?;
+                tx.set_latest_sequenced_block_info(block_info.block_info).await?;
                 tx.commit().await?;
                 Ok::<_, ChainOrchestratorError>(())
             })
@@ -483,7 +484,7 @@ impl<
                 Retry::default()
                     .retry("insert_block", || async {
                         let tx = database.tx_mut().await?;
-                        tx.insert_blocks(block_infos, batch_info).await?;
+                        tx.insert_blocks(block_infos.clone(), batch_info).await?;
                         tx.commit().await?;
                         Ok::<_, ChainOrchestratorError>(())
                     })

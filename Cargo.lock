@@ -10772,6 +10772,7 @@ dependencies = [
  "reth-scroll-node",
  "reth-scroll-primitives",
  "reth-scroll-rpc",
+ "reth-storage-api",
  "reth-tasks",
  "reth-tokio-util",
  "reth-tracing",
@@ -10907,6 +10908,7 @@ dependencies = [
  "reth-scroll-primitives",
  "scroll-alloy-consensus",
  "scroll-alloy-rpc-types-engine",
+ "serde",
 ]
 
 [[package]]
@@ -11547,6 +11549,7 @@ dependencies = [
  "scroll-alloy-rpc-types-engine",
  "scroll-migration",
  "sea-orm",
+ "serde_json",
  "tempfile",
  "thiserror 2.0.16",
  "tokio",

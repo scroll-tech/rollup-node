@@ -108,12 +108,13 @@ reth-provider.workspace = true
 reth-primitives-traits.workspace = true
 reth-rpc-server-types.workspace = true
 reth-scroll-node = { workspace = true, features = ["test-utils"] }
+reth-storage-api.workspace = true
 reth-tasks.workspace = true
 reth-tokio-util.workspace = true
 reth-tracing.workspace = true
 rollup-node = { workspace = true, features = ["test-utils"] }
 scroll-alloy-rpc-types-engine.workspace = true
-serde_json = { version = "1.0.94", default-features = false, features = ["alloc"] }
+serde_json = { workspace = true, features = ["alloc"] }
 color-eyre = "0.6"
 alloy-rpc-types-eth = { workspace = true }
 

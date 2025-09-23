@@ -16,7 +16,6 @@ use alloy_signer_local::PrivateKeySigner;
 use alloy_transport::layers::RetryBackoffLayer;
 use aws_sdk_kms::config::BehaviorVersion;
 use clap::ArgAction;
-use futures::StreamExt;
 use reth_chainspec::EthChainSpec;
 use reth_network::NetworkProtocols;
 use reth_network_api::FullNetwork;
@@ -257,12 +256,6 @@ impl ScrollRollupNodeConfig {
         let mut fcs =
             ForkchoiceState::from_provider(&l2_provider).await.unwrap_or_else(chain_spec_fcs);
 
-        // Update the head block info from the database if available.
-        if let Some(latest_block) = db.tx().await?.get_l2_blocks().await?.next().await {
-            let latest_block = latest_block?;
-            fcs.update_head_block_info(latest_block);
-        }
-
         // On startup we replay the latest batch of blocks from the database as such we set the safe
         // block hash to the latest block hash associated with the previous consolidated
         // batch in the database.
@@ -277,6 +270,14 @@ impl ScrollRollupNodeConfig {
                 hash: genesis_hash_from_chain_spec(chain_spec.clone()).unwrap(),
                 number: 0,
             });
+        }
+
+        // Update the head block info from the latest sequenced block if available and ahead of
+        // finalized.
+        if let Some(latest_block) = db.tx().await?.get_latest_sequenced_block_info().await? {
+            if latest_block > *fcs.finalized_block_info() {
+                fcs.update_head_block_info(latest_block);
+            }
         }
 
         let chain_spec = Arc::new(chain_spec.clone());
