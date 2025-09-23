@@ -158,30 +158,13 @@ main() {
     log_info "=== PHASE 6: RESUMING L2GETH SEQUENCING ==="
     start_l2geth_mining
 
-    # TODO: change wait for method so that this can be done as well. 
-    # Wait for at least one new block to confirm
-    log_info "Waiting for L2GETH to produce at least one new block..."
+    # Wait for at least one new block to confirm sequencing resumed
     local confirmation_target=$((L2RETH_FINAL_BLOCK + 1))
-    local start_time=$(date +%s)
-    while true; do
-        local current_time=$(date +%s)
-        local elapsed=$((current_time - start_time))
-
-        if [[ $elapsed -gt 5 ]]; then  # 5 seconds timeout for first block
-            log_error "Timeout waiting for L2GETH to produce new block"
-            exit 1
-        fi
-
-        local current_block=$(get_block_number "$L2GETH_RPC_URL")
-        if [[ $current_block -ge $confirmation_target ]]; then
-            local confirm_info=$(get_latest_block_info "$L2GETH_RPC_URL")
-            local confirm_hash=$(echo "$confirm_info" | awk '{print $2}')
-            log_success "L2GETH sequencing resumed, produced block #$current_block (hash: $confirm_hash)"
-            break
-        fi
-
-        sleep $POLL_INTERVAL
-    done
+    if ! wait_for_block "L2GETH" "$L2GETH_RPC_URL" "$confirmation_target" ""; then
+        log_error "L2GETH failed to produce new block after resuming sequencing"
+        exit 1
+    fi
+    log_success "L2GETH sequencing resumed successfully"
 
     print_summary
 }

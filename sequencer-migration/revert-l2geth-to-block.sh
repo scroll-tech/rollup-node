@@ -9,9 +9,6 @@ set -euo pipefail
 # Source common functions
 source "$(dirname "$0")/common-functions.sh"
 
-# Script-specific configuration
-BLOCK_PRODUCTION_TIMEOUT=60  # 60 seconds timeout for new block production
-
 # Global variables to track state
 START_TIME=$(date +%s)
 TARGET_BLOCK=""
@@ -35,34 +32,6 @@ reset_l2geth_to_block() {
     fi
 }
 
-# Wait for new block production after reset
-wait_for_new_block_production() {
-    local starting_block="$1"
-    local expected_next_block=$((starting_block + 1))
-
-    log_info "Waiting for l2geth to produce new blocks starting from #$expected_next_block..."
-
-    local start_time=$(date +%s)
-    while true; do
-        local current_time=$(date +%s)
-        local elapsed=$((current_time - start_time))
-
-        if [[ $elapsed -gt $BLOCK_PRODUCTION_TIMEOUT ]]; then
-            log_error "Timeout waiting for l2geth to produce new block (waited ${BLOCK_PRODUCTION_TIMEOUT}s)"
-            return 1
-        fi
-
-        local current_block=$(get_block_number "$L2GETH_RPC_URL")
-        if [[ $current_block -ge $expected_next_block ]]; then
-            local block_info=$(get_latest_block_info "$L2GETH_RPC_URL")
-            local block_hash=$(echo "$block_info" | awk '{print $2}')
-            log_success "L2GETH produced new block #$current_block (hash: $block_hash)"
-            return 0
-        fi
-
-        sleep $POLL_INTERVAL
-    done
-}
 
 
 pre_flight_checks() {
@@ -193,8 +162,11 @@ main() {
 
     # Phase 5: Wait for new block production
     log_info "=== PHASE 5: MONITORING NEW BLOCK PRODUCTION ==="
-    # TODO: combine with wait_for_block ?
-    wait_for_new_block_production "$TARGET_BLOCK"
+    local expected_next_block=$((TARGET_BLOCK + 1))
+    if ! wait_for_block "L2GETH" "$L2GETH_RPC_URL" "$expected_next_block" ""; then
+        log_error "L2GETH failed to produce new block after reset"
+        exit 1
+    fi
 
     print_summary
 }

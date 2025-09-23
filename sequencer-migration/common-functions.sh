@@ -139,13 +139,22 @@ disable_l2reth_sequencing() {
 }
 
 # Wait for a specific block to be reached
+# Parameters:
+#   $1: node_name - Human readable name for logging
+#   $2: rpc_url - RPC URL to query
+#   $3: target_block - Block number to wait for
+#   $4: target_hash (optional) - If provided, will verify exact hash match
 wait_for_block() {
     local node_name="$1"
     local rpc_url="$2"
     local target_block="$3"
     local target_hash="$4"
 
-    log_info "Waiting for $node_name to reach block #$target_block (hash: $target_hash)..."
+    if [[ -n "$target_hash" ]]; then
+        log_info "Waiting for $node_name to reach block #$target_block (hash: $target_hash)..."
+    else
+        log_info "Waiting for $node_name to reach block #$target_block or higher..."
+    fi
 
     local start_time=$(date +%s)
     while true; do
@@ -156,9 +165,11 @@ wait_for_block() {
         if [[ $elapsed -gt $SYNC_TIMEOUT ]]; then
             log_error "Timeout waiting for $node_name to reach block #$target_block"
 
-            local current_block=$(echo "$block_info" | awk '{print $1}')
-            local current_hash=$(echo "$block_info" | awk '{print $2}')
-            log_error "$node_name is at block $current_block (hash: $current_hash)"
+            if block_info=$(get_latest_block_info "$rpc_url" 2>/dev/null); then
+                local current_block=$(echo "$block_info" | awk '{print $1}')
+                local current_hash=$(echo "$block_info" | awk '{print $2}')
+                log_error "$node_name is at block $current_block (hash: $current_hash)"
+            fi
 
             return 1
         fi
@@ -169,14 +180,21 @@ wait_for_block() {
             local current_hash=$(echo "$block_info" | awk '{print $2}')
 
             if [[ "$current_block" -ge "$target_block" ]]; then
-                if [[ "$current_block" -eq "$target_block" && "$current_hash" == "$target_hash" ]]; then
-                    log_success "$node_name reached target block #$target_block (hash: $target_hash)"
-                    return 0
-                elif [[ "$current_block" -gt "$target_block" ]]; then
-                    log_success "$node_name surpassed target, now at block #$current_block (hash: $current_hash)"
-                    return 0
+                if [[ -n "$target_hash" ]]; then
+                    # Hash verification mode
+                    if [[ "$current_block" -eq "$target_block" && "$current_hash" == "$target_hash" ]]; then
+                        log_success "$node_name reached target block #$target_block (hash: $target_hash)"
+                        return 0
+                    elif [[ "$current_block" -gt "$target_block" ]]; then
+                        log_success "$node_name surpassed target, now at block #$current_block (hash: $current_hash)"
+                        return 0
+                    else
+                        log_warning "$node_name at block #$current_block but hash mismatch: expected $target_hash, got $current_hash"
+                    fi
                 else
-                    log_warning "$node_name at block #$current_block but hash mismatch: expected $target_hash, got $current_hash"
+                    # Block number only mode
+                    log_success "$node_name reached block #$current_block (hash: $current_hash)"
+                    return 0
                 fi
             fi
         fi
