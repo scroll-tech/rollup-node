@@ -43,10 +43,10 @@ use tests::*;
 /// Each topology change tests different aspects of peer discovery, block gossip,
 /// and chain synchronization across heterogeneous client implementations.
 #[tokio::test]
-async fn test_heterogeneous_client_sync_and_sequencer_handoff() -> Result<()> {
+async fn docker_test_heterogeneous_client_sync_and_sequencer_handoff() -> Result<()> {
     reth_tracing::init_test_tracing();
 
-    tracing::info!("=== STARTING test_heterogeneous_client_sync_and_sequencer_handoff ===");
+    tracing::info!("=== STARTING docker_test_heterogeneous_client_sync_and_sequencer_handoff ===");
     let env = DockerComposeEnv::new("multi-client-propagation").await?;
 
     let rn_sequencer = env.get_rn_sequencer_provider().await?;
