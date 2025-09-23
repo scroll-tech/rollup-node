@@ -6,16 +6,8 @@
 
 set -euo pipefail
 
-# Colors for output
-RED='\033[0;31m'
-GREEN='\033[0;32m'
-YELLOW='\033[1;33m'
-BLUE='\033[0;34m'
-NC='\033[0m' # No Color
-
-# Configuration
-SYNC_TIMEOUT=5  # 5 seconds timeout for sync operations
-POLL_INTERVAL=0.1   # Poll every 0.1 seconds
+# Source common functions
+source "$(dirname "$0")/common-functions.sh"
 
 # Global variables to track state
 START_TIME=$(date +%s)
@@ -24,171 +16,14 @@ INITIAL_L2RETH_BLOCK=""
 L2GETH_STOP_BLOCK=""
 L2RETH_FINAL_BLOCK=""
 
-# Helper function to print colored output
-log() {
-    echo -e "${2:-$NC}[$(date '+%H:%M:%S')] $1${NC}"
-}
-
-log_info() { log "$1" "$BLUE"; }
-log_success() { log "$1" "$GREEN"; }
-log_warning() { log "$1" "$YELLOW"; }
-log_error() { log "$1" "$RED"; }
-
-# Check if required environment variables are set
-check_env_vars() {
-    log_info "Checking environment variables..."
-
-    if [[ -z "${L2GETH_RPC_URL:-}" ]]; then
-        log_error "L2GETH_RPC_URL environment variable is required"
-        exit 1
-    fi
-
-    if [[ -z "${L2RETH_RPC_URL:-}" ]]; then
-        log_error "L2RETH_RPC_URL environment variable is required"
-        exit 1
-    fi
-
-    log_success "Environment variables configured"
-    log_info "L2GETH_RPC_URL: $L2GETH_RPC_URL"
-    log_info "L2RETH_RPC_URL: $L2RETH_RPC_URL"
-}
-
-# Get block number and hash for a given RPC URL
-get_block_info() {
-    local rpc_url="$1"
-    local temp_file=$(mktemp)
-
-    if ! cast block latest --rpc-url "$rpc_url" > "$temp_file" 2>/dev/null; then
-        rm -f "$temp_file"
-        return 1
-    fi
-
-    local block_number=$(grep "^number" "$temp_file" | awk '{print $2}')
-    local block_hash=$(grep "^hash" "$temp_file" | awk '{print $2}')
-
-    rm -f "$temp_file"
-    echo "$block_number $block_hash"
-}
-
-# Get only block number for a given RPC URL
-get_block_number() {
-    local rpc_url="$1"
-    cast block latest --rpc-url "$rpc_url" 2>/dev/null | grep "^number" | awk '{print $2}'
-}
-
-is_l2geth_mining() {
-    local result=$(cast rpc eth_mining --rpc-url "$L2GETH_RPC_URL" 2>/dev/null | tr -d '"')
-    [[ "$result" == "true" ]]
-}
-
-start_l2geth_mining() {
-    log_info "Starting l2geth mining..."
-    if cast rpc miner_start --rpc-url "$L2GETH_RPC_URL" >/dev/null 2>&1; then
-        log_success "L2GETH mining started"
-        return 0
-    else
-        log_error "Failed to start l2geth mining"
-        return 1
-    fi
-}
-
-stop_l2geth_mining() {
-    log_info "Stopping l2geth mining..."
-    if cast rpc miner_stop --rpc-url "$L2GETH_RPC_URL" >/dev/null 2>&1; then
-        log_success "L2GETH mining stopped"
-        return 0
-    else
-        log_error "Failed to stop l2geth mining"
-        return 1
-    fi
-}
-
-enable_l2reth_sequencing() {
-    log_info "Enabling L2RETH automatic sequencing..."
-    if cast rpc rollupNode_enableAutomaticSequencing --rpc-url "$L2RETH_RPC_URL" >/dev/null 2>&1; then
-        log_success "L2RETH automatic sequencing enabled"
-        return 0
-    else
-        log_error "Failed to enable L2RETH automatic sequencing"
-        return 1
-    fi
-}
-
-disable_l2reth_sequencing() {
-    log_info "Disabling L2RETH automatic sequencing..."
-    if cast rpc rollupNode_disableAutomaticSequencing --rpc-url "$L2RETH_RPC_URL" >/dev/null 2>&1; then
-        log_success "L2RETH automatic sequencing disabled"
-        return 0
-    else
-        log_error "Failed to disable L2RETH automatic sequencing"
-        return 1
-    fi
-}
-
-wait_for_block() {
-    local rpc_url="$1"
-    local target_block="$2"
-    local node_name="$3"
-    local target_hash="$4"
-
-    log_info "Waiting for $node_name to reach block #$target_block (hash: $target_hash)..."
-
-    local start_time=$(date +%s)
-    while true; do
-        local current_time=$(date +%s)
-        local elapsed=$((current_time - start_time))
-
-        if [[ $elapsed -gt $SYNC_TIMEOUT ]]; then
-            log_error "Timeout waiting for $node_name to reach block #$target_block"
-            return 1
-        fi
-
-        local block_info
-        if block_info=$(get_block_info "$rpc_url"); then
-            local current_block=$(echo "$block_info" | awk '{print $1}')
-            local current_hash=$(echo "$block_info" | awk '{print $2}')
-
-            if [[ "$current_block" -ge "$target_block" ]]; then
-                if [[ "$current_block" -eq "$target_block" && "$current_hash" == "$target_hash" ]]; then
-                    log_success "$node_name reached target block #$target_block (hash: $target_hash)"
-                    return 0
-                elif [[ "$current_block" -gt "$target_block" ]]; then
-                    log_success "$node_name surpassed target, now at block #$current_block (hash: $current_hash)"
-                    return 0
-                else
-                    log_warning "$node_name at block #$current_block but hash mismatch: expected $target_hash, got $current_hash"
-                fi
-            fi
-        fi
-
-        sleep $POLL_INTERVAL
-    done
-}
-
-check_rpc_connectivity() {
-    log_info "Checking RPC connectivity..."
-
-    if ! get_block_info "$L2GETH_RPC_URL" >/dev/null; then
-        log_error "Cannot connect to L2GETH at $L2GETH_RPC_URL"
-        exit 1
-    fi
-
-    if ! get_block_info "$L2RETH_RPC_URL" >/dev/null; then
-        log_error "Cannot connect to L2RETH at $L2RETH_RPC_URL"
-        exit 1
-    fi
-
-    log_success "Both nodes are accessible"
-}
-
 pre_flight_checks() {
     log_info "=== PRE-FLIGHT CHECKS ==="
 
     check_rpc_connectivity
 
     # Get initial block states
-    local l2geth_info=$(get_block_info "$L2GETH_RPC_URL")
-    local l2reth_info=$(get_block_info "$L2RETH_RPC_URL")
+    local l2geth_info=$(get_latest_block_info "$L2GETH_RPC_URL")
+    local l2reth_info=$(get_latest_block_info "$L2RETH_RPC_URL")
 
     INITIAL_L2GETH_BLOCK=$(echo "$l2geth_info" | awk '{print $1}')
     local l2geth_hash=$(echo "$l2geth_info" | awk '{print $2}')
@@ -234,7 +69,7 @@ print_summary() {
     log_info "L2GETH stopped at block: #$L2GETH_STOP_BLOCK"
     log_info "L2RETH final block: #$L2RETH_FINAL_BLOCK"
 
-    local final_l2geth_info=$(get_block_info "$L2GETH_RPC_URL")
+    local final_l2geth_info=$(get_latest_block_info "$L2GETH_RPC_URL")
     local final_l2geth_block=$(echo "$final_l2geth_info" | awk '{print $1}')
     local final_l2geth_hash=$(echo "$final_l2geth_info" | awk '{print $2}')
     log_info "Final L2GETH block: #$final_l2geth_block (hash: $final_l2geth_hash)"
@@ -276,14 +111,14 @@ main() {
     stop_l2geth_mining
 
     # Record where L2GETH stopped
-    local stop_info=$(get_block_info "$L2GETH_RPC_URL")
+    local stop_info=$(get_latest_block_info "$L2GETH_RPC_URL")
     L2GETH_STOP_BLOCK=$(echo "$stop_info" | awk '{print $1}')
     local stop_hash=$(echo "$stop_info" | awk '{print $2}')
     log_success "L2GETH sequencing stopped at block #$L2GETH_STOP_BLOCK (hash: $stop_hash)"
 
     # Phase 2: Wait for L2RETH to sync
     log_info "=== PHASE 2: WAITING FOR L2RETH SYNC ==="
-    wait_for_block "$L2RETH_RPC_URL" "$L2GETH_STOP_BLOCK" "L2RETH" "$stop_hash"
+    wait_for_block "L2RETH" "$L2RETH_RPC_URL" "$L2GETH_STOP_BLOCK" "$stop_hash"
 
     # Phase 3: Enable L2RETH sequencing and wait for blocks
     log_info "=== PHASE 3: L2RETH SEQUENCING ($blocks_to_produce blocks) ==="
@@ -298,7 +133,7 @@ main() {
         sleep $POLL_INTERVAL
         local new_block=$(get_block_number "$L2RETH_RPC_URL")
         if [[ $new_block -gt $current_block ]]; then
-            local block_info=$(get_block_info "$L2RETH_RPC_URL")
+            local block_info=$(get_latest_block_info "$L2RETH_RPC_URL")
             local block_hash=$(echo "$block_info" | awk '{print $2}')
             log_success "L2RETH produced block #$new_block (hash: $block_hash)"
             current_block=$new_block
@@ -310,20 +145,20 @@ main() {
     disable_l2reth_sequencing
 
     # Record final L2RETH block
-    local final_info=$(get_block_info "$L2RETH_RPC_URL")
+    local final_info=$(get_latest_block_info "$L2RETH_RPC_URL")
     L2RETH_FINAL_BLOCK=$(echo "$final_info" | awk '{print $1}')
     local final_hash=$(echo "$final_info" | awk '{print $2}')
     log_success "L2RETH sequencing stopped at block #$L2RETH_FINAL_BLOCK (hash: $final_hash)"
 
     # Phase 5: Wait for L2GETH to sync
     log_info "=== PHASE 5: WAITING FOR L2GETH SYNC ==="
-    wait_for_block "$L2GETH_RPC_URL" "$L2RETH_FINAL_BLOCK" "L2GETH" "$final_hash"
+    wait_for_block "L2GETH" "$L2GETH_RPC_URL" "$L2RETH_FINAL_BLOCK" "$final_hash"
 
     # Phase 6: Resume L2GETH sequencing
     log_info "=== PHASE 6: RESUMING L2GETH SEQUENCING ==="
     start_l2geth_mining
 
-    # TODO: this could be done with wait for function?
+    # TODO: change wait for method so that this can be done as well. 
     # Wait for at least one new block to confirm
     log_info "Waiting for L2GETH to produce at least one new block..."
     local confirmation_target=$((L2RETH_FINAL_BLOCK + 1))
@@ -332,14 +167,14 @@ main() {
         local current_time=$(date +%s)
         local elapsed=$((current_time - start_time))
 
-        if [[ $elapsed -gt 60 ]]; then  # 1 minute timeout for first block
+        if [[ $elapsed -gt 5 ]]; then  # 5 seconds timeout for first block
             log_error "Timeout waiting for L2GETH to produce new block"
             exit 1
         fi
 
         local current_block=$(get_block_number "$L2GETH_RPC_URL")
         if [[ $current_block -ge $confirmation_target ]]; then
-            local confirm_info=$(get_block_info "$L2GETH_RPC_URL")
+            local confirm_info=$(get_latest_block_info "$L2GETH_RPC_URL")
             local confirm_hash=$(echo "$confirm_info" | awk '{print $2}')
             log_success "L2GETH sequencing resumed, produced block #$current_block (hash: $confirm_hash)"
             break
