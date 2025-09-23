@@ -98,6 +98,12 @@ impl Database {
         db.tmp_dir = Some(dir);
         Ok(db)
     }
+
+    /// Returns a reference to the database tmp dir.
+    #[cfg(feature = "test-utils")]
+    pub fn tmp_dir(&self) -> Option<&tempfile::TempDir> {
+        self.tmp_dir.as_ref()
+    }
 }
 
 #[async_trait::async_trait]

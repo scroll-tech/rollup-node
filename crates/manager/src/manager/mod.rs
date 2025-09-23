@@ -121,10 +121,10 @@ pub struct RollupNodeManager<
     /// The trigger for the block building process.
     block_building_trigger: Option<Interval>,
     /// A connection to the database.
-    database: Arc<Database>,
+    pub database: Arc<Database>,
     /// The original block time configuration for restoring automatic sequencing.
     block_time_config: Option<u64>,
-    // metrics for the rollup node manager.
+    /// Metrics for the rollup node manager.
     metrics: RollupNodeManagerMetrics,
 }
 
