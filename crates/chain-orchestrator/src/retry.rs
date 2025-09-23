@@ -19,6 +19,11 @@ impl Default for Retry {
     }
 }
 
+/// A trait for errors that can indicate whether an operation can be retried.
+pub trait CanRetry {
+    fn can_retry(&self) -> bool;
+}
+
 impl Retry {
     /// Creates a new [`Retry`] with the specified parameters.
     pub const fn new(
@@ -34,7 +39,7 @@ impl Retry {
     where
         F: Fn() -> Fut,
         Fut: std::future::Future<Output = Result<T, E>>,
-        E: std::fmt::Debug,
+        E: std::fmt::Debug + CanRetry,
     {
         let mut attempt: usize = 0;
 
@@ -42,6 +47,11 @@ impl Retry {
             match operation().await {
                 Ok(result) => return Ok(result),
                 Err(error) => {
+                    // If the error is not retryable, return immediately.
+                    if !error.can_retry() {
+                        return Err(error);
+                    }
+
                     if let Some(max_retries) = self.max_retries {
                         if attempt >= max_retries {
                             return Err(error);
@@ -73,8 +83,16 @@ impl Retry {
 
 #[cfg(test)]
 mod tests {
-    use super::Retry;
+    use super::{CanRetry, Retry};
     use std::cell::RefCell;
+
+    #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+    struct TestErr;
+    impl CanRetry for TestErr {
+        fn can_retry(&self) -> bool {
+            true
+        }
+    }
 
     #[tokio::test]
     async fn test_retry_success_on_first_attempt() {
@@ -83,7 +101,7 @@ mod tests {
         let result = retry
             .retry("test_operation", || {
                 *attempt.borrow_mut() += 1;
-                async move { Ok::<i32, &str>(42) }
+                async move { Ok::<i32, TestErr>(42) }
             })
             .await;
 
@@ -101,7 +119,7 @@ mod tests {
                 let current_attempt = *attempt.borrow();
                 async move {
                     if current_attempt < 3 {
-                        Err::<i32, &str>("failed")
+                        Err::<i32, TestErr>(TestErr)
                     } else {
                         Ok(42)
                     }
@@ -120,11 +138,11 @@ mod tests {
         let result = retry
             .retry("test_operation", || {
                 *attempt.borrow_mut() += 1;
-                async move { Err::<i32, &str>("always fails") }
+                async move { Err::<i32, TestErr>(TestErr) }
             })
             .await;
 
-        assert_eq!(result, Err("always fails"));
+        assert_eq!(result, Err(TestErr));
         assert_eq!(*attempt.borrow(), 3); // 1 initial + 2 retries
     }
 
@@ -138,7 +156,7 @@ mod tests {
                 let current_attempt = *attempt.borrow();
                 async move {
                     if current_attempt < 2 {
-                        Err::<i32, &str>("failed")
+                        Err::<i32, TestErr>(TestErr)
                     } else {
                         Ok(42)
                     }

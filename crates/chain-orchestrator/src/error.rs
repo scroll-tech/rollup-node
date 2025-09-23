@@ -3,6 +3,8 @@ use alloy_primitives::B256;
 use alloy_transport::TransportErrorKind;
 use scroll_db::{DatabaseError, L1MessageStart};
 
+use crate::retry::CanRetry;
+
 /// A type that represents an error that occurred in the chain orchestrator.
 #[derive(Debug, thiserror::Error)]
 pub enum ChainOrchestratorError {
@@ -51,4 +53,24 @@ pub enum ChainOrchestratorError {
     /// An error occurred while making a JSON-RPC request to the Execution Node (EN).
     #[error("An error occurred while making a JSON-RPC request to the EN: {0}")]
     RpcError(#[from] RpcError<TransportErrorKind>),
+}
+
+// Implement the local CanRetry trait for the external DatabaseError type so we can delegate.
+impl CanRetry for DatabaseError {
+    fn can_retry(&self) -> bool {
+        matches!(self, Self::DatabaseError(_) | Self::SqlxError(_))
+    }
+}
+
+impl CanRetry for ChainOrchestratorError {
+    fn can_retry(&self) -> bool {
+        match self {
+            // Delegate to DatabaseError's classification
+            Self::DatabaseError(db) => db.can_retry(),
+            // Network and RPC errors are generally transient
+            Self::NetworkRequestError(_) | Self::RpcError(_) => true,
+            // All others are logical/state errors: do not retry
+            _ => false,
+        }
+    }
 }
