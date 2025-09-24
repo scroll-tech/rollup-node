@@ -1,3 +1,5 @@
+use std::string::String;
+
 /// Contains metadata relevant to the rollup node.
 #[derive(Debug)]
 pub struct Metadata {
