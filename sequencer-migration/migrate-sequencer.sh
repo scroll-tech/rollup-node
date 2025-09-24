@@ -40,11 +40,36 @@ pre_flight_checks() {
     fi
     log_success "L2GETH is currently mining"
 
-    # Verify nodes are on the same chain by comparing a recent block
+    # Verify nodes are on the same chain by comparing chain IDs
+    local l2geth_chain_id=$(get_chain_id "$L2GETH_RPC_URL")
+    local l2reth_chain_id=$(get_chain_id "$L2RETH_RPC_URL")
+
+    if [[ -z "$l2geth_chain_id" || -z "$l2reth_chain_id" ]]; then
+        log_error "Failed to retrieve chain IDs from one or both nodes"
+        exit 1
+    fi
+
+    if [[ "$l2geth_chain_id" != "$l2reth_chain_id" ]]; then
+        log_error "Nodes are on different chains! Chain IDs differ:"
+        log_error "  L2GETH: $l2geth_chain_id"
+        log_error "  L2RETH: $l2reth_chain_id"
+        exit 1
+    fi
+    log_success "Nodes are on the same chain (Chain ID: $l2geth_chain_id)"
+
+    # Verify nodes are on the same chain by comparing a recent block hash
     local compare_block=$((INITIAL_L2RETH_BLOCK < INITIAL_L2GETH_BLOCK ? INITIAL_L2RETH_BLOCK : INITIAL_L2GETH_BLOCK))
     if [[ $compare_block -gt 0 ]]; then
-        local l2geth_compare_hash=$(cast block "$compare_block" --rpc-url "$L2GETH_RPC_URL" 2>/dev/null | grep "^hash" | awk '{print $2}')
-        local l2reth_compare_hash=$(cast block "$compare_block" --rpc-url "$L2RETH_RPC_URL" 2>/dev/null | grep "^hash" | awk '{print $2}')
+        local l2geth_compare_info=$(get_block_info "$L2GETH_RPC_URL" "$compare_block")
+        local l2reth_compare_info=$(get_block_info "$L2RETH_RPC_URL" "$compare_block")
+
+        if [[ -z "$l2geth_compare_info" || -z "$l2reth_compare_info" ]]; then
+            log_error "Failed to retrieve block #$compare_block from one or both nodes"
+            exit 1
+        fi
+
+        local l2geth_compare_hash=$(echo "$l2geth_compare_info" | awk '{print $2}')
+        local l2reth_compare_hash=$(echo "$l2reth_compare_info" | awk '{print $2}')
 
         if [[ "$l2geth_compare_hash" != "$l2reth_compare_hash" ]]; then
             log_error "Nodes are on different chains! Block #$compare_block hashes differ:"
@@ -52,7 +77,7 @@ pre_flight_checks() {
             log_error "  L2RETH: $l2reth_compare_hash"
             exit 1
         fi
-        log_success "Nodes are on the same chain (verified at block #$compare_block)"
+        log_success "Block hash verification passed at block #$compare_block"
     fi
 
     log_success "Pre-flight checks completed"

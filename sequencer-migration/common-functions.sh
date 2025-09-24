@@ -43,45 +43,59 @@ check_env_vars() {
     log_info "L2RETH_RPC_URL: $L2RETH_RPC_URL"
 }
 
-# Get block number and hash for a given RPC URL
-get_latest_block_info() {
+# Get block number and hash for a given RPC URL and block identifier
+# Parameters:
+#   $1: rpc_url - The RPC endpoint URL
+#   $2: block_identifier - Block number or "latest" (default: "latest")
+get_block_info() {
     local rpc_url="$1"
-    local temp_file=$(mktemp)
+    local block_identifier="${2:-latest}"
+    local block_data
 
-    if ! cast block latest --rpc-url "$rpc_url" > "$temp_file" 2>/dev/null; then
-        rm -f "$temp_file"
+    if ! block_data=$(cast block "$block_identifier" --json --rpc-url "$rpc_url" 2>/dev/null); then
         return 1
     fi
 
-    local block_number=$(grep "^number" "$temp_file" | awk '{print $2}')
-    local block_hash=$(grep "^hash" "$temp_file" | awk '{print $2}')
+    local block_number=$(echo "$block_data" | jq -r '.number // empty')
+    local block_hash=$(echo "$block_data" | jq -r '.hash // empty')
 
-    rm -f "$temp_file"
+    if [[ -z "$block_number" || -z "$block_hash" || "$block_number" == "null" || "$block_hash" == "null" ]]; then
+        return 1
+    fi
+
     echo "$block_number $block_hash"
 }
 
-# Get block info for a specific block number
-get_block_info() {
-    local rpc_url="$1"
-    local block_number="$2"
-    local temp_file=$(mktemp)
-
-    if ! cast block "$block_number" --rpc-url "$rpc_url" > "$temp_file" 2>/dev/null; then
-        rm -f "$temp_file"
-        return 1
-    fi
-
-    local block_num=$(grep "^number" "$temp_file" | awk '{print $2}')
-    local block_hash=$(grep "^hash" "$temp_file" | awk '{print $2}')
-
-    rm -f "$temp_file"
-    echo "$block_num $block_hash"
+# Get latest block info (convenience function)
+get_latest_block_info() {
+    get_block_info "$1" "latest"
 }
 
 # Get only block number for a given RPC URL
 get_block_number() {
     local rpc_url="$1"
-    cast block latest --rpc-url "$rpc_url" 2>/dev/null | grep "^number" | awk '{print $2}'
+    local block_data
+
+    if ! block_data=$(cast block latest --json --rpc-url "$rpc_url" 2>/dev/null); then
+        return 1
+    fi
+
+    local block_number=$(echo "$block_data" | jq -r '.number // empty')
+
+    if [[ -z "$block_number" || "$block_number" == "null" ]]; then
+        return 1
+    fi
+
+    echo "$block_number"
+}
+
+# Get chain ID for a given RPC URL
+get_chain_id() {
+    local rpc_url="$1"
+
+    if ! cast chain-id --rpc-url "$rpc_url" 2>/dev/null; then
+        return 1
+    fi
 }
 
 # Check if l2geth is mining
@@ -186,8 +200,21 @@ wait_for_block() {
                         log_success "$node_name reached target block #$target_block (hash: $target_hash)"
                         return 0
                     elif [[ "$current_block" -gt "$target_block" ]]; then
-                        log_success "$node_name surpassed target, now at block #$current_block (hash: $current_hash)"
-                        return 0
+                        # Verify the target block hash even though we surpassed it
+                        local target_block_info=$(get_block_info "$rpc_url" "$target_block")
+                        if [[ -n "$target_block_info" ]]; then
+                            local actual_target_hash=$(echo "$target_block_info" | awk '{print $2}')
+                            if [[ "$actual_target_hash" == "$target_hash" ]]; then
+                                log_success "$node_name surpassed target, now at block #$current_block (hash: $current_hash), target block verified"
+                                return 0
+                            else
+                                log_error "$node_name surpassed target but target block #$target_block hash mismatch: expected $target_hash, got $actual_target_hash"
+                                return 1
+                            fi
+                        else
+                            log_error "$node_name surpassed target but failed to verify target block #$target_block"
+                            return 1
+                        fi
                     else
                         log_warning "$node_name at block #$current_block but hash mismatch: expected $target_hash, got $current_hash"
                     fi
