@@ -56,12 +56,15 @@ get_block_info() {
         return 1
     fi
 
-    local block_number=$(echo "$block_data" | jq -r '.number // empty')
+    local block_number_hex=$(echo "$block_data" | jq -r '.number // empty')
     local block_hash=$(echo "$block_data" | jq -r '.hash // empty')
 
-    if [[ -z "$block_number" || -z "$block_hash" || "$block_number" == "null" || "$block_hash" == "null" ]]; then
+    if [[ -z "$block_number_hex" || -z "$block_hash" || "$block_number_hex" == "null" || "$block_hash" == "null" ]]; then
         return 1
     fi
+
+    # Convert hex to decimal
+    local block_number=$(echo "$block_number_hex" | xargs cast to-dec)
 
     echo "$block_number $block_hash"
 }
@@ -74,19 +77,14 @@ get_latest_block_info() {
 # Get only block number for a given RPC URL
 get_block_number() {
     local rpc_url="$1"
-    local block_data
+    local block_info
 
-    if ! block_data=$(cast block latest --json --rpc-url "$rpc_url" 2>/dev/null); then
+    if ! block_info=$(get_block_info "$rpc_url" "latest"); then
         return 1
     fi
 
-    local block_number=$(echo "$block_data" | jq -r '.number // empty')
-
-    if [[ -z "$block_number" || "$block_number" == "null" ]]; then
-        return 1
-    fi
-
-    echo "$block_number"
+    # Extract just the block number (first field)
+    echo "$block_info" | awk '{print $1}'
 }
 
 # Get chain ID for a given RPC URL
@@ -245,4 +243,42 @@ check_rpc_connectivity() {
     fi
 
     log_success "Both nodes are accessible"
+}
+
+# Common pre-flight checks for sequencer migration scripts
+perform_pre_flight_checks() {
+    log_info "=== PRE-FLIGHT CHECKS ==="
+
+    check_rpc_connectivity
+
+    # Get current block states
+    local l2geth_info=$(get_latest_block_info "$L2GETH_RPC_URL")
+    local l2reth_info=$(get_latest_block_info "$L2RETH_RPC_URL")
+
+    local current_l2geth_block=$(echo "$l2geth_info" | awk '{print $1}')
+    local l2geth_hash=$(echo "$l2geth_info" | awk '{print $2}')
+    local current_l2reth_block=$(echo "$l2reth_info" | awk '{print $1}')
+    local l2reth_hash=$(echo "$l2reth_info" | awk '{print $2}')
+
+    log_info "L2GETH current block: #$current_l2geth_block (hash: $l2geth_hash)"
+    log_info "L2RETH current block: #$current_l2reth_block (hash: $l2reth_hash)"
+
+    # Verify nodes are on the same chain by comparing chain IDs
+    local l2geth_chain_id=$(get_chain_id "$L2GETH_RPC_URL")
+    local l2reth_chain_id=$(get_chain_id "$L2RETH_RPC_URL")
+
+    if [[ -z "$l2geth_chain_id" || -z "$l2reth_chain_id" ]]; then
+        log_error "Failed to retrieve chain IDs from one or both nodes"
+        exit 1
+    fi
+
+    if [[ "$l2geth_chain_id" != "$l2reth_chain_id" ]]; then
+        log_error "Nodes are on different chains! Chain IDs differ:"
+        log_error "  L2GETH: $l2geth_chain_id"
+        log_error "  L2RETH: $l2reth_chain_id"
+        exit 1
+    fi
+    log_success "Nodes are on the same chain (Chain ID: $l2geth_chain_id)"
+
+    log_success "Pre-flight checks completed"
 }

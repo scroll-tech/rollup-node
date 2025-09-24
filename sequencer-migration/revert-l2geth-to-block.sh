@@ -34,22 +34,12 @@ reset_l2geth_to_block() {
 
 
 
-pre_flight_checks() {
-    log_info "=== PRE-FLIGHT CHECKS ==="
+revert_pre_flight_checks() {
+    perform_pre_flight_checks
 
-    check_rpc_connectivity
-
-    # Get current block states
+    # Get current l2geth block for validation
     local l2geth_info=$(get_latest_block_info "$L2GETH_RPC_URL")
-    local l2reth_info=$(get_latest_block_info "$L2RETH_RPC_URL")
-
     local current_l2geth_block=$(echo "$l2geth_info" | awk '{print $1}')
-    local l2geth_hash=$(echo "$l2geth_info" | awk '{print $2}')
-    local current_l2reth_block=$(echo "$l2reth_info" | awk '{print $1}')
-    local l2reth_hash=$(echo "$l2reth_info" | awk '{print $2}')
-
-    log_info "L2GETH current block: #$current_l2geth_block (hash: $l2geth_hash)"
-    log_info "L2RETH current block: #$current_l2reth_block (hash: $l2reth_hash)"
 
     # Validate target block exists and is reachable
     if [[ $TARGET_BLOCK -gt $current_l2geth_block ]]; then
@@ -67,8 +57,6 @@ pre_flight_checks() {
 
     TARGET_HASH=$(echo "$target_info" | awk '{print $2}')
     log_info "Target block #$TARGET_BLOCK exists (hash: $TARGET_HASH)"
-
-    log_success "Pre-flight checks completed"
 }
 
 print_summary() {
@@ -106,7 +94,7 @@ main() {
     log_info "Starting l2geth revert to block #$TARGET_BLOCK"
 
     check_env_vars
-    pre_flight_checks
+    revert_pre_flight_checks
 
     # Phase 1: Disable sequencing on both nodes
     log_info "=== PHASE 1: DISABLING SEQUENCING ==="

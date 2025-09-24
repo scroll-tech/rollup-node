@@ -11,27 +11,11 @@ source "$(dirname "$0")/common-functions.sh"
 
 # Global variables to track state
 START_TIME=$(date +%s)
-INITIAL_L2GETH_BLOCK=""
-INITIAL_L2RETH_BLOCK=""
 L2GETH_STOP_BLOCK=""
 L2RETH_FINAL_BLOCK=""
 
-pre_flight_checks() {
-    log_info "=== PRE-FLIGHT CHECKS ==="
-
-    check_rpc_connectivity
-
-    # Get initial block states
-    local l2geth_info=$(get_latest_block_info "$L2GETH_RPC_URL")
-    local l2reth_info=$(get_latest_block_info "$L2RETH_RPC_URL")
-
-    INITIAL_L2GETH_BLOCK=$(echo "$l2geth_info" | awk '{print $1}')
-    local l2geth_hash=$(echo "$l2geth_info" | awk '{print $2}')
-    INITIAL_L2RETH_BLOCK=$(echo "$l2reth_info" | awk '{print $1}')
-    local l2reth_hash=$(echo "$l2reth_info" | awk '{print $2}')
-
-    log_info "L2GETH current block: #$INITIAL_L2GETH_BLOCK (hash: $l2geth_hash)"
-    log_info "L2RETH current block: #$INITIAL_L2RETH_BLOCK (hash: $l2reth_hash)"
+migrate_pre_flight_checks() {
+    perform_pre_flight_checks
 
     # Check if l2geth is mining
     if ! is_l2geth_mining; then
@@ -39,48 +23,6 @@ pre_flight_checks() {
         exit 1
     fi
     log_success "L2GETH is currently mining"
-
-    # Verify nodes are on the same chain by comparing chain IDs
-    local l2geth_chain_id=$(get_chain_id "$L2GETH_RPC_URL")
-    local l2reth_chain_id=$(get_chain_id "$L2RETH_RPC_URL")
-
-    if [[ -z "$l2geth_chain_id" || -z "$l2reth_chain_id" ]]; then
-        log_error "Failed to retrieve chain IDs from one or both nodes"
-        exit 1
-    fi
-
-    if [[ "$l2geth_chain_id" != "$l2reth_chain_id" ]]; then
-        log_error "Nodes are on different chains! Chain IDs differ:"
-        log_error "  L2GETH: $l2geth_chain_id"
-        log_error "  L2RETH: $l2reth_chain_id"
-        exit 1
-    fi
-    log_success "Nodes are on the same chain (Chain ID: $l2geth_chain_id)"
-
-    # Verify nodes are on the same chain by comparing a recent block hash
-    local compare_block=$((INITIAL_L2RETH_BLOCK < INITIAL_L2GETH_BLOCK ? INITIAL_L2RETH_BLOCK : INITIAL_L2GETH_BLOCK))
-    if [[ $compare_block -gt 0 ]]; then
-        local l2geth_compare_info=$(get_block_info "$L2GETH_RPC_URL" "$compare_block")
-        local l2reth_compare_info=$(get_block_info "$L2RETH_RPC_URL" "$compare_block")
-
-        if [[ -z "$l2geth_compare_info" || -z "$l2reth_compare_info" ]]; then
-            log_error "Failed to retrieve block #$compare_block from one or both nodes"
-            exit 1
-        fi
-
-        local l2geth_compare_hash=$(echo "$l2geth_compare_info" | awk '{print $2}')
-        local l2reth_compare_hash=$(echo "$l2reth_compare_info" | awk '{print $2}')
-
-        if [[ "$l2geth_compare_hash" != "$l2reth_compare_hash" ]]; then
-            log_error "Nodes are on different chains! Block #$compare_block hashes differ:"
-            log_error "  L2GETH: $l2geth_compare_hash"
-            log_error "  L2RETH: $l2reth_compare_hash"
-            exit 1
-        fi
-        log_success "Block hash verification passed at block #$compare_block"
-    fi
-
-    log_success "Pre-flight checks completed"
 }
 
 print_summary() {
@@ -89,8 +31,6 @@ print_summary() {
 
     log_info "=== MIGRATION SUMMARY ==="
     log_info "Migration completed in ${total_time}s"
-    log_info "Initial L2GETH block: #$INITIAL_L2GETH_BLOCK"
-    log_info "Initial L2RETH block: #$INITIAL_L2RETH_BLOCK"
     log_info "L2GETH stopped at block: #$L2GETH_STOP_BLOCK"
     log_info "L2RETH final block: #$L2RETH_FINAL_BLOCK"
 
@@ -122,7 +62,7 @@ main() {
     log_info "L2RETH will produce $blocks_to_produce blocks"
 
     check_env_vars
-    pre_flight_checks
+    migrate_pre_flight_checks
 
     # Double check if user wants to proceed
     read -p "Proceed with migration? (y/N): " confirm
