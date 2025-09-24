@@ -101,7 +101,7 @@ impl Database {
 
     /// Returns a reference to the database tmp dir.
     #[cfg(feature = "test-utils")]
-    pub fn tmp_dir(&self) -> Option<&tempfile::TempDir> {
+    pub const fn tmp_dir(&self) -> Option<&tempfile::TempDir> {
         self.tmp_dir.as_ref()
     }
 }

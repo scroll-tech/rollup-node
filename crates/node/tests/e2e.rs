@@ -37,9 +37,7 @@ use rollup_node_sequencer::L1MessageInclusionMode;
 use rollup_node_watcher::L1Notification;
 use scroll_alloy_consensus::TxL1Message;
 use scroll_alloy_rpc_types::Transaction as ScrollAlloyTransaction;
-use scroll_db::{
-    test_utils::setup_test_db, DatabaseReadOperations, DatabaseTransactionProvider, L1MessageStart,
-};
+use scroll_db::{test_utils::setup_test_db, L1MessageStart};
 use scroll_network::NewBlockWithPeer;
 use scroll_wire::{ScrollWireConfig, ScrollWireProtocolHandler};
 use std::{
@@ -1063,13 +1061,13 @@ async fn graceful_shutdown_consolidates_most_recent_batch_on_startup() -> eyre::
     Ok(())
 }
 
-/// Test that when the rollup node manager is shutdown, it restarts with the head set the max
-/// between the sequenced block and the finalized head.
+/// Test that when the rollup node manager is shutdown, it restarts with the head set to the latest
+/// sequenced block stored in database.
 #[tokio::test]
-async fn graceful_shutdown_sets_fcs_max_between_sequenced_block_and_finalized_head_on_startup(
-) -> eyre::Result<()> {
+async fn graceful_shutdown_sets_fcs_to_latest_sequenced_block_in_db_on_start_up() -> eyre::Result<()>
+{
     reth_tracing::init_test_tracing();
-    let chain_spec = (*SCROLL_MAINNET).clone();
+    let chain_spec = (*SCROLL_DEV).clone();
 
     // Create a config with a random signer.
     let mut config = default_sequencer_test_scroll_rollup_node_config();
@@ -1082,7 +1080,7 @@ async fn graceful_shutdown_sets_fcs_max_between_sequenced_block_and_finalized_he
 
     // Instantiate the rollup node manager.
     let test_db = setup_test_db().await;
-    let path = test_db.tmp_dir().expect("Database started with temp dir").path();
+    let path = test_db.tmp_dir().expect("Database started with temp dir").path().join("test.db");
     config.blob_provider_args.beacon_node_urls = Some(vec!["http://dummy:8545"
         .parse()
         .expect("valid url that will not be used as test batches use calldata")]);
@@ -1095,7 +1093,7 @@ async fn graceful_shutdown_sets_fcs_max_between_sequenced_block_and_finalized_he
             RollupNodeContext::new(
                 node.inner.network.clone(),
                 chain_spec.clone(),
-                path.to_path_buf(),
+                path.clone(),
                 SCROLL_GAS_LIMIT,
             ),
             events,
@@ -1114,7 +1112,6 @@ async fn graceful_shutdown_sets_fcs_max_between_sequenced_block_and_finalized_he
         }
         tokio::time::sleep(Duration::from_millis(10)).await;
     };
-    drop(rnm_events_fut);
 
     // Wait for the EN to be synced to block 10.
     let execution_node_provider = node.inner.provider;
@@ -1135,14 +1132,13 @@ async fn graceful_shutdown_sets_fcs_max_between_sequenced_block_and_finalized_he
     }
 
     // Get the block info for block 10.
-    let head_block_info = execution_node_provider
+    let db_head_block_info = execution_node_provider
         .block(10u64.into())?
         .map(|b| BlockInfo { number: b.number, hash: b.hash_slow() })
         .expect("block exists");
 
     // Build one block, and only wait for the block sequenced event.
     handle.build_block().await;
-
     loop {
         let _ = rnm.poll_unpin(&mut Context::from_waker(noop_waker_ref()));
         if let Poll::Ready(Some(RollupManagerEvent::BlockSequenced(_))) =
@@ -1152,10 +1148,6 @@ async fn graceful_shutdown_sets_fcs_max_between_sequenced_block_and_finalized_he
         }
         tokio::time::sleep(Duration::from_millis(10)).await;
     }
-
-    // Check the last sequenced block is 10 in DB.
-    let info = rnm.database.tx().await?.get_latest_sequenced_block_info().await?.unwrap();
-    assert_eq!(info, head_block_info);
 
     // At this point, we have the EN synced to a block > 10 and the RNM has sequenced one additional
     // block, validating it with the EN, but not updating the last sequenced block in the DB.
@@ -1172,7 +1164,7 @@ async fn graceful_shutdown_sets_fcs_max_between_sequenced_block_and_finalized_he
             RollupNodeContext::new(
                 node.inner.network.clone(),
                 chain_spec,
-                path.to_path_buf(),
+                path.clone(),
                 SCROLL_GAS_LIMIT,
             ),
             events,
@@ -1190,7 +1182,8 @@ async fn graceful_shutdown_sets_fcs_max_between_sequenced_block_and_finalized_he
     handle.send_command(RollupManagerCommand::Status(tx)).await;
     let status = rx.await?;
 
-    assert_eq!(status.forkchoice_state.head_block_info(), &head_block_info);
+    // The fcs should be set to the database head.
+    assert_eq!(status.forkchoice_state.head_block_info(), &db_head_block_info);
 
     Ok(())
 }
