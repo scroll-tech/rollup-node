@@ -21,7 +21,23 @@ The high-level flow of the transition will look like this:
 6. Wait until `l2reth` has sequenced until block X or for some time
 7. Turn off `l2reth` sequencing
 8. Wait until `l2geth` has same block height
-9. Turn on `l2geth` sequencingx
+9. Turn on `l2geth` sequencing
+
+## Usage
+Make sure the `L2RETH_RPC_URL` and `L2GETH_RPC_URL` env variables are properly configured. Simply run the script and follow the instructions. 
+
+```bash
+./migrate-sequencer.sh <blocks_to_produce>
+./revert-l2geth-to-block.sh <block_number>
+./switch-to-l2geth.sh
+
+# make common functions available on bash
+source common-functions.sh
+
+start_l2geth_mining
+get_block_info $L2GETH_RPC_URL
+[...]
+```
 
 ### Testing locally
 To test locally run the test `docker_test_migrate_sequencer` and execute the `migrate-sequencer.sh` script.
@@ -40,5 +56,17 @@ source local.env
 - To simulate the case where `l2reth` produces invalid blocks we can adjust to `--builder.gaslimit=40000000` in `launch_rollup_node_sequencer.bash`. This will produce a block with a too big jump of the gas limit and `l2geth` will reject it. In a simulation we can then "revert" `l2geth` to its latest block and start sequencing on `l2geth` again.
 - Continuing on the above case we can fabricate a L2 reorg by simply resetting to any previous block. For all `l2geth` nodes the reorg will be shallow (ie before the invalid `l2reth` blocks) and for `l2reth` it will be deeper (ie all `l2reth` produced blocks + reset to previous block).
 
-TODO: how to run with Docker
+### Running with Docker
+```bash
+docker run -it --rm sequencer-migration:latest
 
+# then just use the scripts as before
+./migrate-sequencer.sh <blocks_to_produce>
+
+# or call any of the common functions
+start_l2geth_mining
+get_block_info $L2GETH_RPC_URL
+[...]
+```
+
+If running on Linux you might need to specify `-e L2GETH_RPC_URL=http://your-l2geth:8547 -e L2RETH_RPC_URL=http://your-l2reth:8545` as the default URLs might not work. 
