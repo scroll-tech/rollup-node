@@ -222,7 +222,6 @@ pub trait DatabaseWriteOperations: WriteConnectionProvider + DatabaseReadOperati
         };
         let batch = self.get_batch_by_index(batch_info.index).await?.expect("batch must exist");
         Ok((Some(block_info), Some(batch.block_number.saturating_add(1))))
-
     }
 
     /// Delete all L2 blocks with a block number greater than the provided block number.
