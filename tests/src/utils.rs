@@ -1,6 +1,9 @@
+use alloy_primitives::{hex::ToHexExt, Bytes};
 use alloy_rpc_types_eth::BlockNumberOrTag;
-use eyre::Result;
-use std::time::Duration;
+use eyre::{Ok, Result};
+use reth_e2e_test_utils::{transaction::TransactionTestContext, wallet::Wallet};
+use std::{sync::Arc, time::Duration};
+use tokio::sync::Mutex;
 
 use crate::docker_compose::NamedProvider;
 
@@ -213,4 +216,39 @@ pub async fn admin_remove_trusted_peer(provider: &NamedProvider, enode: &str) ->
         .request("admin_removeTrustedPeer", (enode,))
         .await
         .map_err(|e| eyre::eyre!("Failed to remove trusted peer {}: {}", enode, e))
+}
+
+pub fn create_wallet(chain_id: u64) -> Arc<Mutex<Wallet>> {
+    Arc::new(Mutex::new(Wallet::default().with_chain_id(chain_id)))
+}
+
+/// Generate a transfer transaction with the given wallet.
+pub async fn generate_tx(wallet: Arc<Mutex<Wallet>>) -> Bytes {
+    let mut wallet = wallet.lock().await;
+    let tx_fut = TransactionTestContext::transfer_tx_nonce_bytes(
+        wallet.chain_id,
+        wallet.inner.clone(),
+        wallet.inner_nonce,
+    );
+    wallet.inner_nonce += 1;
+    tx_fut.await
+}
+
+pub async fn send_tx_and_wait_for_confirmation(
+    wallet: Arc<Mutex<Wallet>>,
+    provider: &NamedProvider,
+) -> Result<()> {
+    let tx = generate_tx(wallet).await;
+
+    tracing::info!("Sending transaction: {:?}", tx);
+    let tx: Vec<u8> = tx.into();
+    let builder = provider.provider.send_raw_transaction(&tx).await?;
+    let pending_tx = builder.register().await?;
+    tracing::info!("Pending transaction hash: {:?}", pending_tx.tx_hash());
+
+    let r = pending_tx.await?;
+
+    tracing::info!("Transaction confirmed: {:?}", r.encode_hex());
+
+    Ok(())
 }
