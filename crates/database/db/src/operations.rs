@@ -215,14 +215,14 @@ pub trait DatabaseWriteOperations: WriteConnectionProvider + DatabaseReadOperati
             self.delete_batches_gt_block_number(batch.block_number.saturating_sub(1)).await?;
         };
 
-        match self.get_latest_safe_l2_info().await? {
-            Some((block_info, batch_info)) if block_info.number > 0 => {
-                let batch =
-                    self.get_batch_by_index(batch_info.index).await?.expect("batch must exist");
-                Ok((Some(block_info), Some(batch.block_number.saturating_add(1))))
-            }
-            _ => Ok((None, None)),
-        }
+        let Some((block_info, batch_info)) =
+            self.get_latest_safe_l2_info().await?.filter(|(block_info, _)| block_info.number > 0)
+        else {
+            return Ok((None, None))
+        };
+        let batch = self.get_batch_by_index(batch_info.index).await?.expect("batch must exist");
+        Ok((Some(block_info), Some(batch.block_number.saturating_add(1))))
+
     }
 
     /// Delete all L2 blocks with a block number greater than the provided block number.
