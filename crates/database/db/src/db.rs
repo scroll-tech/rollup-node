@@ -946,7 +946,7 @@ mod test {
         // verify the result
         assert_eq!(result, (Some(block_2.block_info), Some(11)));
 
-        // Verify that batches 3 and 4 are deleted
+        // Verify that batches 2 and 3 are deleted
         let tx = db.tx().await.unwrap();
         let batch_1 = tx.get_batch_by_index(1).await.unwrap();
         let batch_2 = tx.get_batch_by_index(2).await.unwrap();
