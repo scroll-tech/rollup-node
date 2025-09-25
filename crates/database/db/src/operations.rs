@@ -205,25 +205,23 @@ pub trait DatabaseWriteOperations: WriteConnectionProvider + DatabaseReadOperati
 
         // Delete all unprocessed batches from the database and return starting l2 safe head and l1
         // head.
-        let safe = if let Some(batch_info) = self
+        if let Some(batch_info) = self
             .get_latest_safe_l2_info()
             .await?
             .map(|(_, batch_info)| batch_info)
             .filter(|b| b.index > 1)
         {
-            let previous_batch_index = batch_info.index - 1;
-            let previous_batch = self
-                .get_batch_by_index(previous_batch_index)
-                .await?
-                .expect("Batch info must be present due to database query arguments");
-            self.delete_batches_gt_batch_index(previous_batch_index).await?;
-            let l2_block = self.get_highest_block_for_batch_hash(previous_batch.hash).await?;
-            (l2_block, Some(previous_batch.block_number))
-        } else {
-            (None, None)
+            let batch = self.get_batch_by_index(batch_info.index).await?.expect("batch must exist");
+            self.delete_batches_gt_block_number(batch.block_number.saturating_sub(1)).await?;
         };
 
-        Ok(safe)
+        let Some((block_info, batch_info)) =
+            self.get_latest_safe_l2_info().await?.filter(|(block_info, _)| block_info.number > 0)
+        else {
+            return Ok((None, None))
+        };
+        let batch = self.get_batch_by_index(batch_info.index).await?.expect("batch must exist");
+        Ok((Some(block_info), Some(batch.block_number.saturating_add(1))))
     }
 
     /// Delete all L2 blocks with a block number greater than the provided block number.

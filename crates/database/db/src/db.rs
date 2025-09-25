@@ -869,4 +869,96 @@ mod test {
         assert_eq!(updated_block_info, block_info);
         assert_eq!(updated_batch_info, batch_info_2);
     }
+
+    #[tokio::test]
+    async fn test_prepare_on_startup() {
+        let db = setup_test_db().await;
+        let tx = db.tx_mut().await.unwrap();
+
+        // Generate unstructured bytes.
+        let mut bytes = [0u8; 1024];
+        rand::rng().fill(bytes.as_mut_slice());
+        let mut u = Unstructured::new(&bytes);
+
+        // Insert batch 1 and associate it with two blocks in the database
+        let batch_data_1 =
+            BatchCommitData { index: 1, block_number: 10, ..Arbitrary::arbitrary(&mut u).unwrap() };
+        let block_1 = L2BlockInfoWithL1Messages {
+            block_info: BlockInfo { number: 1, hash: B256::arbitrary(&mut u).unwrap() },
+            l1_messages: vec![],
+        };
+        let block_2 = L2BlockInfoWithL1Messages {
+            block_info: BlockInfo { number: 2, hash: B256::arbitrary(&mut u).unwrap() },
+            l1_messages: vec![],
+        };
+        tx.insert_batch(batch_data_1.clone()).await.unwrap();
+        tx.insert_block(block_1.clone(), batch_data_1.clone().into()).await.unwrap();
+        tx.insert_block(block_2.clone(), batch_data_1.clone().into()).await.unwrap();
+
+        // Insert batch 2 and associate it with one block in the database
+        let batch_data_2 =
+            BatchCommitData { index: 2, block_number: 20, ..Arbitrary::arbitrary(&mut u).unwrap() };
+        let block_3 = L2BlockInfoWithL1Messages {
+            block_info: BlockInfo { number: 3, hash: B256::arbitrary(&mut u).unwrap() },
+            l1_messages: vec![],
+        };
+        tx.insert_batch(batch_data_2.clone()).await.unwrap();
+        tx.insert_block(block_3.clone(), batch_data_2.clone().into()).await.unwrap();
+
+        // Insert batch 3 produced at the same block number as batch 2 and associate it with one
+        // block
+        let batch_data_3 =
+            BatchCommitData { index: 3, block_number: 20, ..Arbitrary::arbitrary(&mut u).unwrap() };
+        let block_4 = L2BlockInfoWithL1Messages {
+            block_info: BlockInfo { number: 4, hash: B256::arbitrary(&mut u).unwrap() },
+            l1_messages: vec![],
+        };
+        tx.insert_batch(batch_data_3.clone()).await.unwrap();
+        tx.insert_block(block_4.clone(), batch_data_3.clone().into()).await.unwrap();
+
+        tx.set_latest_finalized_l1_block_number(21).await.unwrap();
+        tx.commit().await.unwrap();
+
+        // Verify the batches and blocks were inserted correctly
+        let tx = db.tx().await.unwrap();
+        let retrieved_batch_1 = tx.get_batch_by_index(1).await.unwrap().unwrap();
+        let retrieved_batch_2 = tx.get_batch_by_index(2).await.unwrap().unwrap();
+        let retrieved_batch_3 = tx.get_batch_by_index(3).await.unwrap().unwrap();
+        let retried_block_1 = tx.get_l2_block_info_by_number(1).await.unwrap().unwrap();
+        let retried_block_2 = tx.get_l2_block_info_by_number(2).await.unwrap().unwrap();
+        let retried_block_3 = tx.get_l2_block_info_by_number(3).await.unwrap().unwrap();
+        let retried_block_4 = tx.get_l2_block_info_by_number(4).await.unwrap().unwrap();
+        drop(tx);
+
+        assert_eq!(retrieved_batch_1, batch_data_1);
+        assert_eq!(retrieved_batch_2, batch_data_2);
+        assert_eq!(retrieved_batch_3, batch_data_3);
+        assert_eq!(retried_block_1, block_1.block_info);
+        assert_eq!(retried_block_2, block_2.block_info);
+        assert_eq!(retried_block_3, block_3.block_info);
+        assert_eq!(retried_block_4, block_4.block_info);
+
+        // Call prepare_on_startup which should not error
+        let tx = db.tx_mut().await.unwrap();
+        let result = tx.prepare_on_startup(Default::default()).await.unwrap();
+        tx.commit().await.unwrap();
+
+        // verify the result
+        assert_eq!(result, (Some(block_2.block_info), Some(11)));
+
+        // Verify that batches 2 and 3 are deleted
+        let tx = db.tx().await.unwrap();
+        let batch_1 = tx.get_batch_by_index(1).await.unwrap();
+        let batch_2 = tx.get_batch_by_index(2).await.unwrap();
+        let batch_3 = tx.get_batch_by_index(3).await.unwrap();
+        assert!(batch_1.is_some());
+        assert!(batch_2.is_none());
+        assert!(batch_3.is_none());
+
+        // Verify that blocks 3 and 4 are deleted
+        let retried_block_3 = tx.get_l2_block_info_by_number(3).await.unwrap();
+        let retried_block_4 = tx.get_l2_block_info_by_number(4).await.unwrap();
+        assert!(retried_block_3.is_none());
+        assert!(retried_block_4.is_none());
+    }
 }
