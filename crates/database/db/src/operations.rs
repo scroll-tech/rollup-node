@@ -84,14 +84,11 @@ pub trait DatabaseWriteOperations: WriteConnectionProvider + DatabaseReadOperati
             .map(|_| ())?)
     }
 
-    /// Set the latest sequenced L2 block info.
-    async fn set_latest_sequenced_block_info(
-        &self,
-        block_info: BlockInfo,
-    ) -> Result<(), DatabaseError> {
-        tracing::trace!(target: "scroll::db", ?block_info, "Updating the L2 sequenced block info in the database.");
+    /// Set the L2 head block info.
+    async fn set_l2_head_block_info(&self, block_info: BlockInfo) -> Result<(), DatabaseError> {
+        tracing::trace!(target: "scroll::db", ?block_info, "Updating the L2 head block info in the database.");
         let metadata: models::metadata::ActiveModel = Metadata {
-            key: "l2_sequenced_block".to_string(),
+            key: "l2_head_block".to_string(),
             value: serde_json::to_string(&block_info)?,
         }
         .into();
@@ -469,10 +466,10 @@ pub trait DatabaseReadOperations: ReadConnectionProvider + Sync {
             .map(|x| x.and_then(|x| x.parse::<u64>().ok()))?)
     }
 
-    /// Get the latest sequenced L2 block info.
-    async fn get_latest_sequenced_block_info(&self) -> Result<Option<BlockInfo>, DatabaseError> {
+    /// Get the latest L2 head block info.
+    async fn get_l2_head_block_info(&self) -> Result<Option<BlockInfo>, DatabaseError> {
         Ok(models::metadata::Entity::find()
-            .filter(models::metadata::Column::Key.eq("l2_sequenced_block"))
+            .filter(models::metadata::Column::Key.eq("l2_head_block"))
             .select_only()
             .column(models::metadata::Column::Value)
             .into_tuple::<String>()

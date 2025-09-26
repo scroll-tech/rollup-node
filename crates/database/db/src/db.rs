@@ -875,4 +875,27 @@ mod test {
         assert_eq!(updated_block_info, block_info);
         assert_eq!(updated_batch_info, batch_info_2);
     }
+
+    #[tokio::test]
+    async fn test_l2_block_head_roundtrip() {
+        // Set up the test database.
+        let db = setup_test_db().await;
+        let tx = db.tx_mut().await.unwrap();
+
+        // Generate unstructured bytes.
+        let mut bytes = [0u8; 40];
+        rand::rng().fill(bytes.as_mut_slice());
+        let mut u = Unstructured::new(&bytes);
+
+        // Generate and insert a block info as the head.
+        let block_info = BlockInfo::arbitrary(&mut u).unwrap();
+        tx.set_l2_head_block_info(block_info.clone()).await.unwrap();
+        tx.commit().await.unwrap();
+
+        // Retrieve and verify the head block info.
+        let tx = db.tx().await.unwrap();
+        let head_block_info = tx.get_l2_head_block_info().await.unwrap().unwrap();
+
+        assert_eq!(head_block_info, block_info);
+    }
 }

@@ -215,10 +215,10 @@ impl<
         let block_info: L2BlockInfoWithL1Messages = (&block_with_peer.block).into();
         Self::do_handle_block_from_peer(ctx, block_with_peer).await?;
         Retry::default()
-            .retry("update_l1_messages_with_l2_block", || async {
+            .retry("handle_sequenced_block", || async {
                 let tx = database.tx_mut().await?;
                 tx.update_l1_messages_with_l2_block(block_info.clone()).await?;
-                tx.set_latest_sequenced_block_info(block_info.block_info).await?;
+                tx.set_l2_head_block_info(block_info.block_info).await?;
                 tx.commit().await?;
                 Ok::<_, ChainOrchestratorError>(())
             })
@@ -274,6 +274,13 @@ impl<
                     .ok_or(ChainOrchestratorError::MissingBlockHeader { hash: parent_hash })?;
                 optimistic_headers.push_front(header);
             }
+
+            // Persist the head block to the database.
+            persist_l2_head_with_retry(
+                database.clone(),
+                optimistic_headers.last().expect("chain can not be empty").into(),
+            )
+            .await?;
 
             *chain.lock().await = optimistic_headers;
             *optimistic_mode.lock().await = true;
@@ -439,6 +446,13 @@ impl<
         if !*optimistic_mode.lock().await {
             validate_l1_messages(&new_blocks, &database).await?;
         }
+
+        // Persist the head block to the database.
+        persist_l2_head_with_retry(
+            database.clone(),
+            new_blocks.last().expect("chain can not be empty").into(),
+        )
+        .await?;
 
         match reorg_index {
             // If this is a simple chain extension, we can just extend the in-memory chain and emit
@@ -884,6 +898,21 @@ async fn init_chain_from_db<P: Provider<Scroll> + 'static>(
     let mut chain: Chain = Chain::new(chain_buffer_size);
     chain.extend(blocks);
     Ok(chain)
+}
+
+/// Persists the L2 head block info with retries.
+async fn persist_l2_head_with_retry(
+    db: Arc<Database>,
+    block: BlockInfo,
+) -> Result<(), ChainOrchestratorError> {
+    Retry::default()
+        .retry("set_l2_head_block_info", || async {
+            let tx = db.tx_mut().await?;
+            tx.set_l2_head_block_info(block).await?;
+            tx.commit().await?;
+            Ok::<_, ChainOrchestratorError>(())
+        })
+        .await
 }
 
 impl<

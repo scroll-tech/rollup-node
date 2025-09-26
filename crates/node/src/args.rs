@@ -272,9 +272,8 @@ impl ScrollRollupNodeConfig {
             });
         }
 
-        // Update the head block info from the latest sequenced block if available and ahead of
-        // finalized.
-        if let Some(latest_block) = db.tx().await?.get_latest_sequenced_block_info().await? {
+        // Update the head block info if available and ahead of finalized.
+        if let Some(latest_block) = db.tx().await?.get_l2_head_block_info().await? {
             if latest_block > *fcs.finalized_block_info() {
                 fcs.update_head_block_info(latest_block);
             }

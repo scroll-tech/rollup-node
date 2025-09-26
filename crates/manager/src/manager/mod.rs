@@ -381,26 +381,17 @@ where
                     event_sender.notify(RollupManagerEvent::Reorg(l1_block_number));
                 }
             }
-            ChainOrchestratorEvent::ChainExtended(chain_import) => {
-                self.metrics
-                    .handle_chain_import_block_number
-                    .set(chain_import.chain.last().unwrap().number as f64);
-                trace!(target: "scroll::node::manager", head = ?chain_import.chain.last().unwrap().header.clone(), peer_id = ?chain_import.peer_id.clone(),  "Received chain extension from peer");
-                // Issue the new chain to the engine driver for processing.
-                self.engine.handle_chain_import(chain_import)
-            }
+            ChainOrchestratorEvent::ChainExtended(chain_import) |
             ChainOrchestratorEvent::ChainReorged(chain_import) => {
                 self.metrics
                     .handle_chain_import_block_number
                     .set(chain_import.chain.last().unwrap().number as f64);
-                trace!(target: "scroll::node::manager", head = ?chain_import.chain.last().unwrap().header, ?chain_import.peer_id, "Received chain reorg from peer");
 
                 // Issue the new chain to the engine driver for processing.
                 self.engine.handle_chain_import(chain_import)
             }
             ChainOrchestratorEvent::OptimisticSync(block) => {
                 let block_info: BlockInfo = (&block).into();
-                trace!(target: "scroll::node::manager", ?block_info, "Received optimistic sync from peer");
 
                 self.metrics.handle_optimistic_syncing_block_number.set(block_info.number as f64);
 
