@@ -1,6 +1,15 @@
+use alloy_primitives::{hex::ToHexExt, Bytes};
 use alloy_rpc_types_eth::BlockNumberOrTag;
-use eyre::Result;
-use std::time::Duration;
+use eyre::{Ok, Result};
+use reth_e2e_test_utils::{transaction::TransactionTestContext, wallet::Wallet};
+use std::{
+    sync::{
+        atomic::{AtomicBool, Ordering},
+        Arc,
+    },
+    time::Duration,
+};
+use tokio::{sync::Mutex, time::interval};
 
 use crate::docker_compose::NamedProvider;
 
@@ -213,4 +222,97 @@ pub async fn admin_remove_trusted_peer(provider: &NamedProvider, enode: &str) ->
         .request("admin_removeTrustedPeer", (enode,))
         .await
         .map_err(|e| eyre::eyre!("Failed to remove trusted peer {}: {}", enode, e))
+}
+
+pub fn create_wallet(chain_id: u64) -> Arc<Mutex<Wallet>> {
+    Arc::new(Mutex::new(Wallet::default().with_chain_id(chain_id)))
+}
+
+/// Generate a transfer transaction with the given wallet.
+pub async fn generate_tx(wallet: Arc<Mutex<Wallet>>) -> Bytes {
+    let mut wallet = wallet.lock().await;
+    let tx_fut = TransactionTestContext::transfer_tx_nonce_bytes(
+        wallet.chain_id,
+        wallet.inner.clone(),
+        wallet.inner_nonce,
+    );
+    wallet.inner_nonce += 1;
+    tx_fut.await
+}
+
+/// Send a raw transaction to multiple nodes, optionally waiting for confirmation.
+pub async fn send_tx(
+    wallet: Arc<Mutex<Wallet>>,
+    nodes: &[&NamedProvider],
+    wait_for_confirmation: bool,
+) -> Result<()> {
+    let tx = generate_tx(wallet).await;
+
+    tracing::debug!("Sending transaction: {:?}", tx);
+    let tx: Vec<u8> = tx.into();
+    let mut pending_txs = Vec::new();
+
+    for node in nodes {
+        let builder = node.send_raw_transaction(&tx).await;
+        match builder {
+            std::result::Result::Ok(builder) => {
+                let pending_tx = builder.register().await?;
+                tracing::debug!(
+                    "Sent transaction {:?} to node: {:?}",
+                    pending_tx.tx_hash(),
+                    node.name
+                );
+                pending_txs.push(pending_tx);
+            }
+            Err(e) => {
+                if e.to_string().contains("already known") {
+                    continue;
+                }
+                eyre::bail!("Failed to send transaction to node {}: {}", node.name, e);
+            }
+        };
+    }
+
+    if wait_for_confirmation {
+        for pending_tx in pending_txs {
+            let r = pending_tx.await?;
+            tracing::debug!("Transaction confirmed: {:?}", r.encode_hex());
+        }
+    }
+
+    Ok(())
+}
+
+/// Simple transaction sender that runs continuously until `stop` is set to true.
+pub async fn run_continuous_tx_sender(stop: Arc<AtomicBool>, nodes: &[&NamedProvider]) -> u64 {
+    let mut interval = interval(Duration::from_millis(50));
+    let mut tx_count = 0u64;
+
+    let wallet = create_wallet(nodes[0].get_chain_id().await.expect("Failed to get chain id"));
+
+    while !stop.load(Ordering::Relaxed) {
+        interval.tick().await;
+
+        if let Err(e) = send_tx(wallet.clone(), nodes, false).await {
+            tracing::error!("Error sending transaction: {}", e);
+        } else {
+            tx_count += 1;
+        }
+    }
+
+    tx_count
+}
+
+pub async fn stop_continuous_tx_sender(
+    stop: Arc<AtomicBool>,
+    tx_sender: tokio::task::JoinHandle<u64>,
+) -> Result<()> {
+    stop.store(true, Ordering::Relaxed);
+    let tx_count = tx_sender.await?;
+    tracing::info!(
+        "🔄 Stopped continuous transaction sender after sending {} transactions",
+        tx_count
+    );
+
+    Ok(())
 }
