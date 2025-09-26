@@ -981,7 +981,7 @@ mod test {
 
         // Generate and insert a block info as the head.
         let block_info = BlockInfo::arbitrary(&mut u).unwrap();
-        tx.set_l2_head_block_info(block_info.clone()).await.unwrap();
+        tx.set_l2_head_block_info(block_info).await.unwrap();
         tx.commit().await.unwrap();
 
         // Retrieve and verify the head block info.
