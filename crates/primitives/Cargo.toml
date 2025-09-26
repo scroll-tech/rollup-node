@@ -33,6 +33,7 @@ reth-node-core.workspace = true
 arbitrary = { workspace = true, optional = true }
 derive_more = { workspace = true, features = ["from"] }
 eyre.workspace = true
+serde.workspace = true
 
 [features]
 default = ["std"]

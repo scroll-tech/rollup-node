@@ -1,6 +1,10 @@
+use std::string::String;
+
 /// Contains metadata relevant to the rollup node.
 #[derive(Debug)]
 pub struct Metadata {
-    /// The latest finalized L1 block.
-    pub l1_finalized_block: u64,
+    /// The metadata key.
+    pub key: String,
+    /// The metadata value.
+    pub value: String,
 }
