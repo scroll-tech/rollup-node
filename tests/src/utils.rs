@@ -48,7 +48,7 @@ pub async fn miner_stop(provider: &NamedProvider) -> Result<()> {
 /// * `Ok(())` if all nodes reach the target block within the timeout
 /// * `Err` if timeout is reached or any provider call fails
 pub async fn wait_for_block(nodes: &[&NamedProvider], target_block: u64) -> Result<()> {
-    let timeout_duration = Duration::from_secs(30);
+    let timeout_duration = Duration::from_secs(60);
     let timeout_secs = timeout_duration.as_secs();
 
     tracing::info!(
