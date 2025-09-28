@@ -19,6 +19,7 @@ members = [
     "crates/node",
     "crates/primitives",
     "crates/providers",
+    "crates/retry",
     "crates/scroll-wire",
     "crates/sequencer",
     "crates/signer",
@@ -188,6 +189,7 @@ reth-scroll-node = { git = "https://github.com/scroll-tech/reth.git", default-fe
 reth-scroll-primitives = { git = "https://github.com/scroll-tech/reth.git", default-features = false }
 
 # rollup node
+retry = { path = "crates/retry" }
 rollup-node = { path = "crates/node" }
 rollup-node-chain-orchestrator = { path = "crates/chain-orchestrator" }
 rollup-node-manager = { path = "crates/manager" }

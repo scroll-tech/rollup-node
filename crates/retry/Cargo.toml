@@ -1,0 +1,22 @@
+[package]
+name = "retry"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+exclude.workspace = true
+
+[dependencies]
+async-trait.workspace = true
+eyre.workspace = true
+auto_impl.workspace = true
+futures.workspace = true
+sea-orm = { workspace = true, features = ["sqlx-sqlite", "runtime-tokio-native-tls", "macros"] }
+pin-project = "1.1.10"
+thiserror.workspace = true
+tokio = { workspace = true, features = ["full"] }
+tower = "0.5.2"
+
+
+[lints]
+workspace = true

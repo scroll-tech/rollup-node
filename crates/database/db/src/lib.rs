@@ -22,5 +22,6 @@ pub use operations::{
 mod transaction;
 pub use transaction::{DatabaseTransactionProvider, TXMut, TX};
 
+mod layer;
 #[cfg(feature = "test-utils")]
 pub mod test_utils;
