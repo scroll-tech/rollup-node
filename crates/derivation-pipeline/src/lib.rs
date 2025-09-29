@@ -376,7 +376,7 @@ async fn iter_l1_messages_from_payload<L1P: L1Provider>(
                 .map_err(Into::into)?;
             // we skip the first l1 message, as we are interested in the one starting after
             // prev_l1_message_queue_hash.
-            messages.pop();
+            messages.remove(0);
             messages
         }
     } else {
