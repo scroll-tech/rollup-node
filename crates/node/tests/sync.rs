@@ -423,7 +423,7 @@ async fn test_should_consolidate_after_optimistic_sync() -> eyre::Result<()> {
     // message.
     wait_n_events(
         &mut follower_events,
-        |e| matches!(e, RollupManagerEvent::L1MessageMissingInDatabase { start: _ }),
+        |e| matches!(e, RollupManagerEvent::L1MessageMissingInDatabase { key: _ }),
         1,
     )
     .await;
@@ -599,7 +599,7 @@ async fn test_consolidation() -> eyre::Result<()> {
     // Assert that the follower node rejects the new block as it hasn't received the L1 message.
     wait_n_events(
         &mut follower_events,
-        |e| matches!(e, RollupManagerEvent::L1MessageMissingInDatabase { start: _ }),
+        |e| matches!(e, RollupManagerEvent::L1MessageMissingInDatabase { key: _ }),
         1,
     )
     .await;
