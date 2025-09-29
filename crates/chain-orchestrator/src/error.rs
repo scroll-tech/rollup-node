@@ -1,7 +1,7 @@
 use alloy_json_rpc::RpcError;
 use alloy_primitives::B256;
 use alloy_transport::TransportErrorKind;
-use scroll_db::{DatabaseError, L1MessageStart};
+use scroll_db::{DatabaseError, L1MessageKey};
 
 /// A type that represents an error that occurred in the chain orchestrator.
 #[derive(Debug, thiserror::Error)]
@@ -28,7 +28,7 @@ pub enum ChainOrchestratorError {
     },
     /// An L1 message was not found in the database.
     #[error("L1 message not found at {0}")]
-    L1MessageNotFound(L1MessageStart),
+    L1MessageNotFound(L1MessageKey),
     /// A gap was detected in the L1 message queue: the previous message before index {0} is
     /// missing.
     #[error("L1 message queue gap detected at index {0}, previous L1 message not found")]

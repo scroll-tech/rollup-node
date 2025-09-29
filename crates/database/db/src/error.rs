@@ -1,4 +1,4 @@
-use super::L1MessageStart;
+use super::L1MessageKey;
 use sea_orm::sqlx::Error as SqlxError;
 
 /// The error type for database operations.
@@ -17,6 +17,6 @@ pub enum DatabaseError {
     #[error("failed to serde metadata value: {0}")]
     MetadataSerdeError(#[from] serde_json::Error),
     /// The L1 message was not found in database.
-    #[error("L1 message at index [{0}] not found in database")]
-    L1MessageNotFound(L1MessageStart),
+    #[error("L1 message at key [{0}] not found in database")]
+    L1MessageNotFound(L1MessageKey),
 }
