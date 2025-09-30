@@ -33,7 +33,7 @@ use scroll_codec::{decoding::payload::PayloadData, Codec};
 use scroll_db::{Database, DatabaseReadOperations, DatabaseTransactionProvider};
 use tokio::time::Interval;
 
-/// A future that resolves to a stream of [`ScrollPayloadAttributesWithBatchInfo`].
+/// A future that resolves to a vec of [`WithFullL2Meta<ScrollPayloadAttributes>`].
 type DerivationPipelineFuture = Pin<
     Box<
         dyn Future<
@@ -1014,9 +1014,9 @@ mod tests {
             .zip(batches.clone())
             .map(|(i, batch)| {
                 WithL1FinalizedBlockNumber::new(
-                    batch.l1_block,
+                    i,
                     WithL2BlockNumber::new(
-                        i,
+                        0,
                         WithBatchInfo::new(
                             batch.index,
                             batch.hash,
