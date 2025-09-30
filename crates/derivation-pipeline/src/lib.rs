@@ -30,7 +30,7 @@ use rollup_node_primitives::{
 use rollup_node_providers::{BlockDataProvider, L1Provider};
 use scroll_alloy_rpc_types_engine::{BlockDataHint, ScrollPayloadAttributes};
 use scroll_codec::{decoding::payload::PayloadData, Codec};
-use scroll_db::{Database, DatabaseReadOperations, DatabaseTransactionProvider};
+use scroll_db::{Database, DatabaseReadOperations, DatabaseTransactionProvider, L1MessageKey};
 use tokio::time::Interval;
 
 /// A future that resolves to a vec of [`WithFullL2Meta<ScrollPayloadAttributes>`].
@@ -403,7 +403,10 @@ async fn iter_l1_messages_from_payload<L1P: L1Provider>(
     let total_l1_messages = data.blocks.iter().map(|b| b.context.num_l1_messages as u64).sum();
 
     let messages = if let Some(index) = data.queue_index_start() {
-        provider.get_n_messages(index.into(), total_l1_messages).await.map_err(Into::into)?
+        provider
+            .get_n_messages(L1MessageKey::from_queue_index(index), total_l1_messages)
+            .await
+            .map_err(Into::into)?
     } else if let Some(hash) = data.prev_l1_message_queue_hash() {
         // If the message queue hash is zero then we should use the V2 L1 message queue start
         // index. We must apply this branch logic because we do not have a L1
@@ -411,17 +414,20 @@ async fn iter_l1_messages_from_payload<L1P: L1Provider>(
         // hash for the first L1 message of the V2 contract).
         if hash == &B256::ZERO {
             provider
-                .get_n_messages(l1_v2_message_queue_start_index.into(), total_l1_messages)
+                .get_n_messages(
+                    L1MessageKey::from_queue_index(l1_v2_message_queue_start_index),
+                    total_l1_messages,
+                )
                 .await
                 .map_err(Into::into)?
         } else {
             let mut messages = provider
-                .get_n_messages((*hash).into(), total_l1_messages + 1)
+                .get_n_messages(L1MessageKey::from_queue_hash(*hash), total_l1_messages + 1)
                 .await
                 .map_err(Into::into)?;
             // we skip the first l1 message, as we are interested in the one starting after
             // prev_l1_message_queue_hash.
-            messages.pop();
+            messages.remove(0);
             messages
         }
     } else {

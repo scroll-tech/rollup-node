@@ -531,18 +531,34 @@ pub trait DatabaseReadOperations: ReadConnectionProvider + Sync {
     /// `start` point.
     async fn get_l1_messages<'a>(
         &'a self,
-        start: Option<L1MessageStart>,
+        start: Option<L1MessageKey>,
     ) -> Result<impl Stream<Item = Result<L1MessageEnvelope, DatabaseError>> + 'a, DatabaseError>
     {
         let queue_index = match start {
-            Some(L1MessageStart::Index(i)) => i,
-            Some(L1MessageStart::Hash(ref h)) => {
+            Some(L1MessageKey::QueueIndex(i)) => i,
+            Some(L1MessageKey::TransactionHash(ref h)) => {
                 // Lookup message by hash
                 let record = models::l1_message::Entity::find()
                     .filter(models::l1_message::Column::Hash.eq(h.to_vec()))
                     .one(self.get_connection())
                     .await?
-                    .ok_or_else(|| DatabaseError::L1MessageNotFound(L1MessageStart::Hash(*h)))?;
+                    .ok_or_else(|| {
+                        DatabaseError::L1MessageNotFound(L1MessageKey::TransactionHash(*h))
+                    })?;
+
+                record.queue_index as u64
+            }
+            Some(L1MessageKey::QueueHash(ref h)) => {
+                // Lookup message by queue hash
+                let record = models::l1_message::Entity::find()
+                    .filter(
+                        Condition::all()
+                            .add(models::l1_message::Column::QueueHash.is_not_null())
+                            .add(models::l1_message::Column::QueueHash.eq(h.to_vec())),
+                    )
+                    .one(self.get_connection())
+                    .await?
+                    .ok_or_else(|| DatabaseError::L1MessageNotFound(L1MessageKey::QueueHash(*h)))?;
 
                 record.queue_index as u64
             }
@@ -691,36 +707,43 @@ pub trait DatabaseReadOperations: ReadConnectionProvider + Sync {
     }
 }
 
-/// This type defines the start of an L1 message stream.
+/// A key for an L1 message stored in the database.
 ///
-/// It can either be an index, which is the queue index of the first message to return, or a hash,
-/// which is the hash of the first message to return.
+/// It can either be the queue index, queue hash or the transaction hash.
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub enum L1MessageStart {
-    /// Start from the provided queue index.
-    Index(u64),
-    /// Start from the provided queue hash.
-    Hash(B256),
+pub enum L1MessageKey {
+    /// The queue index of the message.
+    QueueIndex(u64),
+    /// The queue hash of the message.
+    QueueHash(B256),
+    /// The transaction hash of the message.
+    TransactionHash(B256),
 }
 
-impl fmt::Display for L1MessageStart {
+impl L1MessageKey {
+    /// Create a new [`L1MessageKey`] from a queue index.
+    pub const fn from_queue_index(index: u64) -> Self {
+        Self::QueueIndex(index)
+    }
+
+    /// Create a new [`L1MessageKey`] from a queue hash.
+    pub const fn from_queue_hash(hash: B256) -> Self {
+        Self::QueueHash(hash)
+    }
+
+    /// Create a new [`L1MessageKey`] from a transaction hash.
+    pub const fn from_transaction_hash(hash: B256) -> Self {
+        Self::TransactionHash(hash)
+    }
+}
+
+impl fmt::Display for L1MessageKey {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Self::Index(index) => write!(f, "Index({index})"),
-            Self::Hash(hash) => write!(f, "Hash({hash:#x})"),
+            Self::QueueIndex(index) => write!(f, "QueueIndex({index})"),
+            Self::QueueHash(hash) => write!(f, "QueueHash({hash:#x})"),
+            Self::TransactionHash(hash) => write!(f, "TransactionHash({hash:#x})"),
         }
-    }
-}
-
-impl From<u64> for L1MessageStart {
-    fn from(value: u64) -> Self {
-        Self::Index(value)
-    }
-}
-
-impl From<B256> for L1MessageStart {
-    fn from(value: B256) -> Self {
-        Self::Hash(value)
     }
 }
 

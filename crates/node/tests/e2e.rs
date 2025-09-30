@@ -37,7 +37,7 @@ use rollup_node_sequencer::L1MessageInclusionMode;
 use rollup_node_watcher::L1Notification;
 use scroll_alloy_consensus::TxL1Message;
 use scroll_alloy_rpc_types::Transaction as ScrollAlloyTransaction;
-use scroll_db::{test_utils::setup_test_db, L1MessageStart};
+use scroll_db::{test_utils::setup_test_db, L1MessageKey};
 use scroll_network::NewBlockWithPeer;
 use scroll_wire::{ScrollWireConfig, ScrollWireProtocolHandler};
 use std::{
@@ -1719,7 +1719,7 @@ async fn can_reject_l2_block_with_unknown_l1_message() -> eyre::Result<()> {
     wait_for_event_5s(
         &mut node1_rnm_events,
         RollupManagerEvent::L1MessageMissingInDatabase {
-            start: L1MessageStart::Hash(b256!(
+            key: L1MessageKey::TransactionHash(b256!(
                 "0x0a2f8e75392ab51a26a2af835042c614eb141cd934fe1bdd4934c10f2fe17e98"
             )),
         },

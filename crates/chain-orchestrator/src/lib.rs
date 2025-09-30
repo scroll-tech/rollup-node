@@ -19,7 +19,7 @@ use scroll_alloy_hardforks::ScrollHardforks;
 use scroll_alloy_network::Scroll;
 use scroll_db::{
     Database, DatabaseError, DatabaseReadOperations, DatabaseTransactionProvider,
-    DatabaseWriteOperations, L1MessageStart, UnwindResult,
+    DatabaseWriteOperations, L1MessageKey, UnwindResult,
 };
 use scroll_network::NewBlockWithPeer;
 use std::{
@@ -838,7 +838,7 @@ async fn compute_l1_message_queue_hash(
             })
             .await?
             .map(|m| m.queue_hash)
-            .ok_or(DatabaseError::L1MessageNotFound(L1MessageStart::Index(index)))?
+            .ok_or(DatabaseError::L1MessageNotFound(L1MessageKey::QueueIndex(index)))?
             .unwrap_or_default()
             .to_vec();
         input.append(&mut l1_message.tx_hash().to_vec());
@@ -1078,7 +1078,9 @@ async fn validate_l1_messages(
     let l1_message_stream = Retry::default()
         .retry("get_l1_messages", || async {
             let messages = tx
-                .get_l1_messages(l1_message_hashes.first().map(|tx| L1MessageStart::Hash(*tx)))
+                .get_l1_messages(
+                    l1_message_hashes.first().map(|tx| L1MessageKey::TransactionHash(*tx)),
+                )
                 .await?;
             Ok::<_, ChainOrchestratorError>(messages)
         })
@@ -1093,7 +1095,9 @@ async fn validate_l1_messages(
             .await
             .map(|m| m.map(|msg| msg.transaction.tx_hash()))
             .transpose()?
-            .ok_or(ChainOrchestratorError::L1MessageNotFound(L1MessageStart::Hash(message_hash)))?;
+            .ok_or(ChainOrchestratorError::L1MessageNotFound(L1MessageKey::TransactionHash(
+                message_hash,
+            )))?;
 
         // If the received and expected L1 messages do not match return an error.
         if message_hash != expected_hash {

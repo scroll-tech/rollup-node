@@ -435,7 +435,7 @@ where
 
                 if let Some(event_sender) = self.event_sender.as_ref() {
                     event_sender.notify(RollupManagerEvent::L1MessageMissingInDatabase {
-                        start: start.clone(),
+                        key: start.clone(),
                     });
                 }
             }
