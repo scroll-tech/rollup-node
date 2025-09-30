@@ -77,8 +77,11 @@ async fn docker_test_heterogeneous_client_sync_and_sequencer_handoff() -> Result
         utils::run_continuous_tx_sender(stop_clone, &[&rn_follower_clone, &l2geth_follower_clone])
             .await
     });
+    let stop_clone = stop.clone();
+    let l1_message_sender =
+        tokio::spawn(async move { utils::run_continuous_l1_message_sender(stop_clone).await });
 
-    tracing::info!("🔄 Started continuous transaction sender for entire test");
+    tracing::info!("🔄 Started continuous L1 message and L2 transaction sender for entire test");
 
     // Wait for at least 10 blocks to be produced
     let target_block = 10;
@@ -183,7 +186,13 @@ async fn docker_test_heterogeneous_client_sync_and_sequencer_handoff() -> Result
     utils::wait_for_block(&nodes, target_block).await?;
     assert_blocks_match(&nodes, target_block).await?;
 
-    utils::stop_continuous_tx_sender(stop, tx_sender).await?;
+    utils::stop_continuous_tx_sender(stop.clone(), tx_sender).await?;
+    utils::stop_continuous_l1_message_sender(stop, l1_message_sender).await?;
+
+    // Make sure l1 message queue is processed on all l2geth nodes
+    let q = utils::get_l1_message_index_at_finalized().await?;
+    utils::wait_for_l1_message_queue_index_reached(&[&l2geth_sequencer, &l2geth_follower], q)
+        .await?;
 
     Ok(())
 }
