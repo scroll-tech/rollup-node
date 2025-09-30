@@ -257,6 +257,9 @@ where
         {
             match res {
                 Ok(attributes) => {
+                    if let Some(attr) = attributes.last() {
+                        this.latest_processed_l2_block_number = attr.l2_block
+                    }
                     this.attributes_queue.append(&mut attributes.into());
                     this.pipeline_future = None;
                     cx.waker().wake_by_ref();
@@ -322,7 +325,7 @@ pub async fn derive<L1P: L1Provider + Sync + Send, L2P: BlockDataProvider + Sync
                 expected: expected_next_block,
             });
         }
-        expected_next_block += 1;
+        expected_next_block = expected_next_block.saturating_add(1);
 
         // query the appropriate amount of l1 messages.
         let mut txs = Vec::with_capacity(block.context.num_transactions as usize);

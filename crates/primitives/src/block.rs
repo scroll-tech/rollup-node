@@ -84,7 +84,7 @@ impl arbitrary::Arbitrary<'_> for BlockInfo {
     }
 }
 
-/// A wrapper around a type to which a block number is attached.
+/// A wrapper around a type to which a L2 block number is attached.
 #[derive(Debug, Deref, DerefMut, Default, Copy, Clone, PartialEq, Eq)]
 pub struct WithL2BlockNumber<T> {
     /// The L2 block number.
@@ -112,7 +112,7 @@ impl<T: Future + Unpin> Future for WithL2BlockNumber<T> {
     }
 }
 
-/// A wrapper around a type to which a block number is attached.
+/// A wrapper around a type to which a L1 block number is attached.
 #[derive(Debug, Deref, DerefMut, Default, Copy, Clone, PartialEq, Eq)]
 pub struct WithL1FinalizedBlockNumber<T> {
     /// The block number.
@@ -127,16 +127,6 @@ impl<T> WithL1FinalizedBlockNumber<T> {
     /// Returns a new instance of a [`WithBlockNumber`] wrapper.
     pub const fn new(l1_block: u64, inner: T) -> Self {
         Self { l1_block, inner }
-    }
-}
-
-impl<T: Future + Unpin> Future for WithL1FinalizedBlockNumber<T> {
-    type Output = WithL1FinalizedBlockNumber<<T as Future>::Output>;
-
-    fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
-        let block_number = self.l1_block;
-        let inner = ready!(Pin::new(&mut self.get_mut().inner).poll(cx));
-        Poll::Ready(WithL1FinalizedBlockNumber::new(block_number, inner))
     }
 }
 
