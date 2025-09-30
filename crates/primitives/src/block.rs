@@ -96,7 +96,7 @@ pub struct WithL2BlockNumber<T> {
 }
 
 impl<T> WithL2BlockNumber<T> {
-    /// Returns a new instance of a [`WithBlockNumber`] wrapper.
+    /// Returns a new instance of a [`WithL2BlockNumber`] wrapper.
     pub const fn new(l2_block: u64, inner: T) -> Self {
         Self { l2_block, inner }
     }
@@ -124,7 +124,7 @@ pub struct WithL1FinalizedBlockNumber<T> {
 }
 
 impl<T> WithL1FinalizedBlockNumber<T> {
-    /// Returns a new instance of a [`WithBlockNumber`] wrapper.
+    /// Returns a new instance of a [`WithL1FinalizedBlockNumber`] wrapper.
     pub const fn new(l1_block: u64, inner: T) -> Self {
         Self { l1_block, inner }
     }
