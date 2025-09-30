@@ -11,8 +11,8 @@ use eyre::Result;
 use reth_scroll_engine_primitives::try_into_block;
 use reth_scroll_primitives::ScrollBlock;
 use rollup_node_primitives::{
-    BatchInfo, BlockInfo, ChainImport, L2BlockInfoWithL1Messages, MeteredFuture,
-    ScrollPayloadAttributesWithBatchInfo, WithBlockNumber,
+    BatchInfo, BlockInfo, ChainImport, L2BlockInfoWithL1Messages, MeteredFuture, WithFullL2Meta,
+    WithL1FinalizedBlockNumber, WithL2BlockNumber,
 };
 use rollup_node_signer::SignatureAsBytes;
 use scroll_alloy_hardforks::ScrollHardforks;
@@ -99,8 +99,8 @@ pub(crate) type OptimisticSyncFuture =
 /// An enum that represents the different types of futures that can be executed on the engine API.
 /// It can be a block import job, an L1 consolidation job, or a new payload processing.
 pub(crate) enum EngineFuture {
-    ChainImport(WithBlockNumber<ChainImportFuture>),
-    L1Consolidation(WithBlockNumber<L1ConsolidationFuture>),
+    ChainImport(WithL2BlockNumber<ChainImportFuture>),
+    L1Consolidation(WithL1FinalizedBlockNumber<L1ConsolidationFuture>),
     NewPayload(NewPayloadFuture),
     OptimisticSync(OptimisticSyncFuture),
 }
@@ -115,7 +115,7 @@ impl EngineFuture {
         EC: ScrollEngineApi + Unpin + Send + Sync + 'static,
     {
         let highest_block_number = chain_import.chain.last().unwrap().number;
-        Self::ChainImport(WithBlockNumber::new(
+        Self::ChainImport(WithL2BlockNumber::new(
             highest_block_number,
             Box::pin(handle_chain_import(client, chain_import, fcs)),
         ))
@@ -133,14 +133,14 @@ impl EngineFuture {
         client: Arc<EC>,
         execution_payload_provider: P,
         fcs: ForkchoiceState,
-        payload_attributes: WithBlockNumber<ScrollPayloadAttributesWithBatchInfo>,
+        payload_attributes: WithFullL2Meta<ScrollPayloadAttributes>,
     ) -> Self
     where
         EC: ScrollEngineApi + Unpin + Send + Sync + 'static,
         P: Provider<Scroll> + Unpin + Send + Sync + 'static,
     {
-        Self::L1Consolidation(WithBlockNumber::new(
-            payload_attributes.number,
+        Self::L1Consolidation(WithL1FinalizedBlockNumber::new(
+            payload_attributes.l1_block,
             Box::pin(handle_payload_attributes(
                 client,
                 execution_payload_provider,
@@ -267,7 +267,7 @@ async fn handle_payload_attributes<EC, P>(
     client: Arc<EC>,
     provider: P,
     fcs: ForkchoiceState,
-    payload_attributes_with_batch_info: WithBlockNumber<ScrollPayloadAttributesWithBatchInfo>,
+    payload_attributes_with_batch_info: WithFullL2Meta<ScrollPayloadAttributes>,
 ) -> Result<ConsolidationOutcome, EngineDriverError>
 where
     EC: ScrollEngineApi + Unpin + Send + Sync + 'static,
@@ -275,8 +275,11 @@ where
 {
     tracing::trace!(target: "scroll::engine::future", ?fcs, ?payload_attributes_with_batch_info, "handling payload attributes");
 
-    let ScrollPayloadAttributesWithBatchInfo { mut payload_attributes, batch_info } =
-        payload_attributes_with_batch_info.inner.clone();
+    let batch_info = BatchInfo::new(
+        payload_attributes_with_batch_info.index,
+        payload_attributes_with_batch_info.hash,
+    );
+    let mut payload_attributes = payload_attributes_with_batch_info.inner.inner.inner.clone();
 
     let maybe_execution_payload = provider
         .get_block((fcs.safe_block_info().number + 1).into())

@@ -19,6 +19,14 @@ pub enum DerivationPipelineError {
     /// Missing L1 message.
     #[error("missing l1 message for L2 block {0:?}")]
     MissingL1Message(L2Block),
+    /// Blocks are not contiguous
+    #[error("loss of contiguity in blocks: expected {expected}, got {got}")]
+    BlockDiscontinuity {
+        /// The expected block number.
+        expected: u64,
+        /// The actual block number.
+        got: u64,
+    },
     /// Unknown batch.
     #[error("unknown batch for index {0}")]
     UnknownBatch(u64),
