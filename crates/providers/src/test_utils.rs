@@ -6,7 +6,7 @@ use std::{collections::HashMap, sync::Arc};
 use alloy_eips::eip4844::Blob;
 use alloy_primitives::B256;
 use rollup_node_primitives::L1MessageEnvelope;
-use scroll_db::L1MessageStart;
+use scroll_db::L1MessageKey;
 
 /// Implementation of the [`crate::L1Provider`] that never returns blobs.
 #[derive(Clone, Default, Debug)]
@@ -34,7 +34,7 @@ impl<P: L1MessageProvider + Send + Sync> L1MessageProvider for MockL1Provider<P>
 
     async fn get_n_messages(
         &self,
-        start: L1MessageStart,
+        start: L1MessageKey,
         n: u64,
     ) -> Result<Vec<L1MessageEnvelope>, Self::Error> {
         self.l1_messages_provider.get_n_messages(start, n).await
