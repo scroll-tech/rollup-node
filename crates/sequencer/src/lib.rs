@@ -26,6 +26,7 @@ pub use error::SequencerError;
 
 mod metrics;
 pub use metrics::SequencerMetrics;
+use scroll_db::L1MessageKey;
 
 /// A type alias for the payload building job future.
 pub type PayloadBuildingJobFuture =
@@ -250,7 +251,7 @@ async fn build_payload_attributes<P: L1MessageProvider + Unpin + Send + Sync + '
 
     // Collect L1 messages to include in payload.
     let db_l1_messages = provider
-        .get_n_messages(l1_messages_queue_index.into(), max_l1_messages)
+        .get_n_messages(L1MessageKey::from_queue_index(l1_messages_queue_index), max_l1_messages)
         .await
         .map_err(Into::<L1ProviderError>::into)?;
 

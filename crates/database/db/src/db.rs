@@ -98,6 +98,12 @@ impl Database {
         db.tmp_dir = Some(dir);
         Ok(db)
     }
+
+    /// Returns a reference to the database tmp dir.
+    #[cfg(feature = "test-utils")]
+    pub const fn tmp_dir(&self) -> Option<&tempfile::TempDir> {
+        self.tmp_dir.as_ref()
+    }
 }
 
 #[async_trait::async_trait]
@@ -960,5 +966,28 @@ mod test {
         let retried_block_4 = tx.get_l2_block_info_by_number(4).await.unwrap();
         assert!(retried_block_3.is_none());
         assert!(retried_block_4.is_none());
+    }
+
+    #[tokio::test]
+    async fn test_l2_block_head_roundtrip() {
+        // Set up the test database.
+        let db = setup_test_db().await;
+        let tx = db.tx_mut().await.unwrap();
+
+        // Generate unstructured bytes.
+        let mut bytes = [0u8; 40];
+        rand::rng().fill(bytes.as_mut_slice());
+        let mut u = Unstructured::new(&bytes);
+
+        // Generate and insert a block info as the head.
+        let block_info = BlockInfo::arbitrary(&mut u).unwrap();
+        tx.set_l2_head_block_info(block_info).await.unwrap();
+        tx.commit().await.unwrap();
+
+        // Retrieve and verify the head block info.
+        let tx = db.tx().await.unwrap();
+        let head_block_info = tx.get_l2_head_block_info().await.unwrap().unwrap();
+
+        assert_eq!(head_block_info, block_info);
     }
 }

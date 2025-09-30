@@ -9,7 +9,7 @@ use alloy_eips::eip4844::Blob;
 use alloy_primitives::B256;
 use alloy_transport::{RpcError, TransportErrorKind};
 use rollup_node_primitives::L1MessageEnvelope;
-use scroll_db::{DatabaseError, L1MessageStart};
+use scroll_db::{DatabaseError, L1MessageKey};
 
 /// An instance of the trait can be used to provide L1 data.
 pub trait L1Provider: BlobProvider + L1MessageProvider {}
@@ -77,7 +77,7 @@ impl<L1MP: L1MessageProvider, BP: Sync + Send> L1MessageProvider for FullL1Provi
 
     async fn get_n_messages(
         &self,
-        start: L1MessageStart,
+        start: L1MessageKey,
         n: u64,
     ) -> Result<Vec<L1MessageEnvelope>, Self::Error> {
         self.l1_message_provider.get_n_messages(start, n).await
