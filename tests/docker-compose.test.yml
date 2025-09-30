@@ -6,6 +6,7 @@ services:
       - "8544:8545"
     volumes:
       - ./launch_l1.bash:/launch_l1.bash:ro
+      - ./anvil.env:/anvil.env:ro
       - ./anvil_state.json:/anvil_state.json:ro
     healthcheck:
       test: ["CMD", "bash", "-c", "[ \"$(cast storage 0x9fE46736679d2D9a65F0992F2272dE9f3c7fa6e0 0x67 --rpc-url http://localhost:8545)\" = \"0x000000000000000000000000b674ff99cca262c99d3eab5b32796a99188543da\" ]"]

@@ -1,8 +1,11 @@
 #!/usr/bin/env bash
 set -e
 
+# Source environment variables
+source "/anvil.env"
+
 # Start anvil in background
-anvil --host 0.0.0.0 --port 8545 --chain-id 22222222 --accounts 10 --balance 10000 --code-size-limit 100000000 --load-state anvil_state.json &
+anvil --host 0.0.0.0 --port 8545 --chain-id 22222222 --accounts 10 --balance 10000 --code-size-limit 100000000 --load-state anvil_state.json --block-time 1 --slots-in-an-epoch 4 &
 ANVIL_PID=$!
 
 # Wait for anvil to start (with retry)
@@ -32,8 +35,8 @@ done
 
 # Verify that storage was set correctly
 echo "Verifying storage..."
-storage_value=$(cast storage 0x9fE46736679d2D9a65F0992F2272dE9f3c7fa6e0 0x67 --rpc-url http://localhost:8545)
-expected_value="0x000000000000000000000000b674ff99cca262c99d3eab5b32796a99188543da"
+storage_value=$(cast storage "$L1_SYSTEM_CONFIG_PROXY_ADDR" 0x67 --rpc-url http://localhost:8545)
+expected_value="0x000000000000000000000000$(echo "$L1_CONSENSUS_ADDRESS" | sed 's/0x//' | tr '[:upper:]' '[:lower:]')"
 
 if [ "$storage_value" != "$expected_value" ]; then
   echo "Error: Storage verify failed"
