@@ -192,28 +192,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "alloy-contract"
-version = "1.0.36"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a376305e5c3b3285e84a553fa3f9aee4f5f0e1b0aad4944191b843cd8228788d"
-dependencies = [
- "alloy-consensus 1.0.36",
- "alloy-dyn-abi",
- "alloy-json-abi",
- "alloy-network",
- "alloy-network-primitives",
- "alloy-primitives",
- "alloy-provider",
- "alloy-rpc-types-eth",
- "alloy-sol-types",
- "alloy-transport",
- "futures",
- "futures-util",
- "serde_json",
- "thiserror 2.0.16",
-]
-
-[[package]]
 name = "alloy-dyn-abi"
 version = "1.3.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -12798,7 +12776,6 @@ dependencies = [
 name = "tests"
 version = "0.0.1"
 dependencies = [
- "alloy-contract",
  "alloy-network",
  "alloy-primitives",
  "alloy-provider",

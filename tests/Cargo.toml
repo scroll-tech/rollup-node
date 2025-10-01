@@ -14,7 +14,6 @@ alloy-provider = { workspace = true, features = ["reqwest", "ws"] }
 alloy-rpc-types-eth = { workspace = true }
 alloy-signer-local = { workspace = true }
 alloy-sol-types = { workspace = true }
-alloy-contract = "1.0.36"
 scroll-alloy-network = { workspace = true }
 tokio = { workspace = true, features = ["rt", "time", "process"] }
 eyre = { workspace = true }
@@ -22,5 +21,5 @@ getrandom = { workspace = true }
 tracing = { workspace = true }
 reth-tracing = { workspace = true }
 serde = { workspace = true }
-serde_json = "1.0"
+serde_json = { workspace = true }
 reth-e2e-test-utils.workspace = true
