@@ -247,7 +247,7 @@ async fn build_payload_attributes<P: L1MessageProvider + Unpin + Send + Sync + '
 ) -> Result<ScrollPayloadAttributes, SequencerError> {
     let mut l1_messages = vec![];
     let mut cumulative_gas_used = 0;
-    let expected_index = l1_messages_queue_index;
+    let mut expected_index = l1_messages_queue_index;
 
     // Collect L1 messages to include in payload.
     let db_l1_messages = provider
@@ -277,6 +277,7 @@ async fn build_payload_attributes<P: L1MessageProvider + Unpin + Send + Sync + '
             });
         }
 
+expected_index += 1;
         cumulative_gas_used += msg.transaction.gas_limit;
         l1_messages.push(msg.transaction.encoded_2718().into());
     }
