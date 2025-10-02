@@ -88,7 +88,7 @@ impl Signer {
                             let future = Box::pin(async move {
                                 let now = Instant::now();
                                 let res = sign_block(block, signer).await;
-                                metric.signing_duration.set(now.elapsed().as_secs_f64());
+                                metric.signing_duration.record(now.elapsed().as_secs_f64());
                                 res
                             });
                             self.in_progress.push_back(future);

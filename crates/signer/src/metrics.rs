@@ -1,4 +1,4 @@
-use metrics::Gauge;
+use metrics::Histogram;
 use metrics_derive::Metrics;
 
 /// The metrics for the [`super::Signer`].
@@ -6,5 +6,5 @@ use metrics_derive::Metrics;
 #[metrics(scope = "signer")]
 pub struct SignerMetrics {
     /// The signing duration.
-    pub signing_duration: Gauge,
+    pub signing_duration: Histogram,
 }
