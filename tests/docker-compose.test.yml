@@ -52,7 +52,7 @@ services:
         condition: service_healthy
 
   l2geth-sequencer:
-    image: scrolltech/l2geth:scroll-v5.9.4
+    image: scrolltech/l2geth:scroll-v5.9.5
     platform: linux/amd64
     entrypoint: ["bash", "/launch_l2geth.bash"]
     ports:
@@ -67,7 +67,7 @@ services:
         condition: service_healthy
     
   l2geth-follower:
-    image: scrolltech/l2geth:scroll-v5.9.4
+    image: scrolltech/l2geth:scroll-v5.9.5
     platform: linux/amd64
     entrypoint: ["bash", "/launch_l2geth.bash"]
     ports:
