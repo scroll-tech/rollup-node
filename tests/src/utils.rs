@@ -621,5 +621,9 @@ pub async fn get_l1_message_index_at_finalized() -> Result<u64> {
     let count: u64 =
         count_u256.try_into().map_err(|_| eyre::eyre!("Message count exceeds u64::MAX"))?;
 
+    if count == 0 {
+        return Ok(0);
+    }
+
     Ok(count - 1) // Subtract 1 to get the last queued message index
 }
