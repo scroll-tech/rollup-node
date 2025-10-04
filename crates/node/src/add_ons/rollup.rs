@@ -8,7 +8,7 @@ use reth_node_builder::{rpc::RpcHandle, AddOnsContext, FullNodeComponents};
 use reth_rpc_eth_api::EthApiTypes;
 use reth_scroll_chainspec::{ChainConfig, ScrollChainConfig, ScrollChainSpec};
 use reth_scroll_node::ScrollNetworkPrimitives;
-use rollup_node_manager::RollupManagerHandle;
+use rollup_node_chain_orchestrator::ChainOrchestratorHandle;
 use rollup_node_watcher::L1Notification;
 use scroll_alloy_hardforks::ScrollHardforks;
 use scroll_wire::ScrollWireEvent;
@@ -55,7 +55,7 @@ impl RollupManagerAddOn {
         self,
         ctx: AddOnsContext<'_, N>,
         rpc: RpcHandle<N, EthApi>,
-    ) -> eyre::Result<(RollupManagerHandle<N::Network>, Option<Sender<Arc<L1Notification>>>)>
+    ) -> eyre::Result<(ChainOrchestratorHandle<N::Network>, Option<Sender<Arc<L1Notification>>>)>
     where
         <<N as FullNodeTypes>::Types as NodeTypes>::ChainSpec:
             ChainConfig<Config = ScrollChainConfig> + ScrollHardforks + IsDevChain,

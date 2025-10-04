@@ -16,25 +16,36 @@ alloy-eips = { workspace = true }
 alloy-json-rpc.workspace = true
 alloy-primitives.workspace = true
 alloy-provider.workspace = true
+alloy-rpc-types-engine.workspace = true
 alloy-transport.workspace = true
 
 # rollup-node
+scroll-alloy-provider.workspace = true
 scroll-db.workspace = true
+scroll-engine.workspace = true
+rollup-node-providers.workspace = true
 rollup-node-primitives.workspace = true
+rollup-node-signer.workspace = true
 rollup-node-watcher.workspace = true
 
 # scroll
+reth-scroll-engine-primitives.workspace = true
+reth-scroll-node.workspace = true
 reth-scroll-primitives.workspace = true
 scroll-alloy-consensus.workspace = true
 scroll-alloy-hardforks.workspace = true
 scroll-alloy-network.workspace = true
+scroll-derivation-pipeline.workspace = true
 scroll-network.workspace = true
 
 # reth
 reth-chainspec.workspace = true
+reth-network-api.workspace = true
 reth-network-p2p.workspace = true
 reth-network-peers.workspace = true
 reth-primitives-traits.workspace = true
+reth-tasks.workspace = true
+reth-tokio-util.workspace = true
 
 # misc
 futures.workspace = true

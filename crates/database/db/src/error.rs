@@ -16,4 +16,7 @@ pub enum DatabaseError {
     /// The L1 message was not found in database.
     #[error("L1 message at index [{0}] not found in database")]
     L1MessageNotFound(L1MessageStart),
+    /// The finalized L1 block was not found in database.
+    #[error("Finalized L1 block not found in database")]
+    FinalizedL1BlockNotFound,
 }

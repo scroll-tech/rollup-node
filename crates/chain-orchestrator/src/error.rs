@@ -2,6 +2,7 @@ use alloy_json_rpc::RpcError;
 use alloy_primitives::B256;
 use alloy_transport::TransportErrorKind;
 use scroll_db::{DatabaseError, L1MessageStart};
+use scroll_engine::EngineError;
 
 /// A type that represents an error that occurred in the chain orchestrator.
 #[derive(Debug, thiserror::Error)]
@@ -9,6 +10,9 @@ pub enum ChainOrchestratorError {
     /// An error occurred while interacting with the database.
     #[error("database error occurred: {0}")]
     DatabaseError(#[from] DatabaseError),
+    /// An error occurred in the engine.
+    #[error("engine error occurred: {0}")]
+    EngineError(#[from] EngineError),
     /// An error occurred while trying to fetch the L2 block from the database.
     #[error("L2 block not found - block number: {0}")]
     L2BlockNotFoundInDatabase(u64),
@@ -51,4 +55,7 @@ pub enum ChainOrchestratorError {
     /// An error occurred while making a JSON-RPC request to the Execution Node (EN).
     #[error("An error occurred while making a JSON-RPC request to the EN: {0}")]
     RpcError(#[from] RpcError<TransportErrorKind>),
+    /// Received an invalid block from peer.
+    #[error("Received an invalid block from peer")]
+    InvalidBlock,
 }

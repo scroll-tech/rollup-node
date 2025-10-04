@@ -11,6 +11,9 @@ pub use error::DerivationPipelineError;
 mod metrics;
 pub use metrics::DerivationPipelineMetrics;
 
+mod new;
+pub use new::{BatchDerivationResult, DerivationPipelineNew, DerivedAttributes};
+
 use crate::data_source::CodecDataSource;
 use std::{boxed::Box, collections::VecDeque, fmt::Formatter, sync::Arc, time::Instant, vec::Vec};
 
@@ -30,7 +33,7 @@ use rollup_node_primitives::{
 use rollup_node_providers::{BlockDataProvider, L1Provider};
 use scroll_alloy_rpc_types_engine::{BlockDataHint, ScrollPayloadAttributes};
 use scroll_codec::{decoding::payload::PayloadData, Codec};
-use scroll_db::{Database, DatabaseReadOperations, DatabaseTransactionProvider};
+use scroll_db::{Database, DatabaseReadOperations, DatabaseTransactionProvider, L1MessageStart};
 use tokio::time::Interval;
 
 /// A future that resolves to a stream of [`ScrollPayloadAttributesWithBatchInfo`].
@@ -352,7 +355,10 @@ async fn iter_l1_messages_from_payload<L1P: L1Provider>(
     let total_l1_messages = data.blocks.iter().map(|b| b.context.num_l1_messages as u64).sum();
 
     let messages = if let Some(index) = data.queue_index_start() {
-        provider.get_n_messages(index.into(), total_l1_messages).await.map_err(Into::into)?
+        provider
+            .get_n_messages(L1MessageStart::index(index), total_l1_messages)
+            .await
+            .map_err(Into::into)?
     } else if let Some(hash) = data.prev_l1_message_queue_hash() {
         // If the message queue hash is zero then we should use the V2 L1 message queue start
         // index. We must apply this branch logic because we do not have a L1
@@ -360,7 +366,10 @@ async fn iter_l1_messages_from_payload<L1P: L1Provider>(
         // hash for the first L1 message of the V2 contract).
         if hash == &B256::ZERO {
             provider
-                .get_n_messages(l1_v2_message_queue_start_index.into(), total_l1_messages)
+                .get_n_messages(
+                    L1MessageStart::index(l1_v2_message_queue_start_index),
+                    total_l1_messages,
+                )
                 .await
                 .map_err(Into::into)?
         } else {

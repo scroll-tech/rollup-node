@@ -3,7 +3,7 @@
 pub use consensus::{Consensus, NoopConsensus, SystemContractConsensus};
 mod consensus;
 
-mod manager;
-pub use manager::{
-    RollupManagerCommand, RollupManagerEvent, RollupManagerHandle, RollupNodeManager,
-};
+// mod manager;
+// pub use manager::{
+//     RollupManagerCommand, RollupManagerEvent, RollupManagerHandle, RollupNodeManager,
+// };

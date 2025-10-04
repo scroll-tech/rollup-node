@@ -4,7 +4,8 @@ use crate::{ReadConnectionProvider, WriteConnectionProvider};
 use alloy_primitives::{Signature, B256};
 use futures::{Stream, StreamExt};
 use rollup_node_primitives::{
-    BatchCommitData, BatchInfo, BlockInfo, L1MessageEnvelope, L2BlockInfoWithL1Messages, Metadata,
+    BatchCommitData, BatchConsolidationOutcome, BatchInfo, BlockConsolidationOutcome, BlockInfo,
+    L1MessageEnvelope, L2BlockInfoWithL1Messages, Metadata,
 };
 use scroll_alloy_rpc_types_engine::BlockDataHint;
 use sea_orm::{
@@ -64,12 +65,9 @@ pub trait DatabaseWriteOperations: WriteConnectionProvider + DatabaseReadOperati
         Ok(())
     }
 
-    /// Set the latest finalized L1 block number.
-    async fn set_latest_finalized_l1_block_number(
-        &self,
-        block_number: u64,
-    ) -> Result<(), DatabaseError> {
-        tracing::trace!(target: "scroll::db", block_number, "Updating the latest finalized L1 block number in the database.");
+    /// Set the finalized L1 block number.
+    async fn set_finalized_l1_block_number(&self, block_number: u64) -> Result<(), DatabaseError> {
+        tracing::trace!(target: "scroll::db", block_number, "Updating the finalized L1 block number in the database.");
         let metadata: models::metadata::ActiveModel =
             Metadata { l1_finalized_block: block_number }.into();
         Ok(models::metadata::Entity::insert(metadata)
@@ -257,7 +255,7 @@ pub trait DatabaseWriteOperations: WriteConnectionProvider + DatabaseReadOperati
     /// Insert multiple blocks into the database.
     async fn insert_blocks(
         &self,
-        blocks: Vec<L2BlockInfoWithL1Messages>,
+        blocks: Vec<BlockInfo>,
         batch_info: BatchInfo,
     ) -> Result<(), DatabaseError> {
         for block in blocks {
@@ -269,7 +267,7 @@ pub trait DatabaseWriteOperations: WriteConnectionProvider + DatabaseReadOperati
     /// Insert a new block in the database.
     async fn insert_block(
         &self,
-        block_info: L2BlockInfoWithL1Messages,
+        block_info: BlockInfo,
         batch_info: BatchInfo,
     ) -> Result<(), DatabaseError> {
         // We only insert safe blocks into the database, we do not persist unsafe blocks.
@@ -277,11 +275,11 @@ pub trait DatabaseWriteOperations: WriteConnectionProvider + DatabaseReadOperati
             target: "scroll::db",
             batch_hash = ?batch_info.hash,
             batch_index = batch_info.index,
-            block_number = block_info.block_info.number,
-            block_hash = ?block_info.block_info.hash,
+            block_number = block_info.number,
+            block_hash = ?block_info.hash,
             "Inserting block into database."
         );
-        let l2_block: models::l2_block::ActiveModel = (block_info.block_info, batch_info).into();
+        let l2_block: models::l2_block::ActiveModel = (block_info, batch_info).into();
         models::l2_block::Entity::insert(l2_block)
             .on_conflict(
                 OnConflict::column(models::l2_block::Column::BlockNumber)
@@ -300,10 +298,7 @@ pub trait DatabaseWriteOperations: WriteConnectionProvider + DatabaseReadOperati
 
     /// Insert the genesis block into the database.
     async fn insert_genesis_block(&self, genesis_hash: B256) -> Result<(), DatabaseError> {
-        let genesis_block = L2BlockInfoWithL1Messages {
-            block_info: BlockInfo::new(0, genesis_hash),
-            l1_messages: vec![],
-        };
+        let genesis_block = BlockInfo::new(0, genesis_hash);
         let genesis_batch = BatchInfo::new(0, B256::ZERO);
         self.insert_block(genesis_block, genesis_batch).await
     }
@@ -313,6 +308,13 @@ pub trait DatabaseWriteOperations: WriteConnectionProvider + DatabaseReadOperati
         &self,
         blocks: Vec<L2BlockInfoWithL1Messages>,
     ) -> Result<(), DatabaseError> {
+        tracing::trace!(target: "scroll::db", num_blocks = blocks.len(), "Updating executed L1 messages from blocks with L2 block number in the database.");
+
+        // First, purge all existing mappings for unsafe blocks.
+        self.purge_l1_message_to_l2_block_mappings(blocks.first().map(|b| b.block_info.number))
+            .await?;
+
+        // Then, update the executed L1 messages for each block.
         for block in blocks {
             self.update_l1_messages_with_l2_block(block).await?;
         }
@@ -342,6 +344,51 @@ pub trait DatabaseWriteOperations: WriteConnectionProvider + DatabaseReadOperati
             .exec(self.get_connection())
             .await?;
 
+        Ok(())
+    }
+
+    /// Purge all L1 message to L2 block mappings from the database for blocks greater or equal to
+    /// the provided block number. If the no block number is provided, purge mappings for all
+    /// unsafe blocks.
+    async fn purge_l1_message_to_l2_block_mappings(
+        &self,
+        block_number: Option<u64>,
+    ) -> Result<(), DatabaseError> {
+        tracing::trace!(target: "scroll::db", ?block_number, "Purging L1 message to L2 block mappings from database.");
+
+        let filter = if let Some(block_number) = block_number {
+            models::l1_message::Column::L2BlockNumber.gte(block_number as i64)
+        } else {
+            let safe_block_number = self.get_latest_safe_l2_info().await?;
+            models::l1_message::Column::L2BlockNumber
+                .gt(safe_block_number.map(|(block_info, _)| block_info.number as i64).unwrap_or(0))
+        };
+
+        models::l1_message::Entity::update_many()
+            .col_expr(models::l1_message::Column::L2BlockNumber, Expr::value(None::<i64>))
+            .filter(filter)
+            .exec(self.get_connection())
+            .await?;
+
+        Ok(())
+    }
+
+    /// Insert the outcome of a batch consolidation into the database.
+    async fn insert_batch_consolidation_outcome(
+        &self,
+        outcome: BatchConsolidationOutcome,
+    ) -> Result<(), DatabaseError> {
+        for block in outcome.blocks {
+            match block {
+                BlockConsolidationOutcome::Consolidated(block_info) => {
+                    self.insert_block(block_info, outcome.batch_info).await?;
+                }
+                BlockConsolidationOutcome::Reorged(block_info) => {
+                    self.insert_block(block_info.block_info, outcome.batch_info).await?;
+                    self.update_l1_messages_with_l2_block(block_info).await?;
+                }
+            }
+        }
         Ok(())
     }
 
@@ -500,10 +547,12 @@ pub trait DatabaseReadOperations: ReadConnectionProvider + Sync {
     async fn get_l1_messages<'a>(
         &'a self,
         start: Option<L1MessageStart>,
-    ) -> Result<impl Stream<Item = Result<L1MessageEnvelope, DatabaseError>> + 'a, DatabaseError>
-    {
+    ) -> Result<
+        Option<impl Stream<Item = Result<L1MessageEnvelope, DatabaseError>> + 'a>,
+        DatabaseError,
+    > {
         let queue_index = match start {
-            Some(L1MessageStart::Index(i)) => i,
+            Some(L1MessageStart::Index(i)) => Ok::<_, DatabaseError>(Some(i)),
             Some(L1MessageStart::Hash(ref h)) => {
                 // Lookup message by hash
                 let record = models::l1_message::Entity::find()
@@ -512,16 +561,88 @@ pub trait DatabaseReadOperations: ReadConnectionProvider + Sync {
                     .await?
                     .ok_or_else(|| DatabaseError::L1MessageNotFound(L1MessageStart::Hash(*h)))?;
 
-                record.queue_index as u64
+                Ok(Some(record.queue_index as u64))
             }
-            None => 0,
-        };
+            Some(L1MessageStart::BlockNumber(block_number)) => {
+                let exact_match = models::l1_message::Entity::find()
+                    .filter(models::l1_message::Column::L1BlockNumber.eq(block_number as i64))
+                    .order_by_desc(models::l1_message::Column::QueueIndex)
+                    .into_tuple::<i64>()
+                    .one(self.get_connection())
+                    .await?;
 
-        Ok(models::l1_message::Entity::find()
-            .filter(models::l1_message::Column::QueueIndex.gte(queue_index))
-            .stream(self.get_connection())
-            .await?
-            .map(|res| Ok(res.map(Into::into)?)))
+                if let Some(queue_index) = exact_match {
+                    Ok(Some(queue_index as u64))
+                } else {
+                    // If no exact match is found, find the last message before the block number
+                    Ok(models::l1_message::Entity::find()
+                        .filter(models::l1_message::Column::L1BlockNumber.lt(block_number as i64))
+                        .order_by_desc(models::l1_message::Column::L1BlockNumber)
+                        .order_by_desc(models::l1_message::Column::QueueIndex)
+                        .into_tuple::<i64>()
+                        .one(self.get_connection())
+                        .await?
+                        .map(|x| x as u64))
+                }
+            }
+            Some(L1MessageStart::NotIncluded(NotIncludedStart::Finalized)) => {
+                let finalized_block_number = self
+                    .get_finalized_l1_block_number()
+                    .await?
+                    .ok_or(DatabaseError::FinalizedL1BlockNotFound)?;
+                let condition = Condition::all()
+                    .add(
+                        models::l1_message::Column::L1BlockNumber
+                            .lte(finalized_block_number as i64),
+                    )
+                    .add(models::l1_message::Column::L2BlockNumber.is_null());
+                Ok(models::l1_message::Entity::find()
+                    .filter(condition)
+                    .order_by_desc(models::l1_message::Column::QueueIndex)
+                    .into_tuple::<i64>()
+                    .one(self.get_connection())
+                    .await?
+                    .map(|x| x as u64))
+            }
+            Some(L1MessageStart::NotIncluded(NotIncludedStart::BlockDepth(depth))) => {
+                // TODO: USE LATEST BLOCK NUMBER NOT FINALIZED
+                let finalized_block_number = self
+                    .get_finalized_l1_block_number()
+                    .await?
+                    .ok_or(DatabaseError::FinalizedL1BlockNotFound)?;
+                let target_block_number = finalized_block_number.checked_sub(depth);
+                if let Some(target_block_number) = target_block_number {
+                    let condition = Condition::all()
+                        .add(
+                            models::l1_message::Column::L1BlockNumber
+                                .lte(target_block_number as i64),
+                        )
+                        .add(models::l1_message::Column::L2BlockNumber.is_null());
+                    Ok(models::l1_message::Entity::find()
+                        .filter(condition)
+                        .order_by_desc(models::l1_message::Column::QueueIndex)
+                        .into_tuple::<i64>()
+                        .one(self.get_connection())
+                        .await?
+                        .map(|x| x as u64))
+                } else {
+                    Ok(None)
+                }
+            }
+            None => Ok(Some(0)),
+        }?;
+
+        let queue_index =
+            if let Some(queue_index) = queue_index { queue_index } else { return Ok(None) };
+
+        Ok(Some(
+            models::l1_message::Entity::find()
+                .filter(models::l1_message::Column::QueueIndex.gte(queue_index))
+                .order_by_asc(models::l1_message::Column::QueueIndex)
+                .stream(self.get_connection())
+                .await?
+                .map(|res| Ok(res.map(Into::into)?)),
+        ))
     }
 
     /// Get the extra data for the provided block number.
@@ -667,6 +788,32 @@ pub enum L1MessageStart {
     Index(u64),
     /// Start from the provided queue hash.
     Hash(B256),
+    /// Start from the first message for the provided block number.
+    BlockNumber(u64),
+    /// Start from messages that have not been included in a block yet.
+    NotIncluded(NotIncludedStart),
+}
+
+/// This type defines where to start when fetching L1 messages that have not been included in a
+/// block yet.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum NotIncludedStart {
+    /// Start from finalized messages that have not been included in a block yet.
+    Finalized,
+    /// Start from unfinalized messages that are included in L1 blocks at a specific depth.
+    BlockDepth(u64),
+}
+
+impl L1MessageStart {
+    /// Creates a new [`L1MessageStart`] for the provided queue index.
+    pub fn index(index: u64) -> Self {
+        Self::Index(index)
+    }
+
+    /// Creates a new [`L1MessageStart`] for the provided block number.
+    pub fn block_number(number: u64) -> Self {
+        Self::BlockNumber(number)
+    }
 }
 
 impl fmt::Display for L1MessageStart {
@@ -674,13 +821,14 @@ impl fmt::Display for L1MessageStart {
         match self {
             Self::Index(index) => write!(f, "Index({index})"),
             Self::Hash(hash) => write!(f, "Hash({hash:#x})"),
+            Self::BlockNumber(number) => write!(f, "BlockNumber({number})"),
+            Self::NotIncluded(start) => match start {
+                NotIncludedStart::Finalized => write!(f, "NotIncluded(Finalized)"),
+                NotIncludedStart::BlockDepth(depth) => {
+                    write!(f, "NotIncluded(BlockDepth({depth}))")
+                }
+            },
         }
-    }
-}
-
-impl From<u64> for L1MessageStart {
-    fn from(value: u64) -> Self {
-        Self::Index(value)
     }
 }
 

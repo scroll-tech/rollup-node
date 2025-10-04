@@ -29,8 +29,7 @@ use rollup_node::{
     RollupNodeGasPriceOracleArgs, RollupNodeNetworkArgs as ScrollNetworkArgs, RpcArgs,
     ScrollRollupNode, ScrollRollupNodeConfig, SequencerArgs,
 };
-use rollup_node_chain_orchestrator::ChainOrchestratorEvent;
-use rollup_node_manager::{RollupManagerCommand, RollupManagerEvent};
+use rollup_node_chain_orchestrator::{ChainOrchestratorEvent, ChainOrchestratorHandle};
 use rollup_node_primitives::{sig_encode_hash, BatchCommitData, ConsensusUpdate};
 use rollup_node_sequencer::L1MessageInclusionMode;
 use rollup_node_watcher::L1Notification;
@@ -79,8 +78,8 @@ async fn can_bridge_l1_messages() -> eyre::Result<()> {
     let (mut nodes, _tasks, _wallet) = setup_engine(node_args, 1, chain_spec, false, false).await?;
     let node = nodes.pop().unwrap();
 
-    let rnm_handle = node.inner.add_ons_handle.rollup_manager_handle.clone();
-    let mut rnm_events = rnm_handle.get_event_listener().await?;
+    let chain_orchestrator = node.inner.add_ons_handle.rollup_manager_handle.clone();
+    let mut events = chain_orchestrator.get_event_listener().await?;
     let l1_watcher_tx = node.inner.add_ons_handle.l1_watcher_tx.clone().unwrap();
 
     let l1_message = TxL1Message {
@@ -100,12 +99,9 @@ async fn can_bridge_l1_messages() -> eyre::Result<()> {
         .await?;
 
     wait_n_events(
-        &mut rnm_events,
+        &mut events,
         |e| {
-            if let RollupManagerEvent::ChainOrchestratorEvent(
-                rollup_node_chain_orchestrator::ChainOrchestratorEvent::L1MessageCommitted(index),
-            ) = e
-            {
+            if let ChainOrchestratorEvent::L1MessageCommitted(index) = e {
                 assert_eq!(index, 0);
                 true
             } else {
@@ -116,10 +112,10 @@ async fn can_bridge_l1_messages() -> eyre::Result<()> {
     )
     .await;
 
-    rnm_handle.build_block().await;
+    chain_orchestrator.build_block().await;
 
     wait_n_events(
-        &mut rnm_events,
+        &mut events,
         |e| {
             if let RollupManagerEvent::BlockSequenced(block) = e {
                 assert_eq!(block.body.transactions.len(), 1);
@@ -796,7 +792,7 @@ async fn can_bridge_blocks() {
     network_handle.announce_block(new_block_1, block_1_hash);
 
     // Assert block received from the bridge node on the scroll wire protocol is correct
-    if let Some(scroll_network::NetworkManagerEvent::NewBlock(NewBlockWithPeer {
+    if let Some(scroll_network::ScrollNetworkManagerEvent::NewBlock(NewBlockWithPeer {
         peer_id,
         block,
         signature,

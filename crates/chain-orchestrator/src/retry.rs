@@ -98,6 +98,12 @@ impl CanRetry for crate::error::ChainOrchestratorError {
     }
 }
 
+impl CanRetry for scroll_engine::EngineError {
+    fn can_retry(&self) -> bool {
+        matches!(self, Self::TransportError(_))
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::{CanRetry, Retry};

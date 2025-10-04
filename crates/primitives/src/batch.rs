@@ -1,5 +1,6 @@
 use std::sync::Arc;
 
+use super::{BlockInfo, L2BlockInfoWithL1Messages};
 use alloy_primitives::{Bytes, B256};
 
 /// The batch information.
@@ -44,6 +45,36 @@ impl From<BatchCommitData> for BatchInfo {
     fn from(value: BatchCommitData) -> Self {
         Self { index: value.index, hash: value.hash }
     }
+}
+
+/// The outcome of consolidating a batch with the L2 chain.
+#[derive(Debug)]
+pub struct BatchConsolidationOutcome {
+    /// The batch info for the consolidated batch.
+    pub batch_info: BatchInfo,
+    /// The consolidation outcomes for each block in the batch.
+    pub blocks: Vec<BlockConsolidationOutcome>,
+}
+
+impl BatchConsolidationOutcome {
+    /// Creates a new empty batch consolidation outcome for the given batch info.
+    pub fn new(batch_info: BatchInfo) -> Self {
+        Self { batch_info, blocks: Vec::new() }
+    }
+
+    /// Pushes a block consolidation outcome to the batch.
+    pub fn push_block(&mut self, block: BlockConsolidationOutcome) {
+        self.blocks.push(block);
+    }
+}
+
+/// The outcome of consolidating a block with the L2 chain.
+#[derive(Debug)]
+pub enum BlockConsolidationOutcome {
+    /// The derived block was already part of the chain, no action needed.
+    Consolidated(BlockInfo),
+    /// The derived block resulted in a reorg of the L2 chain.
+    Reorged(L2BlockInfoWithL1Messages),
 }
 
 #[cfg(feature = "arbitrary")]

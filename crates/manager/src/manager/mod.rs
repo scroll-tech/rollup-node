@@ -25,7 +25,7 @@ use scroll_alloy_network::Scroll;
 use scroll_alloy_provider::ScrollEngineApi;
 use scroll_engine::{EngineDriver, EngineDriverEvent, ForkchoiceState};
 use scroll_network::{
-    BlockImportOutcome, NetworkManagerEvent, NewBlockWithPeer, ScrollNetworkManager,
+    BlockImportOutcome, NewBlockWithPeer, ScrollNetworkManager, ScrollNetworkManagerEvent,
 };
 use std::{
     fmt::{self, Debug, Formatter},
@@ -98,20 +98,8 @@ pub struct RollupNodeManager<
 > {
     /// The handle receiver used to receive commands.
     handle_rx: Receiver<RollupManagerCommand<N>>,
-    /// The chain spec used by the rollup node.
-    chain_spec: Arc<CS>,
-    /// The network manager that manages the scroll p2p network.
-    network: ScrollNetworkManager<N, CS>,
-    /// The engine driver used to communicate with the engine.
-    engine: EngineDriver<EC, CS, P>,
-    /// The derivation pipeline, used to derive payload attributes from batches.
-    derivation_pipeline: DerivationPipeline<L1P>,
-    /// A receiver for [`L1Notification`]s from the [`rollup_node_watcher::L1Watcher`].
-    l1_notification_rx: Option<ReceiverStream<Arc<L1Notification>>>,
     /// The chain orchestrator.
     chain: ChainOrchestrator<CS, <N as BlockDownloaderProvider>::Client, P>,
-    /// The consensus algorithm used by the rollup node.
-    consensus: Box<dyn Consensus>,
     /// An event sender for sending events to subscribers of the rollup node manager.
     event_sender: Option<EventSender<RollupManagerEvent>>,
     /// The sequencer which is responsible for sequencing transactions and producing new blocks.
@@ -148,7 +136,6 @@ impl<
 {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         f.debug_struct("RollupNodeManager")
-            .field("chain_spec", &self.chain_spec)
             .field("network", &self.network)
             .field("engine", &self.engine)
             .field("derivation_pipeline", &self.derivation_pipeline)
@@ -183,7 +170,6 @@ where
         database: Arc<Database>,
         l1_notification_rx: Option<Receiver<Arc<L1Notification>>>,
         consensus: Box<dyn Consensus>,
-        chain_spec: Arc<CS>,
         sequencer: Option<Sequencer<L1MP>>,
         signer: Option<SignerHandle>,
         block_time: Option<u64>,
@@ -196,13 +182,7 @@ where
             DerivationPipeline::new(l1_provider, database.clone(), l1_v2_message_queue_start_index);
         let rnm = Self {
             handle_rx,
-            chain_spec,
-            network,
-            engine,
-            derivation_pipeline,
-            l1_notification_rx: l1_notification_rx.map(Into::into),
             chain: chain_orchestrator,
-            consensus,
             event_sender: None,
             sequencer,
             signer,
@@ -290,9 +270,9 @@ where
     /// Handles a network manager event.
     ///
     /// Currently the network manager only emits a `NewBlock` event.
-    fn handle_network_manager_event(&mut self, event: NetworkManagerEvent) {
+    fn handle_network_manager_event(&mut self, event: ScrollNetworkManagerEvent) {
         match event {
-            NetworkManagerEvent::NewBlock(block) => self.handle_new_block(block),
+            ScrollNetworkManagerEvent::NewBlock(block) => self.handle_new_block(block),
         }
     }
 
@@ -525,7 +505,8 @@ where
                     sequencer.handle_new_l1_block(new_block)
                 }
             }
-            _ => self.chain.handle_l1_notification(notification),
+            // _ => self.chain.handle_l1_notification(notification),
+            _ => (),
         }
     }
 

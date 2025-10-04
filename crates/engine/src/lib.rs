@@ -6,7 +6,7 @@ pub(crate) mod api;
 pub use driver::EngineDriver;
 mod driver;
 
-pub use error::EngineDriverError;
+pub use error::{EngineDriverError, EngineError, FcsError};
 mod error;
 
 pub use event::EngineDriverEvent;
@@ -22,6 +22,10 @@ pub use metrics::EngineDriverMetrics;
 mod metrics;
 
 mod payload;
+pub use payload::block_matches_attributes;
+
+mod new;
+pub use new::Engine;
 
 #[cfg(any(test, feature = "test-utils"))]
 pub mod test_utils;

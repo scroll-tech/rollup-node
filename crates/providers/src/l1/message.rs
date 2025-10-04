@@ -42,8 +42,11 @@ where
         n: u64,
     ) -> Result<Vec<L1MessageEnvelope>, Self::Error> {
         let tx = self.tx().await?;
-        let messages =
-            tx.get_l1_messages(Some(start)).await?.take(n as usize).try_collect().await?;
+        let messages = if let Some(stream) = tx.get_l1_messages(Some(start)).await? {
+            stream.take(n as usize).try_collect().await?
+        } else {
+            vec![]
+        };
         Ok(messages)
     }
 }

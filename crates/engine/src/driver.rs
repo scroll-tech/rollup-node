@@ -101,17 +101,17 @@ where
 
     /// Sets the finalized block info.
     pub fn set_finalized_block_info(&mut self, block_info: BlockInfo) {
-        self.fcs.update_finalized_block_info(block_info);
+        let _ = self.fcs.update_finalized_block_info(block_info);
     }
 
     /// Sets the safe block info.
     pub fn set_safe_block_info(&mut self, block_info: BlockInfo) {
-        self.fcs.update_safe_block_info(block_info);
+        let _ = self.fcs.update_safe_block_info(block_info);
     }
 
     /// Sets the head block info.
     pub fn set_head_block_info(&mut self, block_info: BlockInfo) {
-        self.fcs.update_head_block_info(block_info);
+        let _ = self.fcs.update_head_block_info(block_info);
     }
 
     /// Sets the payload building duration.
@@ -255,7 +255,7 @@ where
                         // Update the unsafe block info
                         if let Some(block_info) = block_info {
                             tracing::trace!(target: "scroll::engine", ?block_info, "updating unsafe block info");
-                            self.fcs.update_head_block_info(block_info);
+                            let _ = self.fcs.update_head_block_info(block_info);
                         };
 
                         // Update the sync status
@@ -286,13 +286,13 @@ where
                         // safe and finalized block info. Update this once we implement issue #273.
                         // Update the safe and finalized block info and return the block info.
                         tracing::trace!(target: "scroll::engine", ?block_info, "updating safe and finalized block info from block derived from L1");
-                        self.fcs.update_safe_block_info(block_info.block_info);
-                        self.fcs.update_finalized_block_info(block_info.block_info);
+                        let _ = self.fcs.update_safe_block_info(block_info.block_info);
+                        let _ = self.fcs.update_finalized_block_info(block_info.block_info);
 
                         // If we reorged, update the head block info
                         if consolidation_outcome.is_reorg() {
                             tracing::warn!(target: "scroll::engine", ?block_info, "reorging head to l1 derived block");
-                            self.fcs.update_head_block_info(block_info.block_info);
+                            let _ = self.fcs.update_head_block_info(block_info.block_info);
                         }
 
                         // record the metric.
@@ -325,7 +325,7 @@ where
                         // Update the unsafe block info and return the block
                         let block_info = BlockInfo::new(block.number, block.hash_slow());
                         tracing::trace!(target: "scroll::engine", ?block_info, "updating unsafe block info from new payload");
-                        self.fcs.update_head_block_info(block_info);
+                        let _ = self.fcs.update_head_block_info(block_info);
 
                         // record the metrics.
                         self.metrics.build_new_payload_duration.record(duration.as_secs_f64());
@@ -463,7 +463,7 @@ where
 
         // If we have an optimistic sync target, issue the optimistic sync.
         if let Some(block_info) = this.optimistic_sync_target.take() {
-            this.fcs.update_head_block_info(block_info);
+            let _ = this.fcs.update_head_block_info(block_info);
             let fcs = this.fcs.get_alloy_optimistic_fcs();
             this.engine_future =
                 Some(MeteredFuture::new(EngineFuture::optimistic_sync(this.client.clone(), fcs)));

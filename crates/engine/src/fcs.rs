@@ -1,3 +1,4 @@
+use crate::FcsError;
 use alloy_chains::NamedChain;
 use alloy_eips::{BlockId, BlockNumberOrTag};
 use alloy_primitives::{Sealable, B256};
@@ -68,19 +69,59 @@ impl ForkchoiceState {
         Some(Self::head_from_genesis(genesis_hash_from_chain_spec(chain_spec)?))
     }
 
+    /// Update the forkchoice state with the given `head`, `safe` and `finalized` block info.
+    pub fn update(
+        &mut self,
+        head: Option<BlockInfo>,
+        safe: Option<BlockInfo>,
+        finalized: Option<BlockInfo>,
+    ) -> Result<(), FcsError> {
+        tracing::debug!(target: "scroll::engine::fcs", ?head, ?safe, ?finalized, current = ?self, "Updating fork choice state");
+        // Check that at least one of head, safe or finalized is Some.
+        if head.is_none() && safe.is_none() && finalized.is_none() {
+            return Err(FcsError::NoUpdateProvided);
+        }
+
+        // Build the candidate new state.
+        let new_finalized = finalized.unwrap_or(self.finalized.clone());
+        let new_safe = safe.unwrap_or(self.safe.clone());
+        let new_head = head.unwrap_or(self.head.clone());
+
+        // Check that the finalized block number is increasing.
+        if new_finalized.number <= self.finalized.number && new_finalized != self.finalized {
+            return Err(FcsError::FinalizedBlockNumberNotIncreasing);
+        }
+
+        // Assert invariants: head >= safe >= finalized.
+        if new_head.number < new_safe.number {
+            return Err(FcsError::HeadBelowSafe);
+        }
+
+        if new_safe.number < new_finalized.number {
+            return Err(FcsError::SafeBelowFinalized);
+        }
+
+        // Commit the state.
+        self.head = new_head;
+        self.safe = new_safe;
+        self.finalized = new_finalized;
+
+        Ok(())
+    }
+
     /// Updates the `head` block info.
-    pub fn update_head_block_info(&mut self, head: BlockInfo) {
-        self.head = head;
+    pub fn update_head_block_info(&mut self, head: BlockInfo) -> Result<(), FcsError> {
+        self.update(Some(head), None, None)
     }
 
     /// Updates the `safe` block info.
-    pub fn update_safe_block_info(&mut self, safe: BlockInfo) {
-        self.safe = safe;
+    pub fn update_safe_block_info(&mut self, safe: BlockInfo) -> Result<(), FcsError> {
+        self.update(None, Some(safe), None)
     }
 
     /// Updates the `finalized` block info.
-    pub fn update_finalized_block_info(&mut self, finalized: BlockInfo) {
-        self.finalized = finalized;
+    pub fn update_finalized_block_info(&mut self, finalized: BlockInfo) -> Result<(), FcsError> {
+        self.update(None, None, Some(finalized))
     }
 
     /// Returns the block info for the `head` block.

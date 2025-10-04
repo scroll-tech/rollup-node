@@ -3,7 +3,7 @@ use reth_node_api::FullNodeComponents;
 use reth_node_builder::rpc::{RpcHandle, RpcHandleProvider};
 use reth_rpc_eth_api::EthApiTypes;
 use reth_scroll_node::ScrollNetworkPrimitives;
-use rollup_node_manager::RollupManagerHandle;
+use rollup_node_chain_orchestrator::ChainOrchestratorHandle;
 #[cfg(feature = "test-utils")]
 use {rollup_node_watcher::L1Notification, std::sync::Arc, tokio::sync::mpsc::Sender};
 
@@ -14,7 +14,7 @@ pub struct ScrollAddOnsHandle<
     EthApi: EthApiTypes,
 > {
     /// The handle used to send commands to the rollup manager.
-    pub rollup_manager_handle: RollupManagerHandle<Node::Network>,
+    pub rollup_manager_handle: ChainOrchestratorHandle<Node::Network>,
     /// The handle used to send commands to the RPC server.
     pub rpc_handle: RpcHandle<Node, EthApi>,
     /// An optional channel used to send `L1Watcher` notifications to the `RollupNodeManager`.
