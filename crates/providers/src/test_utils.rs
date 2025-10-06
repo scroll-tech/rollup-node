@@ -1,20 +1,19 @@
 //! Test utils for providers.
 
 use crate::{BlobProvider, L1MessageProvider, L1ProviderError};
-use std::{collections::HashMap, sync::Arc};
-
 use alloy_eips::eip4844::Blob;
 use alloy_primitives::B256;
 use rollup_node_primitives::L1MessageEnvelope;
 use scroll_db::L1MessageKey;
+use std::{collections::HashMap, path::PathBuf, sync::Arc};
 
-/// Implementation of the [`crate::L1Provider`] that never returns blobs.
+/// Implementation of the [`crate::L1Provider`] that returns blobs from a file.
 #[derive(Clone, Default, Debug)]
 pub struct MockL1Provider<P: L1MessageProvider> {
     /// L1 message provider.
     pub l1_messages_provider: P,
-    /// Mocked blobs.
-    pub blobs: HashMap<B256, Blob>,
+    /// File blobs.
+    pub blobs: HashMap<B256, PathBuf>,
 }
 
 #[async_trait::async_trait]
@@ -24,7 +23,15 @@ impl<P: L1MessageProvider + Sync> BlobProvider for MockL1Provider<P> {
         _block_timestamp: u64,
         hash: B256,
     ) -> Result<Option<Arc<Blob>>, L1ProviderError> {
-        Ok(self.blobs.get(&hash).map(|b| Arc::new(*b)))
+        let blob = self.blobs.get(&hash).map(|path| {
+            let arr = std::fs::read(path)
+                .expect("failed to read blob file")
+                .as_slice()
+                .try_into()
+                .expect("failed to convert bytes to blob");
+            Arc::new(arr)
+        });
+        Ok(blob)
     }
 }
 

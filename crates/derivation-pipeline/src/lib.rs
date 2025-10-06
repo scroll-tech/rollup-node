@@ -410,7 +410,7 @@ mod tests {
     use scroll_db::{
         test_utils::setup_test_db, DatabaseTransactionProvider, DatabaseWriteOperations,
     };
-    use std::collections::HashMap;
+    use std::{collections::HashMap, path::PathBuf};
 
     struct Infallible;
     impl From<Infallible> for L1ProviderError {
@@ -861,7 +861,7 @@ mod tests {
                     // load batch data in the db.
                     let db = Arc::new(setup_test_db().await);
                     let commit_calldata = read_to_bytes("./testdata/calldata_v4_compressed.bin")?;
-                    let blob = read_to_bytes("./testdata/blob_v4_compressed.bin")?;
+                    let blob_path = PathBuf::from("./testdata/blob_v4_compressed.bin");
                     let batch_data = BatchCommitData {
                         hash: b256!("fdd4ed0eb20398b3fc490ec976dd2ed99f1a898540a18874f302b38732e57431"),
                         index: 314189,
@@ -938,7 +938,7 @@ mod tests {
                         l1_messages_provider,
                         blobs: HashMap::from([(
                             batch_data.blob_versioned_hash.unwrap(),
-                            blob.to_vec().as_slice().try_into()?,
+                            blob_path
                         )]),
                     };
                     let l2_provider = MockL2Provider;
