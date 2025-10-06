@@ -19,6 +19,10 @@ use scroll_derivation_pipeline::DerivationPipeline;
 use std::{collections::HashMap, future::Future, path::PathBuf, pin::Pin, sync::Arc};
 use tokio::runtime::{Handle, Runtime};
 
+const BATCHES_START_INDEX: u64 = 414261;
+const BATCHES_STOP_INDEX: u64 = 414513;
+
+/// Set up a mock provider instance.
 fn setup_mock_provider(
     db: Arc<Database>,
 ) -> Pin<Box<dyn Future<Output = MockL1Provider<Arc<Database>>> + Send>> {
@@ -40,6 +44,7 @@ fn setup_mock_provider(
     })
 }
 
+/// Set up a full provider instance
 fn setup_full_provider(
     db: Arc<Database>,
 ) -> Pin<Box<dyn Future<Output = FullL1Provider<Arc<Database>, S3BlobProvider>> + Send>> {
@@ -52,8 +57,9 @@ fn setup_full_provider(
     })
 }
 
+/// Returns a pipeline with a provider initiated from the factory function.
 async fn setup_pipeline<P: L1Provider + Clone + Send + Sync + 'static>(
-    setup: Box<dyn Fn(Arc<Database>) -> Pin<Box<dyn Future<Output = P> + Send>> + Send>,
+    factory: Box<dyn Fn(Arc<Database>) -> Pin<Box<dyn Future<Output = P> + Send>> + Send>,
 ) -> DerivationPipeline<P> {
     // load batch data in the db.
     let db = Arc::new(setup_test_db().await);
@@ -63,7 +69,7 @@ async fn setup_pipeline<P: L1Provider + Clone + Send + Sync + 'static>(
     .unwrap();
 
     let tx = db.tx_mut().await.unwrap();
-    for (index, hash) in (414261..=414513).zip(blob_hashes.into_iter()) {
+    for (index, hash) in (BATCHES_START_INDEX..=BATCHES_STOP_INDEX).zip(blob_hashes.into_iter()) {
         let raw_calldata =
             std::fs::read(format!("./benches/testdata/calldata/calldata_batch_{index}.bin"))
                 .unwrap();
@@ -95,14 +101,14 @@ async fn setup_pipeline<P: L1Provider + Clone + Send + Sync + 'static>(
     tx.commit().await.unwrap();
 
     // construct the pipeline.
-    let l1_provider = setup(db.clone()).await;
+    let l1_provider = factory(db.clone()).await;
     DerivationPipeline::new(l1_provider, db, u64::MAX)
 }
 
+/// Benchmark the derivation pipeline with blobs fetched from file. This does not bench the network
+/// call to the AWS S3 blob storage.
 fn benchmark_pipeline_derivation_in_file_blobs(c: &mut Criterion) {
     let rt = Runtime::new().unwrap();
-    let start_index = 414261;
-    let end_index = 414513;
 
     c.bench_function("pipeline_derive_in_file_blobs", |b| {
         b.to_async(&rt).iter_batched(
@@ -113,7 +119,7 @@ fn benchmark_pipeline_derivation_in_file_blobs(c: &mut Criterion) {
                     let mut pipeline = setup_pipeline(Box::new(setup_mock_provider)).await;
 
                     // commit 253 batches.
-                    for index in start_index..=end_index {
+                    for index in BATCHES_START_INDEX..=BATCHES_STOP_INDEX {
                         let batch_info = BatchInfo { index, hash: Default::default() };
                         pipeline.push_batch(batch_info, 0);
                     }
@@ -124,7 +130,7 @@ fn benchmark_pipeline_derivation_in_file_blobs(c: &mut Criterion) {
             },
             |mut pipeline| async move {
                 // measured work.
-                for _ in start_index..=end_index {
+                for _ in BATCHES_START_INDEX..=BATCHES_STOP_INDEX {
                     let _ = pipeline.next().await;
                 }
             },
@@ -133,12 +139,9 @@ fn benchmark_pipeline_derivation_in_file_blobs(c: &mut Criterion) {
     });
 }
 
+/// Benchmark the derivation pipeline with blobs fetched from S3.
 fn benchmark_pipeline_derivation_s3_blobs(c: &mut Criterion) {
     let rt = Runtime::new().unwrap();
-    // Bench 15 batches.
-    let start_index = 414261;
-    let end_index = 414276;
-    init_test_tracing();
     let mut group = c.benchmark_group("pipeline_derive_s3_blobs");
     group.sample_size(10);
     group.measurement_time(std::time::Duration::from_secs(20));
@@ -152,7 +155,7 @@ fn benchmark_pipeline_derivation_s3_blobs(c: &mut Criterion) {
                     let mut pipeline = setup_pipeline(Box::new(setup_full_provider)).await;
 
                     // commit 15 batches.
-                    for index in start_index..=end_index {
+                    for index in BATCHES_START_INDEX..=BATCHES_START_INDEX + 15 {
                         let batch_info = BatchInfo { index, hash: Default::default() };
                         pipeline.push_batch(batch_info, 0);
                     }
@@ -163,7 +166,7 @@ fn benchmark_pipeline_derivation_s3_blobs(c: &mut Criterion) {
             },
             |mut pipeline| async move {
                 // measured work.
-                for _ in start_index..=end_index {
+                for _ in BATCHES_START_INDEX..=BATCHES_START_INDEX + 15 {
                     let _ = pipeline.next().await;
                 }
             },

@@ -24,12 +24,12 @@ impl<P: L1MessageProvider + Sync> BlobProvider for MockL1Provider<P> {
         hash: B256,
     ) -> Result<Option<Arc<Blob>>, L1ProviderError> {
         let blob = self.blobs.get(&hash).map(|path| {
-            let arr = std::fs::read(path)
+            let blob = std::fs::read(path)
                 .expect("failed to read blob file")
                 .as_slice()
                 .try_into()
                 .expect("failed to convert bytes to blob");
-            Arc::new(arr)
+            Arc::new(blob)
         });
         Ok(blob)
     }
