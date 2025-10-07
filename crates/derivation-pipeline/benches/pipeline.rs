@@ -5,7 +5,6 @@
 use alloy_primitives::{Bytes, B256};
 use criterion::{criterion_group, criterion_main, Criterion};
 use futures::StreamExt;
-use reth_tracing::init_test_tracing;
 use rollup_node_primitives::{BatchCommitData, BatchInfo, L1MessageEnvelope};
 use rollup_node_providers::{
     test_utils::MockL1Provider, FullL1Provider, L1Provider, S3BlobProvider,
@@ -57,9 +56,13 @@ fn setup_full_provider(
     })
 }
 
+/// The L1 provider factory function.
+type L1ProviderFactory<P> =
+    Box<dyn Fn(Arc<Database>) -> Pin<Box<dyn Future<Output = P> + Send>> + Send>;
+
 /// Returns a pipeline with a provider initiated from the factory function.
 async fn setup_pipeline<P: L1Provider + Clone + Send + Sync + 'static>(
-    factory: Box<dyn Fn(Arc<Database>) -> Pin<Box<dyn Future<Output = P> + Send>> + Send>,
+    factory: L1ProviderFactory<P>,
 ) -> DerivationPipeline<P> {
     // load batch data in the db.
     let db = Arc::new(setup_test_db().await);
