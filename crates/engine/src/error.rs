@@ -1,5 +1,5 @@
 use alloy_rpc_types_engine::PayloadError;
-use rollup_node_primitives::WithFullL2Meta;
+use rollup_node_primitives::{ScrollPayloadAttributesWithBatchInfo, WithBlockNumber};
 use scroll_alloy_provider::ScrollEngineApiError;
 use scroll_alloy_rpc_types_engine::ScrollPayloadAttributes;
 
@@ -21,7 +21,7 @@ pub enum EngineDriverError {
     /// The payload id field is missing in the forkchoice update response for an L1 consolidation
     /// job.
     #[error("Forkchoice update response missing payload id for L1 consolidation job")]
-    L1ConsolidationMissingPayloadId(WithFullL2Meta<ScrollPayloadAttributes>),
+    L1ConsolidationMissingPayloadId(WithBlockNumber<ScrollPayloadAttributesWithBatchInfo>),
     /// The payload id field is missing in the forkchoice update response for a payload building
     /// job.
     #[error("Forkchoice update response missing payload id for payload building job")]

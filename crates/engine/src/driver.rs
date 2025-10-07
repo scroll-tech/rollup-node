@@ -8,8 +8,7 @@ use crate::{
 use alloy_provider::Provider;
 use futures::{ready, task::AtomicWaker, FutureExt, Stream};
 use rollup_node_primitives::{
-    BlockInfo, ChainImport, MeteredFuture, WithFullL2Meta, WithL1FinalizedBlockNumber,
-    WithL2BlockNumber,
+    BlockInfo, ChainImport, MeteredFuture, ScrollPayloadAttributesWithBatchInfo, WithBlockNumber,
 };
 use scroll_alloy_hardforks::ScrollHardforks;
 use scroll_alloy_network::Scroll;
@@ -39,7 +38,7 @@ pub struct EngineDriver<EC, CS, P> {
     /// Block building duration.
     block_building_duration: Duration,
     /// The pending payload attributes derived from batches on L1.
-    l1_payload_attributes: VecDeque<WithFullL2Meta<ScrollPayloadAttributes>>,
+    l1_payload_attributes: VecDeque<WithBlockNumber<ScrollPayloadAttributesWithBatchInfo>>,
     /// The pending block imports received over the network.
     chain_imports: VecDeque<ChainImport>,
     /// The latest optimistic sync target.
@@ -159,8 +158,8 @@ where
             // L2 reorged number.
             if let Some(MeteredFuture { fut, .. }) = self.engine_future.as_ref() {
                 match fut {
-                    EngineFuture::ChainImport(WithL2BlockNumber { l2_block, .. })
-                        if l2_block > &l2_head_block_info.number =>
+                    EngineFuture::ChainImport(WithBlockNumber { number, .. })
+                        if number > &l2_head_block_info.number =>
                     {
                         self.engine_future = None
                     }
@@ -183,15 +182,15 @@ where
         if matches!(
             self.engine_future.as_ref(),
             Some(MeteredFuture {
-                fut: EngineFuture::L1Consolidation(WithL1FinalizedBlockNumber { l1_block, .. }),
+                fut: EngineFuture::L1Consolidation(WithBlockNumber { number, .. }),
                 ..
-            }) if l1_block > &l1_block_number
+            }) if number > &l1_block_number
         ) {
             self.engine_future = None;
         }
 
         // retain the L1 payload attributes with block number <= L1 block.
-        self.l1_payload_attributes.retain(|attribute| attribute.l1_block <= l1_block_number);
+        self.l1_payload_attributes.retain(|attribute| attribute.number <= l1_block_number);
     }
 
     /// Handles a block import request by adding it to the queue and waking up the driver.
@@ -218,7 +217,10 @@ where
 
     /// Handles a [`ScrollPayloadAttributes`] sourced from L1 by initiating a task sending the
     /// attribute to the EN via the [`EngineDriver`].
-    pub fn handle_l1_consolidation(&mut self, attributes: WithFullL2Meta<ScrollPayloadAttributes>) {
+    pub fn handle_l1_consolidation(
+        &mut self,
+        attributes: WithBlockNumber<ScrollPayloadAttributesWithBatchInfo>,
+    ) {
         self.l1_payload_attributes.push_back(attributes);
         self.waker.wake();
     }

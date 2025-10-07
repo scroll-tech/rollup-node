@@ -2,13 +2,7 @@ use alloy_consensus::Header;
 use alloy_eips::{BlockNumHash, Decodable2718};
 use alloy_primitives::{B256, U256};
 use alloy_rpc_types_engine::ExecutionPayload;
-use core::{
-    cmp::Ordering,
-    future::Future,
-    pin::Pin,
-    task::{ready, Context, Poll},
-};
-use derive_more::{Deref, DerefMut};
+use core::cmp::Ordering;
 use reth_primitives_traits::transaction::signed::SignedTransaction;
 use reth_scroll_primitives::{ScrollBlock, ScrollTransactionSigned};
 use scroll_alloy_consensus::L1_MESSAGE_TRANSACTION_TYPE;
@@ -84,74 +78,48 @@ impl arbitrary::Arbitrary<'_> for BlockInfo {
     }
 }
 
-/// A wrapper around a type to which a L2 block number is attached.
-#[derive(Debug, Deref, DerefMut, Default, Copy, Clone, PartialEq, Eq)]
-pub struct WithL2BlockNumber<T> {
-    /// The L2 block number.
-    pub l2_block: u64,
-    /// The wrapped type.
-    #[deref]
-    #[deref_mut]
-    pub inner: T,
-}
+/// A type alias for a wrapper around a type to which a L1 finalized block number is attached.
+pub type WithFinalizedBlockNumber<T> = WithBlockNumber<T>;
 
-impl<T> WithL2BlockNumber<T> {
-    /// Returns a new instance of a [`WithL2BlockNumber`] wrapper.
-    pub const fn new(l2_block: u64, inner: T) -> Self {
-        Self { l2_block, inner }
-    }
-}
-
-impl<T: Future + Unpin> Future for WithL2BlockNumber<T> {
-    type Output = WithL2BlockNumber<<T as Future>::Output>;
-
-    fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
-        let block_number = self.l2_block;
-        let inner = ready!(Pin::new(&mut self.get_mut().inner).poll(cx));
-        Poll::Ready(WithL2BlockNumber::new(block_number, inner))
-    }
-}
-
-/// A wrapper around a type to which a L1 block number is attached.
-#[derive(Debug, Deref, DerefMut, Default, Copy, Clone, PartialEq, Eq)]
-pub struct WithL1FinalizedBlockNumber<T> {
+/// A wrapper around a type to which a block number is attached.
+#[derive(Debug, Default, Copy, Clone, PartialEq, Eq)]
+pub struct WithBlockNumber<T> {
     /// The block number.
-    pub l1_block: u64,
+    pub number: u64,
     /// The wrapped type.
-    #[deref]
-    #[deref_mut]
     pub inner: T,
 }
 
-impl<T> WithL1FinalizedBlockNumber<T> {
-    /// Returns a new instance of a [`WithL1FinalizedBlockNumber`] wrapper.
-    pub const fn new(l1_block: u64, inner: T) -> Self {
-        Self { l1_block, inner }
+impl<T> WithBlockNumber<T> {
+    /// Returns a new instance of a [`WithBlockNumber`] wrapper.
+    pub const fn new(number: u64, inner: T) -> Self {
+        Self { number, inner }
     }
 }
+
+/// A type alias for a wrapper around a type to which a finalized batch information is attached.
+pub type WithFinalizedBatchInfo<T> = WithBatchInfo<T>;
+
+/// A type alias for a wrapper around a type to which a committed batch information is attached.
+pub type WithCommittedBatchInfo<T> = WithBatchInfo<T>;
 
 /// A wrapper around a type to which a batch information is attached.
-#[derive(Debug, Deref, DerefMut, Default, Copy, Clone, PartialEq, Eq)]
+#[derive(Debug, Default, Copy, Clone, PartialEq, Eq)]
 pub struct WithBatchInfo<T> {
+    /// The l1 block number associated with the batch.
+    pub number: u64,
     /// The index of the batch.
     pub index: u64,
-    /// The hash of the batch.
-    pub hash: B256,
     /// The wrapped type.
-    #[deref]
-    #[deref_mut]
     pub inner: T,
 }
 
 impl<T> WithBatchInfo<T> {
     /// Returns a new instance of a [`WithBatchInfo`] wrapper.
-    pub const fn new(index: u64, hash: B256, inner: T) -> Self {
-        Self { index, hash, inner }
+    pub const fn new(index: u64, number: u64, inner: T) -> Self {
+        Self { index, number, inner }
     }
 }
-
-/// Type alias for a wrapper type with the full L2 metadata.
-pub type WithFullL2Meta<T> = WithL1FinalizedBlockNumber<WithL2BlockNumber<WithBatchInfo<T>>>;
 
 /// This struct represents an L2 block with a vector the hashes of the L1 messages included in the
 /// block.

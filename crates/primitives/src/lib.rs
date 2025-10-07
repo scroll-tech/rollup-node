@@ -4,10 +4,13 @@
 #[cfg(not(feature = "std"))]
 extern crate alloc as std;
 
+mod attributes;
+pub use attributes::ScrollPayloadAttributesWithBatchInfo;
+
 mod block;
 pub use block::{
-    BlockInfo, L2BlockInfoWithL1Messages, WithBatchInfo, WithFullL2Meta,
-    WithL1FinalizedBlockNumber, WithL2BlockNumber, DEFAULT_BLOCK_DIFFICULTY,
+    BlockInfo, L2BlockInfoWithL1Messages, WithBatchInfo, WithBlockNumber, WithCommittedBatchInfo,
+    WithFinalizedBatchInfo, WithFinalizedBlockNumber, DEFAULT_BLOCK_DIFFICULTY,
 };
 
 mod batch;
