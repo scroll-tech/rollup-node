@@ -1,10 +1,16 @@
 /// The sync state of the chain orchestrator.
-#[derive(Debug, Default, Clone)]
+#[derive(Debug, Clone)]
 pub struct SyncState {
     /// The sync mode for L1.
     l1: SyncMode,
     /// The sync mode for L2.
     l2: SyncMode,
+}
+
+impl Default for SyncState {
+    fn default() -> Self {
+        Self { l1: SyncMode::default(), l2: SyncMode::Synced }
+    }
 }
 
 impl SyncState {

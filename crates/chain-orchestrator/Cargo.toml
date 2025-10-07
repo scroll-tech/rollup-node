@@ -25,11 +25,13 @@ scroll-db.workspace = true
 scroll-engine.workspace = true
 rollup-node-providers.workspace = true
 rollup-node-primitives.workspace = true
+rollup-node-sequencer.workspace = true
 rollup-node-signer.workspace = true
 rollup-node-watcher.workspace = true
 
 # scroll
 reth-scroll-engine-primitives.workspace = true
+reth-scroll-consensus.workspace = true
 reth-scroll-node.workspace = true
 reth-scroll-primitives.workspace = true
 scroll-alloy-consensus.workspace = true

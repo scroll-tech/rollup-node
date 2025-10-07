@@ -179,6 +179,7 @@ reth-cli-util = { git = "https://github.com/scroll-tech/reth.git", default-featu
 
 # reth-scroll
 reth-scroll-chainspec = { git = "https://github.com/scroll-tech/reth.git", default-features = false }
+reth-scroll-consensus = { git = "https://github.com/scroll-tech/reth.git", default-features = false }
 reth-scroll-cli = { git = "https://github.com/scroll-tech/reth.git", default-features = false }
 reth-scroll-evm = { git = "https://github.com/scroll-tech/reth.git", default-features = false }
 reth-scroll-rpc = { git = "https://github.com/scroll-tech/reth.git", default-features = false }

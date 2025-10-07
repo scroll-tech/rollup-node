@@ -1,3 +1,5 @@
+use crate::ChainOrchestratorStatus;
+
 use super::ChainOrchestratorEvent;
 // use crate::manager::metrics::HandleMetrics;
 use reth_network_api::FullNetwork;
@@ -76,6 +78,13 @@ impl<N: FullNetwork<Primitives = ScrollNetworkPrimitives>> ChainOrchestratorHand
     pub async fn disable_automatic_sequencing(&self) -> Result<bool, oneshot::error::RecvError> {
         let (tx, rx) = oneshot::channel();
         self.send_command(ChainOrchestratorCommand::DisableAutomaticSequencing(tx));
+        rx.await
+    }
+
+    /// Sends a command to the rollup manager to get the current status.
+    pub async fn status(&self) -> Result<ChainOrchestratorStatus, oneshot::error::RecvError> {
+        let (tx, rx) = oneshot::channel();
+        self.send_command(ChainOrchestratorCommand::Status(tx));
         rx.await
     }
 }

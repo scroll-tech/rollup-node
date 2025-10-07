@@ -66,6 +66,7 @@ rollup-node-chain-orchestrator.workspace = true
 rollup-node-primitives.workspace = true
 rollup-node-providers = { workspace = true, features = ["test-utils"] }
 rollup-node-sequencer.workspace = true
+rollup-node-watcher.workspace = true
 scroll-db = { workspace = true, features = ["test-utils"] }
 scroll-engine.workspace = true
 

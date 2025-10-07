@@ -74,6 +74,12 @@ impl From<Header> for BlockInfo {
     }
 }
 
+impl std::fmt::Display for BlockInfo {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "BlockInfo {{ number: {}, hash: 0x{} }}", self.number, self.hash)
+    }
+}
+
 #[cfg(feature = "arbitrary")]
 impl arbitrary::Arbitrary<'_> for BlockInfo {
     fn arbitrary(u: &mut arbitrary::Unstructured<'_>) -> arbitrary::Result<Self> {

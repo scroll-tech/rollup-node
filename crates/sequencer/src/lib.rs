@@ -11,7 +11,7 @@ use std::{
 };
 
 use alloy_eips::eip2718::Encodable2718;
-use alloy_rpc_types_engine::{ExecutionData, ExecutionPayloadV1, PayloadAttributes, PayloadId};
+use alloy_rpc_types_engine::{ExecutionData, PayloadAttributes, PayloadId};
 use futures::{task::AtomicWaker, Stream};
 use reth_scroll_engine_primitives::try_into_block;
 use reth_scroll_primitives::ScrollBlock;
@@ -34,10 +34,9 @@ pub use event::SequencerEvent;
 
 mod metrics;
 pub use metrics::SequencerMetrics;
-use scroll_db::L1MessageKey;
 
 /// A type alias for the payload building job future.
-pub type PayloadBuildingJobFuture = Pin<Box<dyn Future<Output = PayloadId> + Send>>;
+pub type PayloadBuildingJobFuture = Pin<Box<dyn Future<Output = PayloadId> + Send + Sync>>;
 
 /// The sequencer is responsible for sequencing transactions and producing new blocks.
 pub struct Sequencer<P, CS> {
@@ -187,8 +186,8 @@ where
     ) -> Result<Option<ScrollBlock>, SequencerError> {
         let payload = engine.get_payload(payload_id).await?;
 
-        if payload.transactions.is_empty() {
-            tracing::trace!(target: "rollup_node::sequencer", "Built empty payload with id {payload_id:?}.");
+        if payload.transactions.is_empty() && !self.config.allow_empty_blocks {
+            tracing::trace!(target: "rollup_node::sequencer", "Built empty payload with id {payload_id:?}, discarding payload.");
             Ok(None)
         } else {
             tracing::info!(target: "rollup_node::sequencer", "Built payload with id {payload_id:?}, hash: {:#x}, number: {} containing {} transactions.", payload.block_hash, payload.block_number, payload.transactions.len());

@@ -104,6 +104,7 @@ where
                     Poll::Ready(Some(Err((batch_info, err)))) => {
                         tracing::error!(target: "scroll::derivation_pipeline", ?batch_info, ?err, "Failed to derive payload attributes");
                         guard.push_front(this.derivation_future(batch_info.clone()));
+                        cx.waker().wake_by_ref();
                         return Poll::Pending
                     }
                     // If the derivation succeeded then return the attributes.

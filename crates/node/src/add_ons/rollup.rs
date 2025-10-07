@@ -61,14 +61,14 @@ impl RollupManagerAddOn {
             ChainConfig<Config = ScrollChainConfig> + ScrollHardforks + IsDevChain,
         N::Network: NetworkProtocols + FullNetwork<Primitives = ScrollNetworkPrimitives>,
     {
-        let (rnm, handle, l1_notification_tx) = self
+        let (chain_orchestrator, handle, l1_notification_tx) = self
             .config
             .build((&ctx).into(), self.scroll_wire_event, rpc.rpc_server_handles)
             .await?;
         ctx.node
             .task_executor()
-            .spawn_critical_with_graceful_shutdown_signal("rollup_node_manager", |shutdown| {
-                rnm.run_until_graceful_shutdown(shutdown)
+            .spawn_critical_with_shutdown_signal("rollup_node_manager", |shutdown| {
+                chain_orchestrator.run_until_shutdown(shutdown)
             });
         Ok((handle, l1_notification_tx))
     }

@@ -22,4 +22,7 @@ pub enum DatabaseError {
     /// The finalized L1 block was not found in database.
     #[error("Finalized L1 block not found in database")]
     FinalizedL1BlockNotFound,
+    /// The latest L1 block was not found in database.
+    #[error("Latest L1 block not found in database")]
+    LatestL1BlockNotFound,
 }

@@ -19,11 +19,13 @@ use clap::ArgAction;
 use reth_chainspec::EthChainSpec;
 use reth_network::NetworkProtocols;
 use reth_network_api::FullNetwork;
+use reth_network_p2p::FullBlockClient;
 use reth_node_builder::{rpc::RethRpcServerHandles, NodeConfig as RethNodeConfig};
 use reth_node_core::primitives::BlockHeader;
 use reth_scroll_chainspec::{
     ChainConfig, ScrollChainConfig, ScrollChainSpec, SCROLL_FEE_VAULT_ADDRESS,
 };
+use reth_scroll_consensus::ScrollBeaconConsensus;
 use reth_scroll_node::ScrollNetworkPrimitives;
 use rollup_node_chain_orchestrator::{
     ChainOrchestrator, ChainOrchestratorConfig, ChainOrchestratorHandle, Consensus, NoopConsensus,
@@ -163,6 +165,7 @@ impl ScrollRollupNodeConfig {
             N,
             impl ScrollHardforks + EthChainSpec<Header: BlockHeader> + IsDevChain + Clone + 'static,
             impl L1Provider + Clone,
+            impl L1MessageProvider + Clone,
             impl Provider<Scroll> + Clone,
             impl ScrollEngineApi,
         >,
@@ -268,19 +271,32 @@ impl ScrollRollupNodeConfig {
         let (startup_safe_block, l1_start_block_number) =
             tx.prepare_on_startup(chain_spec.genesis_hash()).await?;
         tx.commit().await?;
-        if let Some(block_info) = startup_safe_block {
-            fcs.update_safe_block_info(block_info);
-        } else {
-            fcs.update_safe_block_info(BlockInfo {
-                hash: genesis_hash_from_chain_spec(chain_spec.clone()).unwrap(),
-                number: 0,
-            });
-        }
+        // if let Some(block_info) = startup_safe_block {
+        //     fcs.update(None, Some(block_info), Some(block_info))?;
+        // } else {
+        //     fcs.update(
+        //         None,
+        //         Some(BlockInfo {
+        //             hash: genesis_hash_from_chain_spec(chain_spec.clone()).unwrap(),
+        //             number: 0,
+        //         }),
+        //         None,
+        //     )?;
+        // }
 
         // Update the head block info if available and ahead of finalized.
-        if let Some(latest_block) = db.tx().await?.get_l2_head_block_info().await? {
-            if latest_block > *fcs.finalized_block_info() {
-                fcs.update_head_block_info(latest_block);
+        if let Some(latest_block_number) = db.tx().await?.get_l2_head_block_number().await? {
+            if latest_block_number > fcs.finalized_block_info().number {
+                let block = l2_provider
+                    .get_block(latest_block_number.into())
+                    .full()
+                    .await?
+                    .expect("latest block from db should exist")
+                    .into_consensus()
+                    .map_transactions(|tx| tx.inner.into_inner());
+                let block_info: BlockInfo = (&block).into();
+
+                fcs.update(Some(block_info), None, None)?;
             }
         }
 
@@ -303,6 +319,7 @@ impl ScrollRollupNodeConfig {
             td_constant(chain_spec.chain().named()),
             authorized_signer,
         );
+        tokio::spawn(scroll_network_manager);
 
         tracing::info!(target: "scroll::node::args", fcs = ?fcs, payload_building_duration = ?self.sequencer_args.payload_building_duration, "Starting engine driver");
         let engine = Engine::new(Arc::new(engine_api), fcs);
@@ -361,9 +378,6 @@ impl ScrollRollupNodeConfig {
 
         // Construct the Sequencer.
         let chain_config = chain_spec.chain_config();
-        let latest_l1_message = db.tx().await?.get_latest_executed_l1_message().await?;
-        let sequencer_l1_messages_queue_index =
-            latest_l1_message.map(|msg| msg.transaction.queue_index + 1).unwrap_or_default();
         let sequencer = if self.sequencer_args.sequencer_enabled {
             let args = &self.sequencer_args;
             let config = SequencerConfig {
@@ -401,11 +415,14 @@ impl ScrollRollupNodeConfig {
         };
 
         // Instantiate the chain orchestrator
-        let block_client = scroll_network_handle
-            .inner()
-            .fetch_client()
-            .await
-            .expect("failed to fetch block client");
+        let block_client = FullBlockClient::new(
+            scroll_network_handle
+                .inner()
+                .fetch_client()
+                .await
+                .expect("failed to fetch block client"),
+            Arc::new(ScrollBeaconConsensus::new(chain_spec.clone())),
+        );
         let l1_v2_message_queue_start_index =
             l1_v2_message_queue_start_index(chain_spec.chain().named());
         let config: ChainOrchestratorConfig<Arc<CS>> = ChainOrchestratorConfig::new(
@@ -424,12 +441,14 @@ impl ScrollRollupNodeConfig {
         let (chain_orchestrator, handle) = ChainOrchestrator::new(
             db.clone(),
             config,
-            block_client,
+            Arc::new(block_client),
             l2_provider,
             l1_notification_rx.expect("L1 notification receiver should be set"),
             scroll_network_handle.into_scroll_network().await,
             consensus,
             engine,
+            sequencer,
+            signer,
             derivation_pipeline,
         )
         .await?;

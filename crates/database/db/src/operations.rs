@@ -65,6 +65,22 @@ pub trait DatabaseWriteOperations: WriteConnectionProvider + DatabaseReadOperati
         Ok(())
     }
 
+    /// Set the latest L1 block number.
+    async fn set_latest_l1_block_number(&self, block_number: u64) -> Result<(), DatabaseError> {
+        tracing::trace!(target: "scroll::db", block_number, "Updating the latest L1 block number in the database.");
+        let metadata: models::metadata::ActiveModel =
+            Metadata { key: "l1_latest_block".to_string(), value: block_number.to_string() }.into();
+        Ok(models::metadata::Entity::insert(metadata)
+            .on_conflict(
+                OnConflict::column(models::metadata::Column::Key)
+                    .update_column(models::metadata::Column::Value)
+                    .to_owned(),
+            )
+            .exec(self.get_connection())
+            .await
+            .map(|_| ())?)
+    }
+
     /// Set the finalized L1 block number.
     async fn set_finalized_l1_block_number(&self, block_number: u64) -> Result<(), DatabaseError> {
         tracing::trace!(target: "scroll::db", block_number, "Updating the finalized L1 block number in the database.");
@@ -82,14 +98,11 @@ pub trait DatabaseWriteOperations: WriteConnectionProvider + DatabaseReadOperati
             .map(|_| ())?)
     }
 
-    /// Set the L2 head block info.
-    async fn set_l2_head_block_info(&self, block_info: BlockInfo) -> Result<(), DatabaseError> {
-        tracing::trace!(target: "scroll::db", ?block_info, "Updating the L2 head block info in the database.");
-        let metadata: models::metadata::ActiveModel = Metadata {
-            key: "l2_head_block".to_string(),
-            value: serde_json::to_string(&block_info)?,
-        }
-        .into();
+    /// Set the L2 head block number.
+    async fn set_l2_head_block_number(&self, number: u64) -> Result<(), DatabaseError> {
+        tracing::trace!(target: "scroll::db", ?number, "Updating the L2 head block number in the database.");
+        let metadata: models::metadata::ActiveModel =
+            Metadata { key: "l2_head_block".to_string(), value: number.to_string() }.into();
         Ok(models::metadata::Entity::insert(metadata)
             .on_conflict(
                 OnConflict::column(models::metadata::Column::Key)
@@ -403,6 +416,11 @@ pub trait DatabaseWriteOperations: WriteConnectionProvider + DatabaseReadOperati
                 BlockConsolidationOutcome::Consolidated(block_info) => {
                     self.insert_block(block_info, outcome.batch_info).await?;
                 }
+                BlockConsolidationOutcome::Skipped(block_info) => {
+                    // No action needed, the block has already been previously consolidated however
+                    // we will insert it again defensively
+                    self.insert_block(block_info, outcome.batch_info).await?;
+                }
                 BlockConsolidationOutcome::Reorged(block_info) => {
                     self.insert_block(block_info.block_info, outcome.batch_info).await?;
                     self.update_l1_messages_with_l2_block(block_info).await?;
@@ -453,6 +471,14 @@ pub trait DatabaseWriteOperations: WriteConnectionProvider + DatabaseReadOperati
             None
         };
 
+        // delete mapping for l1 messages that were included in unsafe blocks after the reorg point
+        if l2_head_block_number.is_some() {
+            self.purge_l1_message_to_l2_block_mappings(
+                l2_head_block_number.map(|x| x.saturating_add(1)),
+            )
+            .await?;
+        }
+
         // commit the transaction
         Ok(UnwindResult { l1_block_number, queue_index, l2_head_block_number, l2_safe_block_info })
     }
@@ -499,6 +525,18 @@ pub trait DatabaseReadOperations: ReadConnectionProvider + Sync {
         .map(|x| x.map(Into::into))?)
     }
 
+    /// Get the latest L1 block number from the database.
+    async fn get_latest_l1_block_number(&self) -> Result<Option<u64>, DatabaseError> {
+        Ok(models::metadata::Entity::find()
+            .filter(models::metadata::Column::Key.eq("l1_latest_block"))
+            .select_only()
+            .column(models::metadata::Column::Value)
+            .into_tuple::<String>()
+            .one(self.get_connection())
+            .await
+            .map(|x| x.and_then(|x| x.parse::<u64>().ok()))?)
+    }
+
     /// Get the finalized L1 block number from the database.
     async fn get_finalized_l1_block_number(&self) -> Result<Option<u64>, DatabaseError> {
         Ok(models::metadata::Entity::find()
@@ -512,7 +550,7 @@ pub trait DatabaseReadOperations: ReadConnectionProvider + Sync {
     }
 
     /// Get the latest L2 head block info.
-    async fn get_l2_head_block_info(&self) -> Result<Option<BlockInfo>, DatabaseError> {
+    async fn get_l2_head_block_number(&self) -> Result<Option<u64>, DatabaseError> {
         Ok(models::metadata::Entity::find()
             .filter(models::metadata::Column::Key.eq("l2_head_block"))
             .select_only()
@@ -583,8 +621,15 @@ pub trait DatabaseReadOperations: ReadConnectionProvider + Sync {
         Option<impl Stream<Item = Result<L1MessageEnvelope, DatabaseError>> + 'a>,
         DatabaseError,
     > {
-        let queue_index = match start {
-            Some(L1MessageKey::QueueIndex(i)) => Ok::<_, DatabaseError>(Some(i)),
+        match start {
+            Some(L1MessageKey::QueueIndex(queue_index)) => Ok(Some(
+                models::l1_message::Entity::find()
+                    .filter(models::l1_message::Column::QueueIndex.gte(queue_index))
+                    .order_by_asc(models::l1_message::Column::QueueIndex)
+                    .stream(self.get_connection())
+                    .await?
+                    .map(map_l1_message_result),
+            )),
             Some(L1MessageKey::TransactionHash(ref h)) => {
                 // Lookup message by hash
                 let record = models::l1_message::Entity::find()
@@ -594,8 +639,14 @@ pub trait DatabaseReadOperations: ReadConnectionProvider + Sync {
                     .ok_or_else(|| {
                         DatabaseError::L1MessageNotFound(L1MessageKey::TransactionHash(*h))
                     })?;
-
-                Ok(Some(record.queue_index as u64))
+                Ok(Some(
+                    models::l1_message::Entity::find()
+                        .filter(models::l1_message::Column::QueueIndex.gte(record.queue_index))
+                        .order_by_asc(models::l1_message::Column::QueueIndex)
+                        .stream(self.get_connection())
+                        .await?
+                        .map(map_l1_message_result),
+                ))
             }
             Some(L1MessageKey::QueueHash(ref h)) => {
                 // Lookup message by queue hash
@@ -609,31 +660,45 @@ pub trait DatabaseReadOperations: ReadConnectionProvider + Sync {
                     .await?
                     .ok_or_else(|| DatabaseError::L1MessageNotFound(L1MessageKey::QueueHash(*h)))?;
 
-                Ok(Some(record.queue_index as u64))
-            }
-            Some(L1MessageStart::BlockNumber(block_number)) => {
-                let exact_match = models::l1_message::Entity::find()
-                    .filter(models::l1_message::Column::L1BlockNumber.eq(block_number as i64))
-                    .order_by_desc(models::l1_message::Column::QueueIndex)
-                    .into_tuple::<i64>()
-                    .one(self.get_connection())
-                    .await?;
-
-                if let Some(queue_index) = exact_match {
-                    Ok(Some(queue_index as u64))
-                } else {
-                    // If no exact match is found, find the last message before the block number
-                    Ok(models::l1_message::Entity::find()
-                        .filter(models::l1_message::Column::L1BlockNumber.lt(block_number as i64))
-                        .order_by_desc(models::l1_message::Column::L1BlockNumber)
-                        .order_by_desc(models::l1_message::Column::QueueIndex)
-                        .into_tuple::<i64>()
-                        .one(self.get_connection())
+                Ok(Some(
+                    models::l1_message::Entity::find()
+                        .filter(models::l1_message::Column::QueueIndex.gte(record.queue_index))
+                        .order_by_asc(models::l1_message::Column::QueueIndex)
+                        .stream(self.get_connection())
                         .await?
-                        .map(|x| x as u64))
+                        .map(map_l1_message_result),
+                ))
+            }
+            Some(L1MessageKey::BlockNumber(block_number)) => {
+                if let Some(record) = models::l1_message::Entity::find()
+                    .filter(models::l1_message::Column::L2BlockNumber.lt(block_number as i64))
+                    .order_by_desc(models::l1_message::Column::L2BlockNumber)
+                    .order_by_desc(models::l1_message::Column::QueueIndex)
+                    .one(self.get_connection())
+                    .await?
+                {
+                    Ok(Some(
+                        models::l1_message::Entity::find()
+                            .filter(
+                                // We add 1 to the queue index to constrain across block boundaries
+                                models::l1_message::Column::QueueIndex.gte(record.queue_index + 1),
+                            )
+                            .order_by_asc(models::l1_message::Column::QueueIndex)
+                            .stream(self.get_connection())
+                            .await?
+                            .map(map_l1_message_result),
+                    ))
+                } else {
+                    Ok(Some(
+                        models::l1_message::Entity::find()
+                            .order_by_asc(models::l1_message::Column::QueueIndex)
+                            .stream(self.get_connection())
+                            .await?
+                            .map(map_l1_message_result),
+                    ))
                 }
             }
-            Some(L1MessageStart::NotIncluded(NotIncludedStart::Finalized)) => {
+            Some(L1MessageKey::NotIncluded(NotIncludedStart::Finalized)) => {
                 let finalized_block_number = self
                     .get_finalized_l1_block_number()
                     .await?
@@ -644,21 +709,22 @@ pub trait DatabaseReadOperations: ReadConnectionProvider + Sync {
                             .lte(finalized_block_number as i64),
                     )
                     .add(models::l1_message::Column::L2BlockNumber.is_null());
-                Ok(models::l1_message::Entity::find()
-                    .filter(condition)
-                    .order_by_desc(models::l1_message::Column::QueueIndex)
-                    .into_tuple::<i64>()
-                    .one(self.get_connection())
-                    .await?
-                    .map(|x| x as u64))
+                Ok(Some(
+                    models::l1_message::Entity::find()
+                        .filter(condition)
+                        .order_by_asc(models::l1_message::Column::QueueIndex)
+                        .stream(self.get_connection())
+                        .await?
+                        .map(map_l1_message_result),
+                ))
             }
-            Some(L1MessageStart::NotIncluded(NotIncludedStart::BlockDepth(depth))) => {
-                // TODO: USE LATEST BLOCK NUMBER NOT FINALIZED
-                let finalized_block_number = self
-                    .get_finalized_l1_block_number()
+            Some(L1MessageKey::NotIncluded(NotIncludedStart::BlockDepth(depth))) => {
+                let latest_block_number = self
+                    .get_latest_l1_block_number()
                     .await?
-                    .ok_or(DatabaseError::FinalizedL1BlockNotFound)?;
-                let target_block_number = finalized_block_number.checked_sub(depth);
+                    .ok_or(DatabaseError::LatestL1BlockNotFound)?;
+
+                let target_block_number = latest_block_number.checked_sub(depth);
                 if let Some(target_block_number) = target_block_number {
                     let condition = Condition::all()
                         .add(
@@ -666,31 +732,26 @@ pub trait DatabaseReadOperations: ReadConnectionProvider + Sync {
                                 .lte(target_block_number as i64),
                         )
                         .add(models::l1_message::Column::L2BlockNumber.is_null());
-                    Ok(models::l1_message::Entity::find()
-                        .filter(condition)
-                        .order_by_desc(models::l1_message::Column::QueueIndex)
-                        .into_tuple::<i64>()
-                        .one(self.get_connection())
-                        .await?
-                        .map(|x| x as u64))
+                    Ok(Some(
+                        models::l1_message::Entity::find()
+                            .filter(condition)
+                            .order_by_asc(models::l1_message::Column::QueueIndex)
+                            .stream(self.get_connection())
+                            .await?
+                            .map(map_l1_message_result),
+                    ))
                 } else {
                     Ok(None)
                 }
             }
-            None => Ok(Some(0)),
-        }?;
-
-        let queue_index =
-            if let Some(queue_index) = queue_index { queue_index } else { return Ok(None) };
-
-        Ok(Some(
-            models::l1_message::Entity::find()
-                .filter(models::l1_message::Column::QueueIndex.gte(queue_index))
-                .order_by_asc(models::l1_message::Column::QueueIndex)
-                .stream(self.get_connection())
-                .await?
-                .map(|res| Ok(res.map(Into::into)?)),
-        ))
+            None => Ok(Some(
+                models::l1_message::Entity::find()
+                    .order_by_asc(models::l1_message::Column::QueueIndex)
+                    .stream(self.get_connection())
+                    .await?
+                    .map(map_l1_message_result),
+            )),
+        }
     }
 
     /// Get the extra data for the provided block number.
@@ -875,6 +936,12 @@ pub enum NotIncludedStart {
     Finalized,
     /// Start from unfinalized messages that are included in L1 blocks at a specific depth.
     BlockDepth(u64),
+}
+
+fn map_l1_message_result(
+    res: Result<models::l1_message::Model, sea_orm::DbErr>,
+) -> Result<L1MessageEnvelope, DatabaseError> {
+    Ok(res.map(Into::into)?)
 }
 
 impl fmt::Display for L1MessageKey {

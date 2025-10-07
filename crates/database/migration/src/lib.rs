@@ -13,6 +13,7 @@ mod m20250904_175949_block_signature;
 mod m20250923_135359_add_index_block_hash;
 mod m20250929_161536_add_additional_indexes;
 mod m20251001_125444_add_index_processed;
+mod m20251005_160938_add_initial_l1_block_numbers;
 
 mod migration_info;
 pub use migration_info::{
@@ -38,6 +39,7 @@ impl<MI: MigrationInfo + Send + Sync + 'static> MigratorTrait for Migrator<MI> {
             Box::new(m20250923_135359_add_index_block_hash::Migration),
             Box::new(m20250929_161536_add_additional_indexes::Migration),
             Box::new(m20251001_125444_add_index_processed::Migration),
+            Box::new(m20251005_160938_add_initial_l1_block_numbers::Migration),
         ]
     }
 }

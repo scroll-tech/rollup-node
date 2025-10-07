@@ -1,6 +1,9 @@
 use alloy_json_rpc::RpcError;
 use alloy_primitives::B256;
 use alloy_transport::TransportErrorKind;
+use rollup_node_primitives::{BatchInfo, BlockInfo};
+use rollup_node_sequencer::SequencerError;
+use rollup_node_signer::SignerError;
 use scroll_db::{DatabaseError, L1MessageKey};
 use scroll_engine::EngineError;
 
@@ -46,6 +49,14 @@ pub enum ChainOrchestratorError {
         /// The hash of the block header that was requested.
         hash: B256,
     },
+    /// The peer did not provide the correct number of blocks.
+    #[error("The peer did not provide the correct number of blocks. Expected: {expected}, Actual: {actual}")]
+    BlockFetchMismatch {
+        /// The expected number of blocks.
+        expected: usize,
+        /// The actual number of blocks.
+        actual: usize,
+    },
     /// A gap was detected in batch commit events: the previous batch before index {0} is missing.
     #[error("Batch commit gap detected at index {0}, previous batch commit not found")]
     BatchCommitGap(u64),
@@ -58,4 +69,13 @@ pub enum ChainOrchestratorError {
     /// Received an invalid block from peer.
     #[error("Received an invalid block from peer")]
     InvalidBlock,
+    /// An error occurred at the sequencer level.
+    #[error("An error occurred at the sequencer level: {0}")]
+    SequencerError(#[from] SequencerError),
+    /// An error occurred at the signing level.
+    #[error("An error occurred at the signer level: {0}")]
+    SignerError(#[from] SignerError),
+    /// The derivation pipeline found an invalid block for the given batch.
+    #[error("The derivation pipeline found an invalid block: {0} for batch: {1}")]
+    InvalidBatch(BlockInfo, BatchInfo),
 }

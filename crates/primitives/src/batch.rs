@@ -19,6 +19,12 @@ impl BatchInfo {
     }
 }
 
+impl std::fmt::Display for BatchInfo {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "BatchInfo {{ index: {}, hash: 0x{} }}", self.index, self.hash)
+    }
+}
+
 /// The input data for a batch.
 ///
 /// This is used as input for the derivation pipeline. All data remains in its raw serialized form.
@@ -48,7 +54,7 @@ impl From<BatchCommitData> for BatchInfo {
 }
 
 /// The outcome of consolidating a batch with the L2 chain.
-#[derive(Debug)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct BatchConsolidationOutcome {
     /// The batch info for the consolidated batch.
     pub batch_info: BatchInfo,
@@ -69,12 +75,25 @@ impl BatchConsolidationOutcome {
 }
 
 /// The outcome of consolidating a block with the L2 chain.
-#[derive(Debug)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum BlockConsolidationOutcome {
-    /// The derived block was already part of the chain, no action needed.
+    /// The derived block was already part of the chain, update the fork choice state.
     Consolidated(BlockInfo),
+    /// The fork choice state was already ahead of the derived block.
+    Skipped(BlockInfo),
     /// The derived block resulted in a reorg of the L2 chain.
     Reorged(L2BlockInfoWithL1Messages),
+}
+
+impl BlockConsolidationOutcome {
+    /// Returns the block info for the consolidated block.
+    pub fn block_info(&self) -> &BlockInfo {
+        match self {
+            BlockConsolidationOutcome::Consolidated(info) => info,
+            BlockConsolidationOutcome::Skipped(info) => info,
+            BlockConsolidationOutcome::Reorged(info) => &info.block_info,
+        }
+    }
 }
 
 #[cfg(feature = "arbitrary")]
