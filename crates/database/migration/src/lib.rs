@@ -11,6 +11,8 @@ mod m20250829_042803_add_table_indexes;
 mod m20250901_102341_add_commit_batch_processed_column;
 mod m20250904_175949_block_signature;
 mod m20250923_135359_add_index_block_hash;
+mod m20251001_125444_add_index_processed;
+
 mod migration_info;
 pub use migration_info::{
     MigrationInfo, ScrollDevMigrationInfo, ScrollMainnetMigrationInfo, ScrollSepoliaMigrationInfo,
@@ -33,6 +35,7 @@ impl<MI: MigrationInfo + Send + Sync + 'static> MigratorTrait for Migrator<MI> {
             Box::new(m20250901_102341_add_commit_batch_processed_column::Migration),
             Box::new(m20250904_175949_block_signature::Migration),
             Box::new(m20250923_135359_add_index_block_hash::Migration),
+            Box::new(m20251001_125444_add_index_processed::Migration),
         ]
     }
 }
