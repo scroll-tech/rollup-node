@@ -3,7 +3,7 @@ use reth_scroll_primitives::ScrollBlock;
 use rollup_node_chain_orchestrator::ChainOrchestratorEvent;
 use rollup_node_signer::SignerEvent;
 use rollup_node_watcher::L1Notification;
-use scroll_db::L1MessageStart;
+use scroll_db::L1MessageKey;
 use scroll_engine::ConsolidationOutcome;
 use scroll_network::NewBlockWithPeer;
 
@@ -33,8 +33,8 @@ pub enum RollupManagerEvent {
     },
     /// A block has been received containing an L1 message that is not in the database.
     L1MessageMissingInDatabase {
-        /// The L1 message start index or hash.
-        start: L1MessageStart,
+        /// The L1 message key.
+        key: L1MessageKey,
     },
     /// An event was received from the L1 watcher.
     L1NotificationEvent(L1Notification),

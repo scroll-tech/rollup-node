@@ -40,6 +40,7 @@ rollup-node-providers.workspace = true
 rollup-node-signer.workspace = true
 
 # scroll
+scroll-db.workspace = true
 scroll-network.workspace = true
 
 # misc
@@ -70,6 +71,7 @@ test-utils = [
     "rollup-node-providers/test-utils",
     "reth-chainspec/test-utils",
     "reth-primitives-traits/test-utils",
+    "scroll-db/test-utils",
 ]
 serde = [
     "alloy-eips/serde",

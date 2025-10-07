@@ -2,9 +2,7 @@ use crate::L1ProviderError;
 
 use futures::{StreamExt, TryStreamExt};
 use rollup_node_primitives::L1MessageEnvelope;
-use scroll_db::{
-    DatabaseError, DatabaseReadOperations, DatabaseTransactionProvider, L1MessageStart,
-};
+use scroll_db::{DatabaseError, DatabaseReadOperations, DatabaseTransactionProvider, L1MessageKey};
 
 /// An instance of the trait can provide L1 messages iterators.
 #[async_trait::async_trait]
@@ -24,7 +22,7 @@ pub trait L1MessageProvider: Send + Sync {
     /// avoid capturing the lifetime of `self`.
     async fn get_n_messages(
         &self,
-        start: L1MessageStart,
+        start: L1MessageKey,
         n: u64,
     ) -> Result<Vec<L1MessageEnvelope>, Self::Error>;
 }
@@ -38,7 +36,7 @@ where
 
     async fn get_n_messages(
         &self,
-        start: L1MessageStart,
+        start: L1MessageKey,
         n: u64,
     ) -> Result<Vec<L1MessageEnvelope>, Self::Error> {
         let tx = self.tx().await?;

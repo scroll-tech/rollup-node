@@ -3,6 +3,7 @@ use alloy_eips::{BlockNumHash, Decodable2718};
 use alloy_primitives::{B256, U256};
 use alloy_rpc_types_engine::ExecutionPayload;
 use core::{
+    cmp::Ordering,
     future::Future,
     pin::Pin,
     task::{ready, Context, Poll},
@@ -16,12 +17,18 @@ use std::vec::Vec;
 pub const DEFAULT_BLOCK_DIFFICULTY: U256 = U256::from_limbs([1, 0, 0, 0]);
 
 /// Information about a block.
-#[derive(Debug, Default, Copy, Clone, PartialEq, Eq)]
+#[derive(Debug, Default, Copy, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct BlockInfo {
     /// The block number.
     pub number: u64,
     /// The block hash.
     pub hash: B256,
+}
+
+impl PartialOrd for BlockInfo {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        self.number.partial_cmp(&other.number)
+    }
 }
 
 impl BlockInfo {

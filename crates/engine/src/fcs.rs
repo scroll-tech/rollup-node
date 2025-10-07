@@ -34,7 +34,7 @@ impl ForkchoiceState {
 
     /// Creates a new [`ForkchoiceState`] instance setting the `head`, `safe` and `finalized` block
     /// info to the provided `genesis` hash.
-    pub const fn head_from_genesis(genesis: B256) -> Self {
+    pub const fn from_genesis(genesis: B256) -> Self {
         Self::new(
             BlockInfo { hash: genesis, number: 0 },
             BlockInfo { hash: genesis, number: 0 },
@@ -44,7 +44,7 @@ impl ForkchoiceState {
 
     /// Creates a [`ForkchoiceState`] instance setting the `head`, `safe` and `finalized` hash to
     /// the appropriate genesis values by reading from the provider.
-    pub async fn head_from_provider<P: Provider<Scroll>>(provider: P) -> Option<Self> {
+    pub async fn from_provider<P: Provider<Scroll>>(provider: &P) -> Option<Self> {
         let latest_block =
             provider.get_block(BlockId::Number(BlockNumberOrTag::Latest)).await.ok()??;
         let safe_block =
@@ -66,7 +66,7 @@ impl ForkchoiceState {
     pub fn head_from_chain_spec<CS: EthChainSpec<Header: BlockHeader>>(
         chain_spec: CS,
     ) -> Option<Self> {
-        Some(Self::head_from_genesis(genesis_hash_from_chain_spec(chain_spec)?))
+        Some(Self::from_genesis(genesis_hash_from_chain_spec(chain_spec)?))
     }
 
     /// Update the forkchoice state with the given `head`, `safe` and `finalized` block info.

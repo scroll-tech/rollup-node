@@ -28,7 +28,7 @@ use scroll_alloy_network::Scroll;
 use scroll_alloy_provider::ScrollEngineApi;
 use scroll_db::{
     Database, DatabaseError, DatabaseReadOperations, DatabaseTransactionProvider,
-    DatabaseWriteOperations, L1MessageStart, UnwindResult,
+    DatabaseWriteOperations, L1MessageKey, UnwindResult,
 };
 use scroll_derivation_pipeline::{BatchDerivationResult, DerivationPipelineNew};
 use scroll_engine::Engine;

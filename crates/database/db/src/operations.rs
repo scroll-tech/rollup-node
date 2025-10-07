@@ -69,7 +69,27 @@ pub trait DatabaseWriteOperations: WriteConnectionProvider + DatabaseReadOperati
     async fn set_finalized_l1_block_number(&self, block_number: u64) -> Result<(), DatabaseError> {
         tracing::trace!(target: "scroll::db", block_number, "Updating the finalized L1 block number in the database.");
         let metadata: models::metadata::ActiveModel =
-            Metadata { l1_finalized_block: block_number }.into();
+            Metadata { key: "l1_finalized_block".to_string(), value: block_number.to_string() }
+                .into();
+        Ok(models::metadata::Entity::insert(metadata)
+            .on_conflict(
+                OnConflict::column(models::metadata::Column::Key)
+                    .update_column(models::metadata::Column::Value)
+                    .to_owned(),
+            )
+            .exec(self.get_connection())
+            .await
+            .map(|_| ())?)
+    }
+
+    /// Set the L2 head block info.
+    async fn set_l2_head_block_info(&self, block_info: BlockInfo) -> Result<(), DatabaseError> {
+        tracing::trace!(target: "scroll::db", ?block_info, "Updating the L2 head block info in the database.");
+        let metadata: models::metadata::ActiveModel = Metadata {
+            key: "l2_head_block".to_string(),
+            value: serde_json::to_string(&block_info)?,
+        }
+        .into();
         Ok(models::metadata::Entity::insert(metadata)
             .on_conflict(
                 OnConflict::column(models::metadata::Column::Key)
@@ -491,6 +511,18 @@ pub trait DatabaseReadOperations: ReadConnectionProvider + Sync {
             .map(|x| x.and_then(|x| x.parse::<u64>().ok()))?)
     }
 
+    /// Get the latest L2 head block info.
+    async fn get_l2_head_block_info(&self) -> Result<Option<BlockInfo>, DatabaseError> {
+        Ok(models::metadata::Entity::find()
+            .filter(models::metadata::Column::Key.eq("l2_head_block"))
+            .select_only()
+            .column(models::metadata::Column::Value)
+            .into_tuple::<String>()
+            .one(self.get_connection())
+            .await
+            .map(|x| x.and_then(|x| serde_json::from_str(&x).ok()))?)
+    }
+
     /// Get an iterator over all [`BatchCommitData`]s in the database.
     async fn get_batches<'a>(
         &'a self,
@@ -546,20 +578,36 @@ pub trait DatabaseReadOperations: ReadConnectionProvider + Sync {
     /// `start` point.
     async fn get_l1_messages<'a>(
         &'a self,
-        start: Option<L1MessageStart>,
+        start: Option<L1MessageKey>,
     ) -> Result<
         Option<impl Stream<Item = Result<L1MessageEnvelope, DatabaseError>> + 'a>,
         DatabaseError,
     > {
         let queue_index = match start {
-            Some(L1MessageStart::Index(i)) => Ok::<_, DatabaseError>(Some(i)),
-            Some(L1MessageStart::Hash(ref h)) => {
+            Some(L1MessageKey::QueueIndex(i)) => Ok::<_, DatabaseError>(Some(i)),
+            Some(L1MessageKey::TransactionHash(ref h)) => {
                 // Lookup message by hash
                 let record = models::l1_message::Entity::find()
                     .filter(models::l1_message::Column::Hash.eq(h.to_vec()))
                     .one(self.get_connection())
                     .await?
-                    .ok_or_else(|| DatabaseError::L1MessageNotFound(L1MessageStart::Hash(*h)))?;
+                    .ok_or_else(|| {
+                        DatabaseError::L1MessageNotFound(L1MessageKey::TransactionHash(*h))
+                    })?;
+
+                Ok(Some(record.queue_index as u64))
+            }
+            Some(L1MessageKey::QueueHash(ref h)) => {
+                // Lookup message by queue hash
+                let record = models::l1_message::Entity::find()
+                    .filter(
+                        Condition::all()
+                            .add(models::l1_message::Column::QueueHash.is_not_null())
+                            .add(models::l1_message::Column::QueueHash.eq(h.to_vec())),
+                    )
+                    .one(self.get_connection())
+                    .await?
+                    .ok_or_else(|| DatabaseError::L1MessageNotFound(L1MessageKey::QueueHash(*h)))?;
 
                 Ok(Some(record.queue_index as u64))
             }
@@ -692,7 +740,9 @@ pub trait DatabaseReadOperations: ReadConnectionProvider + Sync {
             })?)
     }
 
-    /// Get the latest safe L2 ([`BlockInfo`], [`BatchInfo`]) from the database.
+    /// Get the latest safe/finalized L2 ([`BlockInfo`], [`BatchInfo`]) from the database. Until we
+    /// update the batch handling logic with issue #273, we don't differentiate between safe and
+    /// finalized l2 blocks.
     async fn get_latest_safe_l2_info(
         &self,
     ) -> Result<Option<(BlockInfo, BatchInfo)>, DatabaseError> {
@@ -778,20 +828,43 @@ pub trait DatabaseReadOperations: ReadConnectionProvider + Sync {
     }
 }
 
-/// This type defines the start of an L1 message stream.
+/// A key for an L1 message stored in the database.
 ///
-/// It can either be an index, which is the queue index of the first message to return, or a hash,
-/// which is the hash of the first message to return.
+/// It can either be the queue index, queue hash or the transaction hash.
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub enum L1MessageStart {
-    /// Start from the provided queue index.
-    Index(u64),
-    /// Start from the provided queue hash.
-    Hash(B256),
+pub enum L1MessageKey {
+    /// The queue index of the message.
+    QueueIndex(u64),
+    /// The queue hash of the message.
+    QueueHash(B256),
+    /// The transaction hash of the message.
+    TransactionHash(B256),
     /// Start from the first message for the provided block number.
     BlockNumber(u64),
     /// Start from messages that have not been included in a block yet.
     NotIncluded(NotIncludedStart),
+}
+
+impl L1MessageKey {
+    /// Create a new [`L1MessageKey`] from a queue index.
+    pub const fn from_queue_index(index: u64) -> Self {
+        Self::QueueIndex(index)
+    }
+
+    /// Create a new [`L1MessageKey`] from a queue hash.
+    pub const fn from_queue_hash(hash: B256) -> Self {
+        Self::QueueHash(hash)
+    }
+
+    /// Create a new [`L1MessageKey`] from a transaction hash.
+    pub const fn from_transaction_hash(hash: B256) -> Self {
+        Self::TransactionHash(hash)
+    }
+
+    /// Creates a new [`L1MessageStart`] for the provided block number.
+    pub fn block_number(number: u64) -> Self {
+        Self::BlockNumber(number)
+    }
 }
 
 /// This type defines where to start when fetching L1 messages that have not been included in a
@@ -804,23 +877,12 @@ pub enum NotIncludedStart {
     BlockDepth(u64),
 }
 
-impl L1MessageStart {
-    /// Creates a new [`L1MessageStart`] for the provided queue index.
-    pub fn index(index: u64) -> Self {
-        Self::Index(index)
-    }
-
-    /// Creates a new [`L1MessageStart`] for the provided block number.
-    pub fn block_number(number: u64) -> Self {
-        Self::BlockNumber(number)
-    }
-}
-
-impl fmt::Display for L1MessageStart {
+impl fmt::Display for L1MessageKey {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Self::Index(index) => write!(f, "Index({index})"),
-            Self::Hash(hash) => write!(f, "Hash({hash:#x})"),
+            Self::QueueIndex(index) => write!(f, "QueueIndex({index})"),
+            Self::QueueHash(hash) => write!(f, "QueueHash({hash:#x})"),
+            Self::TransactionHash(hash) => write!(f, "TransactionHash({hash:#x})"),
             Self::BlockNumber(number) => write!(f, "BlockNumber({number})"),
             Self::NotIncluded(start) => match start {
                 NotIncludedStart::Finalized => write!(f, "NotIncluded(Finalized)"),
@@ -829,12 +891,6 @@ impl fmt::Display for L1MessageStart {
                 }
             },
         }
-    }
-}
-
-impl From<B256> for L1MessageStart {
-    fn from(value: B256) -> Self {
-        Self::Hash(value)
     }
 }
 

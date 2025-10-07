@@ -6,7 +6,7 @@ use alloy_rpc_types_eth::Block;
 use alloy_signer::Signer;
 use alloy_signer_local::PrivateKeySigner;
 use eyre::Ok;
-use futures::StreamExt;
+use futures::{task::noop_waker_ref, FutureExt, StreamExt};
 use reth_chainspec::EthChainSpec;
 use reth_e2e_test_utils::{NodeHelperType, TmpDB};
 use reth_network::{NetworkConfigBuilder, NetworkEventListenerProvider, Peers, PeersInfo};
@@ -17,6 +17,7 @@ use reth_rpc_api::EthApiServer;
 use reth_scroll_chainspec::{ScrollChainSpec, SCROLL_DEV, SCROLL_MAINNET, SCROLL_SEPOLIA};
 use reth_scroll_node::ScrollNetworkPrimitives;
 use reth_scroll_primitives::ScrollBlock;
+use reth_storage_api::BlockReader;
 use reth_tokio_util::EventStream;
 use rollup_node::{
     constants::SCROLL_GAS_LIMIT,
@@ -35,10 +36,17 @@ use rollup_node_sequencer::L1MessageInclusionMode;
 use rollup_node_watcher::L1Notification;
 use scroll_alloy_consensus::TxL1Message;
 use scroll_alloy_rpc_types::Transaction as ScrollAlloyTransaction;
-use scroll_db::L1MessageStart;
+use scroll_db::{test_utils::setup_test_db, L1MessageKey};
 use scroll_network::NewBlockWithPeer;
 use scroll_wire::{ScrollWireConfig, ScrollWireProtocolHandler};
-use std::{path::PathBuf, sync::Arc, time::Duration};
+use std::{
+    future::Future,
+    path::PathBuf,
+    pin::pin,
+    sync::Arc,
+    task::{Context, Poll},
+    time::Duration,
+};
 use tokio::{
     sync::{oneshot, Mutex},
     time,
@@ -1049,6 +1057,133 @@ async fn graceful_shutdown_consolidates_most_recent_batch_on_startup() -> eyre::
     Ok(())
 }
 
+/// Test that when the rollup node manager is shutdown, it restarts with the head set to the latest
+/// sequenced block stored in database.
+#[tokio::test]
+async fn graceful_shutdown_sets_fcs_to_latest_sequenced_block_in_db_on_start_up() -> eyre::Result<()>
+{
+    reth_tracing::init_test_tracing();
+    let chain_spec = (*SCROLL_DEV).clone();
+
+    // Create a config with a random signer.
+    let mut config = default_sequencer_test_scroll_rollup_node_config();
+    config.signer_args.private_key = Some(PrivateKeySigner::random());
+
+    // Launch a node
+    let (mut nodes, _tasks, _) =
+        setup_engine(config.clone(), 1, chain_spec.clone(), false, false).await?;
+    let node = nodes.pop().unwrap();
+
+    // Instantiate the rollup node manager.
+    let test_db = setup_test_db().await;
+    let path = test_db.tmp_dir().expect("Database started with temp dir").path().join("test.db");
+    config.blob_provider_args.beacon_node_urls = Some(vec!["http://dummy:8545"
+        .parse()
+        .expect("valid url that will not be used as test batches use calldata")]);
+    config.hydrate(node.inner.config.clone()).await?;
+
+    let (_, events) = ScrollWireProtocolHandler::new(ScrollWireConfig::new(true));
+    let (mut rnm, handle, _) = config
+        .clone()
+        .build(
+            RollupNodeContext::new(
+                node.inner.network.clone(),
+                chain_spec.clone(),
+                path.clone(),
+                SCROLL_GAS_LIMIT,
+            ),
+            events,
+            node.inner.add_ons_handle.rpc_handle.rpc_server_handles.clone(),
+        )
+        .await?;
+
+    // Poll the rnm until we get an event stream listener.
+    let mut rnm_events_fut = pin!(handle.get_event_listener());
+    let mut rnm_events = loop {
+        let _ = rnm.poll_unpin(&mut Context::from_waker(noop_waker_ref()));
+        if let Poll::Ready(Result::Ok(events)) =
+            rnm_events_fut.as_mut().poll(&mut Context::from_waker(noop_waker_ref()))
+        {
+            break events;
+        }
+        tokio::time::sleep(Duration::from_millis(10)).await;
+    };
+
+    // Wait for the EN to be synced to block 10.
+    let execution_node_provider = node.inner.provider;
+    loop {
+        handle.build_block().await;
+        let block_number = loop {
+            let _ = rnm.poll_unpin(&mut Context::from_waker(noop_waker_ref()));
+            if let Poll::Ready(Some(RollupManagerEvent::BlockSequenced(block))) =
+                rnm_events.poll_next_unpin(&mut Context::from_waker(noop_waker_ref()))
+            {
+                break block.header.number
+            }
+            tokio::time::sleep(Duration::from_millis(10)).await;
+        };
+        if block_number == 10 {
+            break
+        }
+    }
+
+    // Get the block info for block 10.
+    let db_head_block_info = execution_node_provider
+        .block(10u64.into())?
+        .map(|b| BlockInfo { number: b.number, hash: b.hash_slow() })
+        .expect("block exists");
+
+    // Build one block, and only wait for the block sequenced event.
+    handle.build_block().await;
+    loop {
+        let _ = rnm.poll_unpin(&mut Context::from_waker(noop_waker_ref()));
+        if let Poll::Ready(Some(RollupManagerEvent::BlockSequenced(_))) =
+            rnm_events.poll_next_unpin(&mut Context::from_waker(noop_waker_ref()))
+        {
+            break
+        }
+        tokio::time::sleep(Duration::from_millis(10)).await;
+    }
+
+    // At this point, we have the EN synced to a block > 10 and the RNM has sequenced one additional
+    // block, validating it with the EN, but not updating the last sequenced block in the DB.
+
+    // Simulate a shutdown of the rollup node manager by dropping it.
+    drop(rnm_events);
+    drop(rnm);
+
+    // Start the RNM again.
+    let (_, events) = ScrollWireProtocolHandler::new(ScrollWireConfig::new(true));
+    let (_rnm, handle, _) = config
+        .clone()
+        .build(
+            RollupNodeContext::new(
+                node.inner.network.clone(),
+                chain_spec,
+                path.clone(),
+                SCROLL_GAS_LIMIT,
+            ),
+            events,
+            node.inner.add_ons_handle.rpc_handle.rpc_server_handles.clone(),
+        )
+        .await?;
+
+    // Launch the rnm in a task.
+    tokio::spawn(async move {
+        let _ = _rnm.await;
+    });
+
+    // Check the fcs.
+    let (tx, rx) = oneshot::channel();
+    handle.send_command(RollupManagerCommand::Status(tx)).await;
+    let status = rx.await?;
+
+    // The fcs should be set to the database head.
+    assert_eq!(status.forkchoice_state.head_block_info(), &db_head_block_info);
+
+    Ok(())
+}
+
 #[tokio::test]
 #[ignore = "Enable once we implement issue #273"]
 async fn can_handle_batch_revert() -> eyre::Result<()> {
@@ -1351,7 +1486,7 @@ async fn test_custom_genesis_block_production_and_propagation() -> eyre::Result<
                 }
             }
         },
-        "number": "0x0", 
+        "number": "0x0",
         "gasUsed": "0x0",
         "parentHash": "0x0000000000000000000000000000000000000000000000000000000000000000"
     }"#;
@@ -1580,7 +1715,7 @@ async fn can_reject_l2_block_with_unknown_l1_message() -> eyre::Result<()> {
     wait_for_event_5s(
         &mut node1_rnm_events,
         RollupManagerEvent::L1MessageMissingInDatabase {
-            start: L1MessageStart::Hash(b256!(
+            key: L1MessageKey::TransactionHash(b256!(
                 "0x0a2f8e75392ab51a26a2af835042c614eb141cd934fe1bdd4934c10f2fe17e98"
             )),
         },

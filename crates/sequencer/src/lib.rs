@@ -34,6 +34,7 @@ pub use event::SequencerEvent;
 
 mod metrics;
 pub use metrics::SequencerMetrics;
+use scroll_db::L1MessageKey;
 
 /// A type alias for the payload building job future.
 pub type PayloadBuildingJobFuture = Pin<Box<dyn Future<Output = PayloadId> + Send>>;

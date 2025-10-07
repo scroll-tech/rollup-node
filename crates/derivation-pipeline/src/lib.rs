@@ -33,7 +33,7 @@ use rollup_node_primitives::{
 use rollup_node_providers::{BlockDataProvider, L1Provider};
 use scroll_alloy_rpc_types_engine::{BlockDataHint, ScrollPayloadAttributes};
 use scroll_codec::{decoding::payload::PayloadData, Codec};
-use scroll_db::{Database, DatabaseReadOperations, DatabaseTransactionProvider, L1MessageStart};
+use scroll_db::{Database, DatabaseReadOperations, DatabaseTransactionProvider, L1MessageKey};
 use tokio::time::Interval;
 
 /// A future that resolves to a stream of [`ScrollPayloadAttributesWithBatchInfo`].
@@ -356,7 +356,7 @@ async fn iter_l1_messages_from_payload<L1P: L1Provider>(
 
     let messages = if let Some(index) = data.queue_index_start() {
         provider
-            .get_n_messages(L1MessageStart::index(index), total_l1_messages)
+            .get_n_messages(L1MessageKey::from_queue_index(index), total_l1_messages)
             .await
             .map_err(Into::into)?
     } else if let Some(hash) = data.prev_l1_message_queue_hash() {
@@ -367,19 +367,19 @@ async fn iter_l1_messages_from_payload<L1P: L1Provider>(
         if hash == &B256::ZERO {
             provider
                 .get_n_messages(
-                    L1MessageStart::index(l1_v2_message_queue_start_index),
+                    L1MessageKey::from_queue_index(l1_v2_message_queue_start_index),
                     total_l1_messages,
                 )
                 .await
                 .map_err(Into::into)?
         } else {
             let mut messages = provider
-                .get_n_messages((*hash).into(), total_l1_messages + 1)
+                .get_n_messages(L1MessageKey::from_queue_hash(*hash), total_l1_messages + 1)
                 .await
                 .map_err(Into::into)?;
             // we skip the first l1 message, as we are interested in the one starting after
             // prev_l1_message_queue_hash.
-            messages.pop();
+            messages.remove(0);
             messages
         }
     } else {
