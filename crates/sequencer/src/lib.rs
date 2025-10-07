@@ -14,9 +14,9 @@ use std::{
 use alloy_eips::eip2718::Encodable2718;
 use alloy_primitives::Address;
 use alloy_rpc_types_engine::PayloadAttributes;
-use futures::{task::AtomicWaker, Stream};
+use futures::{Stream, task::AtomicWaker};
 use reth_scroll_primitives::ScrollBlock;
-use rollup_node_primitives::{L1MessageEnvelope, DEFAULT_BLOCK_DIFFICULTY};
+use rollup_node_primitives::{DEFAULT_BLOCK_DIFFICULTY, L1MessageEnvelope};
 use rollup_node_providers::{L1MessageProvider, L1ProviderError};
 use scroll_alloy_consensus::ScrollTransaction;
 use scroll_alloy_rpc_types_engine::{BlockDataHint, ScrollPayloadAttributes};
@@ -123,7 +123,7 @@ where
     }
 
     /// Set the L1 finalized block number.
-    pub fn set_l1_finalized_block_number(&mut self, l1_finalized_block_number: u64) {
+    pub const fn set_l1_finalized_block_number(&mut self, l1_finalized_block_number: u64) {
         self.l1_finalized_block_number = l1_finalized_block_number;
     }
 
@@ -178,7 +178,7 @@ where
     }
 
     /// Handle a reorg event.
-    pub fn handle_reorg(&mut self, queue_index: Option<u64>, l1_block_number: u64) {
+    pub const fn handle_reorg(&mut self, queue_index: Option<u64>, l1_block_number: u64) {
         if let Some(index) = queue_index {
             self.l1_messages_queue_index = index;
         }
@@ -186,7 +186,7 @@ where
     }
 
     /// Handle a new L1 block.
-    pub fn handle_new_l1_block(&mut self, block_number: u64) {
+    pub const fn handle_new_l1_block(&mut self, block_number: u64) {
         self.l1_block_number = block_number;
     }
 

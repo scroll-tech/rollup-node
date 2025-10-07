@@ -3,9 +3,9 @@
 
 use alloy_consensus::Header;
 use alloy_eips::{BlockHashOrNumber, Encodable2718};
-use alloy_primitives::{b256, keccak256, B256};
+use alloy_primitives::{B256, b256, keccak256};
 use alloy_provider::Provider;
-use futures::{pin_mut, task::AtomicWaker, Stream, StreamExt, TryStreamExt};
+use futures::{Stream, StreamExt, TryStreamExt, pin_mut, task::AtomicWaker};
 use reth_chainspec::EthChainSpec;
 use reth_network_p2p::{BlockClient, BodiesClient};
 use reth_scroll_primitives::ScrollBlock;
@@ -26,8 +26,8 @@ use std::{
     collections::{HashMap, VecDeque},
     pin::Pin,
     sync::{
-        atomic::{AtomicU64, Ordering},
         Arc,
+        atomic::{AtomicU64, Ordering},
     },
     task::{Context, Poll},
     time::Instant,
@@ -92,10 +92,10 @@ pub struct ChainOrchestrator<ChainSpec, BC, P> {
 }
 
 impl<
-        ChainSpec: ScrollHardforks + EthChainSpec + Send + Sync + 'static,
-        BC: BlockClient<Block = ScrollBlock> + Send + Sync + 'static,
-        P: Provider<Scroll> + 'static,
-    > ChainOrchestrator<ChainSpec, BC, P>
+    ChainSpec: ScrollHardforks + EthChainSpec + Send + Sync + 'static,
+    BC: BlockClient<Block = ScrollBlock> + Send + Sync + 'static,
+    P: Provider<Scroll> + 'static,
+> ChainOrchestrator<ChainSpec, BC, P>
 {
     /// Creates a new chain orchestrator.
     pub async fn new(
@@ -143,17 +143,16 @@ impl<
         chain_orchestrator_fut: PendingChainOrchestratorFuture,
     ) -> PendingChainOrchestratorFuture {
         let metric = self.metrics.get(&item).expect("metric exists").clone();
-        let fut_wrapper = Box::pin(async move {
+        Box::pin(async move {
             let now = Instant::now();
             let res = chain_orchestrator_fut.await;
             metric.task_duration.record(now.elapsed().as_secs_f64());
             res
-        });
-        fut_wrapper
+        })
     }
 
     /// Sets the L1 synced status to the provided value.
-    pub fn set_l1_synced_status(&mut self, l1_synced: bool) {
+    pub const fn set_l1_synced_status(&mut self, l1_synced: bool) {
         self.l1_synced = l1_synced;
     }
 
@@ -888,10 +887,10 @@ async fn init_chain_from_db<P: Provider<Scroll> + 'static>(
 }
 
 impl<
-        ChainSpec: ScrollHardforks + 'static,
-        BC: BlockClient<Block = ScrollBlock> + Send + Sync + 'static,
-        P: Provider<Scroll> + Send + Sync + 'static,
-    > Stream for ChainOrchestrator<ChainSpec, BC, P>
+    ChainSpec: ScrollHardforks + 'static,
+    BC: BlockClient<Block = ScrollBlock> + Send + Sync + 'static,
+    P: Provider<Scroll> + Send + Sync + 'static,
+> Stream for ChainOrchestrator<ChainSpec, BC, P>
 {
     type Item = Result<ChainOrchestratorEvent, ChainOrchestratorError>;
 
@@ -1117,7 +1116,7 @@ mod test {
     use super::*;
     use alloy_consensus::Header;
     use alloy_eips::{BlockHashOrNumber, BlockNumHash};
-    use alloy_primitives::{address, bytes, B256, U256};
+    use alloy_primitives::{B256, U256, address, bytes};
     use alloy_provider::{ProviderBuilder, RootProvider};
     use alloy_transport::mock::Asserter;
     use arbitrary::{Arbitrary, Unstructured};
@@ -1126,15 +1125,15 @@ mod test {
     use rand::Rng;
     use reth_eth_wire_types::HeadersDirection;
     use reth_network_p2p::{
+        BodiesClient,
         download::DownloadClient,
         error::PeerRequestResult,
         headers::client::{HeadersClient, HeadersRequest},
         priority::Priority,
-        BodiesClient,
     };
     use reth_network_peers::{PeerId, WithPeerId};
     use reth_primitives_traits::Block;
-    use reth_scroll_chainspec::{ScrollChainSpec, SCROLL_MAINNET};
+    use reth_scroll_chainspec::{SCROLL_MAINNET, ScrollChainSpec};
     use rollup_node_primitives::BatchCommitData;
     use scroll_alloy_network::Scroll;
     use scroll_db::test_utils::setup_test_db;
@@ -1568,7 +1567,9 @@ mod test {
             to: address!("Ba50f5340FB9F3Bd074bD638c9BE13eCB36E603d"),
             value: U256::ZERO,
             sender: address!("61d8d3E7F7c656493d1d76aAA1a836CEdfCBc27b"),
-            input: bytes!("8ef1332e000000000000000000000000323522a8de3cddeddbb67094eecaebc2436d6996000000000000000000000000323522a8de3cddeddbb67094eecaebc2436d699600000000000000000000000000000000000000000000000000038d7ea4c6800000000000000000000000000000000000000000000000000000000000001034de00000000000000000000000000000000000000000000000000000000000000a00000000000000000000000000000000000000000000000000000000000000000"),
+            input: bytes!(
+                "8ef1332e000000000000000000000000323522a8de3cddeddbb67094eecaebc2436d6996000000000000000000000000323522a8de3cddeddbb67094eecaebc2436d699600000000000000000000000000000000000000000000000000038d7ea4c6800000000000000000000000000000000000000000000000000000000000001034de00000000000000000000000000000000000000000000000000000000000000a00000000000000000000000000000000000000000000000000000000000000000"
+            ),
         };
         chain_orchestrator.handle_l1_notification(L1Notification::L1Message {
             message: message.clone(),

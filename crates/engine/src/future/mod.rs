@@ -1,5 +1,5 @@
-use super::{payload::block_matches_attributes, EngineDriverError};
-use crate::{api::*, ForkchoiceState};
+use super::{EngineDriverError, payload::block_matches_attributes};
+use crate::{ForkchoiceState, api::*};
 
 use alloy_primitives::bytes::Bytes;
 use alloy_provider::Provider;
@@ -275,7 +275,7 @@ where
 {
     tracing::trace!(target: "scroll::engine::future", ?fcs, ?payload_attributes_with_batch_info, "handling payload attributes");
 
-    let ScrollPayloadAttributesWithBatchInfo { mut payload_attributes, batch_info } =
+    let ScrollPayloadAttributesWithBatchInfo { mut payload_attributes, batch_info, .. } =
         payload_attributes_with_batch_info.inner.clone();
 
     let maybe_execution_payload = provider

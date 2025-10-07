@@ -1,12 +1,12 @@
-use super::{future::EngineFuture, ForkchoiceState};
+use super::{ForkchoiceState, future::EngineFuture};
 use crate::{
+    EngineDriverError, EngineDriverEvent,
     future::{BuildNewPayloadFuture, EngineDriverFutureResult},
     metrics::EngineDriverMetrics,
-    EngineDriverError, EngineDriverEvent,
 };
 
 use alloy_provider::Provider;
-use futures::{ready, task::AtomicWaker, FutureExt, Stream};
+use futures::{FutureExt, Stream, ready, task::AtomicWaker};
 use rollup_node_primitives::{
     BlockInfo, ChainImport, MeteredFuture, ScrollPayloadAttributesWithBatchInfo, WithBlockNumber,
 };
@@ -100,22 +100,22 @@ where
     }
 
     /// Sets the finalized block info.
-    pub fn set_finalized_block_info(&mut self, block_info: BlockInfo) {
+    pub const fn set_finalized_block_info(&mut self, block_info: BlockInfo) {
         self.fcs.update_finalized_block_info(block_info);
     }
 
     /// Sets the safe block info.
-    pub fn set_safe_block_info(&mut self, block_info: BlockInfo) {
+    pub const fn set_safe_block_info(&mut self, block_info: BlockInfo) {
         self.fcs.update_safe_block_info(block_info);
     }
 
     /// Sets the head block info.
-    pub fn set_head_block_info(&mut self, block_info: BlockInfo) {
+    pub const fn set_head_block_info(&mut self, block_info: BlockInfo) {
         self.fcs.update_head_block_info(block_info);
     }
 
     /// Sets the payload building duration.
-    pub fn set_payload_building_duration(&mut self, block_building_duration: Duration) {
+    pub const fn set_payload_building_duration(&mut self, block_building_duration: Duration) {
         self.block_building_duration = block_building_duration;
     }
 
