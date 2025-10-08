@@ -1,7 +1,7 @@
-use std::sync::Arc;
-
 use super::{BlockInfo, L2BlockInfoWithL1Messages};
+
 use alloy_primitives::{Bytes, B256};
+use std::{sync::Arc, vec::Vec};
 
 /// The batch information.
 #[derive(Debug, Copy, Clone, Default, PartialEq, Eq)]
