@@ -39,7 +39,7 @@ impl<N: FullNetwork<Primitives = ScrollNetworkPrimitives>> ChainOrchestratorHand
     }
 
     /// Sends a command to the rollup manager to build a block.
-    pub async fn build_block(&self) {
+    pub fn build_block(&self) {
         self.send_command(ChainOrchestratorCommand::BuildBlock);
     }
 
@@ -63,8 +63,10 @@ impl<N: FullNetwork<Primitives = ScrollNetworkPrimitives>> ChainOrchestratorHand
     }
 
     /// Sends a command to the rollup manager to update the head of the FCS in the engine driver.
-    pub async fn update_fcs_head(&self, head: BlockInfo) {
-        self.send_command(ChainOrchestratorCommand::UpdateFcsHead(head));
+    pub async fn update_fcs_head(&self, head: BlockInfo) -> Result<(), oneshot::error::RecvError> {
+        let (tx, rx) = oneshot::channel();
+        self.send_command(ChainOrchestratorCommand::UpdateFcsHead((head, tx)));
+        rx.await
     }
 
     /// Sends a command to the rollup manager to enable automatic sequencing.
@@ -85,6 +87,14 @@ impl<N: FullNetwork<Primitives = ScrollNetworkPrimitives>> ChainOrchestratorHand
     pub async fn status(&self) -> Result<ChainOrchestratorStatus, oneshot::error::RecvError> {
         let (tx, rx) = oneshot::channel();
         self.send_command(ChainOrchestratorCommand::Status(tx));
+        rx.await
+    }
+
+    /// Sends a command to the rollup manager to enable or disable gossiping of blocks to peers.
+    #[cfg(feature = "test-utils")]
+    pub async fn set_gossip(&self, enabled: bool) -> Result<(), oneshot::error::RecvError> {
+        let (tx, rx) = oneshot::channel();
+        self.send_command(ChainOrchestratorCommand::SetGossip((enabled, tx)));
         rx.await
     }
 }

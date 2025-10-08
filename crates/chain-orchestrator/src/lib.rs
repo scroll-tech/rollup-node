@@ -30,7 +30,7 @@ use scroll_db::{
     Database, DatabaseError, DatabaseReadOperations, DatabaseTransactionProvider,
     DatabaseWriteOperations, L1MessageKey, UnwindResult,
 };
-use scroll_derivation_pipeline::{BatchDerivationResult, DerivationPipelineNew};
+use scroll_derivation_pipeline::{BatchDerivationResult, DerivationPipeline};
 use scroll_engine::Engine;
 use scroll_network::{
     BlockImportOutcome, NewBlockWithPeer, ScrollNetwork, ScrollNetworkManagerEvent,
@@ -80,10 +80,10 @@ use crate::consolidation::BlockConsolidationAction;
 const L1_MESSAGE_QUEUE_HASH_MASK: B256 =
     b256!("ffffffffffffffffffffffffffffffffffffffffffffffffffffffff00000000");
 
+/// The number of headers to fetch in each request when fetching headers from peers.
 const HEADER_FETCH_COUNT: u64 = 4000;
 
-const CONSOLIDATION_BATCH_SIZE: u64 = 500;
-
+/// The size of the event channel used to broadcast events to listeners.
 const EVENT_CHANNEL_SIZE: usize = 5000;
 
 /// The [`ChainOrchestrator`] is responsible for orchestrating the progression of the L2 chain
@@ -124,7 +124,7 @@ pub struct ChainOrchestrator<
     /// The signer used to sign messages.
     signer: Option<SignerHandle>,
     /// The derivation pipeline used to derive L2 blocks from batches.
-    derivation_pipeline: DerivationPipelineNew<L1P>,
+    derivation_pipeline: DerivationPipeline<L1P>,
     /// Optional event sender for broadcasting events to listeners.
     event_sender: Option<EventSender<ChainOrchestratorEvent>>,
 }
@@ -139,6 +139,7 @@ impl<
     > ChainOrchestrator<N, ChainSpec, L1P, L1MP, L2P, EC>
 {
     /// Creates a new chain orchestrator.
+    #[allow(clippy::too_many_arguments)]
     pub async fn new(
         database: Arc<Database>,
         config: ChainOrchestratorConfig<ChainSpec>,
@@ -150,7 +151,7 @@ impl<
         engine: Engine<EC>,
         sequencer: Option<Sequencer<L1MP, ChainSpec>>,
         signer: Option<SignerHandle>,
-        derivation_pipeline: DerivationPipelineNew<L1P>,
+        derivation_pipeline: DerivationPipeline<L1P>,
     ) -> Result<(Self, ChainOrchestratorHandle<N>), ChainOrchestratorError> {
         let (handle_tx, handle_rx) = mpsc::unbounded_channel();
         let handle = ChainOrchestratorHandle::new(handle_tx);
@@ -211,7 +212,7 @@ impl<
                     } else {
                         unreachable!()
                     }
-                }, if self.sequencer.is_some() => {
+                }, if self.sequencer.is_some() && self.sync_state.is_synced() => {
                     let res = self.handle_sequencer_event(event).await;
                     self.handle_outcome(res);
                 }
@@ -223,7 +224,7 @@ impl<
                     let res = self.handle_network_event(event).await;
                     self.handle_outcome(res);
                 }
-                Some(notification) = self.l1_notification_rx.recv(), if self.sync_state.l2().is_synced() && self.derivation_pipeline.len().await == 0 => {
+                Some(notification) = self.l1_notification_rx.recv(), if self.sync_state.l2().is_synced() && self.derivation_pipeline.is_empty().await => {
                     let res = self.handle_l1_notification(notification).await;
                     self.handle_outcome(res);
                 }
@@ -238,18 +239,18 @@ impl<
         &self,
         outcome: Result<Option<ChainOrchestratorEvent>, ChainOrchestratorError>,
     ) {
-        match (outcome, self.event_sender.as_ref()) {
-            (Ok(Some(event)), Some(sender)) => sender.notify(event),
-            (Err(err), _) => {
+        match outcome {
+            Ok(Some(event)) => self.notify(event),
+            Err(err) => {
                 tracing::error!(target: "scroll::chain_orchestrator", ?err, "Encountered error in the chain orchestrator");
             }
-            _ => {}
+            Ok(None) => {}
         }
     }
 
     /// Handles an event from the signer.
     async fn handle_signer_event(
-        &mut self,
+        &self,
         event: rollup_node_signer::SignerEvent,
     ) -> Result<Option<ChainOrchestratorEvent>, ChainOrchestratorError> {
         tracing::info!(target: "scroll::chain_orchestrator", ?event, "Handling signer event");
@@ -337,8 +338,13 @@ impl<
             ChainOrchestratorCommand::NetworkHandle(tx) => {
                 let _ = tx.send(self.network.handle().clone());
             }
-            ChainOrchestratorCommand::UpdateFcsHead(_head) => {
-                todo!()
+            ChainOrchestratorCommand::UpdateFcsHead((head, sender)) => {
+                self.engine.update_fcs(Some(head), None, None).await?;
+                let tx = self.database.tx_mut().await?;
+                tx.purge_l1_message_to_l2_block_mappings(Some(head.number + 1)).await?;
+                tx.commit().await?;
+                self.notify(ChainOrchestratorEvent::FcsHeadUpdated(head));
+                let _ = sender.send(());
             }
             ChainOrchestratorCommand::EnableAutomaticSequencing(tx) => {
                 if let Some(sequencer) = self.sequencer.as_mut() {
@@ -358,6 +364,11 @@ impl<
                     let _ = tx.send(false);
                 }
             }
+            #[cfg(feature = "test-utils")]
+            ChainOrchestratorCommand::SetGossip((enabled, tx)) => {
+                self.network.handle().set_gossip(enabled).await;
+                let _ = tx.send(());
+            }
         }
 
         Ok(())
@@ -374,6 +385,13 @@ impl<
         self.event_sender = Some(event_sender);
 
         event_listener
+    }
+
+    /// Notifies all event listeners of the given event.
+    fn notify(&self, event: ChainOrchestratorEvent) {
+        if let Some(s) = self.event_sender.as_ref() {
+            s.notify(event);
+        }
     }
 
     /// Handles a derived batch by inserting the derived blocks into the database.
@@ -435,9 +453,9 @@ impl<
                     BlockConsolidationOutcome::Reorged(block_info)
                 }
             };
-            self.event_sender
-                .as_ref()
-                .map(|s| s.notify(ChainOrchestratorEvent::BlockConsolidated(outcome.clone())));
+
+            self.notify(ChainOrchestratorEvent::BlockConsolidated(outcome.clone()));
+
             batch_consolidation_result.push_block(outcome);
         }
 
@@ -470,12 +488,11 @@ impl<
             }
             L1Notification::Synced => {
                 tracing::info!(target: "scroll::chain_orchestrator", "L1 is now synced");
-                println!("L1 is now synced");
                 self.sync_state.l1_mut().set_synced();
                 if self.sync_state.is_synced() {
                     self.consolidate_chain().await?;
                 }
-                self.event_sender.as_ref().map(|s| s.notify(ChainOrchestratorEvent::L1Synced));
+                self.notify(ChainOrchestratorEvent::L1Synced);
                 Ok(None)
             }
             L1Notification::BatchFinalization { hash: _hash, index, block_number } => {
@@ -485,7 +502,7 @@ impl<
     }
 
     async fn handle_l1_new_block(
-        &mut self,
+        &self,
         block_number: u64,
     ) -> Result<Option<ChainOrchestratorEvent>, ChainOrchestratorError> {
         Retry::default()
@@ -506,7 +523,6 @@ impl<
         &mut self,
         block_number: u64,
     ) -> Result<Option<ChainOrchestratorEvent>, ChainOrchestratorError> {
-        println!("handling l1 reorg to block number {}", block_number);
         let metric = self.metrics.get(&ChainOrchestratorItem::L1Reorg).expect("metric exists");
         let now = Instant::now();
         let UnwindResult { l1_block_number, queue_index, l2_head_block_number, l2_safe_block_info } =
@@ -540,30 +556,34 @@ impl<
                 .header
                 .hash_slow();
 
+            // Cancel the inflight payload building job if the head has changed.
+            if let Some(s) = self.sequencer.as_mut() {
+                s.cancel_payload_building_job();
+            };
+
             Some(BlockInfo { number: block_number, hash: block_hash })
         } else {
             None
         };
+
+        // If the L1 reorg is before the origin of the inflight payload building job, cancel it.
+        if Some(l1_block_number) <
+            self.sequencer
+                .as_ref()
+                .and_then(|s| s.payload_building_job().map(|p| p.l1_origin()))
+                .flatten()
+        {
+            if let Some(s) = self.sequencer.as_mut() {
+                s.cancel_payload_building_job();
+            };
+        }
 
         // TODO: Add retry logic
         if l2_head_block_info.is_some() || l2_safe_block_info.is_some() {
             self.engine.update_fcs(l2_head_block_info, l2_safe_block_info, None).await?;
         }
 
-        if let Some(block_info) = l2_head_block_info {
-            Retry::default()
-                .retry("set_l2_head_block_info", || async {
-                    let tx = self.database.tx_mut().await?;
-                    tx.set_l2_head_block_number(block_info.number).await?;
-                    tx.commit().await?;
-                    Ok::<_, ChainOrchestratorError>(())
-                })
-                .await?;
-        }
-
         metric.task_duration.record(now.elapsed().as_secs_f64());
-
-        println!("completed the reorg notification");
 
         let event = ChainOrchestratorEvent::L1Reorg {
             l1_block_number,
@@ -571,8 +591,6 @@ impl<
             l2_head_block_info,
             l2_safe_block_info,
         };
-
-        println!("event {:?}", event);
 
         Ok(Some(event))
     }
@@ -606,7 +624,7 @@ impl<
             .await?;
 
         for batch in &finalized_batches {
-            self.derivation_pipeline.push(Arc::new(*batch)).await;
+            self.derivation_pipeline.push_batch(Arc::new(*batch)).await;
         }
 
         metric.task_duration.record(now.elapsed().as_secs_f64());
@@ -702,7 +720,7 @@ impl<
 
         if let Ok(Some(ChainOrchestratorEvent::BatchFinalized(_, batches))) = &event {
             for batch in batches {
-                self.derivation_pipeline.push(Arc::new(*batch)).await;
+                self.derivation_pipeline.push_batch(Arc::new(*batch)).await;
             }
         }
 
@@ -774,9 +792,7 @@ impl<
     ) -> Result<Option<ChainOrchestratorEvent>, ChainOrchestratorError> {
         match event {
             ScrollNetworkManagerEvent::NewBlock(block_with_peer) => {
-                self.event_sender.as_ref().map(|s| {
-                    s.notify(ChainOrchestratorEvent::NewBlockReceived(block_with_peer.clone()))
-                });
+                self.notify(ChainOrchestratorEvent::NewBlockReceived(block_with_peer.clone()));
                 Ok(self.handle_block_from_peer(block_with_peer).await?)
             }
         }
@@ -806,11 +822,8 @@ impl<
 
         // We optimistically persist the signature upon passing consensus checks.
         let tx = self.database.tx_mut().await?;
-        tx.insert_signature(
-            block_with_peer.block.header.hash_slow(),
-            block_with_peer.signature.clone(),
-        )
-        .await?;
+        tx.insert_signature(block_with_peer.block.header.hash_slow(), block_with_peer.signature)
+            .await?;
         tx.commit().await?;
 
         let received_block_number = block_with_peer.block.number;
@@ -829,9 +842,7 @@ impl<
             self.engine.optimistic_sync(block_info).await?;
             self.sync_state.l2_mut().set_syncing();
 
-            self.event_sender
-                .as_ref()
-                .map(|s| s.notify(ChainOrchestratorEvent::OptimisticSync(block_info)));
+            self.notify(ChainOrchestratorEvent::OptimisticSync(block_info));
 
             // Purge all L1 message to L2 block mappings as they may be invalid after an
             // optimistic sync.
@@ -848,7 +859,7 @@ impl<
             let block_number_diff = received_block_number - current_head_number;
             let new_headers = if received_block_number > current_head_number + 1 {
                 self.block_client
-                    .get_full_block_range(received_block_hash.into(), block_number_diff)
+                    .get_full_block_range(received_block_hash, block_number_diff)
                     .await
                     .into_iter()
                     .rev()
@@ -869,28 +880,28 @@ impl<
 
             VecDeque::from(new_headers)
         } else {
-            // Assert that we are not reorging below the safe head.
-            let current_safe_info = self.engine.fcs().safe_block_info();
-            if received_block_number <= current_safe_info.number {
-                tracing::debug!(target: "scroll::chain_orchestrator", ?received_block_hash, ?received_block_number, current_safe_info = ?self.engine.fcs().safe_block_info(), "Received block from peer that would reorg below the safe head - ignoring");
-                return Err(ChainOrchestratorError::L2SafeBlockReorgDetected);
-            }
-
             // If the block is less than or equal to the current head check if we already have it in
             // the chain.
-            println!("checking if we already have the block in the chain");
             let current_chain_block = self
                 .l2_client
                 .get_block_by_number(received_block_number.into())
                 .full()
                 .await?
                 .ok_or(ChainOrchestratorError::L2BlockNotFoundInL2Client(received_block_number))?;
+
             if current_chain_block.header.hash_slow() == received_block_hash {
                 tracing::debug!(target: "scroll::chain_orchestrator", ?received_block_hash, ?received_block_number, "Received block from peer that is already in the chain");
                 return Ok(Some(ChainOrchestratorEvent::BlockAlreadyKnown(
                     received_block_hash,
                     block_with_peer.peer_id,
                 )));
+            }
+
+            // Assert that we are not reorging below the safe head.
+            let current_safe_info = self.engine.fcs().safe_block_info();
+            if received_block_number <= current_safe_info.number {
+                tracing::debug!(target: "scroll::chain_orchestrator", ?received_block_hash, ?received_block_number, current_safe_info = ?self.engine.fcs().safe_block_info(), "Received block from peer that would reorg below the safe head - ignoring");
+                return Err(ChainOrchestratorError::L2SafeBlockReorgDetected);
             }
 
             // Check to assert that we have received a newer chain.
@@ -939,7 +950,7 @@ impl<
             let fetch_count = HEADER_FETCH_COUNT.min(parent_number - current_safe_head.number);
             let headers: Vec<ScrollBlock> = self
                 .block_client
-                .get_full_block_range(parent_hash.into(), fetch_count)
+                .get_full_block_range(parent_hash, fetch_count)
                 .await
                 .into_iter()
                 .rev()
@@ -967,14 +978,16 @@ impl<
                 }
                 let chain_import = self.import_chain(new_headers.into(), block_with_peer).await?;
                 return Ok(Some(ChainOrchestratorEvent::ChainReorged(chain_import)));
-            } else {
-                for header in headers.into_iter().rev() {
-                    new_headers.push_front(header);
-                }
+            };
+
+            // If we did not find a common ancestor, we add all the fetched headers to the front of
+            // the deque and continue fetching.
+            for header in headers.into_iter().rev() {
+                new_headers.push_front(header);
             }
         }
 
-        return Err(ChainOrchestratorError::L2SafeBlockReorgDetected)
+        Err(ChainOrchestratorError::L2SafeBlockReorgDetected)
     }
 
     /// Imports a chain of headers into the L2 chain.
@@ -993,8 +1006,8 @@ impl<
         }
 
         // Validate the new blocks by sending them to the engine.
-        for block in chain.iter() {
-            let status = self.engine.new_payload(&block).await?;
+        for block in &chain {
+            let status = self.engine.new_payload(block).await?;
             tracing::debug!(target: "scroll::chain_orchestrator", block_number = block.number, block_hash = ?block.hash_slow(), ?status, "New payload status from engine");
 
             if status.is_invalid() {
@@ -1052,7 +1065,7 @@ impl<
             Bytes::copy_from_slice(&block_with_peer.signature.sig_as_bytes()),
         ));
 
-        return Ok(ChainImport {
+        Ok(ChainImport {
             chain,
             peer_id: block_with_peer.peer_id,
             signature: block_with_peer.signature,
@@ -1064,38 +1077,50 @@ impl<
     ///
     /// This involves validating the L1 messages in the blocks against the expected L1 messages
     /// synced from L1.
-    async fn consolidate_chain(&mut self) -> Result<(), ChainOrchestratorError> {
+    async fn consolidate_chain(&self) -> Result<(), ChainOrchestratorError> {
         tracing::trace!(target: "scroll::chain_orchestrator", fcs = ?self.engine.fcs(), "Consolidating chain from safe to head");
 
-        let mut start_block_number = self.engine.fcs().safe_block_info().number + 1;
-        let end_block_number = self.engine.fcs().head_block_info().number;
-        println!("consolidating chain from block {} to {}", start_block_number, end_block_number);
+        let safe_block_number = self.engine.fcs().safe_block_info().number;
+        let head_block_number = self.engine.fcs().head_block_info().number;
 
-        while start_block_number <= end_block_number {
-            let batch_end =
-                (start_block_number + CONSOLIDATION_BATCH_SIZE - 1).min(end_block_number);
-            println!("consolidating batch from block {} to {}", start_block_number, batch_end);
-            tracing::trace!(target: "scroll::chain_orchestrator", start_block = ?start_block_number, end_block = ?batch_end, "Consolidating batch of blocks");
+        if head_block_number == safe_block_number {
+            tracing::trace!(target: "scroll::chain_orchestrator", "No unsafe blocks to consolidate");
 
-            // TODO: Make fetching parallel but ensure concurrency limits are respected.
-            let mut blocks_to_validate = vec![];
-            for block_number in start_block_number..=batch_end {
-                println!("fetching block {}", block_number);
-                let block = self
-                    .l2_client
-                    .get_block_by_number(block_number.into())
-                    .full()
-                    .await?
-                    .ok_or(ChainOrchestratorError::L2BlockNotFoundInL2Client(block_number))?
-                    .into_consensus()
-                    .map_transactions(|tx| tx.inner.into_inner());
-                blocks_to_validate.push(block);
-            }
-
-            self.validate_l1_messages(&blocks_to_validate).await?;
-
-            start_block_number = batch_end + 1;
+            self.notify(ChainOrchestratorEvent::ChainConsolidated {
+                from: safe_block_number,
+                to: head_block_number,
+            });
+            return Ok(())
         }
+
+        let start_block_number = safe_block_number + 1;
+        // TODO: Make fetching parallel but ensure concurrency limits are respected.
+        let mut blocks_to_validate = vec![];
+        for block_number in start_block_number..=head_block_number {
+            let block = self
+                .l2_client
+                .get_block_by_number(block_number.into())
+                .full()
+                .await?
+                .ok_or(ChainOrchestratorError::L2BlockNotFoundInL2Client(block_number))?
+                .into_consensus()
+                .map_transactions(|tx| tx.inner.into_inner());
+            blocks_to_validate.push(block);
+        }
+
+        self.validate_l1_messages(&blocks_to_validate).await?;
+
+        let tx = self.database.tx_mut().await?;
+        tx.update_l1_messages_from_l2_blocks(
+            blocks_to_validate.into_iter().map(|b| (&b).into()).collect(),
+        )
+        .await?;
+        tx.commit().await?;
+
+        self.notify(ChainOrchestratorEvent::ChainConsolidated {
+            from: safe_block_number,
+            to: head_block_number,
+        });
 
         Ok(())
     }
@@ -1106,44 +1131,64 @@ impl<
         &self,
         blocks: &[ScrollBlock],
     ) -> Result<(), ChainOrchestratorError> {
-        let first_block_number = if let Some(block) = blocks.first() {
-            block.number
-        } else {
+        let l1_message_hashes = blocks
+            .iter()
+            .flat_map(|block| {
+                // Get the L1 messages from the block body.
+                block
+                    .body
+                    .transactions()
+                    .filter(|&tx| tx.is_l1_message())
+                    // The hash for L1 messages is the trie hash of the transaction.
+                    .map(|tx| tx.trie_hash())
+                    .collect::<Vec<B256>>()
+            })
+            .collect::<Vec<B256>>();
+
+        // No L1 messages in the blocks, nothing to validate.
+        if l1_message_hashes.is_empty() {
             return Ok(());
+        }
+
+        let first_block_number =
+            blocks.first().expect("at least one block exists because we have l1 messages").number;
+        let tx = self.database.tx().await?;
+        let mut database_messages = if let Some(database_messages) =
+            tx.get_l1_messages(Some(L1MessageKey::block_number(first_block_number))).await?
+        {
+            database_messages
+        } else {
+            return Err(ChainOrchestratorError::L1MessageNotFound(L1MessageKey::TransactionHash(
+                *l1_message_hashes.first().expect("at least one message exists"),
+            )))
         };
 
-        let tx = self.database.tx().await?;
-        let mut database_txs =
-            tx.get_l1_messages(Some(L1MessageKey::block_number(first_block_number))).await?;
-        for block in blocks {
-            let block_txs =
-                block.body.transactions().filter(|tx| tx.is_l1_message()).map(|tx| tx.trie_hash());
+        for message_hash in l1_message_hashes {
+            // Get the expected L1 message from the database.
+            let expected_hash = database_messages
+                .next()
+                .await
+                .map(|m| m.map(|msg| msg.transaction.tx_hash()))
+                .transpose()?
+                .ok_or(ChainOrchestratorError::L1MessageNotFound(L1MessageKey::TransactionHash(
+                    message_hash,
+                )))
+                .inspect_err(|_| {
+                    self.notify(ChainOrchestratorEvent::L1MessageNotFoundInDatabase(
+                        L1MessageKey::TransactionHash(message_hash),
+                    ));
+                })?;
 
-            // If we have L1 messages in the block we validate them against the expected L1
-            // messages from the database.
-            for tx in block_txs {
-                let expected_message = if let Some(txs) = database_txs.as_mut() {
-                    txs.next().await.transpose()?
-                } else {
-                    None
-                };
-                if let Some(expected_message) = expected_message {
-                    if expected_message.transaction.tx_hash() != tx {
-                        return Err(ChainOrchestratorError::L1MessageMismatch {
-                            expected: expected_message.transaction.tx_hash(),
-                            actual: tx,
-                        })
-                    }
-                } else {
-                    self.event_sender.as_ref().map(|sender| {
-                        sender.notify(ChainOrchestratorEvent::L1MessageNotFoundInDatabase(
-                            L1MessageKey::TransactionHash(tx),
-                        ));
-                    });
-                    return Err(ChainOrchestratorError::L1MessageNotFound(
-                        L1MessageKey::TransactionHash(tx),
-                    ))
-                }
+            // If the received and expected L1 messages do not match return an error.
+            if message_hash != expected_hash {
+                self.notify(ChainOrchestratorEvent::L1MessageMismatch {
+                    expected: expected_hash,
+                    actual: message_hash,
+                });
+                return Err(ChainOrchestratorError::L1MessageMismatch {
+                    expected: expected_hash,
+                    actual: message_hash,
+                });
             }
         }
 

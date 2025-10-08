@@ -45,7 +45,6 @@ eyre.workspace = true
 alloy-consensus.workspace = true
 alloy-primitives.workspace = true
 
-rollup-node-manager.workspace = true
 rollup-node-signer.workspace = true
 
 # scroll-alloy

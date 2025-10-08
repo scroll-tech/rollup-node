@@ -58,12 +58,12 @@ pub enum EngineError {
 
 impl EngineError {
     /// Creates a new [`EngineError`] for a [`FcsError::NoUpdateProvided`].
-    pub fn fcs_no_update_provided() -> Self {
+    pub const fn fcs_no_update_provided() -> Self {
         Self::FcsError(FcsError::NoUpdateProvided)
     }
 
     /// Creates a new [`EngineError`] for a [`FcsError::FinalizedBlockNumberNotIncreasing`].
-    pub fn fcs_finalized_block_number_not_increasing() -> Self {
+    pub const fn fcs_finalized_block_number_not_increasing() -> Self {
         Self::FcsError(FcsError::FinalizedBlockNumberNotIncreasing)
     }
 }

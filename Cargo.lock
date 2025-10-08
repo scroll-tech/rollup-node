@@ -10782,7 +10782,6 @@ dependencies = [
  "reth-trie-db",
  "rollup-node",
  "rollup-node-chain-orchestrator",
- "rollup-node-manager",
  "rollup-node-primitives",
  "rollup-node-providers",
  "rollup-node-sequencer",
@@ -10862,48 +10861,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "rollup-node-manager"
-version = "0.0.1"
-dependencies = [
- "alloy-chains",
- "alloy-consensus 1.0.30",
- "alloy-eips 1.0.30",
- "alloy-primitives",
- "alloy-provider",
- "alloy-rpc-types-engine 1.0.30",
- "futures",
- "metrics",
- "metrics-derive",
- "reth-chainspec",
- "reth-network",
- "reth-network-api",
- "reth-primitives-traits",
- "reth-scroll-node",
- "reth-scroll-primitives",
- "reth-tasks",
- "reth-tokio-util",
- "rollup-node-chain-orchestrator",
- "rollup-node-primitives",
- "rollup-node-providers",
- "rollup-node-sequencer",
- "rollup-node-signer",
- "rollup-node-watcher",
- "scroll-alloy-consensus",
- "scroll-alloy-hardforks",
- "scroll-alloy-network",
- "scroll-alloy-provider",
- "scroll-alloy-rpc-types-engine",
- "scroll-db",
- "scroll-derivation-pipeline",
- "scroll-engine",
- "scroll-network",
- "scroll-wire",
- "tokio",
- "tokio-stream",
- "tracing",
-]
-
-[[package]]
 name = "rollup-node-primitives"
 version = "0.0.1"
 dependencies = [
@@ -10975,7 +10932,6 @@ dependencies = [
  "reth-tracing",
  "rollup-node",
  "rollup-node-chain-orchestrator",
- "rollup-node-manager",
  "rollup-node-primitives",
  "rollup-node-providers",
  "rollup-node-sequencer",
@@ -11626,16 +11582,11 @@ dependencies = [
  "reth-scroll-primitives",
  "reth-testing-utils",
  "rollup-node-primitives",
- "rollup-node-providers",
- "rollup-node-signer",
  "scroll-alloy-consensus",
  "scroll-alloy-hardforks",
  "scroll-alloy-network",
  "scroll-alloy-provider",
  "scroll-alloy-rpc-types-engine",
- "scroll-db",
- "scroll-engine",
- "scroll-network",
  "thiserror 2.0.16",
  "tokio",
  "tracing",

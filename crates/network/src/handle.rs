@@ -76,14 +76,26 @@ impl<N: FullNetwork> ScrollNetworkHandle<N> {
         self.send_message(NetworkHandleMessage::EventListener(tx));
         rx.await.expect("network manager dropped")
     }
+
+    #[cfg(feature = "test-utils")]
+    pub async fn set_gossip(&self, enabled: bool) {
+        let (tx, rx) = oneshot::channel();
+        self.send_message(NetworkHandleMessage::SetGossip((enabled, tx)));
+        rx.await.expect("network manager dropped");
+    }
 }
 
 /// A message type used for communication between the [`ScrollNetworkHandle`] and the
 /// [`super::ScrollNetworkManager`].
 #[derive(Debug)]
 pub enum NetworkHandleMessage {
-    AnnounceBlock { block: ScrollBlock, signature: Signature },
+    AnnounceBlock {
+        block: ScrollBlock,
+        signature: Signature,
+    },
     BlockImportOutcome(super::BlockImportOutcome),
     Shutdown(oneshot::Sender<()>),
     EventListener(oneshot::Sender<EventStream<ScrollNetworkManagerEvent>>),
+    #[cfg(feature = "test-utils")]
+    SetGossip((bool, oneshot::Sender<()>)),
 }

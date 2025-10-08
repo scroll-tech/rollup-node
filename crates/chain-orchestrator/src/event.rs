@@ -85,10 +85,26 @@ pub enum ChainOrchestratorEvent {
     },
     /// An L1 message was not found in the database.
     L1MessageNotFoundInDatabase(L1MessageKey),
+    /// A block contains invalid L1 messages.
+    L1MessageMismatch {
+        /// The expected L1 messages hash.
+        expected: B256,
+        /// The actual L1 messages hash.
+        actual: B256,
+    },
     /// A new block has been received from the network.
     NewBlockReceived(NewBlockWithPeer),
     /// A batch consolidation has occurred, returning the outcome of the consolidation.
     BatchConsolidated(BatchConsolidationOutcome),
     /// An L1 derived block has been consolidated, returning the outcome of the consolidation.
     BlockConsolidated(BlockConsolidationOutcome),
+    /// The chain has been consolidated from `from` block number to `to` block number (inclusive).
+    ChainConsolidated {
+        /// The starting block number of the consolidation (safe block number).
+        from: u64,
+        /// The ending block number of the consolidation (head block number).
+        to: u64,
+    },
+    /// The head of the fork choice state has been updated in the engine driver.
+    FcsHeadUpdated(BlockInfo),
 }

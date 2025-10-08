@@ -1,5 +1,7 @@
 use super::{EngineError, ForkchoiceState};
-use alloy_rpc_types_engine::{ExecutionPayloadV1, ForkchoiceUpdated, PayloadStatus};
+use alloy_rpc_types_engine::{
+    ExecutionPayloadV1, ForkchoiceUpdated, PayloadStatus, PayloadStatusEnum,
+};
 use reth_scroll_primitives::ScrollBlock;
 use rollup_node_primitives::BlockInfo;
 use scroll_alloy_provider::ScrollEngineApi;
@@ -19,12 +21,12 @@ where
     EC: ScrollEngineApi + Sync + 'static,
 {
     /// Create a new [`Engine`].
-    pub fn new(client: Arc<EC>, fcs: ForkchoiceState) -> Self {
+    pub const fn new(client: Arc<EC>, fcs: ForkchoiceState) -> Self {
         Self { client, fcs }
     }
 
     /// Get a reference to the current fork choice state.
-    pub fn fcs(&self) -> &ForkchoiceState {
+    pub const fn fcs(&self) -> &ForkchoiceState {
         &self.fcs
     }
 
@@ -46,6 +48,21 @@ where
 
         // send the fcs update request to the engine
         let result = self.client.fork_choice_updated_v1(fcs.get_alloy_fcs(), None).await?;
+
+        match &result.payload_status.status {
+            PayloadStatusEnum::Invalid { validation_error } => {
+                tracing::error!(target: "scroll::engine", ?validation_error, "failed to issue forkchoice");
+            }
+            PayloadStatusEnum::Syncing => {
+                tracing::debug!(target: "scroll::engine", "head has been seen before, but not part of the chain");
+            }
+            PayloadStatusEnum::Accepted => {
+                unreachable!("forkchoice update should never return an `Accepted` status");
+            }
+            PayloadStatusEnum::Valid => {
+                tracing::trace!(target: "scroll::engine", "forkchoice updated");
+            }
+        };
 
         // update the internal fcs state if the update was successful
         // If the result is invalid, do not update the fcs
@@ -87,6 +104,22 @@ where
         tracing::trace!(target: "scroll::engine", block_number = block.number, block_hash = ?block.hash_slow(), "Submitting new payload to engine");
         let payload = ExecutionPayloadV1::from_block_slow(block);
         let result = self.client.new_payload_v1(payload).await?;
+
+        match &result.status {
+            PayloadStatusEnum::Invalid { validation_error } => {
+                tracing::error!(target: "scroll::engine", ?validation_error, "execution payload is invalid");
+            }
+            PayloadStatusEnum::Syncing => {
+                tracing::debug!(target: "scroll::engine", "execution client is syncing");
+            }
+            PayloadStatusEnum::Accepted => {
+                tracing::error!(target: "scroll::engine", "execution payload part of side chain");
+            }
+            PayloadStatusEnum::Valid => {
+                tracing::trace!(target: "scroll::engine", "execution payload valid");
+            }
+        };
+
         Ok(result)
     }
 
@@ -106,6 +139,8 @@ where
         let result =
             self.client.fork_choice_updated_v1(fcs.get_alloy_fcs(), Some(attributes)).await?;
 
+        tracing::trace!(target: "scroll::engine", ?result, "Build new payload request completed");
+
         Ok(result)
     }
 
@@ -114,6 +149,7 @@ where
         &self,
         payload_id: alloy_rpc_types_engine::PayloadId,
     ) -> Result<ExecutionPayloadV1, EngineError> {
+        tracing::trace!(target: "scroll::engine", ?payload_id, "Getting payload by ID");
         let payload = self.client.get_payload_v1(payload_id).await?;
         Ok(payload)
     }

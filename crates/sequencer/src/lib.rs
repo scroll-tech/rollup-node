@@ -72,7 +72,7 @@ where
     }
 
     /// Returns a reference to the payload building job.
-    pub fn payload_building_job(&self) -> Option<&PayloadBuildingJob> {
+    pub const fn payload_building_job(&self) -> Option<&PayloadBuildingJob> {
         self.payload_building_job.as_ref()
     }
 
@@ -91,6 +91,7 @@ where
     /// Disables the sequencer.
     pub fn disable(&mut self) {
         self.trigger = None;
+        self.cancel_payload_building_job();
     }
 
     /// Creates a new block using the pending transactions from the message queue and
@@ -222,7 +223,7 @@ impl std::fmt::Debug for PayloadBuildingJob {
 
 impl PayloadBuildingJob {
     /// Returns the L1 origin block number of the first included L1 message, if any.
-    pub fn l1_origin(&self) -> Option<u64> {
+    pub const fn l1_origin(&self) -> Option<u64> {
         self.l1_origin
     }
 }
@@ -242,9 +243,8 @@ impl<SMP, CS> Stream for Sequencer<SMP, CS> {
                     // If there's no inflight job, emit a new slot event.
                     if this.payload_building_job.is_none() {
                         return Poll::Ready(Some(SequencerEvent::NewSlot));
-                    } else {
-                        tracing::trace!(target: "rollup_node::sequencer", "Payload building job already in progress, skipping slot.");
                     };
+                    tracing::trace!(target: "rollup_node::sequencer", "Payload building job already in progress, skipping slot.");
                 }
                 Poll::Pending => {}
             }

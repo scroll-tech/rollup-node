@@ -64,7 +64,6 @@ reth-trie-db.workspace = true
 
 # rollup node
 rollup-node-chain-orchestrator.workspace = true
-rollup-node-manager.workspace = true
 rollup-node-primitives.workspace = true
 rollup-node-providers.workspace = true
 rollup-node-sequencer.workspace = true
@@ -143,4 +142,7 @@ test-utils = [
     "scroll-alloy-rpc-types-engine",
     "alloy-rpc-types-engine",
     "reth-primitives-traits/test-utils",
+    "reth-network-p2p/test-utils",
+    "rollup-node-chain-orchestrator/test-utils",
+    "scroll-network/test-utils",
 ]

@@ -4,7 +4,7 @@ use crate::{
     context::RollupNodeContext,
 };
 use scroll_migration::MigratorTrait;
-use std::{fs, path::PathBuf, sync::Arc, time::Duration};
+use std::{fs, path::PathBuf, sync::Arc};
 
 use alloy_chains::NamedChain;
 use alloy_primitives::{hex, Address, U128};
@@ -49,8 +49,8 @@ use scroll_db::{
     Database, DatabaseConnectionProvider, DatabaseReadOperations, DatabaseTransactionProvider,
     DatabaseWriteOperations,
 };
-use scroll_derivation_pipeline::DerivationPipelineNew;
-use scroll_engine::{genesis_hash_from_chain_spec, Engine, EngineDriver, ForkchoiceState};
+use scroll_derivation_pipeline::DerivationPipeline;
+use scroll_engine::{Engine, ForkchoiceState};
 use scroll_migration::traits::ScrollMigrator;
 use scroll_network::ScrollNetworkManager;
 use scroll_wire::ScrollWireEvent;
@@ -154,7 +154,7 @@ impl ScrollRollupNodeConfig {
 }
 
 impl ScrollRollupNodeConfig {
-    /// Consumes the [`ScrollRollupNodeConfig`] and builds a [`RollupNodeManager`].
+    /// Consumes the [`ScrollRollupNodeConfig`] and builds a [`ChainOrchestrator`].
     pub async fn build<N, CS>(
         self,
         ctx: RollupNodeContext<N, CS>,
@@ -268,7 +268,7 @@ impl ScrollRollupNodeConfig {
         // block hash to the latest block hash associated with the previous consolidated
         // batch in the database.
         let tx = db.tx_mut().await?;
-        let (startup_safe_block, l1_start_block_number) =
+        let (_startup_safe_block, l1_start_block_number) =
             tx.prepare_on_startup(chain_spec.genesis_hash()).await?;
         tx.commit().await?;
         // if let Some(block_info) = startup_safe_block {
@@ -378,7 +378,7 @@ impl ScrollRollupNodeConfig {
 
         // Construct the Sequencer.
         let chain_config = chain_spec.chain_config();
-        let sequencer = if self.sequencer_args.sequencer_enabled {
+        let sequencer = self.sequencer_args.sequencer_enabled.then(|| {
             let args = &self.sequencer_args;
             let config = SequencerConfig {
                 chain_spec: chain_spec.clone(),
@@ -396,11 +396,8 @@ impl ScrollRollupNodeConfig {
                 allow_empty_blocks: args.allow_empty_blocks,
                 payload_building_duration: args.payload_building_duration,
             };
-            let sequencer = Sequencer::new(Arc::new(l1_messages_provider), config);
-            Some(sequencer)
-        } else {
-            None
-        };
+            Sequencer::new(Arc::new(l1_messages_provider), config)
+        });
 
         // Instantiate the signer
         let chain_id = chain_spec.chain().id();
@@ -432,7 +429,7 @@ impl ScrollRollupNodeConfig {
         );
 
         // Instantiate the derivation pipeline
-        let derivation_pipeline = DerivationPipelineNew::new(
+        let derivation_pipeline = DerivationPipeline::new(
             l1_provider.clone(),
             db.clone(),
             l1_v2_message_queue_start_index,

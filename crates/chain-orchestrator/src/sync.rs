@@ -15,12 +15,12 @@ impl Default for SyncState {
 
 impl SyncState {
     /// Returns a reference to the sync mode of L1.
-    pub fn l1(&self) -> &SyncMode {
+    pub const fn l1(&self) -> &SyncMode {
         &self.l1
     }
 
     /// Returns a reference to the sync mode of L2.
-    pub fn l2(&self) -> &SyncMode {
+    pub const fn l2(&self) -> &SyncMode {
         &self.l2
     }
 
@@ -35,7 +35,7 @@ impl SyncState {
     }
 
     /// Returns true if both L1 and L2 are synced.
-    pub fn is_synced(&self) -> bool {
+    pub const fn is_synced(&self) -> bool {
         self.l1.is_synced() && self.l2.is_synced()
     }
 }
@@ -51,21 +51,22 @@ pub enum SyncMode {
 }
 
 impl SyncMode {
-    /// Returns true if the sync mode is [`Self::Syncing`].
-    pub fn is_syncing(&self) -> bool {
+    /// Returns true if the sync mode is [`SyncMode::Syncing`].
+    pub const fn is_syncing(&self) -> bool {
         matches!(self, Self::Syncing)
     }
 
-    pub fn is_synced(&self) -> bool {
+    /// Returns true if the sync mode is [`SyncMode::Synced`].
+    pub const fn is_synced(&self) -> bool {
         matches!(self, Self::Synced)
     }
 
-    /// Sets the sync mode to [`Self::Synced].
+    /// Sets the sync mode to [`SyncMode::Synced`].
     pub fn set_synced(&mut self) {
         *self = Self::Synced;
     }
 
-    /// Sets the sync mode to [`Self::Syncing`].
+    /// Sets the sync mode to [`SyncMode::Syncing`].
     pub fn set_syncing(&mut self) {
         *self = Self::Syncing;
     }

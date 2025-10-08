@@ -2,7 +2,6 @@
 
 use alloy_consensus::BlockHeader;
 use alloy_primitives::{hex, Address, U256};
-use alloy_rpc_types_engine::PayloadAttributes;
 use futures::stream::StreamExt;
 use reth_e2e_test_utils::transaction::TransactionTestContext;
 use reth_node_core::primitives::SignedTransaction;
@@ -17,23 +16,15 @@ use rollup_node::{
 };
 use rollup_node_chain_orchestrator::ChainOrchestratorEvent;
 use rollup_node_primitives::{sig_encode_hash, BlockInfo, L1MessageEnvelope};
-use rollup_node_providers::ScrollRootProvider;
 use rollup_node_sequencer::{
     L1MessageInclusionMode, PayloadBuildingConfig, Sequencer, SequencerConfig, SequencerEvent,
 };
-use rollup_node_signer::SignerEvent;
 use rollup_node_watcher::L1Notification;
 use scroll_alloy_consensus::TxL1Message;
 use scroll_alloy_provider::ScrollAuthApiEngineClient;
-use scroll_alloy_rpc_types_engine::{BlockDataHint, ScrollPayloadAttributes};
 use scroll_db::{test_utils::setup_test_db, DatabaseTransactionProvider, DatabaseWriteOperations};
-use scroll_engine::{Engine, EngineDriver, EngineDriverEvent, ForkchoiceState};
-use std::{
-    io::Write,
-    path::PathBuf,
-    sync::Arc,
-    time::{SystemTime, UNIX_EPOCH},
-};
+use scroll_engine::{Engine, ForkchoiceState};
+use std::{io::Write, path::PathBuf, sync::Arc};
 use tempfile::NamedTempFile;
 use tokio::{
     sync::Mutex,
@@ -43,8 +34,6 @@ use tokio::{
 #[tokio::test]
 async fn skip_block_with_no_transactions() {
     reth_tracing::init_test_tracing();
-
-    const BLOCK_BUILDING_DURATION: Duration = Duration::from_millis(0);
 
     // setup a test node
     let (mut nodes, _tasks, _wallet) = setup(1, false).await.unwrap();
@@ -74,7 +63,7 @@ async fn skip_block_with_no_transactions() {
 
     // create a sequencer
     let config = SequencerConfig {
-        chain_spec: node.inner.chain_spec().clone(),
+        chain_spec: node.inner.chain_spec(),
         fee_recipient: Address::random(),
         auto_start: false,
         payload_building_config: PayloadBuildingConfig {
@@ -101,8 +90,6 @@ async fn skip_block_with_no_transactions() {
 #[tokio::test]
 async fn can_build_blocks() {
     reth_tracing::init_test_tracing();
-
-    const BLOCK_BUILDING_DURATION: Duration = Duration::from_millis(0);
 
     // setup a test node
     let (mut nodes, _tasks, wallet) = setup(1, false).await.unwrap();
@@ -133,7 +120,7 @@ async fn can_build_blocks() {
 
     // create a sequencer
     let config = SequencerConfig {
-        chain_spec: node.inner.chain_spec().clone(),
+        chain_spec: node.inner.chain_spec(),
         fee_recipient: Address::random(),
         auto_start: false,
         payload_building_config: PayloadBuildingConfig {
@@ -263,7 +250,7 @@ async fn can_build_blocks_with_delayed_l1_messages() {
 
     // create a sequencer
     let config = SequencerConfig {
-        chain_spec: node.inner.chain_spec().clone(),
+        chain_spec: node.inner.chain_spec(),
         fee_recipient: Address::random(),
         auto_start: false,
         payload_building_config: PayloadBuildingConfig {
@@ -392,7 +379,7 @@ async fn can_build_blocks_with_finalized_l1_messages() {
 
     // create a sequencer
     let config = SequencerConfig {
-        chain_spec: node.inner.chain_spec().clone(),
+        chain_spec: node.inner.chain_spec(),
         fee_recipient: Address::random(),
         auto_start: false,
         payload_building_config: PayloadBuildingConfig {
@@ -552,6 +539,14 @@ async fn can_sequence_blocks_with_private_key_file() -> eyre::Result<()> {
 
     let sequencer_rnm_handle = nodes[0].inner.add_ons_handle.rollup_manager_handle.clone();
     let mut sequencer_events = sequencer_rnm_handle.get_event_listener().await?;
+    let sequencer_l1_watcher_tx = nodes[0].inner.add_ons_handle.l1_watcher_tx.clone().unwrap();
+
+    // Send a notification to set the L1 to synced
+    sequencer_l1_watcher_tx.send(Arc::new(L1Notification::Synced)).await?;
+
+    // skip the L1 synced event and consolidated events
+    sequencer_events.next().await;
+    sequencer_events.next().await;
 
     // Generate and inject transaction
     let mut wallet_lock = wallet.lock().await;
@@ -566,7 +561,7 @@ async fn can_sequence_blocks_with_private_key_file() -> eyre::Result<()> {
     let tx_hash = nodes[0].rpc.inject_tx(raw_tx).await?;
 
     // Build block
-    sequencer_rnm_handle.build_block().await;
+    sequencer_rnm_handle.build_block();
 
     // Verify block was successfully sequenced
     if let Some(ChainOrchestratorEvent::BlockSequenced(block)) = sequencer_events.next().await {
@@ -644,6 +639,14 @@ async fn can_sequence_blocks_with_hex_key_file_without_prefix() -> eyre::Result<
 
     let sequencer_rnm_handle = nodes[0].inner.add_ons_handle.rollup_manager_handle.clone();
     let mut sequencer_events = sequencer_rnm_handle.get_event_listener().await?;
+    let sequencer_l1_watcher_tx = nodes[0].inner.add_ons_handle.l1_watcher_tx.clone().unwrap();
+
+    // Send a notification to set the L1 to synced
+    sequencer_l1_watcher_tx.send(Arc::new(L1Notification::Synced)).await?;
+
+    // skip the L1 synced event and consolidated events
+    sequencer_events.next().await;
+    sequencer_events.next().await;
 
     // Generate and inject transaction
     let mut wallet_lock = wallet.lock().await;
@@ -658,7 +661,7 @@ async fn can_sequence_blocks_with_hex_key_file_without_prefix() -> eyre::Result<
     let tx_hash = nodes[0].rpc.inject_tx(raw_tx).await?;
 
     // Build block
-    sequencer_rnm_handle.build_block().await;
+    sequencer_rnm_handle.build_block();
 
     // Verify block was successfully sequenced
     if let Some(ChainOrchestratorEvent::BlockSequenced(block)) = sequencer_events.next().await {
@@ -687,7 +690,6 @@ async fn can_build_blocks_and_exit_at_gas_limit() {
 
     let chain_spec = SCROLL_DEV.clone();
     const MIN_TRANSACTION_GAS_COST: u64 = 21_000;
-    const BLOCK_BUILDING_DURATION: Duration = Duration::from_millis(250);
     const TRANSACTIONS_COUNT: usize = 2000;
 
     // setup a test node. use a high value for the payload building duration to be sure we don't
@@ -732,39 +734,39 @@ async fn can_build_blocks_and_exit_at_gas_limit() {
     // create the engine driver connected to the node
     let auth_client = node.inner.engine_http_client();
     let engine_client = ScrollAuthApiEngineClient::new(auth_client);
-    let mut engine_driver = EngineDriver::new(
-        Arc::new(engine_client),
-        (*SCROLL_DEV).clone(),
-        None::<ScrollRootProvider>,
-        fcs,
-        false,
-        BLOCK_BUILDING_DURATION,
-        true,
-    );
+    let mut engine = Engine::new(Arc::new(engine_client), fcs);
 
-    // issue a new payload to the execution layer.
-    let timestamp =
-        SystemTime::now().duration_since(UNIX_EPOCH).expect("Time can't go backwards").as_secs();
-    engine_driver.handle_build_new_payload(ScrollPayloadAttributes {
-        payload_attributes: PayloadAttributes {
-            timestamp,
-            prev_randao: Default::default(),
-            suggested_fee_recipient: Default::default(),
-            withdrawals: None,
-            parent_beacon_block_root: None,
+    // create a test database
+    let database = Arc::new(setup_test_db().await);
+
+    // create a sequencer
+    let config = SequencerConfig {
+        chain_spec: node.inner.chain_spec(),
+        fee_recipient: Address::random(),
+        auto_start: false,
+        payload_building_config: PayloadBuildingConfig {
+            block_gas_limit: SCROLL_GAS_LIMIT,
+            max_l1_messages_per_block: 4,
+            l1_message_inclusion_mode: L1MessageInclusionMode::BlockDepth(0),
         },
-        transactions: None,
-        no_tx_pool: false,
-        block_data_hint: BlockDataHint::none(),
-        gas_limit: None,
-    });
+        block_time: 1,
+        payload_building_duration: 0,
+        allow_empty_blocks: false,
+    };
+    let mut sequencer = Sequencer::new(database, config);
+
+    // build a new payload
+    sequencer.start_payload_building(&mut engine).await.unwrap();
+    let block = if let SequencerEvent::PayloadReady(payload_id) = sequencer.next().await.unwrap() {
+        let result = sequencer.finalize_payload_building(payload_id, &mut engine).await.unwrap();
+        assert!(result.is_some(), "expected a new payload, but got: {:?}", result);
+        result.unwrap()
+    } else {
+        panic!("expected a payload ready event");
+    };
 
     // verify the gas used is within MIN_TRANSACTION_GAS_COST of the gas limit.
-    if let Some(EngineDriverEvent::NewPayload(block)) = engine_driver.next().await {
-        assert!(block.header.gas_used >= block.gas_limit - MIN_TRANSACTION_GAS_COST);
-    } else {
-        panic!("expected a new payload event");
-    }
+    assert!(block.header.gas_used >= block.gas_limit - MIN_TRANSACTION_GAS_COST);
 }
 
 #[tokio::test]
@@ -818,55 +820,54 @@ async fn can_build_blocks_and_exit_at_time_limit() {
     // create the engine driver connected to the node
     let auth_client = node.inner.engine_http_client();
     let engine_client = ScrollAuthApiEngineClient::new(auth_client);
-    let mut engine_driver = EngineDriver::new(
-        Arc::new(engine_client),
-        (*SCROLL_DEV).clone(),
-        None::<ScrollRootProvider>,
-        fcs,
-        false,
-        BLOCK_BUILDING_DURATION,
-        true,
-    );
+    let mut engine = Engine::new(Arc::new(engine_client), fcs);
+
+    // create a test database
+    let database = Arc::new(setup_test_db().await);
+
+    // create a sequencer
+    let config = SequencerConfig {
+        chain_spec: node.inner.chain_spec(),
+        fee_recipient: Address::random(),
+        auto_start: false,
+        payload_building_config: PayloadBuildingConfig {
+            block_gas_limit: SCROLL_GAS_LIMIT,
+            max_l1_messages_per_block: 4,
+            l1_message_inclusion_mode: L1MessageInclusionMode::BlockDepth(0),
+        },
+        block_time: 1,
+        payload_building_duration: 0,
+        allow_empty_blocks: false,
+    };
+    let mut sequencer = Sequencer::new(database, config);
 
     // start timer.
     let start = Instant::now();
 
     // issue a new payload to the execution layer.
-    let timestamp =
-        SystemTime::now().duration_since(UNIX_EPOCH).expect("Time can't go backwards").as_secs();
-    engine_driver.handle_build_new_payload(ScrollPayloadAttributes {
-        payload_attributes: PayloadAttributes {
-            timestamp,
-            prev_randao: Default::default(),
-            suggested_fee_recipient: Default::default(),
-            withdrawals: None,
-            parent_beacon_block_root: None,
-        },
-        transactions: None,
-        no_tx_pool: false,
-        block_data_hint: BlockDataHint::none(),
-        gas_limit: None,
-    });
-
-    if let Some(EngineDriverEvent::NewPayload(block)) = engine_driver.next().await {
-        let payload_building_duration = start.elapsed();
-        // verify that the block building duration is within 10% of the target (we allow for 10%
-        // mismatch due to slower performance of debug mode).
-        assert!(payload_building_duration < BLOCK_BUILDING_DURATION * 110 / 100);
-        assert!(block.gas_used < block.gas_limit - MIN_TRANSACTION_GAS_COST);
+    // build a new payload
+    sequencer.start_payload_building(&mut engine).await.unwrap();
+    let block = if let SequencerEvent::PayloadReady(payload_id) = sequencer.next().await.unwrap() {
+        let result = sequencer.finalize_payload_building(payload_id, &mut engine).await.unwrap();
+        assert!(result.is_some(), "expected a new payload, but got: {:?}", result);
+        result.unwrap()
     } else {
-        panic!("expected a new payload event");
-    }
+        panic!("expected a payload ready event");
+    };
+
+    let payload_building_duration = start.elapsed();
+    // verify that the block building duration is within 10% of the target (we allow for 10%
+    // mismatch due to slower performance of debug mode).
+    assert!(payload_building_duration < BLOCK_BUILDING_DURATION * 110 / 100);
+    assert!(block.gas_used < block.gas_limit - MIN_TRANSACTION_GAS_COST);
 }
 
 #[tokio::test]
 async fn should_limit_l1_message_cumulative_gas() {
     reth_tracing::init_test_tracing();
 
-    let chain_spec = SCROLL_DEV.clone();
-    const BLOCK_BUILDING_DURATION: Duration = Duration::from_millis(0);
-
     // setup a test node
+    let chain_spec = SCROLL_DEV.clone();
     let (mut nodes, _tasks, wallet) =
         setup_engine(default_test_scroll_rollup_node_config(), 1, chain_spec, false, false)
             .await
@@ -899,7 +900,7 @@ async fn should_limit_l1_message_cumulative_gas() {
 
     // create a sequencer
     let config = SequencerConfig {
-        chain_spec: node.inner.chain_spec().clone(),
+        chain_spec: node.inner.chain_spec(),
         fee_recipient: Address::random(),
         auto_start: false,
         payload_building_config: PayloadBuildingConfig {

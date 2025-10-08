@@ -86,3 +86,16 @@ rand.workspace = true
 reqwest.workspace = true
 serde_json.workspace = true
 tokio.workspace = true
+
+[features]
+test-utils = [
+    "reth-chainspec/test-utils",
+    "reth-network-p2p/test-utils",
+    "reth-primitives-traits/test-utils",
+    "reth-scroll-node/test-utils",
+    "rollup-node-providers/test-utils",
+    "rollup-node-watcher/test-utils",
+    "scroll-db/test-utils",
+    "scroll-engine/test-utils",
+    "scroll-network/test-utils",
+]

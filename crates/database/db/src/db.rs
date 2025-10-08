@@ -863,15 +863,15 @@ mod test {
         let block_1 = BlockInfo { number: 1, hash: B256::arbitrary(&mut u).unwrap() };
         let block_2 = BlockInfo { number: 2, hash: B256::arbitrary(&mut u).unwrap() };
         tx.insert_batch(batch_data_1.clone()).await.unwrap();
-        tx.insert_block(block_1.clone(), batch_data_1.clone().into()).await.unwrap();
-        tx.insert_block(block_2.clone(), batch_data_1.clone().into()).await.unwrap();
+        tx.insert_block(block_1, batch_data_1.clone().into()).await.unwrap();
+        tx.insert_block(block_2, batch_data_1.clone().into()).await.unwrap();
 
         // Insert batch 2 and associate it with one block in the database
         let batch_data_2 =
             BatchCommitData { index: 2, block_number: 20, ..Arbitrary::arbitrary(&mut u).unwrap() };
         let block_3 = BlockInfo { number: 3, hash: B256::arbitrary(&mut u).unwrap() };
         tx.insert_batch(batch_data_2.clone()).await.unwrap();
-        tx.insert_block(block_3.clone(), batch_data_2.clone().into()).await.unwrap();
+        tx.insert_block(block_3, batch_data_2.clone().into()).await.unwrap();
 
         // Insert batch 3 produced at the same block number as batch 2 and associate it with one
         // block
@@ -879,7 +879,7 @@ mod test {
             BatchCommitData { index: 3, block_number: 20, ..Arbitrary::arbitrary(&mut u).unwrap() };
         let block_4 = BlockInfo { number: 4, hash: B256::arbitrary(&mut u).unwrap() };
         tx.insert_batch(batch_data_3.clone()).await.unwrap();
-        tx.insert_block(block_4.clone(), batch_data_3.clone().into()).await.unwrap();
+        tx.insert_block(block_4, batch_data_3.clone().into()).await.unwrap();
 
         tx.set_finalized_l1_block_number(21).await.unwrap();
         tx.commit().await.unwrap();

@@ -64,6 +64,9 @@ pub struct ScrollNetworkManager<N, CS> {
     td_constant: U128,
     /// The authorized signer for the network.
     authorized_signer: Option<Address>,
+    /// Whether to gossip blocks to peers.
+    #[cfg(feature = "test-utils")]
+    gossip: bool,
     /// The event sender for network events.
     event_sender: EventSender<ScrollNetworkManagerEvent>,
 }
@@ -117,6 +120,8 @@ impl<CS: ScrollHardforks + EthChainSpec + Send + Sync + 'static>
                 td_constant,
                 authorized_signer,
                 event_sender,
+                #[cfg(feature = "test-utils")]
+                gossip: true,
             },
             handle,
         )
@@ -162,6 +167,8 @@ impl<
                 td_constant,
                 authorized_signer,
                 event_sender,
+                #[cfg(feature = "test-utils")]
+                gossip: true,
             },
             handle,
         )
@@ -169,6 +176,11 @@ impl<
 
     /// Announces a new block to the network.
     fn announce_block(&mut self, block: NewBlock) {
+        #[cfg(feature = "test-utils")]
+        if !self.gossip {
+            return;
+        }
+
         // Compute the block hash.
         let hash = block.block.hash_slow();
 
@@ -270,6 +282,11 @@ impl<
             }
             NetworkHandleMessage::EventListener(tx) => {
                 let _ = tx.send(self.event_sender.new_listener());
+            }
+            #[cfg(feature = "test-utils")]
+            NetworkHandleMessage::SetGossip((enabled, tx)) => {
+                self.gossip = enabled;
+                let _ = tx.send(());
             }
         }
     }

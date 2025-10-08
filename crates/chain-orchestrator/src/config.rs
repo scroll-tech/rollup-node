@@ -14,7 +14,7 @@ pub struct ChainOrchestratorConfig<ChainSpec> {
 
 impl<ChainSpec> ChainOrchestratorConfig<ChainSpec> {
     /// Creates a new chain configuration.
-    pub fn new(
+    pub const fn new(
         chain_spec: Arc<ChainSpec>,
         optimistic_sync_threshold: u64,
         l1_v2_message_queue_start_index: u64,
@@ -23,17 +23,17 @@ impl<ChainSpec> ChainOrchestratorConfig<ChainSpec> {
     }
 
     /// Returns a reference to the chain specification.
-    pub fn chain_spec(&self) -> &Arc<ChainSpec> {
+    pub const fn chain_spec(&self) -> &Arc<ChainSpec> {
         &self.chain_spec
     }
 
     /// Returns the optimistic sync threshold.
-    pub fn optimistic_sync_threshold(&self) -> u64 {
+    pub const fn optimistic_sync_threshold(&self) -> u64 {
         self.optimistic_sync_threshold
     }
 
     /// Returns the L1 message queue index at which the V2 L1 message queue was enabled.
-    pub fn l1_v2_message_queue_start_index(&self) -> u64 {
+    pub const fn l1_v2_message_queue_start_index(&self) -> u64 {
         self.l1_v2_message_queue_start_index
     }
 }

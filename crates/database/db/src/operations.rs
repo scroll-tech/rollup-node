@@ -437,6 +437,9 @@ pub trait DatabaseWriteOperations: WriteConnectionProvider + DatabaseReadOperati
         genesis_hash: B256,
         l1_block_number: u64,
     ) -> Result<UnwindResult, DatabaseError> {
+        // Set the latest L1 block number
+        self.set_latest_l1_block_number(l1_block_number).await?;
+
         // delete batch inputs and l1 messages
         let batches_removed = self.delete_batches_gt_block_number(l1_block_number).await?;
         let deleted_messages = self.delete_l1_messages_gt(l1_block_number).await?;
@@ -472,11 +475,10 @@ pub trait DatabaseWriteOperations: WriteConnectionProvider + DatabaseReadOperati
         };
 
         // delete mapping for l1 messages that were included in unsafe blocks after the reorg point
-        if l2_head_block_number.is_some() {
-            self.purge_l1_message_to_l2_block_mappings(
-                l2_head_block_number.map(|x| x.saturating_add(1)),
-            )
-            .await?;
+        if let Some(block_number) = l2_head_block_number {
+            self.purge_l1_message_to_l2_block_mappings(Some(block_number.saturating_add(1)))
+                .await?;
+            self.set_l2_head_block_number(block_number).await?;
         }
 
         // commit the transaction
@@ -922,8 +924,8 @@ impl L1MessageKey {
         Self::TransactionHash(hash)
     }
 
-    /// Creates a new [`L1MessageStart`] for the provided block number.
-    pub fn block_number(number: u64) -> Self {
+    /// Creates a new [`L1MessageKey`] for the provided block number.
+    pub const fn block_number(number: u64) -> Self {
         Self::BlockNumber(number)
     }
 }

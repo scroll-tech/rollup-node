@@ -84,11 +84,11 @@ pub(crate) enum BlockConsolidationAction {
 impl std::fmt::Display for BlockConsolidationAction {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            BlockConsolidationAction::UpdateSafeHead(info) => {
+            Self::UpdateSafeHead(info) => {
                 write!(f, "UpdateSafeHead to block {}", info.number)
             }
-            BlockConsolidationAction::Skip(info) => write!(f, "Skip block {}", info.number),
-            BlockConsolidationAction::Reorg(attrs) => {
+            Self::Skip(info) => write!(f, "Skip block {}", info.number),
+            Self::Reorg(attrs) => {
                 write!(f, "Reorg to block {}", attrs.block_number)
             }
         }

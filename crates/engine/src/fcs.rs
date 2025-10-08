@@ -83,9 +83,9 @@ impl ForkchoiceState {
         }
 
         // Build the candidate new state.
-        let new_finalized = finalized.unwrap_or(self.finalized.clone());
-        let new_safe = safe.unwrap_or(self.safe.clone());
-        let new_head = head.unwrap_or(self.head.clone());
+        let new_finalized = finalized.unwrap_or(self.finalized);
+        let new_safe = safe.unwrap_or(self.safe);
+        let new_head = head.unwrap_or(self.head);
 
         // Check that the finalized block number is increasing.
         if new_finalized.number <= self.finalized.number && new_finalized != self.finalized {

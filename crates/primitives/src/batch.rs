@@ -64,7 +64,7 @@ pub struct BatchConsolidationOutcome {
 
 impl BatchConsolidationOutcome {
     /// Creates a new empty batch consolidation outcome for the given batch info.
-    pub fn new(batch_info: BatchInfo) -> Self {
+    pub const fn new(batch_info: BatchInfo) -> Self {
         Self { batch_info, blocks: Vec::new() }
     }
 
@@ -87,11 +87,10 @@ pub enum BlockConsolidationOutcome {
 
 impl BlockConsolidationOutcome {
     /// Returns the block info for the consolidated block.
-    pub fn block_info(&self) -> &BlockInfo {
+    pub const fn block_info(&self) -> &BlockInfo {
         match self {
-            BlockConsolidationOutcome::Consolidated(info) => info,
-            BlockConsolidationOutcome::Skipped(info) => info,
-            BlockConsolidationOutcome::Reorged(info) => &info.block_info,
+            Self::Consolidated(info) | Self::Skipped(info) => info,
+            Self::Reorged(info) => &info.block_info,
         }
     }
 }
