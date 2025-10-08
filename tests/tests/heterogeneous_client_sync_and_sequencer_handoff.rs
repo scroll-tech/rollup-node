@@ -124,6 +124,18 @@ async fn docker_test_heterogeneous_client_sync_and_sequencer_handoff() -> Result
     tracing::info!("Enabling sequencing on RN sequencer");
     utils::enable_automatic_sequencing(&rn_sequencer).await?;
     let target_block = latest_block + 10;
+
+    // TODO: restart RN follower here
+    // 1. disconnect from all nodes
+    // 2. get latest block and other state info
+    // 3. stop the node
+    // 4. start the node
+    // 5. check that state is the same as before
+    // 6. reconnect to nodes
+    env.stop_container(&rn_follower).await?;
+    env.start_container(&rn_follower).await?;
+    utils::admin_add_peer(&rn_follower, &env.l2geth_sequencer_enode()?).await?;
+
     utils::wait_for_block(&nodes, target_block).await?;
 
     utils::disable_automatic_sequencing(&rn_sequencer).await?;
@@ -158,6 +170,14 @@ async fn docker_test_heterogeneous_client_sync_and_sequencer_handoff() -> Result
         target_block + 1,
         l2geth_follower.get_block_number().await?
     );
+    // TODO: restart RN sequencer here
+    // 1. disconnect from all nodes
+    // 2. get latest block and other state info
+    // 3. stop the node
+    // 4. start the node
+    // 5. check that state is the same as before
+    // 6. reconnect to nodes
+    // 7. start sequencing again
 
     // Reconnect l2geth follower to l2geth sequencer and let them sync
     // topology:
