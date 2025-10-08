@@ -11647,6 +11647,7 @@ dependencies = [
  "metrics",
  "metrics-derive",
  "reqwest",
+ "reth-tracing",
  "rollup-node-primitives",
  "rollup-node-providers",
  "scroll-alloy-consensus",
