@@ -4,7 +4,7 @@ use futures::StreamExt;
 use reth_network::cache::LruCache;
 use reth_network_api::PeerId;
 use std::{
-    collections::{hash_map::Entry, HashMap},
+    collections::{HashMap, hash_map::Entry},
     future::Future,
     pin::Pin,
     task::{Context, Poll},
@@ -61,7 +61,7 @@ impl ScrollWireManager {
     }
 
     /// Returns a mutable reference to the state of the `ScrollWire` protocol.
-    pub fn state_mut(&mut self) -> &mut HashMap<PeerId, LruCache<B256>> {
+    pub const fn state_mut(&mut self) -> &mut HashMap<PeerId, LruCache<B256>> {
         &mut self.state
     }
 }

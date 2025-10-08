@@ -1,6 +1,6 @@
 use alloy_chains::NamedChain;
 use alloy_eips::{BlockId, BlockNumberOrTag};
-use alloy_primitives::{Sealable, B256};
+use alloy_primitives::{B256, Sealable};
 use alloy_provider::Provider;
 use alloy_rpc_types_engine::ForkchoiceState as AlloyForkchoiceState;
 use reth_chainspec::EthChainSpec;
@@ -69,17 +69,17 @@ impl ForkchoiceState {
     }
 
     /// Updates the `head` block info.
-    pub fn update_head_block_info(&mut self, head: BlockInfo) {
+    pub const fn update_head_block_info(&mut self, head: BlockInfo) {
         self.head = head;
     }
 
     /// Updates the `safe` block info.
-    pub fn update_safe_block_info(&mut self, safe: BlockInfo) {
+    pub const fn update_safe_block_info(&mut self, safe: BlockInfo) {
         self.safe = safe;
     }
 
     /// Updates the `finalized` block info.
-    pub fn update_finalized_block_info(&mut self, finalized: BlockInfo) {
+    pub const fn update_finalized_block_info(&mut self, finalized: BlockInfo) {
         self.finalized = finalized;
     }
 

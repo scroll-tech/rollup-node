@@ -2,12 +2,7 @@ use alloy_consensus::Header;
 use alloy_eips::{BlockNumHash, Decodable2718};
 use alloy_primitives::{B256, U256};
 use alloy_rpc_types_engine::ExecutionPayload;
-use core::{
-    cmp::Ordering,
-    future::Future,
-    pin::Pin,
-    task::{ready, Context, Poll},
-};
+use core::cmp::Ordering;
 use reth_primitives_traits::transaction::signed::SignedTransaction;
 use reth_scroll_primitives::{ScrollBlock, ScrollTransactionSigned};
 use scroll_alloy_consensus::L1_MESSAGE_TRANSACTION_TYPE;
@@ -102,16 +97,6 @@ impl<T> WithBlockNumber<T> {
     }
 }
 
-impl<T: Future + Unpin> Future for WithBlockNumber<T> {
-    type Output = WithBlockNumber<<T as Future>::Output>;
-
-    fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
-        let block_number = self.number;
-        let inner = ready!(Pin::new(&mut self.get_mut().inner).poll(cx));
-        Poll::Ready(WithBlockNumber::new(block_number, inner))
-    }
-}
-
 /// A type alias for a wrapper around a type to which a finalized batch information is attached.
 pub type WithFinalizedBatchInfo<T> = WithBatchInfo<T>;
 
@@ -133,17 +118,6 @@ impl<T> WithBatchInfo<T> {
     /// Returns a new instance of a [`WithBatchInfo`] wrapper.
     pub const fn new(index: u64, number: u64, inner: T) -> Self {
         Self { index, number, inner }
-    }
-}
-
-impl<T: Future + Unpin> Future for WithBatchInfo<T> {
-    type Output = WithBatchInfo<<T as Future>::Output>;
-
-    fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
-        let block_number = self.number;
-        let index = self.index;
-        let inner = ready!(Pin::new(&mut self.get_mut().inner).poll(cx));
-        Poll::Ready(WithBatchInfo::new(index, block_number, inner))
     }
 }
 
