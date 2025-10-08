@@ -329,10 +329,16 @@ impl<
                 let _ = tx.send(self.event_listener());
             }
             ChainOrchestratorCommand::Status(tx) => {
-                let status = ChainOrchestratorStatus {
-                    sync_state: self.sync_state.clone(),
-                    forkchoice_state: self.engine.fcs().clone(),
-                };
+                let db_tx = self.database.tx_mut().await?;
+                let l1_latest = db_tx.get_latest_l1_block_number().await?;
+                let l1_finalized = db_tx.get_finalized_l1_block_number().await?;
+                db_tx.commit().await?;
+                let status = ChainOrchestratorStatus::new(
+                    &self.sync_state,
+                    l1_latest,
+                    l1_finalized,
+                    self.engine.fcs().clone(),
+                );
                 let _ = tx.send(status);
             }
             ChainOrchestratorCommand::NetworkHandle(tx) => {
@@ -697,10 +703,7 @@ impl<
 
                 // Get all unprocessed batches that have been finalized by this L1 block
                 // finalization.
-                let finalized_block_number = tx
-                    .get_finalized_l1_block_number()
-                    .await?
-                    .expect("finalized block number must exist");
+                let finalized_block_number = tx.get_finalized_l1_block_number().await?;
                 if finalized_block_number >= block_number {
                     let finalized_batches = tx
                         .fetch_and_update_unprocessed_finalized_batches(finalized_block_number)
@@ -987,7 +990,7 @@ impl<
 
             // If we did not find a common ancestor, we add all the fetched headers to the front of
             // the deque and continue fetching.
-            for header in headers.into_iter() {
+            for header in headers {
                 new_headers.push_front(header);
             }
         }

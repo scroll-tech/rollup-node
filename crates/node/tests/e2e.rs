@@ -1184,7 +1184,7 @@ async fn graceful_shutdown_sets_fcs_to_latest_sequenced_block_in_db_on_start_up(
     let status = handle.status().await?;
 
     // The fcs should be set to the database head.
-    assert_eq!(status.forkchoice_state.head_block_info(), &db_head_block_info);
+    assert_eq!(status.l2.fcs.head_block_info(), &db_head_block_info);
 
     Ok(())
 }
@@ -1269,8 +1269,8 @@ async fn can_handle_batch_revert() -> eyre::Result<()> {
     let status = handle.status().await?;
 
     // Assert the forkchoice state is above 4
-    assert!(status.forkchoice_state.head_block_info().number > 4);
-    assert!(status.forkchoice_state.safe_block_info().number > 4);
+    assert!(status.l2.fcs.head_block_info().number > 4);
+    assert!(status.l2.fcs.safe_block_info().number > 4);
 
     // Send the third batch which should trigger the revert.
     l1_watcher_tx.send(Arc::new(L1Notification::BatchCommit(revert_batch_data))).await?;
@@ -1281,8 +1281,8 @@ async fn can_handle_batch_revert() -> eyre::Result<()> {
     let status = handle.status().await?;
 
     // Assert the forkchoice state was reset to 4.
-    assert_eq!(status.forkchoice_state.head_block_info().number, 4);
-    assert_eq!(status.forkchoice_state.safe_block_info().number, 4);
+    assert_eq!(status.l2.fcs.head_block_info().number, 4);
+    assert_eq!(status.l2.fcs.safe_block_info().number, 4);
 
     Ok(())
 }

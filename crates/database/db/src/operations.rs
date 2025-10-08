@@ -231,7 +231,7 @@ pub trait DatabaseWriteOperations: WriteConnectionProvider + DatabaseReadOperati
         tracing::trace!(target: "scroll::db", "Fetching startup safe block from database.");
 
         // Unwind the database to the last finalized L1 block saved in database.
-        let finalized_block_number = self.get_finalized_l1_block_number().await?.unwrap_or(0);
+        let finalized_block_number = self.get_finalized_l1_block_number().await?;
         self.unwind(genesis_hash, finalized_block_number).await?;
 
         // Delete all unprocessed batches from the database and return starting l2 safe head and l1
@@ -528,27 +528,31 @@ pub trait DatabaseReadOperations: ReadConnectionProvider + Sync {
     }
 
     /// Get the latest L1 block number from the database.
-    async fn get_latest_l1_block_number(&self) -> Result<Option<u64>, DatabaseError> {
+    async fn get_latest_l1_block_number(&self) -> Result<u64, DatabaseError> {
         Ok(models::metadata::Entity::find()
             .filter(models::metadata::Column::Key.eq("l1_latest_block"))
             .select_only()
             .column(models::metadata::Column::Value)
             .into_tuple::<String>()
             .one(self.get_connection())
-            .await
-            .map(|x| x.and_then(|x| x.parse::<u64>().ok()))?)
+            .await?
+            .expect("l1_latest_block should always be set")
+            .parse::<u64>()
+            .expect("l1_latest_block should always be a valid u64"))
     }
 
     /// Get the finalized L1 block number from the database.
-    async fn get_finalized_l1_block_number(&self) -> Result<Option<u64>, DatabaseError> {
+    async fn get_finalized_l1_block_number(&self) -> Result<u64, DatabaseError> {
         Ok(models::metadata::Entity::find()
             .filter(models::metadata::Column::Key.eq("l1_finalized_block"))
             .select_only()
             .column(models::metadata::Column::Value)
             .into_tuple::<String>()
             .one(self.get_connection())
-            .await
-            .map(|x| x.and_then(|x| x.parse::<u64>().ok()))?)
+            .await?
+            .expect("l1_finalized_block should always be set")
+            .parse::<u64>()
+            .expect("l1_finalized_block should always be a valid u64"))
     }
 
     /// Get the latest L2 head block info.
@@ -701,10 +705,7 @@ pub trait DatabaseReadOperations: ReadConnectionProvider + Sync {
                 }
             }
             Some(L1MessageKey::NotIncluded(NotIncludedStart::Finalized)) => {
-                let finalized_block_number = self
-                    .get_finalized_l1_block_number()
-                    .await?
-                    .ok_or(DatabaseError::FinalizedL1BlockNotFound)?;
+                let finalized_block_number = self.get_finalized_l1_block_number().await?;
                 let condition = Condition::all()
                     .add(
                         models::l1_message::Column::L1BlockNumber
@@ -721,10 +722,7 @@ pub trait DatabaseReadOperations: ReadConnectionProvider + Sync {
                 ))
             }
             Some(L1MessageKey::NotIncluded(NotIncludedStart::BlockDepth(depth))) => {
-                let latest_block_number = self
-                    .get_latest_l1_block_number()
-                    .await?
-                    .ok_or(DatabaseError::LatestL1BlockNotFound)?;
+                let latest_block_number = self.get_latest_l1_block_number().await?;
 
                 let target_block_number = latest_block_number.checked_sub(depth);
                 if let Some(target_block_number) = target_block_number {

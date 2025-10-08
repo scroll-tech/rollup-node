@@ -97,7 +97,7 @@ export-sample-test-data:
 
 .PHONY: docs
 docs:
-	cargo docs --document-private-items
+	cargo docs --document-private-items --exclude rollup-node-chain-orchestrator
 
 .PHONY: pr
 pr: lint test docs
