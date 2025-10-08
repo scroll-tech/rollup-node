@@ -81,7 +81,7 @@ const L1_MESSAGE_QUEUE_HASH_MASK: B256 =
     b256!("ffffffffffffffffffffffffffffffffffffffffffffffffffffffff00000000");
 
 /// The number of headers to fetch in each request when fetching headers from peers.
-const HEADER_FETCH_COUNT: u64 = 4000;
+const HEADER_FETCH_COUNT: u64 = 100;
 
 /// The size of the event channel used to broadcast events to listeners.
 const EVENT_CHANNEL_SIZE: usize = 5000;
@@ -834,7 +834,7 @@ impl<
         // If the received block number has a block number greater than the current head by more
         // than the optimistic sync threshold, we optimistically sync the chain.
         if received_block_number > current_head_number + self.config.optimistic_sync_threshold() {
-            tracing::debug!(target: "scroll::chain_orchestrator", ?received_block_number, ?current_head_number, "Received new block from peer with block number greater than current head by more than the optimistic sync threshold");
+            tracing::trace!(target: "scroll::chain_orchestrator", ?received_block_number, ?current_head_number, "Received new block from peer with block number greater than current head by more than the optimistic sync threshold");
             let block_info = BlockInfo {
                 number: received_block_number,
                 hash: block_with_peer.block.header.hash_slow(),
@@ -856,10 +856,11 @@ impl<
         {
             // Fetch the headers for the received block until we can reconcile it with the current
             // chain head.
-            let block_number_diff = received_block_number - current_head_number;
+            let fetch_count = received_block_number - current_head_number;
             let new_headers = if received_block_number > current_head_number + 1 {
+                tracing::trace!(target: "scroll::chain_orchestrator", ?received_block_hash, ?received_block_number, ?current_head_number, fetch_count, "Fetching headers to extend chain");
                 self.block_client
-                    .get_full_block_range(received_block_hash, block_number_diff)
+                    .get_full_block_range(received_block_hash, fetch_count)
                     .await
                     .into_iter()
                     .rev()
@@ -874,6 +875,7 @@ impl<
             if new_headers.first().expect("at least one header exists").parent_hash ==
                 current_head_hash
             {
+                tracing::trace!(target: "scroll::chain_orchestrator", ?received_block_hash, ?received_block_number, "Received block from peer that extends the current head");
                 let chain_import = self.import_chain(new_headers, block_with_peer).await?;
                 return Ok(Some(ChainOrchestratorEvent::ChainExtended(chain_import)));
             }
@@ -948,17 +950,17 @@ impl<
             let parent_hash = new_headers.front().expect("at least one header exists").parent_hash;
             let parent_number = new_headers.front().expect("at least one header exists").number - 1;
             let fetch_count = HEADER_FETCH_COUNT.min(parent_number - current_safe_head.number);
+            tracing::trace!(target: "scroll::chain_orchestrator", ?received_block_hash, ?received_block_number, ?parent_hash, ?parent_number, %current_safe_head, fetch_count, "Fetching headers to find common ancestor for fork");
             let headers: Vec<ScrollBlock> = self
                 .block_client
                 .get_full_block_range(parent_hash, fetch_count)
                 .await
                 .into_iter()
-                .rev()
                 .map(|b| b.into_block())
                 .collect();
 
             let mut index = None;
-            for (i, header) in headers.iter().enumerate().rev() {
+            for (i, header) in headers.iter().enumerate() {
                 let current_block = self
                     .l2_client
                     .get_block_by_number(header.number.into())
@@ -976,7 +978,7 @@ impl<
 
             if let Some(index) = index {
                 tracing::trace!(target: "scroll::chain_orchestrator", ?received_block_hash, ?received_block_number, common_ancestor = ?headers[index].hash_slow(), common_ancestor_number = headers[index].number, "Found common ancestor for fork - reorging to new chain");
-                for header in headers.into_iter().skip(index + 1).rev() {
+                for header in headers.into_iter().take(index) {
                     new_headers.push_front(header);
                 }
                 let chain_import = self.import_chain(new_headers.into(), block_with_peer).await?;
@@ -985,7 +987,7 @@ impl<
 
             // If we did not find a common ancestor, we add all the fetched headers to the front of
             // the deque and continue fetching.
-            for header in headers.into_iter().rev() {
+            for header in headers.into_iter() {
                 new_headers.push_front(header);
             }
         }
