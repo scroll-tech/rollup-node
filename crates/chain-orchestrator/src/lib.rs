@@ -1059,11 +1059,15 @@ impl<
         let tx = self.database.tx_mut().await?;
         tx.insert_signature(chain_head_hash, block_with_peer.signature).await?;
         tx.commit().await?;
-        self.network.handle().block_import_outcome(BlockImportOutcome::valid_block(
-            block_with_peer.peer_id,
-            block_with_peer.block,
-            Bytes::copy_from_slice(&block_with_peer.signature.sig_as_bytes()),
-        ));
+
+        // We only notify the network of valid blocks.
+        if result.is_valid() {
+            self.network.handle().block_import_outcome(BlockImportOutcome::valid_block(
+                block_with_peer.peer_id,
+                block_with_peer.block,
+                Bytes::copy_from_slice(&block_with_peer.signature.sig_as_bytes()),
+            ));
+        }
 
         Ok(ChainImport {
             chain,

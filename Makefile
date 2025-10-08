@@ -71,6 +71,20 @@ test:
 	--no-fail-fast \
 	-E 'not test(docker)'
 
+.PHONY: test-docker
+test-docker:
+	cargo nextest run \
+	--workspace \
+	--locked \
+	--all-features \
+	--no-fail-fast \
+	--no-tests=pass \
+	-E 'test(docker)' \
+	--test-threads=1 \
+	--failure-output immediate \
+	--success-output never \
+	--verbose
+
 # Used to update the mainnet-sample.sql data. Provide the path to the sqlite database that should be read from
 # using `DB_PATH`.
 .PHONY: test-data

@@ -1,5 +1,6 @@
 /// The sync state of the chain orchestrator.
 #[derive(Debug, Clone)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct SyncState {
     /// The sync mode for L1.
     l1: SyncMode,
@@ -42,6 +43,7 @@ impl SyncState {
 
 /// The sync mode of the chain orchestrator.
 #[derive(Debug, Default, Clone)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub enum SyncMode {
     /// Syncing mode.
     #[default]

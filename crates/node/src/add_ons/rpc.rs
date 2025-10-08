@@ -6,7 +6,7 @@ use jsonrpsee::{
 };
 use reth_network_api::FullNetwork;
 use reth_scroll_node::ScrollNetworkPrimitives;
-use rollup_node_chain_orchestrator::ChainOrchestratorHandle;
+use rollup_node_chain_orchestrator::{ChainOrchestratorHandle, ChainOrchestratorStatus};
 use tokio::sync::{oneshot, Mutex, OnceCell};
 
 /// RPC extension for rollup node management operations.
@@ -75,6 +75,10 @@ pub trait RollupNodeExtApi {
     /// Disables automatic sequencing in the rollup node.
     #[method(name = "disableAutomaticSequencing")]
     async fn disable_automatic_sequencing(&self) -> RpcResult<bool>;
+
+    /// Returns the current status of the rollup node.
+    #[method(name = "status")]
+    async fn status(&self) -> RpcResult<ChainOrchestratorStatus>;
 }
 
 #[async_trait]
@@ -113,6 +117,24 @@ where
             ErrorObjectOwned::owned(
                 error::INTERNAL_ERROR_CODE,
                 format!("Failed to disable automatic sequencing: {}", e),
+                None::<()>,
+            )
+        })
+    }
+
+    async fn status(&self) -> RpcResult<ChainOrchestratorStatus> {
+        let handle = self.rollup_manager_handle().await.map_err(|e| {
+            ErrorObjectOwned::owned(
+                error::INTERNAL_ERROR_CODE,
+                format!("Failed to get rollup manager handle: {}", e),
+                None::<()>,
+            )
+        })?;
+
+        handle.status().await.map_err(|e| {
+            ErrorObjectOwned::owned(
+                error::INTERNAL_ERROR_CODE,
+                format!("Failed to get rollup node status: {}", e),
                 None::<()>,
             )
         })

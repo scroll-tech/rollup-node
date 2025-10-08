@@ -63,7 +63,7 @@ reth-transaction-pool.workspace = true
 reth-trie-db.workspace = true
 
 # rollup node
-rollup-node-chain-orchestrator.workspace = true
+rollup-node-chain-orchestrator = { workspace = true, features = ["serde"] }
 rollup-node-primitives.workspace = true
 rollup-node-providers.workspace = true
 rollup-node-sequencer.workspace = true

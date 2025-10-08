@@ -53,6 +53,7 @@ reth-tokio-util.workspace = true
 futures.workspace = true
 metrics.workspace = true
 metrics-derive.workspace = true
+serde = { workspace = true, optional = true, features = ["derive"] }
 strum = "0.27.1"
 thiserror.workspace = true
 tokio = { workspace = true, features = ["full"] }
@@ -98,4 +99,22 @@ test-utils = [
     "scroll-db/test-utils",
     "scroll-engine/test-utils",
     "scroll-network/test-utils",
+]
+serde = [
+    "dep:serde",
+    "alloy-consensus/serde",
+    "alloy-eips/serde",
+    "alloy-primitives/serde",
+    "alloy-rpc-types-engine/serde",
+    "parking_lot/serde",
+    "rand/serde",
+    "reth-eth-wire-types/serde",
+    "reth-network-api/serde",
+    "reth-primitives-traits/serde",
+    "reth-scroll-forks/serde",
+    "reth-scroll-primitives/serde",
+    "scroll-alloy-consensus/serde",
+    "scroll-alloy-hardforks/serde",
+    "scroll-engine/serde",
+    "scroll-network/serde",
 ]

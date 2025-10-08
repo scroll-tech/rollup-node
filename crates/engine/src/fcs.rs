@@ -15,6 +15,7 @@ use scroll_alloy_network::Scroll;
 /// The state is composed of the [`BlockInfo`] for `head`, `safe` block, and the `finalized`
 /// blocks.
 #[derive(Debug, Clone)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct ForkchoiceState {
     head: BlockInfo,
     safe: BlockInfo,

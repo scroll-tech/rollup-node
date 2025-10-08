@@ -17,7 +17,7 @@ use reth_scroll_node::ScrollNetworkPrimitives;
 use reth_scroll_primitives::ScrollBlock;
 use reth_storage_api::BlockNumReader as BlockNumReaderT;
 use reth_tokio_util::{EventSender, EventStream};
-use rollup_node_primitives::sig_encode_hash;
+use rollup_node_primitives::{sig_encode_hash, BlockInfo};
 use scroll_alloy_hardforks::ScrollHardforks;
 use scroll_wire::{
     NewBlock, ScrollWireConfig, ScrollWireEvent, ScrollWireManager, ScrollWireProtocolHandler,
@@ -297,7 +297,7 @@ impl<
         match result {
             Ok(BlockValidation::ValidBlock { new_block: msg }) |
             Ok(BlockValidation::ValidHeader { new_block: msg }) => {
-                trace!(target: "scroll::network::manager", peer_id = ?peer, block = ?msg.block, "Block import successful - announcing block to network");
+                trace!(target: "scroll::network::manager", peer_id = ?peer, block = %Into::<BlockInfo>::into(&msg.block), "Block import successful - announcing block to network");
                 self.announce_block(msg);
             }
             Err(BlockImportError::Consensus(err)) => {

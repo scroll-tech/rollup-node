@@ -43,6 +43,7 @@ eyre.workspace = true
 futures.workspace = true
 metrics.workspace = true
 metrics-derive.workspace = true
+serde = { workspace = true, optional = true, features = ["derive"] }
 thiserror.workspace = true
 tokio.workspace = true
 tracing.workspace = true
@@ -62,6 +63,7 @@ test-utils = [
     "reth-primitives-traits/test-utils",
 ]
 serde = [
+    "dep:serde",
     "alloy-eips/serde",
     "alloy-primitives/serde",
     "alloy-rpc-types-engine/serde",
