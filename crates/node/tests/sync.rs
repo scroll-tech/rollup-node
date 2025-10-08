@@ -539,7 +539,13 @@ async fn test_consolidation() -> eyre::Result<()> {
 #[tokio::test]
 async fn test_chain_orchestrator_reorg_with_gap_above_head() -> eyre::Result<()> {
     test_chain_orchestrator_fork_choice(100, Some(95), 20, |e| {
-        matches!(e, ChainOrchestratorEvent::ChainReorged(_))
+        if let ChainOrchestratorEvent::ChainReorged(chain_import) = e {
+            // Assert that the chain import is as expected.
+            assert_eq!(chain_import.chain.len(), 21);
+            true
+        } else {
+            false
+        }
     })
     .await
 }
@@ -548,7 +554,43 @@ async fn test_chain_orchestrator_reorg_with_gap_above_head() -> eyre::Result<()>
 #[tokio::test]
 async fn test_chain_orchestrator_reorg_with_gap_below_head() -> eyre::Result<()> {
     test_chain_orchestrator_fork_choice(100, Some(50), 20, |e| {
-        matches!(e, ChainOrchestratorEvent::ChainReorged(_))
+        if let ChainOrchestratorEvent::ChainReorged(chain_import) = e {
+            // Assert that the chain import is as expected.
+            assert_eq!(chain_import.chain.len(), 21);
+            true
+        } else {
+            false
+        }
+    })
+    .await
+}
+
+#[allow(clippy::large_stack_frames)]
+#[tokio::test]
+async fn test_chain_orchestrator_extension_with_gap() -> eyre::Result<()> {
+    test_chain_orchestrator_fork_choice(100, None, 20, |e| {
+        if let ChainOrchestratorEvent::ChainExtended(chain_import) = e {
+            // Assert that the chain import is as expected.
+            assert_eq!(chain_import.chain.len(), 21);
+            true
+        } else {
+            false
+        }
+    })
+    .await
+}
+
+#[allow(clippy::large_stack_frames)]
+#[tokio::test]
+async fn test_chain_orchestrator_extension_no_gap() -> eyre::Result<()> {
+    test_chain_orchestrator_fork_choice(100, None, 0, |e| {
+        if let ChainOrchestratorEvent::ChainExtended(chain_import) = e {
+            // Assert that the chain import is as expected.
+            assert_eq!(chain_import.chain.len(), 1);
+            true
+        } else {
+            false
+        }
     })
     .await
 }
@@ -619,7 +661,7 @@ async fn test_chain_orchestrator_fork_choice(
 
     // Initially the sequencer should build 100 empty blocks in each and the follower
     // should follow them
-    let mut reorg_block_info = BlockInfo::default();
+    let mut reorg_block_info: Option<BlockInfo> = None;
     for i in 0..initial_blocks {
         sequencer_handle.build_block();
         wait_n_events(
@@ -627,7 +669,7 @@ async fn test_chain_orchestrator_fork_choice(
             |e| {
                 if let ChainOrchestratorEvent::BlockSequenced(block) = e {
                     if Some(i) == reorg_block_number {
-                        reorg_block_info = (&block).into();
+                        reorg_block_info = Some((&block).into());
                     }
                     true
                 } else {
@@ -647,7 +689,9 @@ async fn test_chain_orchestrator_fork_choice(
 
     // Now reorg the sequencer and disable gossip so we can create fork
     sequencer_handle.set_gossip(false).await.unwrap();
-    sequencer_handle.update_fcs_head(reorg_block_info).await.unwrap();
+    if let Some(block_info) = reorg_block_info {
+        sequencer_handle.update_fcs_head(block_info).await.unwrap();
+    }
 
     // wait two seconds to ensure the timestamp of the new blocks is greater than the old ones
     tokio::time::sleep(tokio::time::Duration::from_secs(2)).await;

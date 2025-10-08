@@ -958,13 +958,16 @@ impl<
                 .collect();
 
             let mut index = None;
-            for (i, header) in headers.iter().enumerate() {
+            for (i, header) in headers.iter().enumerate().rev() {
                 let current_block = self
                     .l2_client
                     .get_block_by_number(header.number.into())
                     .full()
                     .await?
-                    .expect("block must exist");
+                    .expect("block must exist")
+                    .into_consensus()
+                    .map_transactions(|tx| tx.inner.into_inner());
+
                 if header.hash_slow() == current_block.header.hash_slow() {
                     index = Some(i);
                     break;
@@ -973,7 +976,7 @@ impl<
 
             if let Some(index) = index {
                 tracing::trace!(target: "scroll::chain_orchestrator", ?received_block_hash, ?received_block_number, common_ancestor = ?headers[index].hash_slow(), common_ancestor_number = headers[index].number, "Found common ancestor for fork - reorging to new chain");
-                for header in headers.into_iter().skip(index).rev() {
+                for header in headers.into_iter().skip(index + 1).rev() {
                     new_headers.push_front(header);
                 }
                 let chain_import = self.import_chain(new_headers.into(), block_with_peer).await?;
