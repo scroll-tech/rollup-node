@@ -10,7 +10,7 @@ use tracing::debug;
 ///    - timestamps are equal.
 ///    - `prev_randaos` are equal.
 ///    - `block_data_hint` matches the block data if present.
-pub(crate) fn block_matches_attributes<B: Block>(
+pub fn block_matches_attributes<B: Block>(
     attributes: &ScrollPayloadAttributes,
     block: &B,
     parent_hash: B256,

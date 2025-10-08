@@ -15,7 +15,9 @@ mod models;
 pub use models::*;
 
 mod operations;
-pub use operations::{DatabaseReadOperations, DatabaseWriteOperations, L1MessageKey, UnwindResult};
+pub use operations::{
+    DatabaseReadOperations, DatabaseWriteOperations, L1MessageKey, NotIncludedStart, UnwindResult,
+};
 
 mod transaction;
 pub use transaction::{DatabaseTransactionProvider, TXMut, TX};
