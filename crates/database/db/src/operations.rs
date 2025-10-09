@@ -4,8 +4,8 @@ use crate::{ReadConnectionProvider, WriteConnectionProvider};
 use alloy_primitives::{Signature, B256};
 use futures::{Stream, StreamExt};
 use rollup_node_primitives::{
-    BatchCommitData, BatchConsolidationOutcome, BatchInfo, BlockConsolidationOutcome, BlockInfo,
-    L1MessageEnvelope, L2BlockInfoWithL1Messages, Metadata,
+    BatchCommitData, BatchConsolidationOutcome, BatchInfo, BlockInfo, L1MessageEnvelope,
+    L2BlockInfoWithL1Messages, Metadata,
 };
 use scroll_alloy_rpc_types_engine::BlockDataHint;
 use sea_orm::{
@@ -412,20 +412,8 @@ pub trait DatabaseWriteOperations: WriteConnectionProvider + DatabaseReadOperati
         outcome: BatchConsolidationOutcome,
     ) -> Result<(), DatabaseError> {
         for block in outcome.blocks {
-            match block {
-                BlockConsolidationOutcome::Consolidated(block_info) => {
-                    self.insert_block(block_info, outcome.batch_info).await?;
-                }
-                BlockConsolidationOutcome::Skipped(block_info) => {
-                    // No action needed, the block has already been previously consolidated however
-                    // we will insert it again defensively
-                    self.insert_block(block_info, outcome.batch_info).await?;
-                }
-                BlockConsolidationOutcome::Reorged(block_info) => {
-                    self.insert_block(block_info.block_info, outcome.batch_info).await?;
-                    self.update_l1_messages_with_l2_block(block_info).await?;
-                }
-            }
+            self.insert_block(block.block_info, outcome.batch_info).await?;
+            self.update_l1_messages_with_l2_block(block).await?;
         }
         Ok(())
     }
@@ -628,6 +616,8 @@ pub trait DatabaseReadOperations: ReadConnectionProvider + Sync {
         DatabaseError,
     > {
         match start {
+            // Provides an stream over all L1 messages with increasing queue index starting from the
+            // provided queue index.
             Some(L1MessageKey::QueueIndex(queue_index)) => Ok(Some(
                 models::l1_message::Entity::find()
                     .filter(models::l1_message::Column::QueueIndex.gte(queue_index))
@@ -636,8 +626,10 @@ pub trait DatabaseReadOperations: ReadConnectionProvider + Sync {
                     .await?
                     .map(map_l1_message_result),
             )),
+            // Provides a stream over all L1 messages with increasing queue index starting from the
+            // message with the provided transaction hash.
             Some(L1MessageKey::TransactionHash(ref h)) => {
-                // Lookup message by hash
+                // Lookup message by hash to get its queue index.
                 let record = models::l1_message::Entity::find()
                     .filter(models::l1_message::Column::Hash.eq(h.to_vec()))
                     .one(self.get_connection())
@@ -645,6 +637,7 @@ pub trait DatabaseReadOperations: ReadConnectionProvider + Sync {
                     .ok_or_else(|| {
                         DatabaseError::L1MessageNotFound(L1MessageKey::TransactionHash(*h))
                     })?;
+                // Yield a stream of messages starting from the found queue index.
                 Ok(Some(
                     models::l1_message::Entity::find()
                         .filter(models::l1_message::Column::QueueIndex.gte(record.queue_index))
@@ -654,8 +647,10 @@ pub trait DatabaseReadOperations: ReadConnectionProvider + Sync {
                         .map(map_l1_message_result),
                 ))
             }
+            // Provides a stream over all L1 messages with increasing queue index starting from the
+            // message with the provided queue hash.
             Some(L1MessageKey::QueueHash(ref h)) => {
-                // Lookup message by queue hash
+                // Lookup message by queue hash.
                 let record = models::l1_message::Entity::find()
                     .filter(
                         Condition::all()
@@ -665,7 +660,7 @@ pub trait DatabaseReadOperations: ReadConnectionProvider + Sync {
                     .one(self.get_connection())
                     .await?
                     .ok_or_else(|| DatabaseError::L1MessageNotFound(L1MessageKey::QueueHash(*h)))?;
-
+                // Yield a stream of messages starting from the found queue index.
                 Ok(Some(
                     models::l1_message::Entity::find()
                         .filter(models::l1_message::Column::QueueIndex.gte(record.queue_index))
@@ -675,7 +670,14 @@ pub trait DatabaseReadOperations: ReadConnectionProvider + Sync {
                         .map(map_l1_message_result),
                 ))
             }
+            // Provides a stream over all L1 messages with increasing queue index starting from the
+            // message included in the provided L2 block number.
             Some(L1MessageKey::BlockNumber(block_number)) => {
+                // Lookup the the latest message included in a block with a block number less than
+                // the provided block number. This is achieved by filtering for messages with a
+                // block number less than the provided block number and ordering by block number and
+                // queue index in descending order. This ensures that we get the latest message
+                // included in a block before the provided block number.
                 if let Some(record) = models::l1_message::Entity::find()
                     .filter(models::l1_message::Column::L2BlockNumber.lt(block_number as i64))
                     .order_by_desc(models::l1_message::Column::L2BlockNumber)
@@ -683,6 +685,7 @@ pub trait DatabaseReadOperations: ReadConnectionProvider + Sync {
                     .one(self.get_connection())
                     .await?
                 {
+                    // Yield a stream of messages starting from the found queue index + 1.
                     Ok(Some(
                         models::l1_message::Entity::find()
                             .filter(
@@ -694,7 +697,11 @@ pub trait DatabaseReadOperations: ReadConnectionProvider + Sync {
                             .await?
                             .map(map_l1_message_result),
                     ))
-                } else {
+                }
+                // If no messages have been found then it suggests that no messages have been
+                // included in blocks yet and as such we should return a stream of all messages with
+                // increasing queue index starting from the beginning.
+                else {
                     Ok(Some(
                         models::l1_message::Entity::find()
                             .order_by_asc(models::l1_message::Column::QueueIndex)
@@ -704,14 +711,24 @@ pub trait DatabaseReadOperations: ReadConnectionProvider + Sync {
                     ))
                 }
             }
+            // Provides a stream over all L1 messages with increasing queue index starting that have
+            // not been included in an L2 block and have a block number less than or equal to the
+            // finalized L1 block number (they have been finalized on L1).
             Some(L1MessageKey::NotIncluded(NotIncludedStart::Finalized)) => {
+                // Lookup the finalized L1 block number.
                 let finalized_block_number = self.get_finalized_l1_block_number().await?;
+
+                // Create a filter condition for messages that have an L1 block number less than or
+                // equal to the finalized block number and have not been included in an L2 block
+                // (i.e. L2BlockNumber is null).
                 let condition = Condition::all()
                     .add(
                         models::l1_message::Column::L1BlockNumber
                             .lte(finalized_block_number as i64),
                     )
                     .add(models::l1_message::Column::L2BlockNumber.is_null());
+                // Yield a stream of messages matching the condition ordered by increasing queue
+                // index.
                 Ok(Some(
                     models::l1_message::Entity::find()
                         .filter(condition)
@@ -721,17 +738,30 @@ pub trait DatabaseReadOperations: ReadConnectionProvider + Sync {
                         .map(map_l1_message_result),
                 ))
             }
+            // Provides a stream over all L1 messages with increasing queue index starting that have
+            // not been included in an L2 block and have a block number less than or equal to the
+            // latest L1 block number minus the provided depth (they have been sufficiently deep
+            // on L1 to be considered safe to include - reorg risk is low).
             Some(L1MessageKey::NotIncluded(NotIncludedStart::BlockDepth(depth))) => {
+                // Lookup the latest L1 block number.
                 let latest_block_number = self.get_latest_l1_block_number().await?;
 
+                // Calculate the target block number by subtracting the depth from the latest block
+                // number. If the depth is greater than the latest block number, we return None as
+                // there are no messages that satisfy the condition.
                 let target_block_number = latest_block_number.checked_sub(depth);
                 if let Some(target_block_number) = target_block_number {
+                    // Create a filter condition for messages that have an L1 block number less than
+                    // or equal to the target block number and have not been included in an L2 block
+                    // (i.e. L2BlockNumber is null).
                     let condition = Condition::all()
                         .add(
                             models::l1_message::Column::L1BlockNumber
                                 .lte(target_block_number as i64),
                         )
                         .add(models::l1_message::Column::L2BlockNumber.is_null());
+                    // Yield a stream of messages matching the condition ordered by increasing
+                    // queue index.
                     Ok(Some(
                         models::l1_message::Entity::find()
                             .filter(condition)
@@ -741,9 +771,13 @@ pub trait DatabaseReadOperations: ReadConnectionProvider + Sync {
                             .map(map_l1_message_result),
                     ))
                 } else {
+                    // If the depth is greater than the latest block number, return None as there
+                    // are no messages that satisfy the condition.
                     Ok(None)
                 }
             }
+            // Provides a stream over all L1 messages with increasing queue index starting from the
+            // beginning.
             None => Ok(Some(
                 models::l1_message::Entity::find()
                     .order_by_asc(models::l1_message::Column::QueueIndex)

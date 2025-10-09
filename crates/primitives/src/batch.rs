@@ -1,4 +1,4 @@
-use super::{BlockInfo, L2BlockInfoWithL1Messages};
+use super::L2BlockInfoWithL1Messages;
 
 use alloy_primitives::{Bytes, B256};
 use std::{sync::Arc, vec::Vec};
@@ -59,7 +59,7 @@ pub struct BatchConsolidationOutcome {
     /// The batch info for the consolidated batch.
     pub batch_info: BatchInfo,
     /// The consolidation outcomes for each block in the batch.
-    pub blocks: Vec<BlockConsolidationOutcome>,
+    pub blocks: Vec<L2BlockInfoWithL1Messages>,
 }
 
 impl BatchConsolidationOutcome {
@@ -69,7 +69,7 @@ impl BatchConsolidationOutcome {
     }
 
     /// Pushes a block consolidation outcome to the batch.
-    pub fn push_block(&mut self, block: BlockConsolidationOutcome) {
+    pub fn push_block(&mut self, block: L2BlockInfoWithL1Messages) {
         self.blocks.push(block);
     }
 }
@@ -78,19 +78,39 @@ impl BatchConsolidationOutcome {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum BlockConsolidationOutcome {
     /// The derived block was already part of the chain, update the fork choice state.
-    Consolidated(BlockInfo),
+    UpdateFcs(L2BlockInfoWithL1Messages),
     /// The fork choice state was already ahead of the derived block.
-    Skipped(BlockInfo),
+    Skipped(L2BlockInfoWithL1Messages),
     /// The derived block resulted in a reorg of the L2 chain.
     Reorged(L2BlockInfoWithL1Messages),
 }
 
 impl BlockConsolidationOutcome {
-    /// Returns the block info for the consolidated block.
-    pub const fn block_info(&self) -> &BlockInfo {
+    /// Returns the block info with l2 messages for the consolidated block.
+    pub const fn block_info(&self) -> &L2BlockInfoWithL1Messages {
         match self {
-            Self::Consolidated(info) | Self::Skipped(info) => info,
-            Self::Reorged(info) => &info.block_info,
+            Self::UpdateFcs(info) | Self::Skipped(info) | Self::Reorged(info) => info,
+        }
+    }
+
+    /// Consumes the outcome and returns the block info with l2 messages for the consolidated block.
+    pub fn into_inner(self) -> L2BlockInfoWithL1Messages {
+        match self {
+            Self::UpdateFcs(info) | Self::Skipped(info) | Self::Reorged(info) => info,
+        }
+    }
+}
+
+impl std::fmt::Display for BlockConsolidationOutcome {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::UpdateFcs(info) => {
+                write!(f, "Update Fcs to block {}", info.block_info.number)
+            }
+            Self::Skipped(info) => write!(f, "Skipped block {}", info.block_info.number),
+            Self::Reorged(attrs) => {
+                write!(f, "Reorged to block {}", attrs.block_info)
+            }
         }
     }
 }

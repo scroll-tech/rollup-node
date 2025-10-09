@@ -31,9 +31,6 @@ use rollup_node_chain_orchestrator::{
     ChainOrchestrator, ChainOrchestratorConfig, ChainOrchestratorHandle, Consensus, NoopConsensus,
     SystemContractConsensus,
 };
-// use rollup_node_manager::{
-//     Consensus, NoopConsensus, RollupManagerHandle, RollupNodeManager, SystemContractConsensus,
-// };
 use rollup_node_primitives::{BlockInfo, NodeConfig};
 use rollup_node_providers::{
     BlobProvidersBuilder, FullL1Provider, L1MessageProvider, L1Provider, SystemContractProvider,
@@ -323,15 +320,6 @@ impl ScrollRollupNodeConfig {
 
         tracing::info!(target: "scroll::node::args", fcs = ?fcs, payload_building_duration = ?self.sequencer_args.payload_building_duration, "Starting engine driver");
         let engine = Engine::new(Arc::new(engine_api), fcs);
-        // let engine = EngineDriver::new(
-        //     Arc::new(engine_api),
-        //     chain_spec.clone(),
-        //     Some(l2_provider.clone()),
-        //     fcs,
-        //     self.engine_driver_args.sync_at_startup && !self.test && !chain_spec.is_dev_chain(),
-        //     Duration::from_millis(self.sequencer_args.payload_building_duration),
-        //     self.sequencer_args.allow_empty_blocks,
-        // );
 
         // Create the consensus.
         let authorized_signer = if let Some(provider) = l1_provider.as_ref() {

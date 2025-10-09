@@ -1,7 +1,7 @@
 //! Engine Driver for the Scroll Rollup Node. The [`Engine`] exposes the main interface for
 //! the Rollup Node to the Engine API.
 
-pub use error::{EngineDriverError, EngineError, FcsError};
+pub use error::{EngineError, FcsError};
 mod error;
 
 pub use fcs::{genesis_hash_from_chain_spec, ForkchoiceState};
