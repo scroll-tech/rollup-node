@@ -1,4 +1,5 @@
 use eyre::Result;
+use std::sync::{atomic::AtomicBool, Arc};
 use tests::*;
 
 #[tokio::test]
@@ -28,6 +29,18 @@ async fn docker_test_migrate_sequencer() -> Result<()> {
     utils::admin_add_peer(&rn_follower, &env.rn_sequencer_enode()?).await?;
     utils::admin_add_peer(&rn_sequencer, &env.l2geth_sequencer_enode()?).await?;
 
+    // Start single continuous transaction sender for entire test
+    let stop = Arc::new(AtomicBool::new(false));
+    let stop_clone = stop.clone();
+    let rn_follower_clone = env.get_rn_follower_provider().await.unwrap();
+    let l2geth_follower_clone = env.get_l2geth_follower_provider().await.unwrap();
+    let tx_sender = tokio::spawn(async move {
+        utils::run_continuous_tx_sender(stop_clone, &[&rn_follower_clone, &l2geth_follower_clone])
+            .await
+    });
+
+    tracing::info!("🔄 Started continuous transaction sender for entire test");
+
     // Enable block production on l2geth sequencer
     utils::miner_start(&l2geth_sequencer).await?;
 
@@ -46,6 +59,8 @@ async fn docker_test_migrate_sequencer() -> Result<()> {
     let target_block = 120;
     utils::wait_for_block(&nodes, target_block).await?;
     utils::assert_blocks_match(&nodes, target_block).await?;
+
+    utils::stop_continuous_tx_sender(stop, tx_sender).await?;
 
     Ok(())
 }
