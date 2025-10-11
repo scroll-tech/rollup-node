@@ -39,6 +39,7 @@ async-trait.workspace = true
 alloy-primitives = { workspace = true, features = ["getrandom"] }
 criterion = { package = "codspeed-criterion-compat", version = "4.0.2", features = ["async", "async_tokio"] }
 eyre.workspace = true
+reth-tracing.workspace = true
 rollup-node-providers = { workspace = true, features = ["test-utils"] }
 reqwest.workspace = true
 serde_json.workspace = true

@@ -1,27 +1,20 @@
-//! Engine Driver for the Scroll Rollup Node. The [`EngineDriver`] exposes the main interface for
+//! Engine Driver for the Scroll Rollup Node. The [`Engine`] exposes the main interface for
 //! the Rollup Node to the Engine API.
 
-pub(crate) mod api;
-
-pub use driver::EngineDriver;
-mod driver;
-
-pub use error::EngineDriverError;
+pub use error::{EngineError, FcsError};
 mod error;
-
-pub use event::EngineDriverEvent;
-mod event;
 
 pub use fcs::{genesis_hash_from_chain_spec, ForkchoiceState};
 mod fcs;
-
-mod future;
-pub use future::ConsolidationOutcome;
 
 pub use metrics::EngineDriverMetrics;
 mod metrics;
 
 mod payload;
+pub use payload::block_matches_attributes;
+
+mod engine;
+pub use engine::Engine;
 
 #[cfg(any(test, feature = "test-utils"))]
 pub mod test_utils;

@@ -51,3 +51,10 @@ serde = [
     "reth-storage-api/serde",
     "scroll-alloy-hardforks/serde",
 ]
+test-utils = [
+    "reth-chainspec/test-utils",
+    "reth-network/test-utils",
+    "reth-network-types/test-utils",
+    "reth-primitives-traits/test-utils",
+    "reth-scroll-node/test-utils",
+]

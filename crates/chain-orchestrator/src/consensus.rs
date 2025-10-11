@@ -8,7 +8,7 @@ use scroll_network::ConsensusError;
 use std::fmt::Debug;
 
 /// A trait for consensus implementations.
-pub trait Consensus: Send + Debug {
+pub trait Consensus: Send + Sync + Debug {
     /// Updates the current config for the consensus.
     fn update_config(&mut self, update: &ConsensusUpdate);
     /// Validates a new block with the given signature.

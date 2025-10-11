@@ -1,11 +1,11 @@
 use crate::{BlockImportError, BlockValidationError};
 
 use super::{
-    BlockImportOutcome, BlockValidation, NetworkHandleMessage, NetworkManagerEvent,
-    NewBlockWithPeer, ScrollNetworkHandle,
+    BlockImportOutcome, BlockValidation, NetworkHandleMessage, NewBlockWithPeer,
+    ScrollNetworkHandle, ScrollNetworkManagerEvent,
 };
 use alloy_primitives::{Address, FixedBytes, Signature, B256, U128};
-use futures::{FutureExt, Stream, StreamExt};
+use futures::{Future, FutureExt, StreamExt};
 use reth_chainspec::EthChainSpec;
 use reth_eth_wire_types::NewBlock as EthWireNewBlock;
 use reth_network::{
@@ -16,8 +16,8 @@ use reth_network_api::{block::NewBlockWithPeer as RethNewBlockWithPeer, FullNetw
 use reth_scroll_node::ScrollNetworkPrimitives;
 use reth_scroll_primitives::ScrollBlock;
 use reth_storage_api::BlockNumReader as BlockNumReaderT;
-use reth_tokio_util::EventStream;
-use rollup_node_primitives::sig_encode_hash;
+use reth_tokio_util::{EventSender, EventStream};
+use rollup_node_primitives::{sig_encode_hash, BlockInfo};
 use scroll_alloy_hardforks::ScrollHardforks;
 use scroll_wire::{
     NewBlock, ScrollWireConfig, ScrollWireEvent, ScrollWireManager, ScrollWireProtocolHandler,
@@ -35,6 +35,8 @@ use tracing::trace;
 /// The size of the ECDSA signature in bytes.
 const ECDSA_SIGNATURE_LEN: usize = 65;
 
+const EVENT_CHANNEL_SIZE: usize = 5000;
+
 /// [`ScrollNetworkManager`] manages the state of the scroll p2p network.
 ///
 /// This manager drives the state of the entire network forward and includes the following
@@ -47,8 +49,8 @@ const ECDSA_SIGNATURE_LEN: usize = 65;
 pub struct ScrollNetworkManager<N, CS> {
     /// The chain spec used by the rollup node.
     chain_spec: Arc<CS>,
-    /// A handle used to interact with the network manager.
-    handle: ScrollNetworkHandle<N>,
+    /// The inner network handle which is used to communicate with the inner network.
+    inner_network_handle: N,
     /// Receiver half of the channel set up between this type and the [`FullNetwork`], receives
     /// [`NetworkHandleMessage`]s.
     from_handle_rx: UnboundedReceiverStream<NetworkHandleMessage>,
@@ -62,6 +64,11 @@ pub struct ScrollNetworkManager<N, CS> {
     td_constant: U128,
     /// The authorized signer for the network.
     authorized_signer: Option<Address>,
+    /// Whether to gossip blocks to peers.
+    #[cfg(feature = "test-utils")]
+    gossip: bool,
+    /// The event sender for network events.
+    event_sender: EventSender<ScrollNetworkManagerEvent>,
 }
 
 impl<CS: ScrollHardforks + EthChainSpec + Send + Sync + 'static>
@@ -76,7 +83,7 @@ impl<CS: ScrollHardforks + EthChainSpec + Send + Sync + 'static>
         eth_wire_listener: Option<EventStream<RethNewBlockWithPeer<ScrollBlock>>>,
         td_constant: U128,
         authorized_signer: Option<Address>,
-    ) -> Self {
+    ) -> (Self, ScrollNetworkHandle<RethNetworkHandle<ScrollNetworkPrimitives>>) {
         // Create the scroll-wire protocol handler.
         let (scroll_wire_handler, events) = ScrollWireProtocolHandler::new(scroll_wire_config);
 
@@ -91,7 +98,8 @@ impl<CS: ScrollHardforks + EthChainSpec + Send + Sync + 'static>
         // Create the channel for sending messages to the network manager.
         let (to_manager_tx, from_handle_rx) = mpsc::unbounded_channel();
 
-        let handle = ScrollNetworkHandle::new(to_manager_tx, inner_network_handle);
+        let handle = ScrollNetworkHandle::new(to_manager_tx, inner_network_handle.clone());
+        let event_sender = EventSender::new(EVENT_CHANNEL_SIZE);
 
         // Create the scroll-wire protocol manager.
         let scroll_wire = ScrollWireManager::new(events);
@@ -101,16 +109,22 @@ impl<CS: ScrollHardforks + EthChainSpec + Send + Sync + 'static>
         // Spawn the inner network manager.
         tokio::spawn(inner_network_manager);
 
-        Self {
-            chain_spec,
+        (
+            Self {
+                chain_spec,
+                inner_network_handle,
+                from_handle_rx: from_handle_rx.into(),
+                scroll_wire,
+                blocks_seen,
+                eth_wire_listener,
+                td_constant,
+                authorized_signer,
+                event_sender,
+                #[cfg(feature = "test-utils")]
+                gossip: true,
+            },
             handle,
-            from_handle_rx: from_handle_rx.into(),
-            scroll_wire,
-            blocks_seen,
-            eth_wire_listener,
-            td_constant,
-            authorized_signer,
-        }
+        )
     }
 }
 
@@ -130,41 +144,43 @@ impl<
         eth_wire_listener: Option<EventStream<RethNewBlockWithPeer<ScrollBlock>>>,
         td_constant: U128,
         authorized_signer: Option<Address>,
-    ) -> Self {
+    ) -> (Self, ScrollNetworkHandle<N>) {
         // Create the channel for sending messages to the network manager from the network handle.
         let (to_manager_tx, from_handle_rx) = mpsc::unbounded_channel();
 
         // Create the scroll-wire protocol manager.
         let scroll_wire = ScrollWireManager::new(events);
 
-        let handle = ScrollNetworkHandle::new(to_manager_tx, inner_network_handle);
+        let handle = ScrollNetworkHandle::new(to_manager_tx, inner_network_handle.clone());
+        let event_sender = EventSender::new(EVENT_CHANNEL_SIZE);
 
         let blocks_seen = LruCache::new(LRU_CACHE_SIZE);
 
-        Self {
-            chain_spec,
+        (
+            Self {
+                chain_spec,
+                inner_network_handle,
+                from_handle_rx: from_handle_rx.into(),
+                scroll_wire,
+                blocks_seen,
+                eth_wire_listener,
+                td_constant,
+                authorized_signer,
+                event_sender,
+                #[cfg(feature = "test-utils")]
+                gossip: true,
+            },
             handle,
-            from_handle_rx: from_handle_rx.into(),
-            scroll_wire,
-            blocks_seen,
-            eth_wire_listener,
-            td_constant,
-            authorized_signer,
-        }
-    }
-
-    /// Returns a new [`ScrollNetworkHandle`] instance.
-    pub fn handle(&self) -> &ScrollNetworkHandle<N> {
-        &self.handle
-    }
-
-    /// Returns an inner network handle [`RethNetworkHandle`].
-    pub fn inner_network_handle(&self) -> &N {
-        self.handle.inner()
+        )
     }
 
     /// Announces a new block to the network.
     fn announce_block(&mut self, block: NewBlock) {
+        #[cfg(feature = "test-utils")]
+        if !self.gossip {
+            return;
+        }
+
         // Compute the block hash.
         let hash = block.block.hash_slow();
 
@@ -205,7 +221,7 @@ impl<
                 eth_wire_block.header.extra_data = block.signature.clone().into();
                 EthWireNewBlock { block: eth_wire_block, td }
             };
-            self.inner_network_handle().eth_wire_announce_block(eth_wire_new_block, hash);
+            self.inner_network_handle.eth_wire_announce_block(eth_wire_new_block, hash);
         }
 
         // Announce block to the filtered set of peers
@@ -216,7 +232,10 @@ impl<
     }
 
     /// Handler for received events from the [`ScrollWireManager`].
-    fn on_scroll_wire_event(&mut self, event: ScrollWireEvent) -> Option<NetworkManagerEvent> {
+    fn on_scroll_wire_event(
+        &mut self,
+        event: ScrollWireEvent,
+    ) -> Option<ScrollNetworkManagerEvent> {
         match event {
             ScrollWireEvent::NewBlock { peer_id, block, signature } => {
                 let block_hash = block.hash_slow();
@@ -233,7 +252,7 @@ impl<
                     // Update the state of the block cache i.e. we have seen this block.
                     self.blocks_seen.insert((block.hash_slow(), signature));
 
-                    Some(NetworkManagerEvent::NewBlock(NewBlockWithPeer {
+                    Some(ScrollNetworkManagerEvent::NewBlock(NewBlockWithPeer {
                         peer_id,
                         block,
                         signature,
@@ -261,6 +280,14 @@ impl<
                 // self.perform_network_shutdown().await;
                 // let _ = tx.send(());
             }
+            NetworkHandleMessage::EventListener(tx) => {
+                let _ = tx.send(self.event_sender.new_listener());
+            }
+            #[cfg(feature = "test-utils")]
+            NetworkHandleMessage::SetGossip((enabled, tx)) => {
+                self.gossip = enabled;
+                let _ = tx.send(());
+            }
         }
     }
 
@@ -270,17 +297,17 @@ impl<
         match result {
             Ok(BlockValidation::ValidBlock { new_block: msg }) |
             Ok(BlockValidation::ValidHeader { new_block: msg }) => {
-                trace!(target: "scroll::network::manager", peer_id = ?peer, block = ?msg.block, "Block import successful - announcing block to network");
+                trace!(target: "scroll::network::manager", peer_id = ?peer, block = %Into::<BlockInfo>::into(&msg.block), "Block import successful - announcing block to network");
                 self.announce_block(msg);
             }
             Err(BlockImportError::Consensus(err)) => {
                 trace!(target: "scroll::network::manager", peer_id = ?peer, ?err, "Block import failed - consensus error - penalizing peer");
-                self.inner_network_handle()
+                self.inner_network_handle
                     .reputation_change(peer, reth_network_api::ReputationChangeKind::BadBlock);
             }
             Err(BlockImportError::Validation(BlockValidationError::InvalidBlock)) => {
                 trace!(target: "scroll::network::manager", peer_id = ?peer, "Block import failed - invalid block - penalizing peer");
-                self.inner_network_handle()
+                self.inner_network_handle
                     .reputation_change(peer, reth_network_api::ReputationChangeKind::BadBlock);
             }
         }
@@ -290,7 +317,7 @@ impl<
     fn handle_eth_wire_block(
         &mut self,
         block: reth_network_api::block::NewBlockWithPeer<ScrollBlock>,
-    ) -> Option<NetworkManagerEvent> {
+    ) -> Option<ScrollNetworkManagerEvent> {
         let reth_network_api::block::NewBlockWithPeer { peer_id, mut block } = block;
 
         // We purge the extra data field post euclid v2 to align with protocol specification.
@@ -326,10 +353,14 @@ impl<
 
             // Update the state of the block cache i.e. we have seen this block.
             self.blocks_seen.insert((block_hash, signature));
-            Some(NetworkManagerEvent::NewBlock(NewBlockWithPeer { peer_id, block, signature }))
+            Some(ScrollNetworkManagerEvent::NewBlock(NewBlockWithPeer {
+                peer_id,
+                block,
+                signature,
+            }))
         } else {
             tracing::warn!(target: "scroll::bridge::import", peer_id = %peer_id, "Failed to extract signature from block extra data, penalizing peer");
-            self.inner_network_handle()
+            self.inner_network_handle
                 .reputation_change(peer_id, reth_network_api::ReputationChangeKind::BadBlock);
             None
         }
@@ -339,11 +370,11 @@ impl<
 impl<
         N: FullNetwork<Primitives = ScrollNetworkPrimitives>,
         CS: ScrollHardforks + EthChainSpec + Send + Sync + 'static,
-    > Stream for ScrollNetworkManager<N, CS>
+    > Future for ScrollNetworkManager<N, CS>
 {
-    type Item = NetworkManagerEvent;
+    type Output = ();
 
-    fn poll_next(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
+    fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
         let this = self.get_mut();
 
         // We handle the messages from the network handle.
@@ -355,7 +386,7 @@ impl<
                 }
                 // All network handles have been dropped so we can shutdown the network.
                 Poll::Ready(None) => {
-                    return Poll::Ready(None);
+                    return Poll::Ready(());
                 }
                 // No additional messages exist break.
                 Poll::Pending => break,
@@ -363,9 +394,9 @@ impl<
         }
 
         // Next we handle the scroll-wire events.
-        if let Poll::Ready(event) = this.scroll_wire.poll_unpin(cx) {
+        while let Poll::Ready(event) = this.scroll_wire.poll_unpin(cx) {
             if let Some(event) = this.on_scroll_wire_event(event) {
-                return Poll::Ready(Some(event));
+                this.event_sender.notify(event);
             }
         }
 
@@ -374,7 +405,7 @@ impl<
             this.eth_wire_listener.as_mut().map(|new_block_rx| new_block_rx.poll_next_unpin(cx))
         {
             if let Some(event) = this.handle_eth_wire_block(block) {
-                return Poll::Ready(Some(event));
+                this.event_sender.notify(event);
             }
         }
 

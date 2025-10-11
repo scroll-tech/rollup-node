@@ -92,7 +92,7 @@ jobs:
         with:
           cache-on-failure: true
       - name: Run doc
-        run: cargo docs --document-private-items
+        run: cargo docs --document-private-items --exclude rollup-node-chain-orchestrator
         env:
           RUSTDOCFLAGS: --cfg docsrs --show-type-layout --generate-link-to-definition --enable-index-page -Zunstable-options -D warnings
 

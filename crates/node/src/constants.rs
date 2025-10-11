@@ -27,7 +27,7 @@ pub(crate) const DEFAULT_PAYLOAD_BUILDING_DURATION: u64 = 800;
 pub(crate) const DEFAULT_PAYLOAD_SIZE_LIMIT: u64 = 122_880;
 
 /// The gap in blocks between the P2P and EN which triggers sync.
-pub(crate) const BLOCK_GAP_TRIGGER: u64 = 100_000;
+pub(crate) const BLOCK_GAP_TRIGGER: u64 = 1_000;
 
 /// The number of block headers to keep in the in-memory chain buffer in the chain orchestrator.
 pub(crate) const CHAIN_BUFFER_SIZE: usize = 2000;

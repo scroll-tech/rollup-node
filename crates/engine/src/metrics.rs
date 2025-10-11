@@ -1,7 +1,7 @@
 use metrics::Histogram;
 use metrics_derive::Metrics;
 
-/// The metrics for the [`super::EngineDriver`].
+/// The metrics for the [`super::Engine`].
 #[derive(Metrics, Clone)]
 #[metrics(scope = "engine_driver")]
 pub struct EngineDriverMetrics {
