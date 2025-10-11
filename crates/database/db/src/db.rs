@@ -8,7 +8,7 @@ use sea_orm::{
     DatabaseConnection, SqlxSqliteConnector, TransactionTrait,
 };
 use std::sync::Arc;
-use tokio::sync::Mutex;
+use tokio::sync::{Mutex, Semaphore};
 
 // TODO: make these configurable via CLI.
 
@@ -16,7 +16,7 @@ use tokio::sync::Mutex;
 const BUSY_TIMEOUT_SECS: u64 = 5;
 
 /// The maximum number of connections in the database connection pool.
-const MAX_CONNECTIONS: u32 = 10;
+const MAX_CONNECTIONS: u32 = 32;
 
 /// The minimum number of connections in the database connection pool.
 const MIN_CONNECTIONS: u32 = 5;
@@ -36,6 +36,8 @@ pub struct Database {
     connection: DatabaseConnection,
     /// A mutex to ensure that only one mutable transaction is active at a time.
     write_lock: Arc<Mutex<()>>,
+    /// A semaphore to limit the number of concurrent read-only transactions.
+    read_locks: Arc<Semaphore>,
     /// The database metrics.
     metrics: DatabaseMetrics,
     /// The temporary directory used for testing. We keep it here to ensure it lives as long as the
@@ -80,9 +82,13 @@ impl Database {
             .connect_with(options)
             .await?;
 
+        // We reserve one connection for write transactions.
+        let read_connection_limit = max_connections as usize - 1;
+
         Ok(Self {
             connection: SqlxSqliteConnector::from_sqlx_sqlite_pool(sqlx_pool),
             write_lock: Arc::new(Mutex::new(())),
+            read_locks: Arc::new(Semaphore::new(read_connection_limit)),
             metrics: DatabaseMetrics::default(),
             #[cfg(feature = "test-utils")]
             tmp_dir: None,
@@ -111,7 +117,8 @@ impl DatabaseTransactionProvider for Database {
     /// Creates a new [`TX`] which can be used for read-only operations.
     async fn tx(&self) -> Result<TX, DatabaseError> {
         tracing::trace!(target: "scroll::db", "Creating new read-only transaction");
-        Ok(TX::new(self.connection.clone().begin().await?))
+        let permit = self.read_locks.clone().acquire_owned().await.unwrap();
+        Ok(TX::new(self.connection.clone().begin().await?, permit))
     }
 
     /// Creates a new [`TXMut`] which can be used for atomic read and write operations.
@@ -145,18 +152,6 @@ impl DatabaseConnectionProvider for Database {
 
     fn get_connection(&self) -> &Self::Connection {
         &self.connection
-    }
-}
-
-impl From<DatabaseConnection> for Database {
-    fn from(connection: DatabaseConnection) -> Self {
-        Self {
-            connection,
-            write_lock: Arc::new(Mutex::new(())),
-            metrics: DatabaseMetrics::default(),
-            #[cfg(feature = "test-utils")]
-            tmp_dir: None,
-        }
     }
 }
 

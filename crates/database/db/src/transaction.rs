@@ -1,7 +1,7 @@
 use crate::DatabaseConnectionProvider;
 
 use super::{DatabaseError, ReadConnectionProvider, WriteConnectionProvider};
-use tokio::sync::OwnedMutexGuard;
+use tokio::sync::{OwnedMutexGuard, OwnedSemaphorePermit};
 
 /// A type that represents a read-only database transaction.
 ///
@@ -10,12 +10,14 @@ use tokio::sync::OwnedMutexGuard;
 pub struct TX {
     /// The underlying database transaction.
     tx: sea_orm::DatabaseTransaction,
+    /// A permit for the read transaction semaphore.
+    _permit: OwnedSemaphorePermit,
 }
 
 impl TX {
     /// Creates a new [`TX`] instance associated with the provided [`sea_orm::DatabaseTransaction`].
-    pub const fn new(tx: sea_orm::DatabaseTransaction) -> Self {
-        Self { tx }
+    pub const fn new(tx: sea_orm::DatabaseTransaction, permit: OwnedSemaphorePermit) -> Self {
+        Self { tx, _permit: permit }
     }
 }
 
