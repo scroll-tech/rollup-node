@@ -714,18 +714,25 @@ pub trait DatabaseReadOperations: ReadConnectionProvider + Sync {
             // Provides a stream over all L1 messages with increasing queue index starting that have
             // not been included in an L2 block and have a block number less than or equal to the
             // finalized L1 block number (they have been finalized on L1).
-            Some(L1MessageKey::NotIncluded(NotIncludedStart::Finalized)) => {
+            Some(L1MessageKey::NotIncluded(NotIncludedStart::FinalizedWithBlockDepth(depth))) => {
                 // Lookup the finalized L1 block number.
                 let finalized_block_number = self.get_finalized_l1_block_number().await?;
+
+                // Calculate the target block number by subtracting the depth from the finalized
+                // block number. If the depth is greater than the finalized block number, we return
+                // None as there are no messages that satisfy the condition.
+                let target_block_number =
+                    if let Some(target_block_number) = finalized_block_number.checked_sub(depth) {
+                        target_block_number
+                    } else {
+                        return Ok(None);
+                    };
 
                 // Create a filter condition for messages that have an L1 block number less than or
                 // equal to the finalized block number and have not been included in an L2 block
                 // (i.e. L2BlockNumber is null).
                 let condition = Condition::all()
-                    .add(
-                        models::l1_message::Column::L1BlockNumber
-                            .lte(finalized_block_number as i64),
-                    )
+                    .add(models::l1_message::Column::L1BlockNumber.lte(target_block_number as i64))
                     .add(models::l1_message::Column::L2BlockNumber.is_null());
                 // Yield a stream of messages matching the condition ordered by increasing queue
                 // index.
@@ -749,32 +756,28 @@ pub trait DatabaseReadOperations: ReadConnectionProvider + Sync {
                 // Calculate the target block number by subtracting the depth from the latest block
                 // number. If the depth is greater than the latest block number, we return None as
                 // there are no messages that satisfy the condition.
-                let target_block_number = latest_block_number.checked_sub(depth);
-                if let Some(target_block_number) = target_block_number {
-                    // Create a filter condition for messages that have an L1 block number less than
-                    // or equal to the target block number and have not been included in an L2 block
-                    // (i.e. L2BlockNumber is null).
-                    let condition = Condition::all()
-                        .add(
-                            models::l1_message::Column::L1BlockNumber
-                                .lte(target_block_number as i64),
-                        )
-                        .add(models::l1_message::Column::L2BlockNumber.is_null());
-                    // Yield a stream of messages matching the condition ordered by increasing
-                    // queue index.
-                    Ok(Some(
-                        models::l1_message::Entity::find()
-                            .filter(condition)
-                            .order_by_asc(models::l1_message::Column::QueueIndex)
-                            .stream(self.get_connection())
-                            .await?
-                            .map(map_l1_message_result),
-                    ))
-                } else {
-                    // If the depth is greater than the latest block number, return None as there
-                    // are no messages that satisfy the condition.
-                    Ok(None)
-                }
+                let target_block_number =
+                    if let Some(target_block_number) = latest_block_number.checked_sub(depth) {
+                        target_block_number
+                    } else {
+                        return Ok(None);
+                    };
+                // Create a filter condition for messages that have an L1 block number less than
+                // or equal to the target block number and have not been included in an L2 block
+                // (i.e. L2BlockNumber is null).
+                let condition = Condition::all()
+                    .add(models::l1_message::Column::L1BlockNumber.lte(target_block_number as i64))
+                    .add(models::l1_message::Column::L2BlockNumber.is_null());
+                // Yield a stream of messages matching the condition ordered by increasing
+                // queue index.
+                Ok(Some(
+                    models::l1_message::Entity::find()
+                        .filter(condition)
+                        .order_by_asc(models::l1_message::Column::QueueIndex)
+                        .stream(self.get_connection())
+                        .await?
+                        .map(map_l1_message_result),
+                ))
             }
             // Provides a stream over all L1 messages with increasing queue index starting from the
             // beginning.
@@ -966,8 +969,10 @@ impl L1MessageKey {
 /// block yet.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum NotIncludedStart {
-    /// Start from finalized messages that have not been included in a block yet.
-    Finalized,
+    /// Start from finalized messages that have not been included in a block yet and have a L1
+    /// block number that is a specified number of blocks below the current finalized L1 block
+    /// number.
+    FinalizedWithBlockDepth(u64),
     /// Start from unfinalized messages that are included in L1 blocks at a specific depth.
     BlockDepth(u64),
 }
@@ -986,7 +991,9 @@ impl fmt::Display for L1MessageKey {
             Self::TransactionHash(hash) => write!(f, "TransactionHash({hash:#x})"),
             Self::BlockNumber(number) => write!(f, "BlockNumber({number})"),
             Self::NotIncluded(start) => match start {
-                NotIncludedStart::Finalized => write!(f, "NotIncluded(Finalized)"),
+                NotIncludedStart::FinalizedWithBlockDepth(depth) => {
+                    write!(f, "NotIncluded(Finalized:{depth})")
+                }
                 NotIncludedStart::BlockDepth(depth) => {
                     write!(f, "NotIncluded(BlockDepth({depth}))")
                 }

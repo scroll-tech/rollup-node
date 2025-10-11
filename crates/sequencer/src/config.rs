@@ -33,21 +33,32 @@ pub struct PayloadBuildingConfig {
 }
 
 /// Configuration for L1 message inclusion strategy.
-#[derive(Debug, Default, Clone, Copy)]
+#[derive(Debug, Clone, Copy)]
 pub enum L1MessageInclusionMode {
     /// Include L1 messages based on block depth.
     BlockDepth(u64),
-    /// Include only finalized L1 messages.
-    #[default]
-    Finalized,
+    /// Include only finalized L1 messages with an additional block depth.
+    FinalizedWithBlockDepth(u64),
+}
+
+// The default is to include finalized L1 messages with a depth of 2 blocks below the current
+// finalized block number.
+impl Default for L1MessageInclusionMode {
+    fn default() -> Self {
+        Self::FinalizedWithBlockDepth(2)
+    }
 }
 
 impl FromStr for L1MessageInclusionMode {
     type Err = String;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        if s.eq_ignore_ascii_case("finalized") {
-            Ok(Self::Finalized)
+        if let Some(rest) = s.strip_prefix("finalized:") {
+            rest.parse::<u64>()
+                .map(Self::FinalizedWithBlockDepth)
+                .map_err(|_| format!("Expected a valid number after 'finalized:', got '{rest}'"))
+        } else if s.eq_ignore_ascii_case("finalized") {
+            Ok(Self::FinalizedWithBlockDepth(0))
         } else if let Some(rest) = s.strip_prefix("depth:") {
             rest.parse::<u64>()
                 .map(Self::BlockDepth)
@@ -61,7 +72,7 @@ impl FromStr for L1MessageInclusionMode {
 impl fmt::Display for L1MessageInclusionMode {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Self::Finalized => write!(f, "finalized"),
+            Self::FinalizedWithBlockDepth(depth) => write!(f, "finalized:{depth}"),
             Self::BlockDepth(depth) => write!(f, "depth:{depth}"),
         }
     }
@@ -70,7 +81,9 @@ impl fmt::Display for L1MessageInclusionMode {
 impl From<L1MessageInclusionMode> for L1MessageKey {
     fn from(mode: L1MessageInclusionMode) -> Self {
         match mode {
-            L1MessageInclusionMode::Finalized => Self::NotIncluded(NotIncludedStart::Finalized),
+            L1MessageInclusionMode::FinalizedWithBlockDepth(depth) => {
+                Self::NotIncluded(NotIncludedStart::FinalizedWithBlockDepth(depth))
+            }
             L1MessageInclusionMode::BlockDepth(depth) => {
                 Self::NotIncluded(NotIncludedStart::BlockDepth(depth))
             }
