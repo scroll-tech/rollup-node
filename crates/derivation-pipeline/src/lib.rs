@@ -94,6 +94,9 @@ impl Stream for DerivationPipeline {
     }
 }
 
+/// The maximum number of concurrent batch derivation futures.
+const DERIVATION_PIPELINE_WORKER_CONCURRENCY: usize = 5;
+
 /// A structure holding the current unresolved futures for the derivation pipeline.
 #[derive(Debug)]
 pub struct DerivationPipelineWorker<P> {
@@ -170,8 +173,7 @@ where
             tokio::select! {
                 biased;
 
-                // TODO: consider adding a filter on the receiver channel to limit the number of active derivation futures / concurrency.
-                Some(batch_info) = self.batch_receiver.recv() => {
+                Some(batch_info) = self.batch_receiver.recv(), if self.futures.len() < DERIVATION_PIPELINE_WORKER_CONCURRENCY => {
                     let fut = self.derivation_future(batch_info);
                     self.futures.push_back(fut);
                 }
