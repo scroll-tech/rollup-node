@@ -63,7 +63,7 @@ type L1ProviderFactory<P> =
 /// Returns a pipeline with a provider initiated from the factory function.
 async fn setup_pipeline<P: L1Provider + Clone + Send + Sync + 'static>(
     factory: L1ProviderFactory<P>,
-) -> DerivationPipeline<P> {
+) -> DerivationPipeline {
     // load batch data in the db.
     let db = Arc::new(setup_test_db().await);
     let blob_hashes: Vec<B256> = serde_json::from_str(
@@ -105,7 +105,7 @@ async fn setup_pipeline<P: L1Provider + Clone + Send + Sync + 'static>(
 
     // construct the pipeline.
     let l1_provider = factory(db.clone()).await;
-    DerivationPipeline::new(l1_provider, db, u64::MAX)
+    DerivationPipeline::new(l1_provider, db, u64::MAX).await
 }
 
 /// Benchmark the derivation pipeline with blobs fetched from file. This does not bench the network

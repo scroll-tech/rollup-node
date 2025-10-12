@@ -18,7 +18,7 @@ use rollup_node_primitives::{
     BatchCommitData, BatchInfo, BlockConsolidationOutcome, BlockInfo, ChainImport,
     L1MessageEnvelope, L2BlockInfoWithL1Messages,
 };
-use rollup_node_providers::{L1MessageProvider, L1Provider};
+use rollup_node_providers::L1MessageProvider;
 use rollup_node_sequencer::{Sequencer, SequencerEvent};
 use rollup_node_signer::{SignatureAsBytes, SignerEvent, SignerHandle};
 use rollup_node_watcher::L1Notification;
@@ -92,7 +92,6 @@ const EVENT_CHANNEL_SIZE: usize = 5000;
 pub struct ChainOrchestrator<
     N: FullNetwork<Primitives = ScrollNetworkPrimitives>,
     ChainSpec,
-    L1P,
     L1MP,
     L2P,
     EC,
@@ -124,7 +123,7 @@ pub struct ChainOrchestrator<
     /// The signer used to sign messages.
     signer: Option<SignerHandle>,
     /// The derivation pipeline used to derive L2 blocks from batches.
-    derivation_pipeline: DerivationPipeline<L1P>,
+    derivation_pipeline: DerivationPipeline,
     /// Optional event sender for broadcasting events to listeners.
     event_sender: Option<EventSender<ChainOrchestratorEvent>>,
 }
@@ -132,11 +131,10 @@ pub struct ChainOrchestrator<
 impl<
         N: FullNetwork<Primitives = ScrollNetworkPrimitives> + Send + Sync + 'static,
         ChainSpec: ScrollHardforks + EthChainSpec + Send + Sync + 'static,
-        L1P: L1Provider + Unpin + Clone + Send + Sync + 'static,
         L1MP: L1MessageProvider + Unpin + Clone + Send + Sync + 'static,
         L2P: Provider<Scroll> + 'static,
         EC: ScrollEngineApi + Sync + Send + 'static,
-    > ChainOrchestrator<N, ChainSpec, L1P, L1MP, L2P, EC>
+    > ChainOrchestrator<N, ChainSpec, L1MP, L2P, EC>
 {
     /// Creates a new chain orchestrator.
     #[allow(clippy::too_many_arguments)]
@@ -151,7 +149,7 @@ impl<
         engine: Engine<EC>,
         sequencer: Option<Sequencer<L1MP, ChainSpec>>,
         signer: Option<SignerHandle>,
-        derivation_pipeline: DerivationPipeline<L1P>,
+        derivation_pipeline: DerivationPipeline,
     ) -> Result<(Self, ChainOrchestratorHandle<N>), ChainOrchestratorError> {
         let (handle_tx, handle_rx) = mpsc::unbounded_channel();
         let handle = ChainOrchestratorHandle::new(handle_tx);
@@ -224,7 +222,7 @@ impl<
                     let res = self.handle_network_event(event).await;
                     self.handle_outcome(res);
                 }
-                Some(notification) = self.l1_notification_rx.recv(), if self.sync_state.l2().is_synced() && self.derivation_pipeline.is_empty().await => {
+                Some(notification) = self.l1_notification_rx.recv(), if self.sync_state.l2().is_synced() && self.derivation_pipeline.is_empty() => {
                     let res = self.handle_l1_notification(notification).await;
                     self.handle_outcome(res);
                 }

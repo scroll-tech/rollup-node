@@ -33,7 +33,7 @@ use rollup_node_chain_orchestrator::{
 };
 use rollup_node_primitives::{BlockInfo, NodeConfig};
 use rollup_node_providers::{
-    BlobProvidersBuilder, FullL1Provider, L1MessageProvider, L1Provider, SystemContractProvider,
+    BlobProvidersBuilder, FullL1Provider, L1MessageProvider, SystemContractProvider,
 };
 use rollup_node_sequencer::{
     L1MessageInclusionMode, PayloadBuildingConfig, Sequencer, SequencerConfig,
@@ -161,7 +161,6 @@ impl ScrollRollupNodeConfig {
         ChainOrchestrator<
             N,
             impl ScrollHardforks + EthChainSpec<Header: BlockHeader> + IsDevChain + Clone + 'static,
-            impl L1Provider + Clone,
             impl L1MessageProvider + Clone,
             impl Provider<Scroll> + Clone,
             impl ScrollEngineApi,
@@ -421,7 +420,8 @@ impl ScrollRollupNodeConfig {
             l1_provider.clone(),
             db.clone(),
             l1_v2_message_queue_start_index,
-        );
+        )
+        .await;
 
         let (chain_orchestrator, handle) = ChainOrchestrator::new(
             db.clone(),
