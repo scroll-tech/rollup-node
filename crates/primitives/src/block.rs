@@ -1,3 +1,4 @@
+use alloy_consensus::transaction::TxHashRef;
 use alloy_consensus::Header;
 use alloy_eips::{BlockNumHash, Decodable2718};
 use alloy_primitives::{B256, U256};
