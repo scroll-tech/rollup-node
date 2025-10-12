@@ -1,9 +1,9 @@
 //! Credit to <https://github.com/op-rs/kona/tree/main/crates/providers/providers-alloy>
 
 use crate::{BlobProvider, L1ProviderError};
-use alloy_eips::eip4844::{Blob, BlobTransactionSidecarItem};
-use alloy_primitives::B256;
-use alloy_rpc_types_beacon::sidecar::{BeaconBlobBundle, BlobData};
+use alloy_eips::eip4844::Blob;
+use alloy_primitives::{hex, FixedBytes, B256};
+use alloy_rpc_types_beacon::sidecar::GetBlobsResponse;
 use lru::LruCache;
 use reqwest::Client;
 use std::{num::NonZeroUsize, sync::Arc};
@@ -60,7 +60,7 @@ impl BeaconClientProvider {
     const GENESIS_METHOD: &'static str = "eth/v1/beacon/genesis";
 
     /// The blob sidecars engine api method prefix.
-    const SIDECARS_METHOD_PREFIX: &'static str = "eth/v1/beacon/blob_sidecars";
+    const BLOBS_METHOD_PREFIX: &'static str = "eth/v1/beacon/blobs";
 
     /// Creates a new [`BeaconClientProvider`] from the provided base url.
     pub async fn new_http(base: reqwest::Url) -> Self {
@@ -110,15 +110,23 @@ impl BeaconClientProvider {
     }
 
     /// Returns the blobs for the provided slot.
-    async fn blobs(&self, slot: u64) -> Result<Vec<BlobData>, reqwest::Error> {
-        let raw_response = self
-            .inner
-            .get(format!("{}/{}/{}", self.base, Self::SIDECARS_METHOD_PREFIX, slot))
-            .send()
-            .await?;
-        let raw_response = raw_response.json::<BeaconBlobBundle>().await?;
+    async fn blobs(
+        &self,
+        slot: u64,
+        versioned_hashes: Option<Vec<B256>>,
+    ) -> Result<Vec<FixedBytes<131072>>, reqwest::Error> {
+        let url = format!("{}/{}/{}", self.base, Self::BLOBS_METHOD_PREFIX, slot);
+        let mut request = self.inner.get(&url);
 
-        Ok(raw_response.data)
+        if let Some(hashes) = versioned_hashes {
+            let hash_strings: Vec<String> =
+                hashes.iter().map(|h| format!("0x{}", hex::encode(h))).collect();
+            request = request.query(&[("versioned_hashes", hash_strings)]);
+        }
+
+        let raw_response = request.send().await?;
+        let parsed_response = raw_response.json::<GetBlobsResponse>().await?;
+        Ok(parsed_response.data)
     }
 
     /// Returns the beacon slot given a block timestamp.
@@ -151,30 +159,18 @@ impl BlobProvider for BeaconClientProvider {
 
         // query the blobs with the client, return target blob and store all others in cache.
         let slot = self.slot(block_timestamp)?;
-        let mut blobs = self
-            .blobs(slot)
-            .await?
-            .into_iter()
-            .map(|blob| BlobTransactionSidecarItem {
-                index: blob.index,
-                blob: blob.blob,
-                kzg_commitment: blob.kzg_commitment,
-                kzg_proof: blob.kzg_proof,
-            })
-            .collect::<Vec<_>>();
+
+        let blob = self.blobs(slot, Some(vec![hash])).await.map_err(|e| {
+            L1ProviderError::BeaconProvider(e)
+        })?;
 
         // if we find a blob, timestamp is valid.
-        // cache the other blobs and return the matched blob.
-        let maybe_blob = blobs.iter().position(|blob| blob.to_kzg_versioned_hash() == hash.0);
-        if let Some(position) = maybe_blob {
-            let blob = Arc::new(*blobs.remove(position).blob);
+        // cache this blob.
+        if let Some(blob) = blob.into_iter().next() {
+            let arc_blob: Arc<FixedBytes<131072>> = Arc::new(blob);
             let mut cache = self.cache.lock().await;
-            for (hash, blob) in
-                blobs.iter().map(|b| (b.to_kzg_versioned_hash().into(), Arc::new(*b.blob)))
-            {
-                cache.put(hash, blob);
-            }
-            return Ok(Some(blob))
+            cache.put(hash, arc_blob.clone());
+            return Ok(Some(arc_blob));
         }
 
         Ok(None)
