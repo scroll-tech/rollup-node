@@ -17,6 +17,7 @@ impl ChainOrchestratorStatus {
         sync_state: &SyncState,
         l1_latest: u64,
         l1_finalized: u64,
+        l1_processed: u64,
         l2_fcs: ForkchoiceState,
     ) -> Self {
         Self {
@@ -24,6 +25,7 @@ impl ChainOrchestratorStatus {
                 status: sync_state.l1().clone(),
                 latest: l1_latest,
                 finalized: l1_finalized,
+                processed: l1_processed,
             },
             l2: L2ChainStatus { status: sync_state.l2().clone(), fcs: l2_fcs },
         }
@@ -40,6 +42,8 @@ pub struct L1ChainStatus {
     pub latest: u64,
     /// The finalized block number of the chain.
     pub finalized: u64,
+    /// The highest block number that has been processed.
+    pub processed: u64,
 }
 
 /// The status of the L2 chain.
