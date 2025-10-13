@@ -13,10 +13,7 @@ impl MigrationTrait for Migration {
             r#"
             INSERT INTO metadata (key, value)
             VALUES 
-                ('l1_finalized_block', '0'),
-                ('l1_latest_block', '0'),
-                ('l1_processed_block', '0'),
-                ('l2_head_block', '0')
+                ('l1_processed_block', '0')
             ON CONFLICT(key) DO NOTHING;
             "#,
         )
@@ -31,7 +28,7 @@ impl MigrationTrait for Migration {
         db.execute_unprepared(
             r#"
             DELETE FROM metadata 
-            WHERE key IN ('l1_finalized_block', 'l1_latest_block', 'l1_processed_block', 'l2_head_block');
+            WHERE key = 'l1_processed_block';
             "#,
         )
         .await?;
