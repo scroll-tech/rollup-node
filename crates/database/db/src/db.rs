@@ -940,7 +940,7 @@ mod test {
 
         // Retrieve and verify the head block info.
         let tx = db.tx().await.unwrap();
-        let head_block_info = tx.get_l2_head_block_number().await.unwrap().unwrap();
+        let head_block_info = tx.get_l2_head_block_number().await.unwrap();
 
         assert_eq!(head_block_info, block_info.number);
     }

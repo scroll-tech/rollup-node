@@ -236,6 +236,17 @@ impl<SMP, CS> Stream for Sequencer<SMP, CS> {
         let this = self.get_mut();
         this.waker.register(cx.waker());
 
+        // If there is an inflight payload building job, poll it.
+        if let Some(payload_building_job) = this.payload_building_job.as_mut() {
+            match payload_building_job.future.as_mut().poll(cx) {
+                Poll::Ready(payload_id) => {
+                    this.payload_building_job = None;
+                    return Poll::Ready(Some(SequencerEvent::PayloadReady(payload_id)));
+                }
+                Poll::Pending => {}
+            }
+        }
+
         // Poll the trigger to see if it's time to build a new block.
         if let Some(trigger) = this.trigger.as_mut() {
             match trigger.poll_tick(cx) {
@@ -245,17 +256,6 @@ impl<SMP, CS> Stream for Sequencer<SMP, CS> {
                         return Poll::Ready(Some(SequencerEvent::NewSlot));
                     };
                     tracing::trace!(target: "rollup_node::sequencer", "Payload building job already in progress, skipping slot.");
-                }
-                Poll::Pending => {}
-            }
-        }
-
-        // If there is an inflight payload building job, poll it.
-        if let Some(payload_building_job) = this.payload_building_job.as_mut() {
-            match payload_building_job.future.as_mut().poll(cx) {
-                Poll::Ready(payload_id) => {
-                    this.payload_building_job = None;
-                    return Poll::Ready(Some(SequencerEvent::PayloadReady(payload_id)));
                 }
                 Poll::Pending => {}
             }

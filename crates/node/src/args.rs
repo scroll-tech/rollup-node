@@ -266,34 +266,23 @@ impl ScrollRollupNodeConfig {
         let tx = db.tx_mut().await?;
         let (_startup_safe_block, l1_start_block_number) =
             tx.prepare_on_startup(chain_spec.genesis_hash()).await?;
+        let l2_head_block_number = tx.get_l2_head_block_number().await?;
+        tx.purge_l1_message_to_l2_block_mappings(Some(l2_head_block_number + 1)).await?;
         tx.commit().await?;
-        // if let Some(block_info) = startup_safe_block {
-        //     fcs.update(None, Some(block_info), Some(block_info))?;
-        // } else {
-        //     fcs.update(
-        //         None,
-        //         Some(BlockInfo {
-        //             hash: genesis_hash_from_chain_spec(chain_spec.clone()).unwrap(),
-        //             number: 0,
-        //         }),
-        //         None,
-        //     )?;
-        // }
 
         // Update the head block info if available and ahead of finalized.
-        if let Some(latest_block_number) = db.tx().await?.get_l2_head_block_number().await? {
-            if latest_block_number > fcs.finalized_block_info().number {
-                let block = l2_provider
-                    .get_block(latest_block_number.into())
-                    .full()
-                    .await?
-                    .expect("latest block from db should exist")
-                    .into_consensus()
-                    .map_transactions(|tx| tx.inner.into_inner());
-                let block_info: BlockInfo = (&block).into();
+        let l2_head_block_number = db.tx().await?.get_l2_head_block_number().await?;
+        if l2_head_block_number > fcs.finalized_block_info().number {
+            let block = l2_provider
+                .get_block(l2_head_block_number.into())
+                .full()
+                .await?
+                .expect("latest block from db should exist")
+                .into_consensus()
+                .map_transactions(|tx| tx.inner.into_inner());
+            let block_info: BlockInfo = (&block).into();
 
-                fcs.update(Some(block_info), None, None)?;
-            }
+            fcs.update(Some(block_info), None, None)?;
         }
 
         let chain_spec = Arc::new(chain_spec.clone());

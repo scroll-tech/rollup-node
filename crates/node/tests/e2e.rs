@@ -1080,10 +1080,9 @@ async fn shutdown_consolidates_most_recent_batch_on_startup() -> eyre::Result<()
 }
 
 /// Test that when the rollup node manager is shutdown, it restarts with the head set to the latest
-/// sequenced block stored in database.
+/// signed block stored in database.
 #[tokio::test]
-async fn graceful_shutdown_sets_fcs_to_latest_sequenced_block_in_db_on_start_up() -> eyre::Result<()>
-{
+async fn graceful_shutdown_sets_fcs_to_latest_signed_block_in_db_on_start_up() -> eyre::Result<()> {
     reth_tracing::init_test_tracing();
     let chain_spec = (*SCROLL_DEV).clone();
 
@@ -1152,7 +1151,7 @@ async fn graceful_shutdown_sets_fcs_to_latest_sequenced_block_in_db_on_start_up(
         handle.build_block();
         let block_number = loop {
             let _ = rnm.poll_unpin(&mut Context::from_waker(noop_waker_ref()));
-            if let Poll::Ready(Some(ChainOrchestratorEvent::BlockSequenced(block))) =
+            if let Poll::Ready(Some(ChainOrchestratorEvent::SignedBlock { block, signature: _ })) =
                 rnm_events.poll_next_unpin(&mut Context::from_waker(noop_waker_ref()))
             {
                 break block.header.number

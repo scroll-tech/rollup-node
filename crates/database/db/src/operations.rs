@@ -544,15 +544,17 @@ pub trait DatabaseReadOperations: ReadConnectionProvider + Sync {
     }
 
     /// Get the latest L2 head block info.
-    async fn get_l2_head_block_number(&self) -> Result<Option<u64>, DatabaseError> {
+    async fn get_l2_head_block_number(&self) -> Result<u64, DatabaseError> {
         Ok(models::metadata::Entity::find()
             .filter(models::metadata::Column::Key.eq("l2_head_block"))
             .select_only()
             .column(models::metadata::Column::Value)
             .into_tuple::<String>()
             .one(self.get_connection())
-            .await
-            .map(|x| x.and_then(|x| serde_json::from_str(&x).ok()))?)
+            .await?
+            .expect("l2_head_block should always be set")
+            .parse::<u64>()
+            .expect("l2_head_block should always be a valid u64"))
     }
 
     /// Get an iterator over all [`BatchCommitData`]s in the database.

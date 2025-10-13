@@ -255,6 +255,7 @@ impl<
         match event {
             SignerEvent::SignedBlock { block, signature } => {
                 let tx = self.database.tx_mut().await?;
+                tx.set_l2_head_block_number(block.header.number).await?;
                 tx.insert_signature(block.hash_slow(), signature).await?;
                 tx.commit().await?;
                 self.network.handle().announce_block(block.clone(), signature);
@@ -295,7 +296,6 @@ impl<
                     let tx = self.database.tx_mut().await?;
                     let block_info: L2BlockInfoWithL1Messages = (&block).into();
                     tx.update_l1_messages_from_l2_blocks(vec![block_info.clone()]).await?;
-                    tx.set_l2_head_block_number(block_info.block_info.number).await?;
                     tx.commit().await?;
                     self.signer
                         .as_mut()
@@ -1066,18 +1066,14 @@ impl<
             }
         }
 
-        // Persist the L1 message to L2 block mappings for reorg awareness, the block signature and
-        // handle the valid block import if we are in a synced state and the result is valid.
+        // Persist the L1 message to L2 block mappings for reorg awareness, update the l2 head block
+        // number and handle the valid block import if we are in a synced state and the
+        // result is valid.
         if self.sync_state.is_synced() && result.is_valid() {
             let blocks = chain.iter().map(|block| block.into()).collect::<Vec<_>>();
             let tx = self.database.tx_mut().await?;
             tx.update_l1_messages_from_l2_blocks(blocks).await?;
-            tx.commit().await?;
-
-            // Persist the signature for the block and notify the network manager of a successful
-            // import.
-            let tx = self.database.tx_mut().await?;
-            tx.insert_signature(chain_head_hash, block_with_peer.signature).await?;
+            tx.set_l2_head_block_number(block_with_peer.block.header.number).await?;
             tx.commit().await?;
 
             self.network.handle().block_import_outcome(BlockImportOutcome::valid_block(

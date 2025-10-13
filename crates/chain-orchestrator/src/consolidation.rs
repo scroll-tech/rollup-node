@@ -30,11 +30,7 @@ pub(crate) async fn reconcile_batch<L2P: Provider<Scroll>>(
             };
 
             // Check if the block matches the derived attributes.
-            if block_matches_attributes(
-                &attributes.attributes,
-                &current_block,
-                current_block.parent_hash,
-            ) {
+            if block_matches_attributes(&attributes.attributes, &current_block) {
                 // Extract the block info with L1 messages.
                 let block_info: L2BlockInfoWithL1Messages = (&current_block).into();
 
