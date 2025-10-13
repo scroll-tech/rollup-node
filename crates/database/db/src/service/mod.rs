@@ -38,8 +38,8 @@ where
                 let tx = Arc::new(db.tx_mut().await?);
                 let res = f(tx.clone()).await;
 
-                // The `WriteQueryFactory` cannot clone the atomic reference to the transaction, or
-                // the below will fail, and we won't be able to commit/rollback the transaction.
+                // The `WriteQuery` cannot clone the atomic reference to the transaction, or the
+                // below will fail, and we won't be able to commit/rollback the transaction.
                 let tx = Arc::try_unwrap(tx);
 
                 if res.is_ok() {
@@ -55,7 +55,7 @@ where
 
 /// An implementor of the trait can make queries to the database. This trait is used in order to
 /// move the `T` generic out from the [`Service<DatabaseQuery<T, Err>>`] trait and into the method
-/// call itself.
+/// itself.
 #[async_trait::async_trait]
 pub trait DatabaseService: Clone + Send + Sync + 'static {
     /// Call the database.

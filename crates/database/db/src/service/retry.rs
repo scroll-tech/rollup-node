@@ -1,7 +1,7 @@
-use crate::{BoxedFuture, DatabaseError, DatabaseQuery};
+use crate::{service::DatabaseService, BoxedFuture, DatabaseError, DatabaseQuery};
+use metrics::Histogram;
+use metrics_derive::Metrics;
 use std::{fmt::Debug, time::Duration};
-
-use crate::service::DatabaseService;
 use tower::Service;
 
 /// A type used for retrying transient failures in operations.
@@ -15,17 +15,39 @@ pub struct Retry<S> {
     pub initial_delay_ms: u64,
     /// Whether to use exponential backoff
     pub exponential_backoff: bool,
+    /// Retry metrics.
+    metrics: RetryMetrics,
+}
+
+/// Metrics for the retry service.
+#[derive(Metrics, Clone)]
+#[metrics(scope = "database_retry")]
+struct RetryMetrics {
+    /// Number of database query attempts before a successful result.
+    #[metrics(describe = "Number of attempts before successful database query result")]
+    pub attempts_before_query_success: Histogram,
 }
 
 impl<S> Retry<S> {
     /// Creates a new [`Retry`] with the specified parameters.
-    pub const fn new(
+    pub fn new(
         inner: S,
         max_retries: Option<usize>,
         initial_delay_ms: u64,
         exponential_backoff: bool,
     ) -> Self {
-        Self { inner, max_retries, initial_delay_ms, exponential_backoff }
+        Self {
+            inner,
+            max_retries,
+            initial_delay_ms,
+            exponential_backoff,
+            metrics: RetryMetrics::default(),
+        }
+    }
+
+    /// Creates a new [`Retry`] with default retry parameters.
+    pub fn new_with_default_config(inner: S) -> Self {
+        Self::new(inner, None, 50, false)
     }
 }
 
@@ -55,7 +77,10 @@ where
 
             loop {
                 match inner.call(req.clone()).await {
-                    Ok(result) => return Ok(result),
+                    Ok(result) => {
+                        this.metrics.attempts_before_query_success.record(attempt as f64);
+                        return Ok(result)
+                    }
                     Err(error) => {
                         // If the error is not retryable, return immediately.
                         if !error.can_retry() {

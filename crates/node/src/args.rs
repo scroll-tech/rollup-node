@@ -44,7 +44,7 @@ use scroll_alloy_network::Scroll;
 use scroll_alloy_provider::{ScrollAuthApiEngineClient, ScrollEngineApi};
 use scroll_db::{
     Database, DatabaseConnectionProvider, DatabaseReadOperations, DatabaseService,
-    DatabaseTransactionProvider, DatabaseWriteOperations,
+    DatabaseTransactionProvider, DatabaseWriteOperations, Retry,
 };
 use scroll_derivation_pipeline::DerivationPipeline;
 use scroll_engine::{Engine, ForkchoiceState};
@@ -413,8 +413,9 @@ impl ScrollRollupNodeConfig {
         )
         .await;
 
+        let database_retry = Retry::new_with_default_config(db.clone());
         let (chain_orchestrator, handle) = ChainOrchestrator::new(
-            db.clone(),
+            database_retry,
             config,
             Arc::new(block_client),
             l2_provider,

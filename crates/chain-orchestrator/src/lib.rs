@@ -102,7 +102,7 @@ pub struct ChainOrchestrator<
     block_client: Arc<FullBlockClient<<N as BlockDownloaderProvider>::Client>>,
     /// The L2 client that is used to interact with the L2 chain.
     l2_client: Arc<L2P>,
-    /// The database service used to make database calls.
+    /// The service used for database accesses.
     database_service: S,
     /// The metrics for the chain orchestrator.
     metrics: HashMap<ChainOrchestratorItem, ChainOrchestratorMetrics>,
