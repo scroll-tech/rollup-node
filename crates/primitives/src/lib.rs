@@ -14,7 +14,7 @@ pub use block::{
 };
 
 mod batch;
-pub use batch::{BatchCommitData, BatchInfo};
+pub use batch::{BatchCommitData, BatchConsolidationOutcome, BatchInfo, BlockConsolidationOutcome};
 
 mod bounded_vec;
 pub use bounded_vec::BoundedVec;
