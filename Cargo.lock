@@ -11612,7 +11612,6 @@ dependencies = [
 name = "scroll-db"
 version = "0.0.1"
 dependencies = [
- "alloy-eips 1.0.30",
  "alloy-primitives",
  "arbitrary",
  "async-trait",
@@ -11630,6 +11629,7 @@ dependencies = [
  "tempfile",
  "thiserror 2.0.16",
  "tokio",
+ "tower",
  "tracing",
 ]
 

@@ -43,8 +43,8 @@ use scroll_alloy_hardforks::ScrollHardforks;
 use scroll_alloy_network::Scroll;
 use scroll_alloy_provider::{ScrollAuthApiEngineClient, ScrollEngineApi};
 use scroll_db::{
-    Database, DatabaseConnectionProvider, DatabaseReadOperations, DatabaseTransactionProvider,
-    DatabaseWriteOperations,
+    Database, DatabaseConnectionProvider, DatabaseReadOperations, DatabaseService,
+    DatabaseTransactionProvider, DatabaseWriteOperations,
 };
 use scroll_derivation_pipeline::DerivationPipeline;
 use scroll_engine::{Engine, ForkchoiceState};
@@ -164,6 +164,7 @@ impl ScrollRollupNodeConfig {
             impl L1MessageProvider + Clone,
             impl Provider<Scroll> + Clone,
             impl ScrollEngineApi,
+            impl DatabaseService,
         >,
         ChainOrchestratorHandle<N>,
         Option<Sender<Arc<L1Notification>>>,

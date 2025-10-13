@@ -4,7 +4,7 @@ use alloy_transport::TransportErrorKind;
 use rollup_node_primitives::{BatchInfo, BlockInfo};
 use rollup_node_sequencer::SequencerError;
 use rollup_node_signer::SignerError;
-use scroll_db::{DatabaseError, L1MessageKey};
+use scroll_db::{CanRetry, DatabaseError, L1MessageKey};
 use scroll_engine::EngineError;
 
 /// A type that represents an error that occurred in the chain orchestrator.
@@ -89,4 +89,13 @@ pub enum ChainOrchestratorError {
         /// The derived block number.
         derived_block_number: u64,
     },
+}
+
+impl CanRetry for ChainOrchestratorError {
+    fn can_retry(&self) -> bool {
+        match &self {
+            Self::DatabaseError(err) => err.can_retry(),
+            _ => false,
+        }
+    }
 }

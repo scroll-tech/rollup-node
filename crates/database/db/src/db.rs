@@ -173,6 +173,7 @@ mod test {
     use rollup_node_primitives::{
         BatchCommitData, BatchInfo, BlockInfo, L1MessageEnvelope, L2BlockInfoWithL1Messages,
     };
+    use scroll_alloy_consensus::TxL1Message;
     use sea_orm::{ColumnTrait, EntityTrait, QueryFilter};
 
     #[tokio::test]
@@ -492,7 +493,7 @@ mod test {
     }
 
     #[tokio::test]
-    async fn test_database_iterator() {
+    async fn test_database_get_l1_messages() {
         // Setup the test database.
         let db = setup_test_db().await;
         let tx = db.tx_mut().await.unwrap();
@@ -502,29 +503,27 @@ mod test {
         rand::rng().fill(bytes.as_mut_slice());
         let mut u = Unstructured::new(&bytes);
 
-        // Generate 2 random L1Messages.
-        let l1_message_1 = L1MessageEnvelope::arbitrary(&mut u).unwrap();
-        let l1_message_2 = L1MessageEnvelope::arbitrary(&mut u).unwrap();
-
-        // Insert the L1Messages into the database.
-        tx.insert_l1_message(l1_message_1.clone()).await.unwrap();
-        tx.insert_l1_message(l1_message_2.clone()).await.unwrap();
+        // Generate 10 random L1Messages.
+        let mut l1_messages = Vec::new();
+        for i in 0..10 {
+            let l1_message = L1MessageEnvelope {
+                transaction: TxL1Message {
+                    queue_index: i,
+                    ..TxL1Message::arbitrary(&mut u).unwrap()
+                },
+                ..L1MessageEnvelope::arbitrary(&mut u).unwrap()
+            };
+            tx.insert_l1_message(l1_message.clone()).await.unwrap();
+            l1_messages.push(l1_message);
+        }
         tx.commit().await.unwrap();
 
         // collect the L1Messages
         let tx = db.tx().await.unwrap();
-        let l1_messages = tx
-            .get_l1_messages(None)
-            .await
-            .unwrap()
-            .unwrap()
-            .map(|res| res.unwrap())
-            .collect::<Vec<_>>()
-            .await;
+        let db_l1_messages = tx.get_n_l1_messages(None, 5).await.unwrap();
 
         // Apply the assertions.
-        assert!(l1_messages.contains(&l1_message_1));
-        assert!(l1_messages.contains(&l1_message_2));
+        assert_eq!(db_l1_messages, l1_messages[..5]);
     }
 
     #[tokio::test]

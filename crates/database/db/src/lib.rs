@@ -19,6 +19,11 @@ pub use operations::{
     DatabaseReadOperations, DatabaseWriteOperations, L1MessageKey, NotIncludedStart, UnwindResult,
 };
 
+mod service;
+pub use service::{
+    BoxedFuture, CanRetry, DatabaseQuery, DatabaseService, ReadQuery, Retry, WriteQuery,
+};
+
 mod transaction;
 pub use transaction::{DatabaseTransactionProvider, TXMut, TX};
 

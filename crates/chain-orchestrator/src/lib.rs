@@ -27,8 +27,8 @@ use scroll_alloy_hardforks::ScrollHardforks;
 use scroll_alloy_network::Scroll;
 use scroll_alloy_provider::ScrollEngineApi;
 use scroll_db::{
-    Database, DatabaseError, DatabaseReadOperations, DatabaseTransactionProvider,
-    DatabaseWriteOperations, L1MessageKey, UnwindResult,
+    DatabaseError, DatabaseQuery, DatabaseReadOperations, DatabaseService, DatabaseWriteOperations,
+    L1MessageKey, UnwindResult,
 };
 use scroll_derivation_pipeline::{BatchDerivationResult, DerivationPipeline};
 use scroll_engine::Engine;
@@ -65,9 +65,6 @@ pub use handle::{ChainOrchestratorCommand, ChainOrchestratorHandle};
 mod metrics;
 pub use metrics::{ChainOrchestratorItem, ChainOrchestratorMetrics};
 
-mod retry;
-pub use retry::Retry;
-
 mod sync;
 pub use sync::SyncState;
 
@@ -95,6 +92,7 @@ pub struct ChainOrchestrator<
     L1MP,
     L2P,
     EC,
+    S,
 > {
     /// The configuration for the chain orchestrator.
     config: ChainOrchestratorConfig<ChainSpec>,
@@ -104,8 +102,8 @@ pub struct ChainOrchestrator<
     block_client: Arc<FullBlockClient<<N as BlockDownloaderProvider>::Client>>,
     /// The L2 client that is used to interact with the L2 chain.
     l2_client: Arc<L2P>,
-    /// A reference to the database used to persist the indexed data.
-    database: Arc<Database>,
+    /// The database service used to make database calls.
+    database_service: S,
     /// The metrics for the chain orchestrator.
     metrics: HashMap<ChainOrchestratorItem, ChainOrchestratorMetrics>,
     /// The current sync state of the [`ChainOrchestrator`].
@@ -134,12 +132,13 @@ impl<
         L1MP: L1MessageProvider + Unpin + Clone + Send + Sync + 'static,
         L2P: Provider<Scroll> + 'static,
         EC: ScrollEngineApi + Sync + Send + 'static,
-    > ChainOrchestrator<N, ChainSpec, L1MP, L2P, EC>
+        S: DatabaseService + 'static,
+    > ChainOrchestrator<N, ChainSpec, L1MP, L2P, EC, S>
 {
     /// Creates a new chain orchestrator.
     #[allow(clippy::too_many_arguments)]
     pub async fn new(
-        database: Arc<Database>,
+        database_service: S,
         config: ChainOrchestratorConfig<ChainSpec>,
         block_client: Arc<FullBlockClient<<N as BlockDownloaderProvider>::Client>>,
         l2_provider: L2P,
@@ -157,7 +156,7 @@ impl<
             Self {
                 block_client,
                 l2_client: Arc::new(l2_provider),
-                database,
+                database_service,
                 config,
                 metrics: ChainOrchestratorItem::iter()
                     .map(|i| {
@@ -248,16 +247,19 @@ impl<
 
     /// Handles an event from the signer.
     async fn handle_signer_event(
-        &self,
+        &mut self,
         event: rollup_node_signer::SignerEvent,
     ) -> Result<Option<ChainOrchestratorEvent>, ChainOrchestratorError> {
         tracing::info!(target: "scroll::chain_orchestrator", ?event, "Handling signer event");
         match event {
             SignerEvent::SignedBlock { block, signature } => {
-                let tx = self.database.tx_mut().await?;
-                tx.set_l2_head_block_number(block.header.number).await?;
-                tx.insert_signature(block.hash_slow(), signature).await?;
-                tx.commit().await?;
+                let hash = block.hash_slow();
+                self.database_service
+                    .call(DatabaseQuery::write(move |tx| async move {
+                        tx.set_l2_head_block_number(block.header.number).await?;
+                        tx.insert_signature(hash, signature).await
+                    }))
+                    .await?;
                 self.network.handle().announce_block(block.clone(), signature);
                 Ok(Some(ChainOrchestratorEvent::SignedBlock { block, signature }))
             }
@@ -293,15 +295,20 @@ impl<
                     .finalize_payload_building(payload_id, &mut self.engine)
                     .await?
                 {
-                    let tx = self.database.tx_mut().await?;
                     let block_info: L2BlockInfoWithL1Messages = (&block).into();
-                    tx.update_l1_messages_from_l2_blocks(vec![block_info.clone()]).await?;
-                    tx.commit().await?;
+                    self.database_service
+                        .call(DatabaseQuery::write(move |tx| {
+                            let block_info = block_info.clone();
+                            async move {
+                                tx.update_l1_messages_from_l2_blocks(vec![block_info.clone()]).await
+                            }
+                        }))
+                        .await?;
                     self.signer
                         .as_mut()
                         .expect("signer must be present")
                         .sign_block(block.clone())?;
-                    return Ok(Some(ChainOrchestratorEvent::BlockSequenced(block)))
+                    return Ok(Some(ChainOrchestratorEvent::BlockSequenced(block)));
                 }
             }
         }
@@ -327,10 +334,15 @@ impl<
                 let _ = tx.send(self.event_listener());
             }
             ChainOrchestratorCommand::Status(tx) => {
-                let db_tx = self.database.tx().await?;
-                let l1_latest = db_tx.get_latest_l1_block_number().await?;
-                let l1_finalized = db_tx.get_finalized_l1_block_number().await?;
-                let l1_processed = db_tx.get_processed_l1_block_number().await?;
+                let (l1_latest, l1_finalized, l1_processed) = self
+                    .database_service
+                    .call(DatabaseQuery::write(|tx| async move {
+                        let l1_latest = tx.get_latest_l1_block_number().await?;
+                        let l1_finalized = tx.get_finalized_l1_block_number().await?;
+                        let l1_processed = tx.get_processed_l1_block_number().await?;
+                        Ok::<_, ChainOrchestratorError>((l1_latest, l1_finalized, l1_processed))
+                    }))
+                    .await?;
                 let status = ChainOrchestratorStatus::new(
                     &self.sync_state,
                     l1_latest,
@@ -345,9 +357,11 @@ impl<
             }
             ChainOrchestratorCommand::UpdateFcsHead((head, sender)) => {
                 self.engine.update_fcs(Some(head), None, None).await?;
-                let tx = self.database.tx_mut().await?;
-                tx.purge_l1_message_to_l2_block_mappings(Some(head.number + 1)).await?;
-                tx.commit().await?;
+                self.database_service
+                    .call(DatabaseQuery::write(move |tx| async move {
+                        tx.purge_l1_message_to_l2_block_mappings(Some(head.number + 1)).await
+                    }))
+                    .await?;
                 self.notify(ChainOrchestratorEvent::FcsHeadUpdated(head));
                 let _ = sender.send(());
             }
@@ -477,9 +491,13 @@ impl<
             batch_reconciliation_result.into_batch_consolidation_outcome(reorg_results).await?;
 
         // Insert the batch consolidation outcome into the database.
-        let tx = self.database.tx_mut().await?;
-        tx.insert_batch_consolidation_outcome(batch_consolidation_outcome.clone()).await?;
-        tx.commit().await?;
+        let consolidation_outcome = batch_consolidation_outcome.clone();
+        self.database_service
+            .call(DatabaseQuery::write(move |tx| {
+                let consolidation_outcome = consolidation_outcome.clone();
+                async move { tx.insert_batch_consolidation_outcome(consolidation_outcome).await }
+            }))
+            .await?;
 
         Ok(Some(ChainOrchestratorEvent::BatchConsolidated(batch_consolidation_outcome)))
     }
@@ -491,9 +509,12 @@ impl<
     ) -> Result<Option<ChainOrchestratorEvent>, ChainOrchestratorError> {
         match &*notification {
             L1Notification::Processed(block_number) => {
-                let tx = self.database.tx_mut().await?;
-                tx.set_processed_l1_block_number(*block_number).await?;
-                tx.commit().await?;
+                let block_number = *block_number;
+                self.database_service
+                    .call(DatabaseQuery::write(move |tx| async move {
+                        tx.set_processed_l1_block_number(block_number).await
+                    }))
+                    .await?;
                 Ok(None)
             }
             L1Notification::Reorg(block_number) => self.handle_l1_reorg(*block_number).await,
@@ -525,16 +546,13 @@ impl<
     }
 
     async fn handle_l1_new_block(
-        &self,
+        &mut self,
         block_number: u64,
     ) -> Result<Option<ChainOrchestratorEvent>, ChainOrchestratorError> {
-        Retry::default()
-            .retry("handle_new_block", || async {
-                let tx = self.database.tx_mut().await?;
-                tx.set_latest_l1_block_number(block_number).await?;
-                tx.commit().await?;
-                Ok::<_, ChainOrchestratorError>(())
-            })
+        self.database_service
+            .call(DatabaseQuery::write(move |tx| async move {
+                tx.set_latest_l1_block_number(block_number).await
+            }))
             .await?;
 
         Ok(Some(ChainOrchestratorEvent::NewL1Block(block_number)))
@@ -548,15 +566,12 @@ impl<
     ) -> Result<Option<ChainOrchestratorEvent>, ChainOrchestratorError> {
         let metric = self.metrics.get(&ChainOrchestratorItem::L1Reorg).expect("metric exists");
         let now = Instant::now();
+        let genesis_hash = self.config.chain_spec().genesis_hash();
         let UnwindResult { l1_block_number, queue_index, l2_head_block_number, l2_safe_block_info } =
-            Retry::default()
-                .retry("unwind", || async {
-                    let txn = self.database.tx_mut().await?;
-                    let unwind_result =
-                        txn.unwind(self.config.chain_spec().genesis_hash(), block_number).await?;
-                    txn.commit().await?;
-                    Ok::<_, ChainOrchestratorError>(unwind_result)
-                })
+            self.database_service
+                .call(DatabaseQuery::write(move |tx| async move {
+                    tx.unwind(genesis_hash, block_number).await
+                }))
                 .await?;
 
         let l2_head_block_info = if let Some(block_number) = l2_head_block_number {
@@ -619,22 +634,16 @@ impl<
             self.metrics.get(&ChainOrchestratorItem::L1Finalization).expect("metric exists");
         let now = Instant::now();
 
-        let finalized_batches = Retry::default()
-            .retry("handle_finalized", || async {
-                let tx = self.database.tx_mut().await?;
-
+        let finalized_batches = self
+            .database_service
+            .call(DatabaseQuery::write(move |tx| async move {
                 // Set the latest finalized L1 block in the database.
                 tx.set_finalized_l1_block_number(block_number).await?;
 
                 // Get all unprocessed batches that have been finalized by this L1 block
                 // finalization.
-                let finalized_batches =
-                    tx.fetch_and_update_unprocessed_finalized_batches(block_number).await?;
-
-                tx.commit().await?;
-
-                Ok::<_, ChainOrchestratorError>(finalized_batches)
-            })
+                tx.fetch_and_update_unprocessed_finalized_batches(block_number).await
+            }))
             .await?;
 
         for batch in &finalized_batches {
@@ -648,47 +657,47 @@ impl<
 
     /// Handles a batch input by inserting it into the database.
     async fn handle_batch_commit(
-        &self,
+        &mut self,
         batch: BatchCommitData,
     ) -> Result<Option<ChainOrchestratorEvent>, ChainOrchestratorError> {
         let metric = self.metrics.get(&ChainOrchestratorItem::BatchCommit).expect("metric exists");
         let now = Instant::now();
 
-        let event = Retry::default()
-            .retry("handle_batch_commit", || async {
-                let tx = self.database.tx_mut().await?;
+        let event = self
+            .database_service
+            .call(DatabaseQuery::write(move |tx| {
                 let batch_clone = batch.clone();
-                let prev_batch_index = batch_clone.clone().index - 1;
+                async move {
+                    let prev_batch_index = batch_clone.index - 1;
 
-                // Perform a consistency check to ensure the previous commit batch exists in the
-                // database.
-                if tx.get_batch_by_index(prev_batch_index).await?.is_none() {
-                    return Err(ChainOrchestratorError::BatchCommitGap(batch_clone.index))
+                    // Perform a consistency check to ensure the previous commit batch exists in the
+                    // database.
+                    if tx.get_batch_by_index(prev_batch_index).await?.is_none() {
+                        return Err(ChainOrchestratorError::BatchCommitGap(batch_clone.index));
+                    }
+
+                    // remove any batches with an index greater than the previous batch.
+                    let affected = tx.delete_batches_gt_batch_index(prev_batch_index).await?;
+
+                    // handle the case of a batch revert.
+                    let new_safe_head = if affected > 0 {
+                        tx.delete_l2_blocks_gt_batch_index(prev_batch_index).await?;
+                        tx.get_highest_block_for_batch_index(prev_batch_index).await?
+                    } else {
+                        None
+                    };
+
+                    let event = ChainOrchestratorEvent::BatchCommitIndexed {
+                        batch_info: BatchInfo::new(batch_clone.index, batch_clone.hash),
+                        l1_block_number: batch_clone.block_number,
+                        safe_head: new_safe_head,
+                    };
+
+                    // insert the batch and commit the transaction.
+                    tx.insert_batch(batch_clone).await?;
+                    Ok::<_, ChainOrchestratorError>(Some(event))
                 }
-
-                // remove any batches with an index greater than the previous batch.
-                let affected = tx.delete_batches_gt_batch_index(prev_batch_index).await?;
-
-                // handle the case of a batch revert.
-                let new_safe_head = if affected > 0 {
-                    tx.delete_l2_blocks_gt_batch_index(prev_batch_index).await?;
-                    tx.get_highest_block_for_batch_index(prev_batch_index).await?
-                } else {
-                    None
-                };
-
-                let event = ChainOrchestratorEvent::BatchCommitIndexed {
-                    batch_info: BatchInfo::new(batch_clone.index, batch_clone.hash),
-                    l1_block_number: batch.block_number,
-                    safe_head: new_safe_head,
-                };
-
-                // insert the batch and commit the transaction.
-                tx.insert_batch(batch_clone).await?;
-                tx.commit().await?;
-
-                Ok::<_, ChainOrchestratorError>(Some(event))
-            })
+            }))
             .await?;
 
         metric.task_duration.record(now.elapsed().as_secs_f64());
@@ -702,10 +711,9 @@ impl<
         batch_index: u64,
         block_number: u64,
     ) -> Result<Option<ChainOrchestratorEvent>, ChainOrchestratorError> {
-        let event = Retry::default()
-            .retry("handle_batch_finalization", || async {
-                let tx = self.database.tx_mut().await?;
-
+        let event = self
+            .database_service
+            .call(DatabaseQuery::write(move |tx| async move {
                 // finalize all batches up to `batch_index`.
                 tx.finalize_batches_up_to_index(batch_index, block_number).await?;
 
@@ -716,17 +724,15 @@ impl<
                     let finalized_batches = tx
                         .fetch_and_update_unprocessed_finalized_batches(finalized_block_number)
                         .await?;
-                    tx.commit().await?;
 
                     return Ok(Some(ChainOrchestratorEvent::BatchFinalized(
                         block_number,
                         finalized_batches,
-                    )))
+                    )));
                 }
 
-                tx.commit().await?;
                 Ok::<_, ChainOrchestratorError>(None)
-            })
+            }))
             .await;
 
         if let Ok(Some(ChainOrchestratorEvent::BatchFinalized(_, batches))) = &event {
@@ -740,7 +746,7 @@ impl<
 
     /// Handles an L1 message by inserting it into the database.
     async fn handle_l1_message(
-        &self,
+        &mut self,
         l1_message: TxL1Message,
         l1_block_number: u64,
     ) -> Result<Option<ChainOrchestratorEvent>, ChainOrchestratorError> {
@@ -749,7 +755,7 @@ impl<
 
         let event = ChainOrchestratorEvent::L1MessageCommitted(l1_message.queue_index);
         let queue_hash = compute_l1_message_queue_hash(
-            &self.database,
+            &mut self.database_service,
             &l1_message,
             self.config.l1_v2_message_queue_start_index(),
         )
@@ -757,23 +763,24 @@ impl<
         let l1_message = L1MessageEnvelope::new(l1_message, l1_block_number, None, queue_hash);
 
         // Perform a consistency check to ensure the previous L1 message exists in the database.
-        Retry::default()
-            .retry("handle_l1_message", || async {
-                let tx = self.database.tx_mut().await?;
-                if l1_message.transaction.queue_index > 0 &&
-                    tx.get_l1_message_by_index(l1_message.transaction.queue_index - 1)
-                        .await?
-                        .is_none()
-                {
-                    return Err(ChainOrchestratorError::L1MessageQueueGap(
-                        l1_message.transaction.queue_index,
-                    ))
-                }
+        self.database_service
+            .call(DatabaseQuery::write(move |tx| {
+                let l1_message = l1_message.clone();
+                async move {
+                    if l1_message.transaction.queue_index > 0 &&
+                        tx.get_l1_message_by_index(l1_message.transaction.queue_index - 1)
+                            .await?
+                            .is_none()
+                    {
+                        return Err(ChainOrchestratorError::L1MessageQueueGap(
+                            l1_message.transaction.queue_index,
+                        ));
+                    }
 
-                tx.insert_l1_message(l1_message.clone()).await?;
-                tx.commit().await?;
-                Ok::<_, ChainOrchestratorError>(())
-            })
+                    tx.insert_l1_message(l1_message.clone()).await?;
+                    Ok::<_, ChainOrchestratorError>(())
+                }
+            }))
             .await?;
 
         metric.task_duration.record(now.elapsed().as_secs_f64());
@@ -832,10 +839,12 @@ impl<
         }
 
         // We optimistically persist the signature upon passing consensus checks.
-        let tx = self.database.tx_mut().await?;
-        tx.insert_signature(block_with_peer.block.header.hash_slow(), block_with_peer.signature)
+        let block_hash = block_with_peer.block.header.hash_slow();
+        self.database_service
+            .call(DatabaseQuery::write(move |tx| async move {
+                tx.insert_signature(block_hash, block_with_peer.signature).await
+            }))
             .await?;
-        tx.commit().await?;
 
         let received_block_number = block_with_peer.block.number;
         let received_block_hash = block_with_peer.block.header.hash_slow();
@@ -858,11 +867,13 @@ impl<
 
             // Purge all L1 message to L2 block mappings as they may be invalid after an
             // optimistic sync.
-            let tx = self.database.tx_mut().await?;
-            tx.purge_l1_message_to_l2_block_mappings(None).await?;
-            tx.commit().await?;
+            self.database_service
+                .call(DatabaseQuery::write(|tx| async move {
+                    tx.purge_l1_message_to_l2_block_mappings(None).await
+                }))
+                .await?;
 
-            return Ok(Some(ChainOrchestratorEvent::OptimisticSync(block_info)))
+            return Ok(Some(ChainOrchestratorEvent::OptimisticSync(block_info)));
         }
 
         // If the block number is greater than the current head we attempt to extend the chain.
@@ -935,7 +946,7 @@ impl<
                     headers: vec![block_with_peer.block.header],
                     peer_id: block_with_peer.peer_id,
                     signature: block_with_peer.signature,
-                }))
+                }));
             }
 
             // Check if the parent hash of the received block is in the chain.
@@ -1058,7 +1069,7 @@ impl<
         // If the FCS update resulted in an invalid state, we return an error.
         if result.is_invalid() {
             tracing::warn!(target: "scroll::chain_orchestrator", ?chain_head_hash, ?chain_head_number, ?result, "Failed to update FCS after importing new chain from peer");
-            return Err(ChainOrchestratorError::InvalidBlock)
+            return Err(ChainOrchestratorError::InvalidBlock);
         }
 
         // If we were previously in L2 syncing mode and the FCS update resulted in a valid state, we
@@ -1079,10 +1090,15 @@ impl<
         // result is valid.
         if self.sync_state.is_synced() && result.is_valid() {
             let blocks = chain.iter().map(|block| block.into()).collect::<Vec<_>>();
-            let tx = self.database.tx_mut().await?;
-            tx.update_l1_messages_from_l2_blocks(blocks).await?;
-            tx.set_l2_head_block_number(block_with_peer.block.header.number).await?;
-            tx.commit().await?;
+            self.database_service
+                .call(DatabaseQuery::write(move |tx| {
+                    let blocks = blocks.clone();
+                    async move {
+                        tx.update_l1_messages_from_l2_blocks(blocks).await?;
+                        tx.set_l2_head_block_number(block_with_peer.block.header.number).await
+                    }
+                }))
+                .await?;
 
             self.network.handle().block_import_outcome(BlockImportOutcome::valid_block(
                 block_with_peer.peer_id,
@@ -1103,7 +1119,7 @@ impl<
     ///
     /// This involves validating the L1 messages in the blocks against the expected L1 messages
     /// synced from L1.
-    async fn consolidate_chain(&self) -> Result<(), ChainOrchestratorError> {
+    async fn consolidate_chain(&mut self) -> Result<(), ChainOrchestratorError> {
         tracing::trace!(target: "scroll::chain_orchestrator", fcs = ?self.engine.fcs(), "Consolidating chain from safe to head");
 
         let safe_block_number = self.engine.fcs().safe_block_info().number;
@@ -1116,7 +1132,7 @@ impl<
                 from: safe_block_number,
                 to: head_block_number,
             });
-            return Ok(())
+            return Ok(());
         }
 
         let start_block_number = safe_block_number + 1;
@@ -1136,12 +1152,17 @@ impl<
 
         self.validate_l1_messages(&blocks_to_validate).await?;
 
-        let tx = self.database.tx_mut().await?;
-        tx.update_l1_messages_from_l2_blocks(
-            blocks_to_validate.into_iter().map(|b| (&b).into()).collect(),
-        )
-        .await?;
-        tx.commit().await?;
+        self.database_service
+            .call(DatabaseQuery::write(move |tx| {
+                let blocks_to_validate = blocks_to_validate.clone();
+                async move {
+                    tx.update_l1_messages_from_l2_blocks(
+                        blocks_to_validate.into_iter().map(|b| (&b).into()).collect(),
+                    )
+                    .await
+                }
+            }))
+            .await?;
 
         self.notify(ChainOrchestratorEvent::ChainConsolidated {
             from: safe_block_number,
@@ -1154,7 +1175,7 @@ impl<
     /// Validates the L1 messages in the provided blocks against the expected L1 messages synced
     /// from L1.
     async fn validate_l1_messages(
-        &self,
+        &mut self,
         blocks: &[ScrollBlock],
     ) -> Result<(), ChainOrchestratorError> {
         let l1_message_hashes = blocks
@@ -1178,24 +1199,21 @@ impl<
 
         let first_block_number =
             blocks.first().expect("at least one block exists because we have l1 messages").number;
-        let tx = self.database.tx().await?;
-        let mut database_messages = if let Some(database_messages) =
-            tx.get_l1_messages(Some(L1MessageKey::block_number(first_block_number))).await?
-        {
-            database_messages
-        } else {
-            return Err(ChainOrchestratorError::L1MessageNotFound(L1MessageKey::TransactionHash(
-                *l1_message_hashes.first().expect("at least one message exists"),
-            )))
-        };
+        let count = l1_message_hashes.len();
+        let mut database_messages = self
+            .database_service
+            .call(DatabaseQuery::read(move |tx| async move {
+                tx.get_n_l1_messages(Some(L1MessageKey::block_number(first_block_number)), count)
+                    .await
+            }))
+            .await?
+            .into_iter();
 
         for message_hash in l1_message_hashes {
             // Get the expected L1 message from the database.
             let expected_hash = database_messages
                 .next()
-                .await
-                .map(|m| m.map(|msg| msg.transaction.tx_hash()))
-                .transpose()?
+                .map(|m| m.transaction.tx_hash())
                 .ok_or(ChainOrchestratorError::L1MessageNotFound(L1MessageKey::TransactionHash(
                     message_hash,
                 )))
@@ -1229,8 +1247,8 @@ impl<
 /// migration to `L1MessageQueueV2`, the queue hash will be None.
 ///
 /// The solidity contract (`L1MessageQueueV2.sol`) implementation is defined here: <https://github.com/scroll-tech/scroll-contracts/blob/67c1bde19c1d3462abf8c175916a2bb3c89530e4/src/L1/rollup/L1MessageQueueV2.sol#L379-L403>
-async fn compute_l1_message_queue_hash(
-    database: &Arc<Database>,
+async fn compute_l1_message_queue_hash<S: DatabaseService>(
+    database: &mut S,
     l1_message: &TxL1Message,
     l1_v2_message_queue_start_index: u64,
 ) -> Result<Option<alloy_primitives::FixedBytes<32>>, ChainOrchestratorError> {
@@ -1240,17 +1258,16 @@ async fn compute_l1_message_queue_hash(
         Some(keccak256(input) & L1_MESSAGE_QUEUE_HASH_MASK)
     } else if l1_message.queue_index > l1_v2_message_queue_start_index {
         let index = l1_message.queue_index - 1;
-        let mut input = Retry::default()
-            .retry("get_l1_message_by_index", || async {
-                let tx = database.tx().await?;
-                let input = tx.get_l1_message_by_index(index).await?;
-                Ok::<_, ChainOrchestratorError>(input)
-            })
+        let mut input = database
+            .call(DatabaseQuery::read(
+                move |tx| async move { tx.get_l1_message_by_index(index).await },
+            ))
             .await?
             .map(|m| m.queue_hash)
             .ok_or(DatabaseError::L1MessageNotFound(L1MessageKey::QueueIndex(index)))?
             .unwrap_or_default()
             .to_vec();
+
         input.append(&mut l1_message.tx_hash().to_vec());
         Some(keccak256(input) & L1_MESSAGE_QUEUE_HASH_MASK)
     } else {
