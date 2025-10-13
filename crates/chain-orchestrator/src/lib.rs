@@ -330,10 +330,12 @@ impl<
                 let db_tx = self.database.tx().await?;
                 let l1_latest = db_tx.get_latest_l1_block_number().await?;
                 let l1_finalized = db_tx.get_finalized_l1_block_number().await?;
+                let l1_processed = db_tx.get_processed_l1_block_number().await?;
                 let status = ChainOrchestratorStatus::new(
                     &self.sync_state,
                     l1_latest,
                     l1_finalized,
+                    l1_processed,
                     self.engine.fcs().clone(),
                 );
                 let _ = tx.send(status);
@@ -488,6 +490,12 @@ impl<
         notification: Arc<L1Notification>,
     ) -> Result<Option<ChainOrchestratorEvent>, ChainOrchestratorError> {
         match &*notification {
+            L1Notification::Processed(block_number) => {
+                let tx = self.database.tx_mut().await?;
+                tx.set_processed_l1_block_number(*block_number).await?;
+                tx.commit().await?;
+                Ok(None)
+            }
             L1Notification::Reorg(block_number) => self.handle_l1_reorg(*block_number).await,
             L1Notification::Consensus(update) => {
                 self.consensus.update_config(update);

@@ -98,6 +98,23 @@ pub trait DatabaseWriteOperations: WriteConnectionProvider + DatabaseReadOperati
             .map(|_| ())?)
     }
 
+    /// Set the processed L1 block number.
+    async fn set_processed_l1_block_number(&self, block_number: u64) -> Result<(), DatabaseError> {
+        tracing::trace!(target: "scroll::db", block_number, "Updating the processed L1 block number in the database.");
+        let metadata: models::metadata::ActiveModel =
+            Metadata { key: "l1_processed_block".to_string(), value: block_number.to_string() }
+                .into();
+        Ok(models::metadata::Entity::insert(metadata)
+            .on_conflict(
+                OnConflict::column(models::metadata::Column::Key)
+                    .update_column(models::metadata::Column::Value)
+                    .to_owned(),
+            )
+            .exec(self.get_connection())
+            .await
+            .map(|_| ())?)
+    }
+
     /// Set the L2 head block number.
     async fn set_l2_head_block_number(&self, number: u64) -> Result<(), DatabaseError> {
         tracing::trace!(target: "scroll::db", ?number, "Updating the L2 head block number in the database.");
@@ -541,6 +558,20 @@ pub trait DatabaseReadOperations: ReadConnectionProvider + Sync {
             .expect("l1_finalized_block should always be set")
             .parse::<u64>()
             .expect("l1_finalized_block should always be a valid u64"))
+    }
+
+    /// Get the processed L1 block number from the database.
+    async fn get_processed_l1_block_number(&self) -> Result<u64, DatabaseError> {
+        Ok(models::metadata::Entity::find()
+            .filter(models::metadata::Column::Key.eq("l1_processed_block"))
+            .select_only()
+            .column(models::metadata::Column::Value)
+            .into_tuple::<String>()
+            .one(self.get_connection())
+            .await?
+            .expect("l1_processed_block should always be set")
+            .parse::<u64>()
+            .expect("l1_processed_block should always be a valid u64"))
     }
 
     /// Get the latest L2 head block info.
