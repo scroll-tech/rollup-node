@@ -126,7 +126,7 @@ impl<S: DatabaseService> DatabaseService for Retry<S> {
 
 /// A trait for errors that can indicate whether an operation can be retried.
 pub trait CanRetry {
-    /// Returns true if the implementor can be retried.
+    /// Returns true if the implementer can be retried.
     fn can_retry(&self) -> bool;
 }
 

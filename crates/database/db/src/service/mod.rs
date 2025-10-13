@@ -53,7 +53,7 @@ where
     }
 }
 
-/// An implementor of the trait can make queries to the database. This trait is used in order to
+/// An implementer of the trait can make queries to the database. This trait is used in order to
 /// move the `T` generic out from the [`Service<DatabaseQuery<T, Err>>`] trait and into the method
 /// itself.
 #[async_trait::async_trait]
