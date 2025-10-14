@@ -727,6 +727,10 @@ async fn can_bridge_blocks() {
             .unwrap();
     let mut bridge_node = nodes.pop().unwrap();
     let bridge_peer_id = bridge_node.network.record().id;
+    let bridge_node_l1_watcher_tx = bridge_node.inner.add_ons_handle.l1_watcher_tx.clone().unwrap();
+
+    // Send a notification to set the L1 to synced
+    bridge_node_l1_watcher_tx.send(Arc::new(L1Notification::Synced)).await.unwrap();
 
     // Instantiate the scroll NetworkManager.
     let network_config = NetworkConfigBuilder::<ScrollNetworkPrimitives>::with_rng_secret_key()
@@ -888,6 +892,8 @@ async fn shutdown_consolidates_most_recent_batch_on_startup() -> eyre::Result<()
         finalized_block_number: None,
     };
 
+    println!("Sending first batch commit and finalization");
+
     // Send the first batch commit to the rollup node manager and finalize it.
     l1_notification_tx.send(Arc::new(L1Notification::BatchCommit(batch_0_data.clone()))).await?;
     l1_notification_tx
@@ -901,14 +907,19 @@ async fn shutdown_consolidates_most_recent_batch_on_startup() -> eyre::Result<()
     // Lets finalize the first batch
     l1_notification_tx.send(Arc::new(L1Notification::Finalized(batch_0_data.block_number))).await?;
 
+    println!("First batch finalized, iterating until first batch is consolidated");
+
     // Lets iterate over all blocks expected to be derived from the first batch commit.
     let consolidation_outcome = loop {
         let event = rnm_events.next().await;
+        println!("Received event: {:?}", event);
         if let Some(ChainOrchestratorEvent::BatchConsolidated(consolidation_outcome)) = event {
             break consolidation_outcome;
         }
     };
     assert_eq!(consolidation_outcome.blocks.len(), 4, "Expected 4 blocks to be consolidated");
+
+    println!("First batch consolidated, sending second batch commit and finalization");
 
     // Now we send the second batch commit and finalize it.
     l1_notification_tx.send(Arc::new(L1Notification::BatchCommit(batch_1_data.clone()))).await?;
@@ -923,6 +934,8 @@ async fn shutdown_consolidates_most_recent_batch_on_startup() -> eyre::Result<()
     // Lets finalize the second batch.
     l1_notification_tx.send(Arc::new(L1Notification::Finalized(batch_1_data.block_number))).await?;
 
+    println!("Second batch finalized, iterating until block 40 is consolidated");
+
     // The second batch commit contains 42 blocks (5-57), lets iterate until the rnm has
     // consolidated up to block 40.
     let mut i = 5;
@@ -931,8 +944,8 @@ async fn shutdown_consolidates_most_recent_batch_on_startup() -> eyre::Result<()
             if let Some(ChainOrchestratorEvent::BlockConsolidated(consolidation_outcome)) =
                 rnm_events.next().await
             {
-                assert_eq!(consolidation_outcome.block_info().number, i);
-                break consolidation_outcome.block_info().hash;
+                assert_eq!(consolidation_outcome.block_info().block_info.number, i);
+                break consolidation_outcome.block_info().block_info.hash;
             }
         };
         if i == 40 {
@@ -940,6 +953,8 @@ async fn shutdown_consolidates_most_recent_batch_on_startup() -> eyre::Result<()
         }
         i += 1;
     };
+
+    println!("Block 40 consolidated, checking safe and head block hashes");
 
     // Fetch the safe and head block hashes from the EN.
     let rpc = node.rpc.inner.eth_api();
@@ -1020,13 +1035,16 @@ async fn shutdown_consolidates_most_recent_batch_on_startup() -> eyre::Result<()
     };
 
     // One issue #273 is completed, we will again have safe blocks != finalized blocks, and this
-    // should be changed to 1. Assert that the consolidated block is the first block of the
-    // batch.
-    assert_eq!(l2_block.number, 5, "Consolidated block number does not match expected number");
+    // should be changed to 1. Assert that the consolidated block is the first block that was not
+    // previously processed of the batch.
+    assert_eq!(
+        l2_block.block_info.number, 41,
+        "Consolidated block number does not match expected number"
+    );
 
     // Lets now iterate over all remaining blocks expected to be derived from the second batch
     // commit.
-    for i in 6..=57 {
+    for i in 42..=57 {
         loop {
             if let Some(ChainOrchestratorEvent::BlockConsolidated(consolidation_outcome)) =
                 rnm_events.next().await
@@ -1062,10 +1080,9 @@ async fn shutdown_consolidates_most_recent_batch_on_startup() -> eyre::Result<()
 }
 
 /// Test that when the rollup node manager is shutdown, it restarts with the head set to the latest
-/// sequenced block stored in database.
+/// signed block stored in database.
 #[tokio::test]
-async fn graceful_shutdown_sets_fcs_to_latest_sequenced_block_in_db_on_start_up() -> eyre::Result<()>
-{
+async fn graceful_shutdown_sets_fcs_to_latest_signed_block_in_db_on_start_up() -> eyre::Result<()> {
     reth_tracing::init_test_tracing();
     let chain_spec = (*SCROLL_DEV).clone();
 
@@ -1134,7 +1151,7 @@ async fn graceful_shutdown_sets_fcs_to_latest_sequenced_block_in_db_on_start_up(
         handle.build_block();
         let block_number = loop {
             let _ = rnm.poll_unpin(&mut Context::from_waker(noop_waker_ref()));
-            if let Poll::Ready(Some(ChainOrchestratorEvent::BlockSequenced(block))) =
+            if let Poll::Ready(Some(ChainOrchestratorEvent::SignedBlock { block, signature: _ })) =
                 rnm_events.poll_next_unpin(&mut Context::from_waker(noop_waker_ref()))
             {
                 break block.header.number
@@ -1309,8 +1326,9 @@ async fn can_handle_l1_message_reorg() -> eyre::Result<()> {
     let mut node1_rnm_events = node1_rnm_handle.get_event_listener().await?;
     let node1_l1_watcher_tx = node1.inner.add_ons_handle.l1_watcher_tx.as_ref().unwrap();
 
-    // Set L1 synced on sequencer node
+    // Set L1 synced on both the sequencer and follower nodes.
     node0_l1_watcher_tx.send(Arc::new(L1Notification::Synced)).await?;
+    node1_l1_watcher_tx.send(Arc::new(L1Notification::Synced)).await?;
 
     // Let the sequencer build 10 blocks before performing the reorg process.
     let mut reorg_block = None;

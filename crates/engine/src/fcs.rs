@@ -88,7 +88,7 @@ impl ForkchoiceState {
         let new_safe = safe.unwrap_or(self.safe);
         let new_head = head.unwrap_or(self.head);
 
-        // Check that the finalized block number is increasing.
+        // Check that the finalized block number is increasing or stays the same with the same hash.
         if new_finalized.number <= self.finalized.number && new_finalized != self.finalized {
             return Err(FcsError::FinalizedBlockNumberNotIncreasing);
         }

@@ -385,7 +385,7 @@ async fn can_build_blocks_with_finalized_l1_messages() {
         payload_building_config: PayloadBuildingConfig {
             block_gas_limit: SCROLL_GAS_LIMIT,
             max_l1_messages_per_block: 4,
-            l1_message_inclusion_mode: L1MessageInclusionMode::Finalized,
+            l1_message_inclusion_mode: L1MessageInclusionMode::FinalizedWithBlockDepth(0),
         },
         block_time: 0,
         payload_building_duration: 0,
@@ -906,7 +906,7 @@ async fn should_limit_l1_message_cumulative_gas() {
         payload_building_config: PayloadBuildingConfig {
             block_gas_limit: SCROLL_GAS_LIMIT,
             max_l1_messages_per_block: 4,
-            l1_message_inclusion_mode: L1MessageInclusionMode::Finalized,
+            l1_message_inclusion_mode: L1MessageInclusionMode::FinalizedWithBlockDepth(0),
         },
         block_time: 0,
         payload_building_duration: 0,

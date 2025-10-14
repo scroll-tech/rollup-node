@@ -1,30 +1,16 @@
-use alloy_primitives::{B256, B64};
+use alloy_primitives::B64;
 use reth_primitives_traits::{AlloyBlockHeader, Block, BlockBody};
 use scroll_alloy_rpc_types_engine::ScrollPayloadAttributes;
 
 use tracing::debug;
 
 /// Returns true if the [`Block`] matches the [`ScrollPayloadAttributes`]:
-///    - parent hash matches the parent hash of the [`Block`].
 ///    - all transactions match.
 ///    - timestamps are equal.
 ///    - `prev_randaos` are equal.
 ///    - `block_data_hint` matches the block data if present.
-pub fn block_matches_attributes<B: Block>(
-    attributes: &ScrollPayloadAttributes,
-    block: &B,
-    parent_hash: B256,
-) -> bool {
+pub fn block_matches_attributes<B: Block>(attributes: &ScrollPayloadAttributes, block: &B) -> bool {
     let header = block.header();
-    if header.parent_hash() != parent_hash {
-        debug!(
-            target: "scroll::engine::driver",
-            expected = ?parent_hash,
-            got = ?header.parent_hash(),
-            "reorg: mismatch in parent hash"
-        );
-        return false;
-    }
 
     let payload_transactions = &block.body().encoded_2718_transactions();
     let matching_transactions =
@@ -109,7 +95,7 @@ mod tests {
 
     use alloy_consensus::Header;
     use alloy_eips::Encodable2718;
-    use alloy_primitives::{Bytes, U256};
+    use alloy_primitives::{Bytes, B256, U256};
     use arbitrary::{Arbitrary, Unstructured};
     use reth_scroll_primitives::ScrollBlock;
     use reth_testing_utils::{generators, generators::Rng};
@@ -154,7 +140,7 @@ mod tests {
             body: alloy_consensus::BlockBody { transactions, ..Default::default() },
         };
 
-        assert!(block_matches_attributes(&attributes, &block, parent_hash));
+        assert!(block_matches_attributes(&attributes, &block));
 
         Ok(())
     }
@@ -185,7 +171,7 @@ mod tests {
             body: alloy_consensus::BlockBody { transactions, ..Default::default() },
         };
 
-        assert!(!block_matches_attributes(&attributes, &block, parent_hash));
+        assert!(!block_matches_attributes(&attributes, &block));
 
         Ok(())
     }

@@ -31,12 +31,9 @@ use rollup_node_chain_orchestrator::{
     ChainOrchestrator, ChainOrchestratorConfig, ChainOrchestratorHandle, Consensus, NoopConsensus,
     SystemContractConsensus,
 };
-// use rollup_node_manager::{
-//     Consensus, NoopConsensus, RollupManagerHandle, RollupNodeManager, SystemContractConsensus,
-// };
 use rollup_node_primitives::{BlockInfo, NodeConfig};
 use rollup_node_providers::{
-    BlobProvidersBuilder, FullL1Provider, L1MessageProvider, L1Provider, SystemContractProvider,
+    BlobProvidersBuilder, FullL1Provider, L1MessageProvider, SystemContractProvider,
 };
 use rollup_node_sequencer::{
     L1MessageInclusionMode, PayloadBuildingConfig, Sequencer, SequencerConfig,
@@ -164,7 +161,6 @@ impl ScrollRollupNodeConfig {
         ChainOrchestrator<
             N,
             impl ScrollHardforks + EthChainSpec<Header: BlockHeader> + IsDevChain + Clone + 'static,
-            impl L1Provider + Clone,
             impl L1MessageProvider + Clone,
             impl Provider<Scroll> + Clone,
             impl ScrollEngineApi,
@@ -270,34 +266,23 @@ impl ScrollRollupNodeConfig {
         let tx = db.tx_mut().await?;
         let (_startup_safe_block, l1_start_block_number) =
             tx.prepare_on_startup(chain_spec.genesis_hash()).await?;
+        let l2_head_block_number = tx.get_l2_head_block_number().await?;
+        tx.purge_l1_message_to_l2_block_mappings(Some(l2_head_block_number + 1)).await?;
         tx.commit().await?;
-        // if let Some(block_info) = startup_safe_block {
-        //     fcs.update(None, Some(block_info), Some(block_info))?;
-        // } else {
-        //     fcs.update(
-        //         None,
-        //         Some(BlockInfo {
-        //             hash: genesis_hash_from_chain_spec(chain_spec.clone()).unwrap(),
-        //             number: 0,
-        //         }),
-        //         None,
-        //     )?;
-        // }
 
         // Update the head block info if available and ahead of finalized.
-        if let Some(latest_block_number) = db.tx().await?.get_l2_head_block_number().await? {
-            if latest_block_number > fcs.finalized_block_info().number {
-                let block = l2_provider
-                    .get_block(latest_block_number.into())
-                    .full()
-                    .await?
-                    .expect("latest block from db should exist")
-                    .into_consensus()
-                    .map_transactions(|tx| tx.inner.into_inner());
-                let block_info: BlockInfo = (&block).into();
+        let l2_head_block_number = db.tx().await?.get_l2_head_block_number().await?;
+        if l2_head_block_number > fcs.finalized_block_info().number {
+            let block = l2_provider
+                .get_block(l2_head_block_number.into())
+                .full()
+                .await?
+                .expect("latest block from db should exist")
+                .into_consensus()
+                .map_transactions(|tx| tx.inner.into_inner());
+            let block_info: BlockInfo = (&block).into();
 
-                fcs.update(Some(block_info), None, None)?;
-            }
+            fcs.update(Some(block_info), None, None)?;
         }
 
         let chain_spec = Arc::new(chain_spec.clone());
@@ -323,15 +308,6 @@ impl ScrollRollupNodeConfig {
 
         tracing::info!(target: "scroll::node::args", fcs = ?fcs, payload_building_duration = ?self.sequencer_args.payload_building_duration, "Starting engine driver");
         let engine = Engine::new(Arc::new(engine_api), fcs);
-        // let engine = EngineDriver::new(
-        //     Arc::new(engine_api),
-        //     chain_spec.clone(),
-        //     Some(l2_provider.clone()),
-        //     fcs,
-        //     self.engine_driver_args.sync_at_startup && !self.test && !chain_spec.is_dev_chain(),
-        //     Duration::from_millis(self.sequencer_args.payload_building_duration),
-        //     self.sequencer_args.allow_empty_blocks,
-        // );
 
         // Create the consensus.
         let authorized_signer = if let Some(provider) = l1_provider.as_ref() {
@@ -433,7 +409,8 @@ impl ScrollRollupNodeConfig {
             l1_provider.clone(),
             db.clone(),
             l1_v2_message_queue_start_index,
-        );
+        )
+        .await;
 
         let (chain_orchestrator, handle) = ChainOrchestrator::new(
             db.clone(),

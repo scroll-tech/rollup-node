@@ -6,13 +6,13 @@
 use alloy_primitives::{Address, B256};
 use alloy_rpc_types_engine::PayloadAttributes;
 use core::{fmt::Debug, future::Future, pin::Pin, task::Poll};
-use futures::{stream::FuturesOrdered, task::AtomicWaker, Stream, StreamExt};
+use futures::{stream::FuturesOrdered, Stream, StreamExt};
 use rollup_node_primitives::{BatchCommitData, BatchInfo, L1MessageEnvelope};
 use rollup_node_providers::{BlockDataProvider, L1Provider};
 use scroll_alloy_rpc_types_engine::{BlockDataHint, ScrollPayloadAttributes};
 use scroll_codec::{decoding::payload::PayloadData, Codec};
 use scroll_db::{Database, DatabaseReadOperations, DatabaseTransactionProvider, L1MessageKey};
-use tokio::sync::Mutex;
+use tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender};
 
 mod data_source;
 
@@ -25,11 +25,87 @@ pub use metrics::DerivationPipelineMetrics;
 use crate::data_source::CodecDataSource;
 use std::{boxed::Box, sync::Arc, time::Instant, vec::Vec};
 
+/// The derivation pipeline that derives [`BatchDerivationResult`] from [`BatchInfo`].
+///
+/// This struct holds the sender and receiver for the pipeline worker, as well as the length of
+/// active batches being processed. The actual processing is done in the
+/// [`DerivationPipelineWorker`] which is run in a separate task to prevent poll starvation due to
+/// database locks.
+#[derive(Debug)]
+pub struct DerivationPipeline {
+    /// The sender for the pipeline used to push new batches to be processed.
+    batch_sender: UnboundedSender<Arc<BatchInfo>>,
+    /// The receiver for the pipeline used to receive the results of the batch processing.
+    result_receiver: UnboundedReceiver<BatchDerivationResult>,
+    /// The number of active batches being processed.
+    len: u64,
+}
+
+impl DerivationPipeline {
+    /// Returns a new instance of the [`DerivationPipeline`].
+    pub async fn new<P>(
+        l1_provider: P,
+        database: Arc<Database>,
+        l1_v2_message_queue_start_index: u64,
+    ) -> Self
+    where
+        P: L1Provider + Clone + Send + Sync + 'static,
+    {
+        let (batch_sender, result_receiver) =
+            DerivationPipelineWorker::spawn(l1_provider, database, l1_v2_message_queue_start_index)
+                .await;
+        Self { batch_sender, result_receiver, len: 0 }
+    }
+
+    /// Pushes a new batch info to the derivation pipeline.
+    pub async fn push_batch(&mut self, batch_info: Arc<BatchInfo>) {
+        self.batch_sender
+            .send(batch_info)
+            .expect("Failed to send batch info to derivation pipeline");
+        self.len += 1;
+    }
+
+    /// Returns the number of active batches being processed.
+    pub const fn len(&self) -> u64 {
+        self.len
+    }
+
+    /// Returns a boolean indicating if there are no active batches being processed.
+    pub const fn is_empty(&self) -> bool {
+        self.len == 0
+    }
+}
+
+impl Stream for DerivationPipeline {
+    type Item = BatchDerivationResult;
+
+    fn poll_next(
+        self: Pin<&mut Self>,
+        cx: &mut std::task::Context<'_>,
+    ) -> std::task::Poll<Option<Self::Item>> {
+        let this = self.get_mut();
+        match Pin::new(&mut this.result_receiver).poll_recv(cx) {
+            Poll::Ready(Some(result)) => {
+                this.len = this.len.saturating_sub(1);
+                Poll::Ready(Some(result))
+            }
+            _ => Poll::Pending,
+        }
+    }
+}
+
+/// The maximum number of concurrent batch derivation futures.
+const DERIVATION_PIPELINE_WORKER_CONCURRENCY: usize = 5;
+
 /// A structure holding the current unresolved futures for the derivation pipeline.
 #[derive(Debug)]
-pub struct DerivationPipeline<P> {
+pub struct DerivationPipelineWorker<P> {
+    /// The receiver for the pipeline used to receive new batches to be derived.
+    batch_receiver: UnboundedReceiver<Arc<BatchInfo>>,
+    /// The sender for the pipeline used to send the results of the batch derivation.
+    result_sender: UnboundedSender<BatchDerivationResult>,
     /// The active batch derivation futures.
-    futures: Arc<Mutex<FuturesOrdered<DerivationPipelineFuture>>>,
+    futures: FuturesOrdered<DerivationPipelineFuture>,
     /// A reference to the database.
     database: Arc<Database>,
     /// A L1 provider.
@@ -38,47 +114,94 @@ pub struct DerivationPipeline<P> {
     l1_v2_message_queue_start_index: u64,
     /// The metrics of the pipeline.
     metrics: DerivationPipelineMetrics,
-    /// The waker for the stream.
-    waker: AtomicWaker,
 }
 
-impl<P> DerivationPipeline<P> {
+impl<P> DerivationPipelineWorker<P> {
     /// Returns a new instance of the [`DerivationPipeline`].
     pub fn new(
         l1_provider: P,
         database: Arc<Database>,
         l1_v2_message_queue_start_index: u64,
+        batch_receiver: UnboundedReceiver<Arc<BatchInfo>>,
+        result_sender: UnboundedSender<BatchDerivationResult>,
     ) -> Self {
         Self {
-            futures: Arc::new(Mutex::new(FuturesOrdered::new())),
+            batch_receiver,
+            result_sender,
+            futures: FuturesOrdered::new(),
             database,
             l1_provider,
             l1_v2_message_queue_start_index,
             metrics: DerivationPipelineMetrics::default(),
-            waker: AtomicWaker::new(),
         }
     }
 }
 
-impl<P> DerivationPipeline<P>
+impl<P> DerivationPipelineWorker<P>
 where
     P: L1Provider + Clone + Send + Sync + 'static,
 {
-    /// Pushes a new batch info to the derivation pipeline.
-    pub async fn push_batch(&mut self, batch_info: Arc<BatchInfo>) {
-        let fut = self.derivation_future(batch_info);
-        self.futures.lock().await.push_back(fut);
-        self.waker.wake();
+    /// Spawns a new instance of the [`DerivationPipelineWorker`] in a separate task.
+    pub async fn spawn(
+        l1_provider: P,
+        database: Arc<Database>,
+        l1_v2_message_queue_start_index: u64,
+    ) -> (UnboundedSender<Arc<BatchInfo>>, UnboundedReceiver<BatchDerivationResult>) {
+        let (batch_sender, batch_receiver) = tokio::sync::mpsc::unbounded_channel();
+        let (result_sender, result_receiver) = tokio::sync::mpsc::unbounded_channel();
+
+        tokio::task::spawn(async move {
+            let worker = Self::new(
+                l1_provider,
+                database,
+                l1_v2_message_queue_start_index,
+                batch_receiver,
+                result_sender,
+            );
+
+            worker.run().await;
+        });
+
+        (batch_sender, result_receiver)
     }
 
-    /// Returns the number of unresolved futures in the derivation pipeline.
-    pub async fn len(&self) -> usize {
-        self.futures.lock().await.len()
-    }
+    /// Runs the derivation pipeline worker.
+    async fn run(mut self) {
+        tracing::info!(target: "scroll::derivation_pipeline", "Starting derivation pipeline worker");
 
-    /// Returns true if there are no unresolved futures in the derivation pipeline.
-    pub async fn is_empty(&self) -> bool {
-        self.futures.lock().await.is_empty()
+        loop {
+            tokio::select! {
+                biased;
+
+                maybe_batch = self.batch_receiver.recv(), if self.futures.len() < DERIVATION_PIPELINE_WORKER_CONCURRENCY => {
+                    match maybe_batch {
+                        Some(batch_info) => {
+                            let fut = self.derivation_future(batch_info);
+                            self.futures.push_back(fut);
+                        }
+                        None => {
+                            tracing::info!(target: "scroll::derivation_pipeline", "Batch channel closed, shutting down derivation pipeline worker");
+                            break;
+                        }
+                    }
+
+                }
+                Some(result) = self.futures.next() => {
+                    match result {
+                        Ok(res) => {
+                            if self.result_sender.send(res).is_err() {
+                                tracing::info!(target: "scroll::derivation_pipeline", "Result channel closed, shutting down derivation pipeline worker");
+                                break;
+                            }
+                        }
+                        Err((batch_info, err)) => {
+                            tracing::error!(target: "scroll::derivation_pipeline", ?batch_info, ?err, "Failed to derive payload attributes");
+                            self.futures.push_front(self.derivation_future(batch_info));
+                        }
+                    }
+                }
+            }
+        }
     }
 
     fn derivation_future(&self, batch_info: Arc<BatchInfo>) -> DerivationPipelineFuture {
@@ -102,7 +225,7 @@ where
                 ))?;
 
             // derive the attributes and attach the corresponding batch info.
-            let result = derive_new(batch, provider, tx, l1_v2_message_queue_start_index)
+            let result = derive(batch, provider, tx, l1_v2_message_queue_start_index)
                 .await
                 .map_err(|err| (batch_info.clone(), err))?;
 
@@ -112,48 +235,6 @@ where
             metrics.blocks_per_second.set(result.attributes.len() as f64 / execution_duration);
             Ok(result)
         })
-    }
-}
-
-impl<P> Stream for DerivationPipeline<P>
-where
-    P: L1Provider + Unpin + Clone + Send + Sync + 'static,
-{
-    type Item = BatchDerivationResult;
-
-    fn poll_next(
-        self: Pin<&mut Self>,
-        cx: &mut std::task::Context<'_>,
-    ) -> std::task::Poll<Option<Self::Item>> {
-        let this = self.get_mut();
-        this.waker.register(cx.waker());
-
-        // Poll the next future in the ordered set of futures.
-        match this.futures.try_lock() {
-            Ok(mut guard) => {
-                let result = guard.poll_next_unpin(cx);
-                match result {
-                    // If the derivation failed then push it to the front of the queue to be
-                    // retried.
-                    Poll::Ready(Some(Err((batch_info, err)))) => {
-                        tracing::error!(target: "scroll::derivation_pipeline", ?batch_info, ?err, "Failed to derive payload attributes");
-                        guard.push_front(this.derivation_future(batch_info));
-                        cx.waker().wake_by_ref();
-                        Poll::Pending
-                    }
-                    // If the derivation succeeded then return the attributes.
-                    Poll::Ready(Some(Ok(result))) => Poll::Ready(Some(result)),
-                    // If there are no more futures then return None.
-                    Poll::Ready(None) | Poll::Pending => Poll::Pending,
-                }
-            }
-            Err(_) => {
-                // Could not acquire the lock, return pending.
-                cx.waker().wake_by_ref();
-
-                Poll::Pending
-            }
-        }
     }
 }
 
@@ -184,9 +265,9 @@ type DerivationPipelineFuture = Pin<
     >,
 >;
 
-/// Returns a vector of [`ScrollPayloadAttributes`] from the [`BatchCommitData`] and a
-/// [`L1Provider`].
-pub async fn derive_new<L1P: L1Provider + Sync + Send, L2P: BlockDataProvider + Sync + Send>(
+/// Returns a [`BatchDerivationResult`] from the [`BatchCommitData`] by deriving the payload
+/// attributes for each L2 block in the batch.
+pub async fn derive<L1P: L1Provider + Sync + Send, L2P: BlockDataProvider + Sync + Send>(
     batch: BatchCommitData,
     l1_provider: L1P,
     l2_provider: L2P,
@@ -414,7 +495,7 @@ mod tests {
         // construct the pipeline.
         let l1_messages_provider = db.clone();
         let mock_l1_provider = MockL1Provider { l1_messages_provider, blobs: HashMap::new() };
-        let mut pipeline = DerivationPipeline::new(mock_l1_provider, db.clone(), u64::MAX);
+        let mut pipeline = DerivationPipeline::new(mock_l1_provider, db.clone(), u64::MAX).await;
 
         // as long as we don't call `push_batch`, pipeline should not return attributes.
         pipeline.push_batch(BatchInfo { index: 12, hash: Default::default() }.into()).await;
@@ -487,7 +568,7 @@ mod tests {
         // construct the pipeline.
         let l1_messages_provider = db.clone();
         let mock_l1_provider = MockL1Provider { l1_messages_provider, blobs: HashMap::new() };
-        let mut pipeline = DerivationPipeline::new(mock_l1_provider, db, u64::MAX);
+        let mut pipeline = DerivationPipeline::new(mock_l1_provider, db, u64::MAX).await;
 
         // as long as we don't call `push_batch`, pipeline should not return attributes.
         pipeline.push_batch(BatchInfo { index: 12, hash: Default::default() }.into()).await;
@@ -543,7 +624,7 @@ mod tests {
         let l1_provider = MockL1Provider { l1_messages_provider, blobs: HashMap::new() };
         let l2_provider = MockL2Provider;
 
-        let result = derive_new(batch_data, l1_provider, l2_provider, u64::MAX).await?;
+        let result = derive(batch_data, l1_provider, l2_provider, u64::MAX).await?;
         let attribute = result
             .attributes
             .iter()
@@ -647,7 +728,7 @@ mod tests {
         let l2_provider = MockL2Provider;
 
         // derive attributes and extract l1 messages.
-        let attributes = derive_new(batch_data, l1_provider, l2_provider, u64::MAX).await?;
+        let attributes = derive(batch_data, l1_provider, l2_provider, u64::MAX).await?;
         let derived_l1_messages: Vec<_> = attributes
             .attributes
             .into_iter()
@@ -704,7 +785,7 @@ mod tests {
         let l2_provider = MockL2Provider;
 
         // derive attributes and extract l1 messages.
-        let attributes = derive_new(batch_data, l1_provider, l2_provider, u64::MAX).await?;
+        let attributes = derive(batch_data, l1_provider, l2_provider, u64::MAX).await?;
         let derived_l1_messages: Vec<_> = attributes
             .attributes
             .into_iter()
@@ -821,7 +902,7 @@ mod tests {
                     };
                     let l2_provider = MockL2Provider;
 
-                    let attributes = derive_new(batch_data, l1_provider, l2_provider, u64::MAX).await?;
+                    let attributes = derive(batch_data, l1_provider, l2_provider, u64::MAX).await?;
 
                     let attribute = attributes.attributes.last().unwrap();
                     let expected = ScrollPayloadAttributes {
