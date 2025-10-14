@@ -1,5 +1,5 @@
 use alloy_network::TransactionBuilder;
-use alloy_primitives::{address, hex::ToHexExt, Address, Bytes, TxHash, U256};
+use alloy_primitives::{address, hex::ToHexExt, Address, Bytes, U256};
 use alloy_provider::{Provider, ProviderBuilder};
 use alloy_rpc_types_eth::{BlockId, BlockNumberOrTag, TransactionRequest};
 use alloy_signer_local::PrivateKeySigner;

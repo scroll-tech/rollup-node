@@ -1,4 +1,3 @@
-use alloy_primitives::{address, Bytes, U256};
 use eyre::Result;
 use std::sync::{atomic::AtomicBool, Arc};
 use tests::*;
