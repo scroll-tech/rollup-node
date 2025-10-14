@@ -26,7 +26,7 @@ jobs:
         with:
           tool: cargo-codspeed
       - name: Build the benchmark target(s)
-        run: cargo codspeed build -p scroll-derivation-pipeline
+        run: cargo codspeed build -p scroll-derivation-pipeline --profile profiling
       - name: Run the benchmarks
         uses: CodSpeedHQ/action@v3
         with:
