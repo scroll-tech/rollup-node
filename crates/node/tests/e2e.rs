@@ -1030,7 +1030,7 @@ async fn shutdown_consolidates_most_recent_batch_on_startup() -> eyre::Result<()
         if let Some(ChainOrchestratorEvent::BlockConsolidated(consolidation_outcome)) =
             rnm_events.next().await
         {
-            break *consolidation_outcome.block_info();
+            break consolidation_outcome.block_info().clone();
         }
     };
 
@@ -1049,7 +1049,7 @@ async fn shutdown_consolidates_most_recent_batch_on_startup() -> eyre::Result<()
             if let Some(ChainOrchestratorEvent::BlockConsolidated(consolidation_outcome)) =
                 rnm_events.next().await
             {
-                assert!(consolidation_outcome.block_info().number == i);
+                assert!(consolidation_outcome.block_info().block_info.number == i);
                 break;
             }
         }
@@ -1263,7 +1263,7 @@ async fn can_handle_batch_revert() -> eyre::Result<()> {
         if let Some(ChainOrchestratorEvent::BlockConsolidated(consolidation_outcome)) =
             rnm_events.next().await
         {
-            if consolidation_outcome.block_info().number == 4 {
+            if consolidation_outcome.block_info().block_info.number == 4 {
                 break
             }
         }
@@ -1277,7 +1277,7 @@ async fn can_handle_batch_revert() -> eyre::Result<()> {
         if let Some(ChainOrchestratorEvent::BlockConsolidated(consolidation_outcome)) =
             rnm_events.next().await
         {
-            if consolidation_outcome.block_info().number == 46 {
+            if consolidation_outcome.block_info().block_info.number == 46 {
                 break
             }
         }
