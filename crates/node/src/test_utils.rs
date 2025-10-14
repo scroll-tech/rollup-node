@@ -90,7 +90,8 @@ where
             .with_add_ons(node.add_ons())
             .launch_with_fn(|builder| {
                 let tree_config = TreeConfig::default()
-                    .with_always_process_payload_attributes_on_canonical_head(true);
+                    .with_always_process_payload_attributes_on_canonical_head(true)
+                    .with_persistence_threshold(0);
                 let launcher = EngineNodeLauncher::new(
                     builder.task_executor().clone(),
                     builder.config().datadir(),
