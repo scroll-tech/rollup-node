@@ -83,7 +83,11 @@ async fn test_should_detect_reorg() -> eyre::Result<()> {
     for (latest, finalized) in latest_blocks[1..].iter().zip(finalized_blocks[1..].iter()) {
         // check finalized first.
         if finalized_number < finalized.header.number {
-            let notification = l1_watcher.recv().await.unwrap();
+            let mut notification = l1_watcher.recv().await.unwrap();
+            // skip the `L1Notification::Processed` notifications
+            if matches!(notification.as_ref(), L1Notification::Processed(_)) {
+                notification = l1_watcher.recv().await.unwrap();
+            }
             assert_eq!(notification.as_ref(), &L1Notification::Finalized(finalized.header.number));
         }
 
@@ -91,8 +95,14 @@ async fn test_should_detect_reorg() -> eyre::Result<()> {
             continue
         }
 
-        // skip the `L1Notification::Synced` notifications
         let mut notification = l1_watcher.recv().await.unwrap();
+
+        // skip the `L1Notification::Processed` notifications
+        if matches!(notification.as_ref(), L1Notification::Processed(_)) {
+            notification = l1_watcher.recv().await.unwrap();
+        }
+
+        // skip the `L1Notification::Synced` notifications
         if matches!(notification.as_ref(), L1Notification::Synced) {
             notification = l1_watcher.recv().await.unwrap();
         }
@@ -174,7 +184,11 @@ async fn test_should_fetch_gap_in_unfinalized_blocks() -> eyre::Result<()> {
     for (latest, finalized) in latest_blocks[1..].iter().zip(finalized_blocks[1..].iter()) {
         // check finalized first.
         if finalized_number < finalized.header.number {
-            let notification = l1_watcher.recv().await.unwrap();
+            let mut notification = l1_watcher.recv().await.unwrap();
+            // skip the `L1Notification::Processed` notifications
+            if matches!(notification.as_ref(), L1Notification::Processed(_)) {
+                notification = l1_watcher.recv().await.unwrap();
+            }
             assert_eq!(notification.as_ref(), &L1Notification::Finalized(finalized.header.number));
         }
 
@@ -182,8 +196,14 @@ async fn test_should_fetch_gap_in_unfinalized_blocks() -> eyre::Result<()> {
             continue
         }
 
-        // skip the `L1Notification::Synced` notifications
         let mut notification = l1_watcher.recv().await.unwrap();
+
+        // skip the `L1Notification::Processed` notifications
+        if matches!(notification.as_ref(), L1Notification::Processed(_)) {
+            notification = l1_watcher.recv().await.unwrap();
+        }
+
+        // skip the `L1Notification::Synced` notifications
         if matches!(notification.as_ref(), L1Notification::Synced) {
             notification = l1_watcher.recv().await.unwrap();
         }

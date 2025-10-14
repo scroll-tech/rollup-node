@@ -8,7 +8,7 @@ use sea_orm::{
     DatabaseConnection, SqlxSqliteConnector, TransactionTrait,
 };
 use std::sync::Arc;
-use tokio::sync::Mutex;
+use tokio::sync::{Mutex, Semaphore};
 
 // TODO: make these configurable via CLI.
 
@@ -16,7 +16,7 @@ use tokio::sync::Mutex;
 const BUSY_TIMEOUT_SECS: u64 = 5;
 
 /// The maximum number of connections in the database connection pool.
-const MAX_CONNECTIONS: u32 = 10;
+const MAX_CONNECTIONS: u32 = 32;
 
 /// The minimum number of connections in the database connection pool.
 const MIN_CONNECTIONS: u32 = 5;
@@ -36,6 +36,8 @@ pub struct Database {
     connection: DatabaseConnection,
     /// A mutex to ensure that only one mutable transaction is active at a time.
     write_lock: Arc<Mutex<()>>,
+    /// A semaphore to limit the number of concurrent read-only transactions.
+    read_locks: Arc<Semaphore>,
     /// The database metrics.
     metrics: DatabaseMetrics,
     /// The temporary directory used for testing. We keep it here to ensure it lives as long as the
@@ -80,9 +82,13 @@ impl Database {
             .connect_with(options)
             .await?;
 
+        // We reserve one connection for write transactions.
+        let read_connection_limit = max_connections as usize - 1;
+
         Ok(Self {
             connection: SqlxSqliteConnector::from_sqlx_sqlite_pool(sqlx_pool),
             write_lock: Arc::new(Mutex::new(())),
+            read_locks: Arc::new(Semaphore::new(read_connection_limit)),
             metrics: DatabaseMetrics::default(),
             #[cfg(feature = "test-utils")]
             tmp_dir: None,
@@ -111,7 +117,8 @@ impl DatabaseTransactionProvider for Database {
     /// Creates a new [`TX`] which can be used for read-only operations.
     async fn tx(&self) -> Result<TX, DatabaseError> {
         tracing::trace!(target: "scroll::db", "Creating new read-only transaction");
-        Ok(TX::new(self.connection.clone().begin().await?))
+        let permit = self.read_locks.clone().acquire_owned().await.unwrap();
+        Ok(TX::new(self.connection.clone().begin().await?, permit))
     }
 
     /// Creates a new [`TXMut`] which can be used for atomic read and write operations.
@@ -145,18 +152,6 @@ impl DatabaseConnectionProvider for Database {
 
     fn get_connection(&self) -> &Self::Connection {
         &self.connection
-    }
-}
-
-impl From<DatabaseConnection> for Database {
-    fn from(connection: DatabaseConnection) -> Self {
-        Self {
-            connection,
-            write_lock: Arc::new(Mutex::new(())),
-            metrics: DatabaseMetrics::default(),
-            #[cfg(feature = "test-utils")]
-            tmp_dir: None,
-        }
     }
 }
 
@@ -314,13 +309,8 @@ mod test {
         tx.insert_batch(data).await.unwrap();
 
         for _ in 0..10 {
-            let block_info = L2BlockInfoWithL1Messages {
-                block_info: BlockInfo {
-                    number: block_number,
-                    hash: B256::arbitrary(&mut u).unwrap(),
-                },
-                l1_messages: vec![],
-            };
+            let block_info =
+                BlockInfo { number: block_number, hash: B256::arbitrary(&mut u).unwrap() };
             tx.insert_block(block_info, batch_info).await.unwrap();
             block_number += 1;
         }
@@ -359,13 +349,8 @@ mod test {
         tx.insert_batch(second_batch).await.unwrap();
 
         for _ in 0..10 {
-            let block_info = L2BlockInfoWithL1Messages {
-                block_info: BlockInfo {
-                    number: block_number,
-                    hash: B256::arbitrary(&mut u).unwrap(),
-                },
-                l1_messages: vec![],
-            };
+            let block_info =
+                BlockInfo { number: block_number, hash: B256::arbitrary(&mut u).unwrap() };
             tx.insert_block(block_info, first_batch_info).await.unwrap();
             block_number += 1;
         }
@@ -532,6 +517,7 @@ mod test {
             .get_l1_messages(None)
             .await
             .unwrap()
+            .unwrap()
             .map(|res| res.unwrap())
             .collect::<Vec<_>>()
             .await;
@@ -605,7 +591,7 @@ mod test {
         let mut block_infos = Vec::new();
         for i in 200..205 {
             let block_info = BlockInfo { number: i, hash: B256::arbitrary(&mut u).unwrap() };
-            let l2_block = L2BlockInfoWithL1Messages { block_info, l1_messages: vec![] };
+            let l2_block = block_info;
             block_infos.push(block_info);
             tx.insert_block(l2_block, batch_info).await.unwrap();
         }
@@ -647,19 +633,9 @@ mod test {
         let safe_block_1 = BlockInfo { number: 200, hash: B256::arbitrary(&mut u).unwrap() };
         let safe_block_2 = BlockInfo { number: 201, hash: B256::arbitrary(&mut u).unwrap() };
 
-        tx.insert_block(
-            L2BlockInfoWithL1Messages { block_info: safe_block_1, l1_messages: vec![] },
-            batch_info,
-        )
-        .await
-        .unwrap();
+        tx.insert_block(safe_block_1, batch_info).await.unwrap();
 
-        tx.insert_block(
-            L2BlockInfoWithL1Messages { block_info: safe_block_2, l1_messages: vec![] },
-            batch_info,
-        )
-        .await
-        .unwrap();
+        tx.insert_block(safe_block_2, batch_info).await.unwrap();
 
         // Should return the highest safe block (block 201)
         let latest_safe = tx.get_latest_safe_l2_info().await.unwrap();
@@ -682,12 +658,7 @@ mod test {
         for i in 400..410 {
             let block_info = BlockInfo { number: i, hash: B256::arbitrary(&mut u).unwrap() };
 
-            tx.insert_block(
-                L2BlockInfoWithL1Messages { block_info, l1_messages: vec![] },
-                batch_info,
-            )
-            .await
-            .unwrap();
+            tx.insert_block(block_info, batch_info).await.unwrap();
         }
 
         // Delete blocks with number > 405
@@ -734,9 +705,8 @@ mod test {
             let batch_info: BatchInfo = batch_data.into();
 
             let block_info = BlockInfo { number: 500 + i, hash: B256::arbitrary(&mut u).unwrap() };
-            let l2_block = L2BlockInfoWithL1Messages { block_info, l1_messages: vec![] };
 
-            tx.insert_block(l2_block, batch_info).await.unwrap();
+            tx.insert_block(block_info, batch_info).await.unwrap();
         }
 
         // Delete L2 blocks with batch index > 105
@@ -793,7 +763,7 @@ mod test {
             L2BlockInfoWithL1Messages { block_info, l1_messages: l1_message_hashes.clone() };
 
         // Insert block
-        tx.insert_block(l2_block.clone(), batch_info).await.unwrap();
+        tx.insert_block(l2_block.block_info, batch_info).await.unwrap();
         tx.update_l1_messages_with_l2_block(l2_block).await.unwrap();
 
         // Verify block was inserted
@@ -829,9 +799,7 @@ mod test {
 
         // Insert initial block
         let block_info = BlockInfo { number: 600, hash: B256::arbitrary(&mut u).unwrap() };
-        let l2_block = L2BlockInfoWithL1Messages { block_info, l1_messages: vec![] };
-
-        tx.insert_block(l2_block, batch_info_1).await.unwrap();
+        tx.insert_block(block_info, batch_info_1).await.unwrap();
 
         // Verify initial insertion
         let retrieved_block = tx.get_l2_block_info_by_number(600).await.unwrap();
@@ -851,10 +819,8 @@ mod test {
         assert_eq!(initial_batch_info, batch_info_1);
 
         // Update the same block with different batch info (upsert)
-        let updated_l2_block = L2BlockInfoWithL1Messages { block_info, l1_messages: vec![] };
-
         let tx = db.tx_mut().await.unwrap();
-        tx.insert_block(updated_l2_block, batch_info_2).await.unwrap();
+        tx.insert_block(block_info, batch_info_2).await.unwrap();
         tx.commit().await.unwrap();
 
         // Verify the block still exists and was updated
@@ -889,40 +855,28 @@ mod test {
         // Insert batch 1 and associate it with two blocks in the database
         let batch_data_1 =
             BatchCommitData { index: 1, block_number: 10, ..Arbitrary::arbitrary(&mut u).unwrap() };
-        let block_1 = L2BlockInfoWithL1Messages {
-            block_info: BlockInfo { number: 1, hash: B256::arbitrary(&mut u).unwrap() },
-            l1_messages: vec![],
-        };
-        let block_2 = L2BlockInfoWithL1Messages {
-            block_info: BlockInfo { number: 2, hash: B256::arbitrary(&mut u).unwrap() },
-            l1_messages: vec![],
-        };
+        let block_1 = BlockInfo { number: 1, hash: B256::arbitrary(&mut u).unwrap() };
+        let block_2 = BlockInfo { number: 2, hash: B256::arbitrary(&mut u).unwrap() };
         tx.insert_batch(batch_data_1.clone()).await.unwrap();
-        tx.insert_block(block_1.clone(), batch_data_1.clone().into()).await.unwrap();
-        tx.insert_block(block_2.clone(), batch_data_1.clone().into()).await.unwrap();
+        tx.insert_block(block_1, batch_data_1.clone().into()).await.unwrap();
+        tx.insert_block(block_2, batch_data_1.clone().into()).await.unwrap();
 
         // Insert batch 2 and associate it with one block in the database
         let batch_data_2 =
             BatchCommitData { index: 2, block_number: 20, ..Arbitrary::arbitrary(&mut u).unwrap() };
-        let block_3 = L2BlockInfoWithL1Messages {
-            block_info: BlockInfo { number: 3, hash: B256::arbitrary(&mut u).unwrap() },
-            l1_messages: vec![],
-        };
+        let block_3 = BlockInfo { number: 3, hash: B256::arbitrary(&mut u).unwrap() };
         tx.insert_batch(batch_data_2.clone()).await.unwrap();
-        tx.insert_block(block_3.clone(), batch_data_2.clone().into()).await.unwrap();
+        tx.insert_block(block_3, batch_data_2.clone().into()).await.unwrap();
 
         // Insert batch 3 produced at the same block number as batch 2 and associate it with one
         // block
         let batch_data_3 =
             BatchCommitData { index: 3, block_number: 20, ..Arbitrary::arbitrary(&mut u).unwrap() };
-        let block_4 = L2BlockInfoWithL1Messages {
-            block_info: BlockInfo { number: 4, hash: B256::arbitrary(&mut u).unwrap() },
-            l1_messages: vec![],
-        };
+        let block_4 = BlockInfo { number: 4, hash: B256::arbitrary(&mut u).unwrap() };
         tx.insert_batch(batch_data_3.clone()).await.unwrap();
-        tx.insert_block(block_4.clone(), batch_data_3.clone().into()).await.unwrap();
+        tx.insert_block(block_4, batch_data_3.clone().into()).await.unwrap();
 
-        tx.set_latest_finalized_l1_block_number(21).await.unwrap();
+        tx.set_finalized_l1_block_number(21).await.unwrap();
         tx.commit().await.unwrap();
 
         // Verify the batches and blocks were inserted correctly
@@ -939,10 +893,10 @@ mod test {
         assert_eq!(retrieved_batch_1, batch_data_1);
         assert_eq!(retrieved_batch_2, batch_data_2);
         assert_eq!(retrieved_batch_3, batch_data_3);
-        assert_eq!(retried_block_1, block_1.block_info);
-        assert_eq!(retried_block_2, block_2.block_info);
-        assert_eq!(retried_block_3, block_3.block_info);
-        assert_eq!(retried_block_4, block_4.block_info);
+        assert_eq!(retried_block_1, block_1);
+        assert_eq!(retried_block_2, block_2);
+        assert_eq!(retried_block_3, block_3);
+        assert_eq!(retried_block_4, block_4);
 
         // Call prepare_on_startup which should not error
         let tx = db.tx_mut().await.unwrap();
@@ -950,7 +904,7 @@ mod test {
         tx.commit().await.unwrap();
 
         // verify the result
-        assert_eq!(result, (Some(block_2.block_info), Some(11)));
+        assert_eq!(result, (Some(block_2), Some(11)));
 
         // Verify that batches 2 and 3 are deleted
         let tx = db.tx().await.unwrap();
@@ -981,13 +935,13 @@ mod test {
 
         // Generate and insert a block info as the head.
         let block_info = BlockInfo::arbitrary(&mut u).unwrap();
-        tx.set_l2_head_block_info(block_info).await.unwrap();
+        tx.set_l2_head_block_number(block_info.number).await.unwrap();
         tx.commit().await.unwrap();
 
         // Retrieve and verify the head block info.
         let tx = db.tx().await.unwrap();
-        let head_block_info = tx.get_l2_head_block_info().await.unwrap().unwrap();
+        let head_block_info = tx.get_l2_head_block_number().await.unwrap();
 
-        assert_eq!(head_block_info, block_info);
+        assert_eq!(head_block_info, block_info.number);
     }
 }
