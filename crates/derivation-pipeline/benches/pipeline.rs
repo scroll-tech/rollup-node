@@ -43,7 +43,7 @@ fn setup_mock_provider(
             }
         }
 
-        MockL1Provider { l1_messages_provider: db, blobs }
+        MockL1Provider { db, blobs }
     })
 }
 

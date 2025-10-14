@@ -10,8 +10,8 @@ use std::{collections::HashMap, path::PathBuf, sync::Arc};
 /// Implementation of the [`crate::L1Provider`] that returns blobs from a file.
 #[derive(Clone, Default, Debug)]
 pub struct MockL1Provider<DB: DatabaseReadOperations> {
-    /// L1 message provider.
-    pub l1_messages_provider: DB,
+    /// Database.
+    pub db: DB,
     /// File blobs.
     pub blobs: HashMap<B256, PathBuf>,
 }
@@ -44,6 +44,6 @@ impl<DB: DatabaseReadOperations + Send + Sync> L1MessageProvider for MockL1Provi
         start: L1MessageKey,
         n: u64,
     ) -> Result<Vec<L1MessageEnvelope>, Self::Error> {
-        self.l1_messages_provider.get_n_messages(start, n).await
+        self.db.get_n_messages(start, n).await
     }
 }

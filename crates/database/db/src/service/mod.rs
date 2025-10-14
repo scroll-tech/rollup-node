@@ -1,5 +1,3 @@
-//! The [`Service`] implementation for the database and the retry mechanism.
-
 use crate::{
     db::DatabaseInner, service::query::DatabaseQuery, DatabaseError, DatabaseTransactionProvider,
 };
@@ -15,9 +13,8 @@ pub use retry::CanRetry;
 pub trait DatabaseServiceError: From<DatabaseError> + CanRetry + Debug + Send + 'static {}
 impl<T> DatabaseServiceError for T where T: From<DatabaseError> + CanRetry + Debug + Send + 'static {}
 
-/// An implementer of the trait can make queries to the database. This trait is used in order to
-/// move the `T` generic out from the [`Service<DatabaseQuery<T, Err>>`] trait and into the method
-/// itself.
+/// An implementer of the trait can make queries to the database. This trait is preferred over the
+/// `tower::Service` because it doesn't require a mutable reference.
 #[async_trait::async_trait]
 #[auto_impl::auto_impl(&, Arc)]
 pub(crate) trait DatabaseService: Clone + Send + Sync + 'static {

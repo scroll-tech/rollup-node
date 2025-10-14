@@ -32,7 +32,7 @@ const MIN_CONNECTIONS: u32 = 5;
 /// The timeout for acquiring a connection from the pool.
 const ACQUIRE_TIMEOUT_SECS: u64 = 5;
 
-/// A wrapper around [`DatabaseInner`] which provides retry features.
+/// A wrapper around `DatabaseInner` which provides retry features.
 #[derive(Debug)]
 pub struct Database {
     database: Retry<Arc<DatabaseInner>>,
@@ -81,7 +81,7 @@ impl Database {
         self.database.inner.tmp_dir()
     }
 
-    /// Returns a reference to the [`DatabaseInner`].
+    /// Returns a reference to the inner database structure.
     pub fn inner(&self) -> Arc<DatabaseInner> {
         self.database.inner.clone()
     }

@@ -475,8 +475,7 @@ mod tests {
         db.insert_l1_message(L1_MESSAGE_INDEX_33).await?;
 
         // construct the pipeline.
-        let l1_messages_provider = db.clone();
-        let mock_l1_provider = MockL1Provider { l1_messages_provider, blobs: HashMap::new() };
+        let mock_l1_provider = MockL1Provider { db: db.clone(), blobs: HashMap::new() };
         let mut pipeline = DerivationPipeline::new(mock_l1_provider, db.clone(), u64::MAX).await;
 
         // as long as we don't call `push_batch`, pipeline should not return attributes.
@@ -544,8 +543,7 @@ mod tests {
         }
 
         // construct the pipeline.
-        let l1_messages_provider = db.clone();
-        let mock_l1_provider = MockL1Provider { l1_messages_provider, blobs: HashMap::new() };
+        let mock_l1_provider = MockL1Provider { db: db.clone(), blobs: HashMap::new() };
         let mut pipeline = DerivationPipeline::new(mock_l1_provider, db, u64::MAX).await;
 
         // as long as we don't call `push_batch`, pipeline should not return attributes.
@@ -596,8 +594,7 @@ mod tests {
             db.insert_l1_message(message).await?;
         }
 
-        let l1_messages_provider = db.clone();
-        let l1_provider = MockL1Provider { l1_messages_provider, blobs: HashMap::new() };
+        let l1_provider = MockL1Provider { db: db.clone(), blobs: HashMap::new() };
 
         let result = derive(batch_data, l1_provider, db, u64::MAX).await?;
         let attribute = result
@@ -696,8 +693,7 @@ mod tests {
             db.insert_l1_message(message).await?;
         }
 
-        let l1_messages_provider = db.clone();
-        let l1_provider = MockL1Provider { l1_messages_provider, blobs: HashMap::new() };
+        let l1_provider = MockL1Provider { db: db.clone(), blobs: HashMap::new() };
 
         // derive attributes and extract l1 messages.
         let attributes = derive(batch_data, l1_provider, db, u64::MAX).await?;
@@ -750,8 +746,7 @@ mod tests {
             db.insert_l1_message(message).await?;
         }
 
-        let l1_messages_provider = db.clone();
-        let l1_provider = MockL1Provider { l1_messages_provider, blobs: HashMap::new() };
+        let l1_provider = MockL1Provider { db: db.clone(), blobs: HashMap::new() };
 
         // derive attributes and extract l1 messages.
         let attributes = derive(batch_data, l1_provider, db, u64::MAX).await?;
@@ -859,9 +854,8 @@ mod tests {
                         db.insert_l1_message(message).await?;
                     }
 
-                    let l1_messages_provider = db.clone();
                     let l1_provider = MockL1Provider {
-                        l1_messages_provider,
+                        db: db.clone(),
                         blobs: HashMap::from([(
                             batch_data.blob_versioned_hash.unwrap(),
                             blob_path
