@@ -43,8 +43,7 @@ use scroll_alloy_hardforks::ScrollHardforks;
 use scroll_alloy_network::Scroll;
 use scroll_alloy_provider::{ScrollAuthApiEngineClient, ScrollEngineApi};
 use scroll_db::{
-    Database, DatabaseConnectionProvider, DatabaseReadOperations, DatabaseService,
-    DatabaseTransactionProvider, DatabaseWriteOperations, Retry,
+    Database, DatabaseConnectionProvider, DatabaseReadOperations, DatabaseWriteOperations,
 };
 use scroll_derivation_pipeline::DerivationPipeline;
 use scroll_engine::{Engine, ForkchoiceState};
@@ -164,7 +163,6 @@ impl ScrollRollupNodeConfig {
             impl L1MessageProvider + Clone,
             impl Provider<Scroll> + Clone,
             impl ScrollEngineApi,
-            impl DatabaseService,
         >,
         ChainOrchestratorHandle<N>,
         Option<Sender<Arc<L1Notification>>>,
@@ -227,7 +225,7 @@ impl ScrollRollupNodeConfig {
         // Run the database migrations
         if let Some(named) = chain_spec.chain().named() {
             named
-                .migrate(db.get_connection(), self.test)
+                .migrate(db.inner().get_connection(), self.test)
                 .await
                 .expect("failed to perform migration");
         } else {
@@ -237,7 +235,7 @@ impl ScrollRollupNodeConfig {
             // This is a workaround due to the fact that sea orm migrations are static.
             // See https://github.com/scroll-tech/rollup-node/issues/297 for more details.
             scroll_migration::Migrator::<scroll_migration::ScrollDevMigrationInfo>::up(
-                db.get_connection(),
+                db.inner().get_connection(),
                 None,
             )
             .await
@@ -245,11 +243,9 @@ impl ScrollRollupNodeConfig {
 
             // insert the custom chain genesis hash into the database
             let genesis_hash = chain_spec.genesis_hash();
-            let tx = db.tx_mut().await?;
-            tx.insert_genesis_block(genesis_hash)
+            db.insert_genesis_block(genesis_hash)
                 .await
                 .expect("failed to insert genesis block (custom chain)");
-            tx.commit().await?;
 
             tracing::info!(target: "scroll::node::args", ?genesis_hash, "Overwriting genesis hash for custom chain");
         }
@@ -264,15 +260,13 @@ impl ScrollRollupNodeConfig {
         // On startup we replay the latest batch of blocks from the database as such we set the safe
         // block hash to the latest block hash associated with the previous consolidated
         // batch in the database.
-        let tx = db.tx_mut().await?;
         let (_startup_safe_block, l1_start_block_number) =
-            tx.prepare_on_startup(chain_spec.genesis_hash()).await?;
-        let l2_head_block_number = tx.get_l2_head_block_number().await?;
-        tx.purge_l1_message_to_l2_block_mappings(Some(l2_head_block_number + 1)).await?;
-        tx.commit().await?;
+            db.prepare_on_startup(chain_spec.genesis_hash()).await?;
+        let l2_head_block_number = db.get_l2_head_block_number().await?;
+        db.purge_l1_message_to_l2_block_mappings(Some(l2_head_block_number + 1)).await?;
 
         // Update the head block info if available and ahead of finalized.
-        let l2_head_block_number = db.tx().await?.get_l2_head_block_number().await?;
+        let l2_head_block_number = db.get_l2_head_block_number().await?;
         if l2_head_block_number > fcs.finalized_block_info().number {
             let block = l2_provider
                 .get_block(l2_head_block_number.into())
@@ -413,9 +407,8 @@ impl ScrollRollupNodeConfig {
         )
         .await;
 
-        let database_retry = Retry::new_with_default_config(db.clone());
         let (chain_orchestrator, handle) = ChainOrchestrator::new(
-            database_retry,
+            db,
             config,
             Arc::new(block_client),
             l2_provider,

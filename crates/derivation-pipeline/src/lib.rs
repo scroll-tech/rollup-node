@@ -8,10 +8,10 @@ use alloy_rpc_types_engine::PayloadAttributes;
 use core::{fmt::Debug, future::Future, pin::Pin, task::Poll};
 use futures::{stream::FuturesOrdered, Stream, StreamExt};
 use rollup_node_primitives::{BatchCommitData, BatchInfo, L1MessageEnvelope};
-use rollup_node_providers::{BlockDataProvider, L1Provider};
+use rollup_node_providers::L1Provider;
 use scroll_alloy_rpc_types_engine::{BlockDataHint, ScrollPayloadAttributes};
 use scroll_codec::{decoding::payload::PayloadData, Codec};
-use scroll_db::{Database, DatabaseReadOperations, DatabaseTransactionProvider, L1MessageKey};
+use scroll_db::{Database, DatabaseReadOperations, L1MessageKey};
 use tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender};
 
 mod data_source;
@@ -205,7 +205,7 @@ where
     }
 
     fn derivation_future(&self, batch_info: Arc<BatchInfo>) -> DerivationPipelineFuture {
-        let database = self.database.clone();
+        let db = self.database.clone();
         let metrics = self.metrics.clone();
         let provider = self.l1_provider.clone();
         let l1_v2_message_queue_start_index = self.l1_v2_message_queue_start_index;
@@ -214,8 +214,7 @@ where
             let derive_start = Instant::now();
 
             // get the batch commit data.
-            let tx = database.tx().await.map_err(|e| (batch_info.clone(), e.into()))?;
-            let batch = tx
+            let batch = db
                 .get_batch_by_index(batch_info.index)
                 .await
                 .map_err(|err| (batch_info.clone(), err.into()))?
@@ -225,7 +224,7 @@ where
                 ))?;
 
             // derive the attributes and attach the corresponding batch info.
-            let result = derive(batch, provider, tx, l1_v2_message_queue_start_index)
+            let result = derive(batch, provider, db, l1_v2_message_queue_start_index)
                 .await
                 .map_err(|err| (batch_info.clone(), err))?;
 
@@ -267,10 +266,10 @@ type DerivationPipelineFuture = Pin<
 
 /// Returns a [`BatchDerivationResult`] from the [`BatchCommitData`] by deriving the payload
 /// attributes for each L2 block in the batch.
-pub async fn derive<L1P: L1Provider + Sync + Send, L2P: BlockDataProvider + Sync + Send>(
+pub async fn derive<L1P: L1Provider + Sync + Send, DB: DatabaseReadOperations>(
     batch: BatchCommitData,
     l1_provider: L1P,
-    l2_provider: L2P,
+    db: DB,
     l1_v2_message_queue_start_index: u64,
 ) -> Result<BatchDerivationResult, DerivationPipelineError> {
     // fetch the blob then decode the input batch.
@@ -317,7 +316,7 @@ pub async fn derive<L1P: L1Provider + Sync + Send, L2P: BlockDataProvider + Sync
         // get the block data for the l2 block.
         let number = block.context.number;
         // TODO(performance): can this be improved by adding block_data_range.
-        let block_data = l2_provider.block_data(number).await.map_err(Into::into)?;
+        let block_data = db.get_l2_block_data_hint(number).await?;
 
         // construct the payload attributes.
         let attribute = DerivedAttributes {
@@ -417,29 +416,13 @@ mod tests {
     use scroll_alloy_consensus::TxL1Message;
     use scroll_alloy_rpc_types_engine::BlockDataHint;
     use scroll_codec::decoding::test_utils::read_to_bytes;
-    use scroll_db::{
-        test_utils::setup_test_db, DatabaseTransactionProvider, DatabaseWriteOperations,
-    };
+    use scroll_db::{test_utils::setup_test_db, DatabaseWriteOperations};
     use std::{collections::HashMap, path::PathBuf};
 
     struct Infallible;
     impl From<Infallible> for L1ProviderError {
         fn from(_value: Infallible) -> Self {
             Self::Other("infallible")
-        }
-    }
-
-    struct MockL2Provider;
-
-    #[async_trait::async_trait]
-    impl BlockDataProvider for MockL2Provider {
-        type Error = Infallible;
-
-        async fn block_data(
-            &self,
-            _block_number: u64,
-        ) -> Result<Option<BlockDataHint>, Self::Error> {
-            Ok(None)
         }
     }
 
@@ -486,11 +469,10 @@ mod tests {
             blob_versioned_hash: None,
             finalized_block_number: None,
         };
-        let tx = db.tx_mut().await?;
-        tx.insert_batch(batch_data).await?;
+        db.insert_batch(batch_data).await?;
+
         // load message in db, leaving a l1 message missing.
-        tx.insert_l1_message(L1_MESSAGE_INDEX_33).await?;
-        tx.commit().await?;
+        db.insert_l1_message(L1_MESSAGE_INDEX_33).await?;
 
         // construct the pipeline.
         let l1_messages_provider = db.clone();
@@ -509,9 +491,7 @@ mod tests {
         // in a separate task, add the second l1 message.
         tokio::task::spawn(async move {
             tokio::time::sleep(tokio::time::Duration::from_millis(10)).await;
-            let tx = db.tx_mut().await.unwrap();
-            tx.insert_l1_message(L1_MESSAGE_INDEX_34).await.unwrap();
-            tx.commit().await.unwrap();
+            db.insert_l1_message(L1_MESSAGE_INDEX_34).await.unwrap();
         });
 
         // check the correctness of the last attribute.
@@ -556,14 +536,12 @@ mod tests {
             blob_versioned_hash: None,
             finalized_block_number: None,
         };
-        let tx = db.tx_mut().await?;
-        tx.insert_batch(batch_data).await?;
+        db.insert_batch(batch_data).await?;
         // load messages in db.
         let l1_messages = vec![L1_MESSAGE_INDEX_33, L1_MESSAGE_INDEX_34];
         for message in l1_messages {
-            tx.insert_l1_message(message).await?;
+            db.insert_l1_message(message).await?;
         }
-        tx.commit().await?;
 
         // construct the pipeline.
         let l1_messages_provider = db.clone();
@@ -614,17 +592,14 @@ mod tests {
             finalized_block_number: None,
         };
         let l1_messages = vec![L1_MESSAGE_INDEX_33, L1_MESSAGE_INDEX_34];
-        let tx = db.tx_mut().await?;
         for message in l1_messages {
-            tx.insert_l1_message(message).await?;
+            db.insert_l1_message(message).await?;
         }
-        tx.commit().await?;
 
         let l1_messages_provider = db.clone();
         let l1_provider = MockL1Provider { l1_messages_provider, blobs: HashMap::new() };
-        let l2_provider = MockL2Provider;
 
-        let result = derive(batch_data, l1_provider, l2_provider, u64::MAX).await?;
+        let result = derive(batch_data, l1_provider, db, u64::MAX).await?;
         let attribute = result
             .attributes
             .iter()
@@ -717,18 +692,15 @@ mod tests {
                 },
             },
         ];
-        let tx = db.tx_mut().await?;
         for message in l1_messages.clone() {
-            tx.insert_l1_message(message).await?;
+            db.insert_l1_message(message).await?;
         }
-        tx.commit().await?;
 
         let l1_messages_provider = db.clone();
         let l1_provider = MockL1Provider { l1_messages_provider, blobs: HashMap::new() };
-        let l2_provider = MockL2Provider;
 
         // derive attributes and extract l1 messages.
-        let attributes = derive(batch_data, l1_provider, l2_provider, u64::MAX).await?;
+        let attributes = derive(batch_data, l1_provider, db, u64::MAX).await?;
         let derived_l1_messages: Vec<_> = attributes
             .attributes
             .into_iter()
@@ -774,18 +746,15 @@ mod tests {
             })
             .collect::<Vec<_>>();
 
-        let tx = db.tx_mut().await?;
         for message in l1_messages.clone() {
-            tx.insert_l1_message(message).await?;
+            db.insert_l1_message(message).await?;
         }
-        tx.commit().await?;
 
         let l1_messages_provider = db.clone();
         let l1_provider = MockL1Provider { l1_messages_provider, blobs: HashMap::new() };
-        let l2_provider = MockL2Provider;
 
         // derive attributes and extract l1 messages.
-        let attributes = derive(batch_data, l1_provider, l2_provider, u64::MAX).await?;
+        let attributes = derive(batch_data, l1_provider, db, u64::MAX).await?;
         let derived_l1_messages: Vec<_> = attributes
             .attributes
             .into_iter()
@@ -886,11 +855,9 @@ mod tests {
                             },
                         },
                     ];
-                    let tx = db.tx_mut().await?;
                     for message in l1_messages {
-                        tx.insert_l1_message(message).await?;
+                        db.insert_l1_message(message).await?;
                     }
-                    tx.commit().await?;
 
                     let l1_messages_provider = db.clone();
                     let l1_provider = MockL1Provider {
@@ -900,9 +867,8 @@ mod tests {
                             blob_path
                         )]),
                     };
-                    let l2_provider = MockL2Provider;
 
-                    let attributes = derive(batch_data, l1_provider, l2_provider, u64::MAX).await?;
+                    let attributes = derive(batch_data, l1_provider, db, u64::MAX).await?;
 
                     let attribute = attributes.attributes.last().unwrap();
                     let expected = ScrollPayloadAttributes {

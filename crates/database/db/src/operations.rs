@@ -2,7 +2,6 @@ use super::{models, DatabaseError};
 use crate::{ReadConnectionProvider, WriteConnectionProvider};
 
 use alloy_primitives::{Signature, B256};
-use futures::{Stream, StreamExt};
 use rollup_node_primitives::{
     BatchCommitData, BatchConsolidationOutcome, BatchInfo, BlockInfo, L1MessageEnvelope,
     L2BlockInfoWithL1Messages, Metadata,
@@ -17,8 +16,141 @@ use std::fmt;
 /// The [`DatabaseWriteOperations`] trait provides write methods for interacting with the
 /// database.
 #[async_trait::async_trait]
-pub trait DatabaseWriteOperations: WriteConnectionProvider + DatabaseReadOperations {
+#[auto_impl::auto_impl(Arc)]
+pub trait DatabaseWriteOperations {
     /// Insert a [`BatchCommitData`] into the database.
+    async fn insert_batch(&self, batch_commit: BatchCommitData) -> Result<(), DatabaseError>;
+
+    /// Finalizes all [`BatchCommitData`] up to the provided `batch_index` by setting their
+    /// finalized block number to the provided block number.
+    async fn finalize_batches_up_to_index(
+        &self,
+        batch_index: u64,
+        block_number: u64,
+    ) -> Result<(), DatabaseError>;
+
+    /// Set the latest L1 block number.
+    async fn set_latest_l1_block_number(&self, block_number: u64) -> Result<(), DatabaseError>;
+
+    /// Set the finalized L1 block number.
+    async fn set_finalized_l1_block_number(&self, block_number: u64) -> Result<(), DatabaseError>;
+
+    /// Set the processed L1 block number.
+    async fn set_processed_l1_block_number(&self, block_number: u64) -> Result<(), DatabaseError>;
+
+    /// Set the L2 head block number.
+    async fn set_l2_head_block_number(&self, number: u64) -> Result<(), DatabaseError>;
+
+    /// Fetches unprocessed batches up to the provided finalized L1 block number and updates their
+    /// status.
+    async fn fetch_and_update_unprocessed_finalized_batches(
+        &self,
+        finalized_l1_block_number: u64,
+    ) -> Result<Vec<BatchInfo>, DatabaseError>;
+
+    /// Delete all [`BatchCommitData`]s with a block number greater than the provided block number.
+    async fn delete_batches_gt_block_number(&self, block_number: u64)
+        -> Result<u64, DatabaseError>;
+
+    /// Delete all [`BatchCommitData`]s with a batch index greater than the provided index.
+    async fn delete_batches_gt_batch_index(&self, batch_index: u64) -> Result<u64, DatabaseError>;
+
+    /// Insert an [`L1MessageEnvelope`] into the database.
+    async fn insert_l1_message(&self, l1_message: L1MessageEnvelope) -> Result<(), DatabaseError>;
+
+    /// Delete all [`L1MessageEnvelope`]s with a block number greater than the provided block
+    /// number and return them.
+    async fn delete_l1_messages_gt(
+        &self,
+        l1_block_number: u64,
+    ) -> Result<Vec<L1MessageEnvelope>, DatabaseError>;
+
+    /// Prepare the database on startup and return metadata used for other components in the
+    /// rollup-node.
+    ///
+    /// This method first unwinds the database to the finalized L1 block. It then fetches the batch
+    /// info for the latest safe L2 block. It takes note of the L1 block number at which
+    /// this batch was produced (currently the finalized block for the batch until we implement
+    /// issue #273). It then retrieves the latest block for the previous batch (i.e., the batch
+    /// before the latest safe block). It returns a tuple of this latest fetched block and the
+    /// L1 block number of the batch.
+    async fn prepare_on_startup(
+        &self,
+        genesis_hash: B256,
+    ) -> Result<(Option<BlockInfo>, Option<u64>), DatabaseError>;
+
+    /// Delete all L2 blocks with a block number greater than the provided block number.
+    async fn delete_l2_blocks_gt_block_number(
+        &self,
+        block_number: u64,
+    ) -> Result<u64, DatabaseError>;
+
+    /// Delete all L2 blocks with a batch index greater than the batch index.
+    async fn delete_l2_blocks_gt_batch_index(&self, batch_index: u64)
+        -> Result<u64, DatabaseError>;
+
+    /// Insert multiple blocks into the database.
+    async fn insert_blocks(
+        &self,
+        blocks: Vec<BlockInfo>,
+        batch_info: BatchInfo,
+    ) -> Result<(), DatabaseError>;
+
+    /// Insert a new block in the database.
+    async fn insert_block(
+        &self,
+        block_info: BlockInfo,
+        batch_info: BatchInfo,
+    ) -> Result<(), DatabaseError>;
+
+    /// Insert the genesis block into the database.
+    async fn insert_genesis_block(&self, genesis_hash: B256) -> Result<(), DatabaseError>;
+
+    /// Update the executed L1 messages from the provided L2 blocks in the database.
+    async fn update_l1_messages_from_l2_blocks(
+        &self,
+        blocks: Vec<L2BlockInfoWithL1Messages>,
+    ) -> Result<(), DatabaseError>;
+
+    /// Update the executed L1 messages with the provided L2 block number in the database.
+    async fn update_l1_messages_with_l2_block(
+        &self,
+        block_info: L2BlockInfoWithL1Messages,
+    ) -> Result<(), DatabaseError>;
+
+    /// Purge all L1 message to L2 block mappings from the database for blocks greater or equal to
+    /// the provided block number. If the no block number is provided, purge mappings for all
+    /// unsafe blocks.
+    async fn purge_l1_message_to_l2_block_mappings(
+        &self,
+        block_number: Option<u64>,
+    ) -> Result<(), DatabaseError>;
+
+    /// Insert the outcome of a batch consolidation into the database.
+    async fn insert_batch_consolidation_outcome(
+        &self,
+        outcome: BatchConsolidationOutcome,
+    ) -> Result<(), DatabaseError>;
+
+    /// Unwinds the chain orchestrator by deleting all indexed data greater than the provided L1
+    /// block number.
+    async fn unwind(
+        &self,
+        genesis_hash: B256,
+        l1_block_number: u64,
+    ) -> Result<UnwindResult, DatabaseError>;
+
+    /// Store a block signature in the database.
+    /// TODO: remove this once we deprecated l2geth.
+    async fn insert_signature(
+        &self,
+        block_hash: B256,
+        signature: Signature,
+    ) -> Result<(), DatabaseError>;
+}
+
+#[async_trait::async_trait]
+impl<T: WriteConnectionProvider + ?Sized + Sync> DatabaseWriteOperations for T {
     async fn insert_batch(&self, batch_commit: BatchCommitData) -> Result<(), DatabaseError> {
         tracing::trace!(target: "scroll::db", batch_hash = ?batch_commit.hash, batch_index = batch_commit.index, "Inserting batch input into database.");
         let batch_commit: models::batch_commit::ActiveModel = batch_commit.into();
@@ -40,8 +172,6 @@ pub trait DatabaseWriteOperations: WriteConnectionProvider + DatabaseReadOperati
             .map(|_| ())?)
     }
 
-    /// Finalizes all [`BatchCommitData`] up to the provided `batch_index` by setting their
-    /// finalized block number to the provided block number.
     async fn finalize_batches_up_to_index(
         &self,
         batch_index: u64,
@@ -65,7 +195,6 @@ pub trait DatabaseWriteOperations: WriteConnectionProvider + DatabaseReadOperati
         Ok(())
     }
 
-    /// Set the latest L1 block number.
     async fn set_latest_l1_block_number(&self, block_number: u64) -> Result<(), DatabaseError> {
         tracing::trace!(target: "scroll::db", block_number, "Updating the latest L1 block number in the database.");
         let metadata: models::metadata::ActiveModel =
@@ -81,7 +210,6 @@ pub trait DatabaseWriteOperations: WriteConnectionProvider + DatabaseReadOperati
             .map(|_| ())?)
     }
 
-    /// Set the finalized L1 block number.
     async fn set_finalized_l1_block_number(&self, block_number: u64) -> Result<(), DatabaseError> {
         tracing::trace!(target: "scroll::db", block_number, "Updating the finalized L1 block number in the database.");
         let metadata: models::metadata::ActiveModel =
@@ -98,7 +226,6 @@ pub trait DatabaseWriteOperations: WriteConnectionProvider + DatabaseReadOperati
             .map(|_| ())?)
     }
 
-    /// Set the processed L1 block number.
     async fn set_processed_l1_block_number(&self, block_number: u64) -> Result<(), DatabaseError> {
         tracing::trace!(target: "scroll::db", block_number, "Updating the processed L1 block number in the database.");
         let metadata: models::metadata::ActiveModel =
@@ -115,7 +242,6 @@ pub trait DatabaseWriteOperations: WriteConnectionProvider + DatabaseReadOperati
             .map(|_| ())?)
     }
 
-    /// Set the L2 head block number.
     async fn set_l2_head_block_number(&self, number: u64) -> Result<(), DatabaseError> {
         tracing::trace!(target: "scroll::db", ?number, "Updating the L2 head block number in the database.");
         let metadata: models::metadata::ActiveModel =
@@ -131,8 +257,6 @@ pub trait DatabaseWriteOperations: WriteConnectionProvider + DatabaseReadOperati
             .map(|_| ())?)
     }
 
-    /// Fetches unprocessed batches up to the provided finalized L1 block number and updates their
-    /// status.
     async fn fetch_and_update_unprocessed_finalized_batches(
         &self,
         finalized_l1_block_number: u64,
@@ -166,7 +290,6 @@ pub trait DatabaseWriteOperations: WriteConnectionProvider + DatabaseReadOperati
         Ok(batches)
     }
 
-    /// Delete all [`BatchCommitData`]s with a block number greater than the provided block number.
     async fn delete_batches_gt_block_number(
         &self,
         block_number: u64,
@@ -179,7 +302,6 @@ pub trait DatabaseWriteOperations: WriteConnectionProvider + DatabaseReadOperati
             .map(|x| x.rows_affected)?)
     }
 
-    /// Delete all [`BatchCommitData`]s with a batch index greater than the provided index.
     async fn delete_batches_gt_batch_index(&self, batch_index: u64) -> Result<u64, DatabaseError> {
         tracing::trace!(target: "scroll::db", batch_index, "Deleting batch inputs greater than batch index.");
         Ok(models::batch_commit::Entity::delete_many()
@@ -189,7 +311,6 @@ pub trait DatabaseWriteOperations: WriteConnectionProvider + DatabaseReadOperati
             .map(|x| x.rows_affected)?)
     }
 
-    /// Insert an [`L1MessageEnvelope`] into the database.
     async fn insert_l1_message(&self, l1_message: L1MessageEnvelope) -> Result<(), DatabaseError> {
         let l1_index = l1_message.transaction.queue_index;
         tracing::trace!(target: "scroll::db", queue_index = l1_index, "Inserting L1 message into database.");
@@ -208,8 +329,6 @@ pub trait DatabaseWriteOperations: WriteConnectionProvider + DatabaseReadOperati
         }
     }
 
-    /// Delete all [`L1MessageEnvelope`]s with a block number greater than the provided block
-    /// number and return them.
     async fn delete_l1_messages_gt(
         &self,
         l1_block_number: u64,
@@ -232,15 +351,6 @@ pub trait DatabaseWriteOperations: WriteConnectionProvider + DatabaseReadOperati
         Ok(removed_messages.into_iter().map(Into::into).collect())
     }
 
-    /// Prepare the database on startup and return metadata used for other components in the
-    /// rollup-node.
-    ///
-    /// This method first unwinds the database to the finalized L1 block. It then fetches the batch
-    /// info for the latest safe L2 block. It takes note of the L1 block number at which
-    /// this batch was produced (currently the finalized block for the batch until we implement
-    /// issue #273). It then retrieves the latest block for the previous batch (i.e., the batch
-    /// before the latest safe block). It returns a tuple of this latest fetched block and the
-    /// L1 block number of the batch.
     async fn prepare_on_startup(
         &self,
         genesis_hash: B256,
@@ -272,7 +382,6 @@ pub trait DatabaseWriteOperations: WriteConnectionProvider + DatabaseReadOperati
         Ok((Some(block_info), Some(batch.block_number.saturating_add(1))))
     }
 
-    /// Delete all L2 blocks with a block number greater than the provided block number.
     async fn delete_l2_blocks_gt_block_number(
         &self,
         block_number: u64,
@@ -285,7 +394,6 @@ pub trait DatabaseWriteOperations: WriteConnectionProvider + DatabaseReadOperati
             .map(|x| x.rows_affected)?)
     }
 
-    /// Delete all L2 blocks with a batch index greater than the batch index.
     async fn delete_l2_blocks_gt_batch_index(
         &self,
         batch_index: u64,
@@ -302,7 +410,6 @@ pub trait DatabaseWriteOperations: WriteConnectionProvider + DatabaseReadOperati
             .map(|x| x.rows_affected)?)
     }
 
-    /// Insert multiple blocks into the database.
     async fn insert_blocks(
         &self,
         blocks: Vec<BlockInfo>,
@@ -314,7 +421,6 @@ pub trait DatabaseWriteOperations: WriteConnectionProvider + DatabaseReadOperati
         Ok(())
     }
 
-    /// Insert a new block in the database.
     async fn insert_block(
         &self,
         block_info: BlockInfo,
@@ -346,14 +452,12 @@ pub trait DatabaseWriteOperations: WriteConnectionProvider + DatabaseReadOperati
         Ok(())
     }
 
-    /// Insert the genesis block into the database.
     async fn insert_genesis_block(&self, genesis_hash: B256) -> Result<(), DatabaseError> {
         let genesis_block = BlockInfo::new(0, genesis_hash);
         let genesis_batch = BatchInfo::new(0, B256::ZERO);
         self.insert_block(genesis_block, genesis_batch).await
     }
 
-    /// Update the executed L1 messages from the provided L2 blocks in the database.
     async fn update_l1_messages_from_l2_blocks(
         &self,
         blocks: Vec<L2BlockInfoWithL1Messages>,
@@ -371,7 +475,6 @@ pub trait DatabaseWriteOperations: WriteConnectionProvider + DatabaseReadOperati
         Ok(())
     }
 
-    /// Update the executed L1 messages with the provided L2 block number in the database.
     async fn update_l1_messages_with_l2_block(
         &self,
         block_info: L2BlockInfoWithL1Messages,
@@ -397,9 +500,6 @@ pub trait DatabaseWriteOperations: WriteConnectionProvider + DatabaseReadOperati
         Ok(())
     }
 
-    /// Purge all L1 message to L2 block mappings from the database for blocks greater or equal to
-    /// the provided block number. If the no block number is provided, purge mappings for all
-    /// unsafe blocks.
     async fn purge_l1_message_to_l2_block_mappings(
         &self,
         block_number: Option<u64>,
@@ -423,7 +523,6 @@ pub trait DatabaseWriteOperations: WriteConnectionProvider + DatabaseReadOperati
         Ok(())
     }
 
-    /// Insert the outcome of a batch consolidation into the database.
     async fn insert_batch_consolidation_outcome(
         &self,
         outcome: BatchConsolidationOutcome,
@@ -435,8 +534,6 @@ pub trait DatabaseWriteOperations: WriteConnectionProvider + DatabaseReadOperati
         Ok(())
     }
 
-    /// Unwinds the chain orchestrator by deleting all indexed data greater than the provided L1
-    /// block number.
     async fn unwind(
         &self,
         genesis_hash: B256,
@@ -490,8 +587,6 @@ pub trait DatabaseWriteOperations: WriteConnectionProvider + DatabaseReadOperati
         Ok(UnwindResult { l1_block_number, queue_index, l2_head_block_number, l2_safe_block_info })
     }
 
-    /// Store a block signature in the database.
-    /// TODO: remove this once we deprecated l2geth.
     async fn insert_signature(
         &self,
         block_hash: B256,
@@ -518,8 +613,80 @@ pub trait DatabaseWriteOperations: WriteConnectionProvider + DatabaseReadOperati
 /// The [`DatabaseReadOperations`] trait provides read-only methods for interacting with the
 /// database.
 #[async_trait::async_trait]
-pub trait DatabaseReadOperations: ReadConnectionProvider + Sync {
+#[auto_impl::auto_impl(Arc)]
+pub trait DatabaseReadOperations {
     /// Get a [`BatchCommitData`] from the database by its batch index.
+    async fn get_batch_by_index(
+        &self,
+        batch_index: u64,
+    ) -> Result<Option<BatchCommitData>, DatabaseError>;
+
+    /// Get the latest L1 block number from the database.
+    async fn get_latest_l1_block_number(&self) -> Result<u64, DatabaseError>;
+
+    /// Get the finalized L1 block number from the database.
+    async fn get_finalized_l1_block_number(&self) -> Result<u64, DatabaseError>;
+
+    /// Get the processed L1 block number from the database.
+    async fn get_processed_l1_block_number(&self) -> Result<u64, DatabaseError>;
+
+    /// Get the latest L2 head block info.
+    async fn get_l2_head_block_number(&self) -> Result<u64, DatabaseError>;
+
+    /// Get a vector of n [`L1MessageEnvelope`]s in the database starting from the provided `start`
+    /// point.
+    async fn get_n_l1_messages(
+        &self,
+        start: Option<L1MessageKey>,
+        n: usize,
+    ) -> Result<Vec<L1MessageEnvelope>, DatabaseError>;
+
+    /// Get the extra data for the provided block number.
+    async fn get_l2_block_data_hint(
+        &self,
+        block_number: u64,
+    ) -> Result<Option<BlockDataHint>, DatabaseError>;
+
+    /// Get the [`BlockInfo`] and optional [`BatchInfo`] for the provided block hash.
+    async fn get_l2_block_and_batch_info_by_hash(
+        &self,
+        block_hash: B256,
+    ) -> Result<Option<(BlockInfo, BatchInfo)>, DatabaseError>;
+
+    /// Get a [`BlockInfo`] from the database by its block number.
+    async fn get_l2_block_info_by_number(
+        &self,
+        block_number: u64,
+    ) -> Result<Option<BlockInfo>, DatabaseError>;
+
+    /// Get the latest safe/finalized L2 ([`BlockInfo`], [`BatchInfo`]) from the database. Until we
+    /// update the batch handling logic with issue #273, we don't differentiate between safe and
+    /// finalized l2 blocks.
+    async fn get_latest_safe_l2_info(
+        &self,
+    ) -> Result<Option<(BlockInfo, BatchInfo)>, DatabaseError>;
+
+    /// Returns the highest L2 block originating from the provided `batch_hash` or the highest block
+    /// for the batch's index.
+    async fn get_highest_block_for_batch_hash(
+        &self,
+        batch_hash: B256,
+    ) -> Result<Option<BlockInfo>, DatabaseError>;
+
+    /// Returns the highest L2 block originating from the provided `batch_index` or the highest
+    /// block for the batch's index.
+    async fn get_highest_block_for_batch_index(
+        &self,
+        batch_index: u64,
+    ) -> Result<Option<BlockInfo>, DatabaseError>;
+
+    /// Get a block signature from the database by block hash.
+    /// TODO: remove this once we deprecated l2geth.
+    async fn get_signature(&self, block_hash: B256) -> Result<Option<Signature>, DatabaseError>;
+}
+
+#[async_trait::async_trait]
+impl<T: ReadConnectionProvider + Sync + ?Sized> DatabaseReadOperations for T {
     async fn get_batch_by_index(
         &self,
         batch_index: u64,
@@ -532,7 +699,6 @@ pub trait DatabaseReadOperations: ReadConnectionProvider + Sync {
         .map(|x| x.map(Into::into))?)
     }
 
-    /// Get the latest L1 block number from the database.
     async fn get_latest_l1_block_number(&self) -> Result<u64, DatabaseError> {
         Ok(models::metadata::Entity::find()
             .filter(models::metadata::Column::Key.eq("l1_latest_block"))
@@ -546,7 +712,6 @@ pub trait DatabaseReadOperations: ReadConnectionProvider + Sync {
             .expect("l1_latest_block should always be a valid u64"))
     }
 
-    /// Get the finalized L1 block number from the database.
     async fn get_finalized_l1_block_number(&self) -> Result<u64, DatabaseError> {
         Ok(models::metadata::Entity::find()
             .filter(models::metadata::Column::Key.eq("l1_finalized_block"))
@@ -560,7 +725,6 @@ pub trait DatabaseReadOperations: ReadConnectionProvider + Sync {
             .expect("l1_finalized_block should always be a valid u64"))
     }
 
-    /// Get the processed L1 block number from the database.
     async fn get_processed_l1_block_number(&self) -> Result<u64, DatabaseError> {
         Ok(models::metadata::Entity::find()
             .filter(models::metadata::Column::Key.eq("l1_processed_block"))
@@ -574,7 +738,6 @@ pub trait DatabaseReadOperations: ReadConnectionProvider + Sync {
             .expect("l1_processed_block should always be a valid u64"))
     }
 
-    /// Get the latest L2 head block info.
     async fn get_l2_head_block_number(&self) -> Result<u64, DatabaseError> {
         Ok(models::metadata::Entity::find()
             .filter(models::metadata::Column::Key.eq("l2_head_block"))
@@ -588,59 +751,6 @@ pub trait DatabaseReadOperations: ReadConnectionProvider + Sync {
             .expect("l2_head_block should always be a valid u64"))
     }
 
-    /// Get an iterator over all [`BatchCommitData`]s in the database.
-    async fn get_batches<'a>(
-        &'a self,
-    ) -> Result<impl Stream<Item = Result<BatchCommitData, DatabaseError>> + 'a, DatabaseError>
-    {
-        Ok(models::batch_commit::Entity::find()
-            .stream(self.get_connection())
-            .await?
-            .map(|res| Ok(res.map(Into::into)?)))
-    }
-
-    /// Get a [`L1MessageEnvelope`] from the database by its message queue index.
-    async fn get_l1_message_by_index(
-        &self,
-        queue_index: u64,
-    ) -> Result<Option<L1MessageEnvelope>, DatabaseError> {
-        Ok(models::l1_message::Entity::find_by_id(queue_index as i64)
-            .one(self.get_connection())
-            .await
-            .map(|x| x.map(Into::into))?)
-    }
-
-    /// Get a [`L1MessageEnvelope`] from the database by its message queue hash.
-    async fn get_l1_message_by_hash(
-        &self,
-        queue_hash: B256,
-    ) -> Result<Option<L1MessageEnvelope>, DatabaseError> {
-        Ok(models::l1_message::Entity::find()
-            .filter(
-                Condition::all()
-                    .add(models::l1_message::Column::QueueHash.is_not_null())
-                    .add(models::l1_message::Column::QueueHash.eq(queue_hash.to_vec())),
-            )
-            .one(self.get_connection())
-            .await
-            .map(|x| x.map(Into::into))?)
-    }
-
-    /// Gets the latest L1 messages which has an associated L2 block number if any.
-    async fn get_latest_executed_l1_message(
-        &self,
-    ) -> Result<Option<L1MessageEnvelope>, DatabaseError> {
-        Ok(models::l1_message::Entity::find()
-            .filter(models::l1_message::Column::L2BlockNumber.is_not_null())
-            .order_by_desc(models::l1_message::Column::L2BlockNumber)
-            .order_by_desc(models::l1_message::Column::QueueIndex)
-            .one(self.get_connection())
-            .await?
-            .map(Into::into))
-    }
-
-    /// Get an iterator over all [`L1MessageEnvelope`]s in the database starting from the provided
-    /// `start` point.
     async fn get_n_l1_messages(
         &self,
         start: Option<L1MessageKey>,
@@ -811,7 +921,6 @@ pub trait DatabaseReadOperations: ReadConnectionProvider + Sync {
         }
     }
 
-    /// Get the extra data for the provided block number.
     async fn get_l2_block_data_hint(
         &self,
         block_number: u64,
@@ -823,7 +932,6 @@ pub trait DatabaseReadOperations: ReadConnectionProvider + Sync {
             .map(|x| x.map(Into::into))?)
     }
 
-    /// Get the [`BlockInfo`] and optional [`BatchInfo`] for the provided block hash.
     async fn get_l2_block_and_batch_info_by_hash(
         &self,
         block_hash: B256,
@@ -841,7 +949,6 @@ pub trait DatabaseReadOperations: ReadConnectionProvider + Sync {
             })?)
     }
 
-    /// Get a [`BlockInfo`] from the database by its block number.
     async fn get_l2_block_info_by_number(
         &self,
         block_number: u64,
@@ -858,9 +965,6 @@ pub trait DatabaseReadOperations: ReadConnectionProvider + Sync {
             })?)
     }
 
-    /// Get the latest safe/finalized L2 ([`BlockInfo`], [`BatchInfo`]) from the database. Until we
-    /// update the batch handling logic with issue #273, we don't differentiate between safe and
-    /// finalized l2 blocks.
     async fn get_latest_safe_l2_info(
         &self,
     ) -> Result<Option<(BlockInfo, BatchInfo)>, DatabaseError> {
@@ -873,20 +977,6 @@ pub trait DatabaseReadOperations: ReadConnectionProvider + Sync {
             .map(|x| x.map(|x| (x.block_info(), x.batch_info())))?)
     }
 
-    /// Get an iterator over all L2 blocks in the database starting from the most recent one.
-    async fn get_l2_blocks<'a>(
-        &'a self,
-    ) -> Result<impl Stream<Item = Result<BlockInfo, DatabaseError>> + 'a, DatabaseError> {
-        tracing::trace!(target: "scroll::db", "Fetching L2 blocks from database.");
-        Ok(models::l2_block::Entity::find()
-            .order_by_desc(models::l2_block::Column::BlockNumber)
-            .stream(self.get_connection())
-            .await?
-            .map(|res| Ok(res.map(|res| res.block_info())?)))
-    }
-
-    /// Returns the highest L2 block originating from the provided `batch_hash` or the highest block
-    /// for the batch's index.
     async fn get_highest_block_for_batch_hash(
         &self,
         batch_hash: B256,
@@ -911,8 +1001,6 @@ pub trait DatabaseReadOperations: ReadConnectionProvider + Sync {
         }
     }
 
-    /// Returns the highest L2 block originating from the provided `batch_index` or the highest
-    /// block for the batch's index.
     async fn get_highest_block_for_batch_index(
         &self,
         batch_index: u64,
@@ -925,8 +1013,6 @@ pub trait DatabaseReadOperations: ReadConnectionProvider + Sync {
             .map(|model| model.block_info()))
     }
 
-    /// Get a block signature from the database by block hash.
-    /// TODO: remove this once we deprecated l2geth.
     async fn get_signature(&self, block_hash: B256) -> Result<Option<Signature>, DatabaseError> {
         tracing::trace!(target: "scroll::db", block_hash = ?block_hash, "Retrieving block signature from database.");
 
@@ -1033,7 +1119,3 @@ pub struct UnwindResult {
     /// The L2 safe block info after the unwind. This is only populated if the L2 safe has reorged.
     pub l2_safe_block_info: Option<BlockInfo>,
 }
-
-impl<T> DatabaseReadOperations for T where T: ReadConnectionProvider + ?Sized + Sync {}
-
-impl<T> DatabaseWriteOperations for T where T: WriteConnectionProvider + ?Sized + Sync {}

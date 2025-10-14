@@ -1,40 +1,46 @@
 //! The [`Service`] implementation for the database and the retry mechanism.
 
-use crate::{Database, DatabaseError, DatabaseTransactionProvider};
+use crate::{
+    db::DatabaseInner, service::query::DatabaseQuery, DatabaseError, DatabaseTransactionProvider,
+};
 use std::{fmt::Debug, sync::Arc};
 
-use tower::Service;
+pub(crate) mod query;
 
-mod query;
-pub use query::{BoxedFuture, DatabaseQuery, ReadQuery, WriteQuery};
+pub(crate) mod retry;
+pub use retry::CanRetry;
 
-mod retry;
-pub use retry::{CanRetry, Retry};
+/// Error type for database service operations that can be converted from [`DatabaseError`],
+/// supports retry logic, and is thread-safe for async contexts.
+pub trait DatabaseServiceError: From<DatabaseError> + CanRetry + Debug + Send + 'static {}
+impl<T> DatabaseServiceError for T where T: From<DatabaseError> + CanRetry + Debug + Send + 'static {}
 
-impl<T, Err> Service<DatabaseQuery<T, Err>> for Arc<Database>
-where
-    T: Send + 'static,
-    Err: From<DatabaseError> + Send + 'static,
-{
-    type Response = T;
-    type Error = Err;
-    type Future = BoxedFuture<Self::Response, Self::Error>;
+/// An implementer of the trait can make queries to the database. This trait is used in order to
+/// move the `T` generic out from the [`Service<DatabaseQuery<T, Err>>`] trait and into the method
+/// itself.
+#[async_trait::async_trait]
+#[auto_impl::auto_impl(&, Arc)]
+pub(crate) trait DatabaseService: Clone + Send + Sync + 'static {
+    /// Call the database.
+    async fn call<T: Send + 'static, Err: DatabaseServiceError>(
+        &self,
+        req: DatabaseQuery<T, Err>,
+    ) -> Result<T, Err>;
+}
 
-    fn poll_ready(
-        &mut self,
-        _: &mut std::task::Context<'_>,
-    ) -> std::task::Poll<Result<(), Self::Error>> {
-        std::task::Poll::Ready(Ok(()))
-    }
-
-    fn call(&mut self, req: DatabaseQuery<T, Err>) -> Self::Future {
+#[async_trait::async_trait]
+impl DatabaseService for Arc<DatabaseInner> {
+    async fn call<T: Send + 'static, Err: DatabaseServiceError>(
+        &self,
+        req: DatabaseQuery<T, Err>,
+    ) -> Result<T, Err> {
         let db = self.clone();
         match req {
-            DatabaseQuery::Read(f) => Box::pin(async move {
+            DatabaseQuery::Read(f) => {
                 let tx = Arc::new(db.tx().await?);
                 f(tx).await
-            }),
-            DatabaseQuery::Write(f) => Box::pin(async move {
+            }
+            DatabaseQuery::Write(f) => {
                 let tx = Arc::new(db.tx_mut().await?);
                 let res = f(tx.clone()).await;
 
@@ -48,32 +54,7 @@ where
                     tx.map_err(|_| DatabaseError::RollbackFailed)?.rollback().await?;
                 }
                 res
-            }),
+            }
         }
-    }
-}
-
-/// An implementer of the trait can make queries to the database. This trait is used in order to
-/// move the `T` generic out from the [`Service<DatabaseQuery<T, Err>>`] trait and into the method
-/// itself.
-#[async_trait::async_trait]
-pub trait DatabaseService: Clone + Send + Sync + 'static {
-    /// Call the database.
-    async fn call<T: Send + 'static, Err: From<DatabaseError> + CanRetry + Debug + Send + 'static>(
-        &mut self,
-        req: DatabaseQuery<T, Err>,
-    ) -> Result<T, Err>;
-}
-
-#[async_trait::async_trait]
-impl DatabaseService for Arc<Database> {
-    async fn call<
-        T: Send + 'static,
-        Err: From<DatabaseError> + CanRetry + Debug + Send + 'static,
-    >(
-        &mut self,
-        req: DatabaseQuery<T, Err>,
-    ) -> Result<T, Err> {
-        Service::call(self, req).await
     }
 }

@@ -11640,7 +11640,6 @@ dependencies = [
  "alloy-eips 1.0.30",
  "alloy-primitives",
  "alloy-rpc-types-engine 1.0.30",
- "async-trait",
  "codspeed-criterion-compat",
  "eyre",
  "futures",

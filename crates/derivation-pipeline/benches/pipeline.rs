@@ -11,8 +11,8 @@ use rollup_node_providers::{
 };
 use scroll_alloy_consensus::TxL1Message;
 use scroll_db::{
-    test_utils::setup_test_db, Database, DatabaseReadOperations, DatabaseTransactionProvider,
-    DatabaseWriteOperations,
+    test_utils::setup_test_db, Database, DatabaseConnectionProvider, DatabaseWriteOperations,
+    EntityTrait,
 };
 use scroll_derivation_pipeline::DerivationPipeline;
 use std::{collections::HashMap, future::Future, path::PathBuf, pin::Pin, sync::Arc};
@@ -26,11 +26,15 @@ fn setup_mock_provider(
     db: Arc<Database>,
 ) -> Pin<Box<dyn Future<Output = MockL1Provider<Arc<Database>>> + Send>> {
     Box::pin(async {
-        let tx = db.tx().await.expect("failed to get tx");
         let mut blobs = HashMap::new();
-        let mut batches = tx.get_batches().await.expect("failed to get batches stream");
+        let db_inner = db.inner();
+        let mut batches = scroll_db::batch_commit::Entity::find()
+            .stream(db_inner.get_connection())
+            .await
+            .expect("failed to get batches stream");
 
         while let Some(Ok(batch)) = batches.next().await {
+            let batch = Into::<BatchCommitData>::into(batch);
             if let Some(blob_hash) = batch.blob_versioned_hash {
                 blobs.insert(
                     blob_hash,
@@ -71,7 +75,6 @@ async fn setup_pipeline<P: L1Provider + Clone + Send + Sync + 'static>(
     )
     .unwrap();
 
-    let tx = db.tx_mut().await.unwrap();
     for (index, hash) in (BATCHES_START_INDEX..=BATCHES_STOP_INDEX).zip(blob_hashes.into_iter()) {
         let raw_calldata =
             std::fs::read(format!("./benches/testdata/calldata/calldata_batch_{index}.bin"))
@@ -85,7 +88,7 @@ async fn setup_pipeline<P: L1Provider + Clone + Send + Sync + 'static>(
             blob_versioned_hash: Some(hash),
             finalized_block_number: None,
         };
-        tx.insert_batch(batch_data).await.unwrap();
+        db.insert_batch(batch_data).await.unwrap();
     }
 
     // load messages in db.
@@ -99,9 +102,8 @@ async fn setup_pipeline<P: L1Provider + Clone + Send + Sync + 'static>(
     .collect();
 
     for message in l1_messages {
-        tx.insert_l1_message(message).await.unwrap();
+        db.insert_l1_message(message).await.unwrap();
     }
-    tx.commit().await.unwrap();
 
     // construct the pipeline.
     let l1_provider = factory(db.clone()).await;
