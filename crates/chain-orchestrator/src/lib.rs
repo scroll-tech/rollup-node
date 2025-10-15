@@ -347,6 +347,7 @@ impl<
                 self.engine.update_fcs(Some(head), None, None).await?;
                 let tx = self.database.tx_mut().await?;
                 tx.purge_l1_message_to_l2_block_mappings(Some(head.number + 1)).await?;
+                tx.set_l2_head_block_number(head.number).await?;
                 tx.commit().await?;
                 self.notify(ChainOrchestratorEvent::FcsHeadUpdated(head));
                 let _ = sender.send(());

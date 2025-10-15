@@ -403,7 +403,7 @@ pub async fn send_tx(
     Ok(())
 }
 
-/// Simple L2 transaction sender that runs continuously until `stop` is set to true.
+/// Simple transaction sender that runs continuously until `stop` is set to true.
 pub async fn run_continuous_tx_sender(stop: Arc<AtomicBool>, nodes: &[&NamedProvider]) -> u64 {
     let mut interval = interval(Duration::from_millis(50));
     let mut tx_count = 0u64;
