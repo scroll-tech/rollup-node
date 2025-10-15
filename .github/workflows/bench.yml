@@ -3,7 +3,7 @@
 on:
   pull_request:
   push:
-    branches: [main]
+#    branches: [main]
 
 env:
   CARGO_TERM_COLOR: always
@@ -13,7 +13,7 @@ env:
 name: bench
 jobs:
   codspeed:
-    runs-on: ubuntu-latest
+    runs-on: codspeed-macro
     steps:
       - uses: actions/checkout@v5
       - uses: rui314/setup-mold@v1
