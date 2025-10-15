@@ -6,6 +6,7 @@ use alloy_signer_local::PrivateKeySigner;
 use alloy_sol_types::{sol, SolCall};
 use eyre::{Ok, Result};
 use reth_e2e_test_utils::{transaction::TransactionTestContext, wallet::Wallet};
+use rollup_node_chain_orchestrator::ChainOrchestratorStatus;
 use std::{
     sync::{
         atomic::{AtomicBool, Ordering},
@@ -77,6 +78,22 @@ pub async fn disable_automatic_sequencing(provider: &NamedProvider) -> Result<bo
         .request("rollupNode_disableAutomaticSequencing", ())
         .await
         .map_err(|e| eyre::eyre!("Failed to disable automatic sequencing: {}", e))
+}
+
+/// Get the current status of a rollup node
+///
+/// # Arguments
+/// * `provider` - The rollup node provider
+///
+/// # Returns
+/// * `Ok(ChainOrchestratorStatus)` - The current status including L1 and L2 sync states
+/// * `Err` - If the RPC call fails
+pub async fn rollup_node_status(provider: &NamedProvider) -> Result<ChainOrchestratorStatus> {
+    provider
+        .client()
+        .request("rollupNode_status", ())
+        .await
+        .map_err(|e| eyre::eyre!("Failed to get rollup node status: {}", e))
 }
 
 pub async fn miner_start(provider: &NamedProvider) -> Result<()> {

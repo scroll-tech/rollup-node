@@ -95,8 +95,8 @@ impl DockerComposeEnv {
                 project_name,
                 "up",
                 "-d",
-                // "--force-recreate",
-                // "--build",
+                "--force-recreate", // comment for for local testing and avoiding rebuilds
+                "--build",          // comment for for local testing and avoiding rebuilds
             ])
             .stdout(std::process::Stdio::piped())
             .stderr(std::process::Stdio::piped())
@@ -386,7 +386,7 @@ impl DockerComposeEnv {
 
         tracing::info!("✅ Started container: {}", service_name);
 
-        Self::wait_for_l2_node_ready(provider.rpc_url, 30).await.map_err(|e| {
+        Self::wait_for_l2_node_ready(provider.rpc_url, 5).await.map_err(|e| {
             eyre::eyre!("Container {} did not become ready after start: {}", service_name, e)
         })?;
 

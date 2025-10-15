@@ -125,15 +125,19 @@ async fn docker_test_heterogeneous_client_sync_and_sequencer_handoff() -> Result
     utils::enable_automatic_sequencing(&rn_sequencer).await?;
     let target_block = latest_block + 10;
 
-    // TODO: restart RN follower here
-    // 1. disconnect from all nodes
-    // 2. get latest block and other state info
-    // 3. stop the node
-    // 4. start the node
-    // 5. check that state is the same as before
-    // 6. reconnect to nodes
+    // restart RN follower to test it can recover its state after a restart
+    tracing::info!("Restarting RN follower");
+    utils::admin_remove_peer(&rn_follower, &env.l2geth_sequencer_enode()?).await?;
+    let latest_block_before_restart = rn_follower.get_block_number().await?;
+    let chain_status_before_restart = utils::rollup_node_status(&rn_follower).await?;
     env.stop_container(&rn_follower).await?;
     env.start_container(&rn_follower).await?;
+    let rn_follower = env.get_rn_follower_provider().await?; // without this line rn_follower isn't always reachable after restart
+    utils::assert_latest_block(&[&rn_follower], latest_block_before_restart).await?;
+    assert!(
+        utils::rollup_node_status(&rn_follower).await?.l2 == chain_status_before_restart.l2,
+        "L2 Chain status after restart does not match the one before restart",
+    );
     utils::admin_add_peer(&rn_follower, &env.l2geth_sequencer_enode()?).await?;
 
     utils::wait_for_block(&nodes, target_block).await?;
@@ -170,14 +174,21 @@ async fn docker_test_heterogeneous_client_sync_and_sequencer_handoff() -> Result
         target_block + 1,
         l2geth_follower.get_block_number().await?
     );
-    // TODO: restart RN sequencer here
-    // 1. disconnect from all nodes
-    // 2. get latest block and other state info
-    // 3. stop the node
-    // 4. start the node
-    // 5. check that state is the same as before
-    // 6. reconnect to nodes
-    // 7. start sequencing again
+
+    // restart RN sequencer to test it can recover its state after a restart
+    tracing::info!("Restarting RN sequencer");
+    utils::disable_automatic_sequencing(&rn_sequencer).await?;
+    let latest_block_before_restart = rn_sequencer.get_block_number().await?;
+    let chain_status_before_restart = utils::rollup_node_status(&rn_sequencer).await?;
+    env.stop_container(&rn_sequencer).await?;
+    env.start_container(&rn_sequencer).await?;
+    utils::assert_latest_block(&[&rn_sequencer], latest_block_before_restart).await?;
+    assert!(
+        utils::rollup_node_status(&rn_sequencer).await?.l2 == chain_status_before_restart.l2,
+        "L2 Chain status after restart does not match the one before restart",
+    );
+    utils::admin_add_peer(&rn_follower, &env.rn_sequencer_enode()?).await?;
+    utils::enable_automatic_sequencing(&rn_sequencer).await?;
 
     // Reconnect l2geth follower to l2geth sequencer and let them sync
     // topology:
