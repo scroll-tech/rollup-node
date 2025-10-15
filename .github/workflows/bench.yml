@@ -13,9 +13,9 @@ env:
 name: bench
 jobs:
   codspeed:
-    runs-on: codspeed-macro
-#      group: codspeed
-#      labels: codspeed-macro
+    runs-on:
+      group: codspeed
+      labels: codspeed-macro
     steps:
       - uses: actions/checkout@v5
       - uses: rui314/setup-mold@v1
