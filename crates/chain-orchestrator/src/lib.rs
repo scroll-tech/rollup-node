@@ -69,7 +69,7 @@ mod retry;
 pub use retry::Retry;
 
 mod sync;
-pub use sync::SyncState;
+pub use sync::{SyncMode, SyncState};
 
 mod status;
 pub use status::ChainOrchestratorStatus;

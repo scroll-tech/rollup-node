@@ -15,6 +15,7 @@ alloy-rpc-types-eth = { workspace = true }
 alloy-signer-local = { workspace = true }
 alloy-sol-types = { workspace = true }
 scroll-alloy-network = { workspace = true }
+rollup-node-chain-orchestrator = { path = "../crates/chain-orchestrator", features = ["serde"] }
 tokio = { workspace = true, features = ["rt", "time", "process"] }
 eyre = { workspace = true }
 getrandom = { workspace = true }
