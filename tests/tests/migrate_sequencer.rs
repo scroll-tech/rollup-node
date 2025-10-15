@@ -1,5 +1,8 @@
 use eyre::Result;
-use std::sync::{atomic::AtomicBool, Arc};
+use std::{
+    sync::{atomic::AtomicBool, Arc},
+    time::Duration,
+};
 use tests::*;
 
 #[tokio::test]
@@ -44,24 +47,45 @@ async fn docker_test_migrate_sequencer() -> Result<()> {
 
     tracing::info!("🔄 Started continuous L1 message and L2 transaction sender for entire test");
 
-    // Enable block production on l2geth sequencer
-    utils::miner_start(&l2geth_sequencer).await?;
+    let enable_l2geth_sequencing = async || -> Result<()> {
+        utils::disable_automatic_sequencing(&rn_sequencer).await?;
+        let latest_block = rn_sequencer.get_block_number().await?;
+        utils::wait_for_block(&nodes, latest_block).await?;
 
-    // Wait for at least 60 blocks to be produced
-    let target_block = 30;
-    utils::wait_for_block(&[&l2geth_sequencer], target_block).await?;
+        tracing::info!("Enabling sequencing on l2geth sequencer");
+        utils::miner_start(&l2geth_sequencer).await?;
 
-    let target_block = 60;
-    utils::wait_for_block(&nodes, target_block).await?;
-    utils::assert_blocks_match(&nodes, target_block).await?;
+        Ok(())
+    };
 
-    let target_block = 90;
-    utils::wait_for_block(&nodes, target_block).await?;
-    utils::assert_blocks_match(&nodes, target_block).await?;
+    let enable_rn_sequencing = async || -> Result<()> {
+        utils::miner_stop(&l2geth_sequencer).await?;
+        let latest_block = l2geth_sequencer.get_block_number().await?;
+        utils::wait_for_block(&nodes, latest_block).await?;
 
-    let target_block = 120;
-    utils::wait_for_block(&nodes, target_block).await?;
-    utils::assert_blocks_match(&nodes, target_block).await?;
+        tracing::info!("Enabling sequencing on RN sequencer");
+        utils::enable_automatic_sequencing(&rn_sequencer).await?;
+
+        Ok(())
+    };
+
+    // Alternate sequencing between l2geth and rn sequencer every 5 seconds. With a block time of
+    // 500ms we should produce about 10 blocks each handoff.
+    let latest_block = 0u64;
+    loop {
+        enable_l2geth_sequencing().await?;
+        tokio::time::sleep(Duration::from_secs(5)).await;
+        enable_rn_sequencing().await?;
+        tokio::time::sleep(Duration::from_secs(5)).await;
+
+        let latest_block = rn_sequencer.get_block_number().await?;
+        if latest_block >= 120 {
+            break;
+        }
+    }
+
+    utils::wait_for_block(&nodes, latest_block).await?;
+    utils::assert_blocks_match(&nodes, latest_block).await?;
 
     utils::stop_continuous_tx_sender(stop.clone(), tx_sender).await?;
     utils::stop_continuous_l1_message_sender(stop, l1_message_sender).await?;

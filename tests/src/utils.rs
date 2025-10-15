@@ -181,7 +181,11 @@ pub async fn wait_for_l1_message_queue_index_reached(
         tokio::time::sleep(Duration::from_millis(500)).await;
     }
 
-    Ok(())
+    eyre::bail!(
+        "Timeout after {}s waiting for all nodes to reach queue index {}",
+        timeout_secs,
+        expected_index
+    )
 }
 
 /// Waits for all provided nodes to reach the target block number.
