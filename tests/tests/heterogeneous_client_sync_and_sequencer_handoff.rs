@@ -1,4 +1,5 @@
 use eyre::Result;
+use std::sync::{atomic::AtomicBool, Arc};
 use tests::*;
 
 /// Tests cross-client block propagation and synchronization between heterogeneous nodes.
@@ -47,7 +48,8 @@ async fn docker_test_heterogeneous_client_sync_and_sequencer_handoff() -> Result
     reth_tracing::init_test_tracing();
 
     tracing::info!("=== STARTING docker_test_heterogeneous_client_sync_and_sequencer_handoff ===");
-    let env = DockerComposeEnv::new("multi-client-propagation").await?;
+    let env = DockerComposeEnv::new("docker_test_heterogeneous_client_sync_and_sequencer_handoff")
+        .await?;
 
     let rn_sequencer = env.get_rn_sequencer_provider().await?;
     let rn_follower = env.get_rn_follower_provider().await?;
@@ -65,6 +67,18 @@ async fn docker_test_heterogeneous_client_sync_and_sequencer_handoff() -> Result
 
     // Enable block production on l2geth sequencer
     utils::miner_start(&l2geth_sequencer).await?;
+
+    // Start single continuous transaction sender for entire test
+    let stop = Arc::new(AtomicBool::new(false));
+    let stop_clone = stop.clone();
+    let rn_follower_clone = env.get_rn_follower_provider().await.unwrap();
+    let l2geth_follower_clone = env.get_l2geth_follower_provider().await.unwrap();
+    let tx_sender = tokio::spawn(async move {
+        utils::run_continuous_tx_sender(stop_clone, &[&rn_follower_clone, &l2geth_follower_clone])
+            .await
+    });
+
+    tracing::info!("🔄 Started continuous transaction sender for entire test");
 
     // Wait for at least 10 blocks to be produced
     let target_block = 10;
@@ -168,6 +182,8 @@ async fn docker_test_heterogeneous_client_sync_and_sequencer_handoff() -> Result
     let target_block = latest_block + 20;
     utils::wait_for_block(&nodes, target_block).await?;
     assert_blocks_match(&nodes, target_block).await?;
+
+    utils::stop_continuous_tx_sender(stop, tx_sender).await?;
 
     Ok(())
 }
