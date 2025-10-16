@@ -46,9 +46,9 @@ impl DatabaseService for Arc<DatabaseInner> {
                 let tx = Arc::try_unwrap(tx);
 
                 if res.is_ok() {
-                    tx.map_err(|_| DatabaseError::CommitFailed)?.commit().await?;
+                    tx.map(|tx| tx.commit()).map_err(|_| DatabaseError::CommitFailed)?.await?;
                 } else {
-                    tx.map_err(|_| DatabaseError::RollbackFailed)?.rollback().await?;
+                    tx.map(|tx| tx.rollback()).map_err(|_| DatabaseError::RollbackFailed)?.await?;
                 }
                 res
             }

@@ -295,12 +295,7 @@ impl<
                 {
                     let block_info: L2BlockInfoWithL1Messages = (&block).into();
                     self.database
-                        .tx_mut(move |tx| {
-                            let block_info = block_info.clone();
-                            async move {
-                                tx.update_l1_messages_from_l2_blocks(vec![block_info.clone()]).await
-                            }
-                        })
+                        .update_l1_messages_from_l2_blocks(vec![block_info.clone()])
                         .await?;
                     self.signer
                         .as_mut()
@@ -334,7 +329,7 @@ impl<
             ChainOrchestratorCommand::Status(tx) => {
                 let (l1_latest, l1_finalized, l1_processed) = self
                     .database
-                    .tx_mut(|tx| async move {
+                    .tx(|tx| async move {
                         let l1_latest = tx.get_latest_l1_block_number().await?;
                         let l1_finalized = tx.get_finalized_l1_block_number().await?;
                         let l1_processed = tx.get_processed_l1_block_number().await?;
@@ -491,12 +486,7 @@ impl<
 
         // Insert the batch consolidation outcome into the database.
         let consolidation_outcome = batch_consolidation_outcome.clone();
-        self.database
-            .tx_mut(move |tx| {
-                let consolidation_outcome = consolidation_outcome.clone();
-                async move { tx.insert_batch_consolidation_outcome(consolidation_outcome).await }
-            })
-            .await?;
+        self.database.insert_batch_consolidation_outcome(consolidation_outcome).await?;
 
         Ok(Some(ChainOrchestratorEvent::BatchConsolidated(batch_consolidation_outcome)))
     }
@@ -509,11 +499,7 @@ impl<
         match &*notification {
             L1Notification::Processed(block_number) => {
                 let block_number = *block_number;
-                self.database
-                    .tx_mut(move |tx| async move {
-                        tx.set_processed_l1_block_number(block_number).await
-                    })
-                    .await?;
+                self.database.set_processed_l1_block_number(block_number).await?;
                 Ok(None)
             }
             L1Notification::Reorg(block_number) => self.handle_l1_reorg(*block_number).await,
@@ -548,10 +534,7 @@ impl<
         &self,
         block_number: u64,
     ) -> Result<Option<ChainOrchestratorEvent>, ChainOrchestratorError> {
-        self.database
-            .tx_mut(move |tx| async move { tx.set_latest_l1_block_number(block_number).await })
-            .await?;
-
+        self.database.set_latest_l1_block_number(block_number).await?;
         Ok(Some(ChainOrchestratorEvent::NewL1Block(block_number)))
     }
 
@@ -565,9 +548,7 @@ impl<
         let now = Instant::now();
         let genesis_hash = self.config.chain_spec().genesis_hash();
         let UnwindResult { l1_block_number, queue_index, l2_head_block_number, l2_safe_block_info } =
-            self.database
-                .tx_mut(move |tx| async move { tx.unwind(genesis_hash, block_number).await })
-                .await?;
+            self.database.unwind(genesis_hash, block_number).await?;
 
         let l2_head_block_info = if let Some(block_number) = l2_head_block_number {
             // Fetch the block hash of the new L2 head block.
@@ -840,11 +821,7 @@ impl<
 
         // We optimistically persist the signature upon passing consensus checks.
         let block_hash = block_with_peer.block.header.hash_slow();
-        self.database
-            .tx_mut(move |tx| async move {
-                tx.insert_signature(block_hash, block_with_peer.signature).await
-            })
-            .await?;
+        self.database.insert_signature(block_hash, block_with_peer.signature).await?;
 
         let received_block_number = block_with_peer.block.number;
         let received_block_hash = block_with_peer.block.header.hash_slow();
@@ -867,9 +844,7 @@ impl<
 
             // Purge all L1 message to L2 block mappings as they may be invalid after an
             // optimistic sync.
-            self.database
-                .tx_mut(|tx| async move { tx.purge_l1_message_to_l2_block_mappings(None).await })
-                .await?;
+            self.database.purge_l1_message_to_l2_block_mappings(None).await?;
 
             return Ok(Some(ChainOrchestratorEvent::OptimisticSync(block_info)));
         }
@@ -1151,15 +1126,9 @@ impl<
         self.validate_l1_messages(&blocks_to_validate).await?;
 
         self.database
-            .tx_mut(move |tx| {
-                let blocks_to_validate = blocks_to_validate.clone();
-                async move {
-                    tx.update_l1_messages_from_l2_blocks(
-                        blocks_to_validate.into_iter().map(|b| (&b).into()).collect(),
-                    )
-                    .await
-                }
-            })
+            .update_l1_messages_from_l2_blocks(
+                blocks_to_validate.into_iter().map(|b| (&b).into()).collect(),
+            )
             .await?;
 
         self.notify(ChainOrchestratorEvent::ChainConsolidated {
@@ -1200,10 +1169,7 @@ impl<
         let count = l1_message_hashes.len();
         let mut database_messages = self
             .database
-            .tx(move |tx| async move {
-                tx.get_n_l1_messages(Some(L1MessageKey::block_number(first_block_number)), count)
-                    .await
-            })
+            .get_n_l1_messages(Some(L1MessageKey::block_number(first_block_number)), count)
             .await?
             .into_iter();
 
@@ -1257,9 +1223,7 @@ async fn compute_l1_message_queue_hash(
     } else if l1_message.queue_index > l1_v2_message_queue_start_index {
         let index = l1_message.queue_index - 1;
         let mut input = database
-            .tx(move |tx| async move {
-                tx.get_n_l1_messages(Some(L1MessageKey::from_queue_index(index)), 1).await
-            })
+            .get_n_l1_messages(Some(L1MessageKey::from_queue_index(index)), 1)
             .await?
             .first()
             .map(|m| m.queue_hash)

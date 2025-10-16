@@ -43,7 +43,8 @@ use scroll_alloy_hardforks::ScrollHardforks;
 use scroll_alloy_network::Scroll;
 use scroll_alloy_provider::{ScrollAuthApiEngineClient, ScrollEngineApi};
 use scroll_db::{
-    Database, DatabaseConnectionProvider, DatabaseReadOperations, DatabaseWriteOperations,
+    Database, DatabaseConnectionProvider, DatabaseError, DatabaseReadOperations,
+    DatabaseWriteOperations,
 };
 use scroll_derivation_pipeline::DerivationPipeline;
 use scroll_engine::{Engine, ForkchoiceState};
@@ -257,16 +258,24 @@ impl ScrollRollupNodeConfig {
         let mut fcs =
             ForkchoiceState::from_provider(&l2_provider).await.unwrap_or_else(chain_spec_fcs);
 
-        // On startup we replay the latest batch of blocks from the database as such we set the safe
-        // block hash to the latest block hash associated with the previous consolidated
-        // batch in the database.
-        let (_startup_safe_block, l1_start_block_number) =
-            db.prepare_on_startup(chain_spec.genesis_hash()).await?;
-        let l2_head_block_number = db.get_l2_head_block_number().await?;
-        db.purge_l1_message_to_l2_block_mappings(Some(l2_head_block_number + 1)).await?;
+        let genesis_hash = chain_spec.genesis_hash();
+        let (l1_start_block_number, l2_head_block_number) = db
+            .tx_mut(move |tx| async move {
+                // On startup we replay the latest batch of blocks from the database as such we set
+                // the safe block hash to the latest block hash associated with the
+                // previous consolidated batch in the database.
+                let (_startup_safe_block, l1_start_block_number) =
+                    tx.prepare_on_startup(genesis_hash).await?;
+
+                let l2_head_block_number = tx.get_l2_head_block_number().await?;
+                tx.purge_l1_message_to_l2_block_mappings(Some(l2_head_block_number + 1)).await?;
+
+                let l2_head_block_number = tx.get_l2_head_block_number().await?;
+                Ok::<_, DatabaseError>((l1_start_block_number, l2_head_block_number))
+            })
+            .await?;
 
         // Update the head block info if available and ahead of finalized.
-        let l2_head_block_number = db.get_l2_head_block_number().await?;
         if l2_head_block_number > fcs.finalized_block_info().number {
             let block = l2_provider
                 .get_block(l2_head_block_number.into())
