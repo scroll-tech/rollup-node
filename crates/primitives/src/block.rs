@@ -195,7 +195,7 @@ impl TryFrom<&ExecutionPayloadV1> for L2BlockInfoWithL1Messages {
         let block_number = value.block_number;
         let block_hash = value.block_hash;
 
-        let mut l1_messages = vec![];
+        let mut l1_messages = Vec::new();
         for tx in &value.transactions {
             if tx.as_ref().first() == Some(&L1_MESSAGE_TRANSACTION_TYPE) {
                 let tx = ScrollTransactionSigned::decode_2718(&mut tx.as_ref())?;
