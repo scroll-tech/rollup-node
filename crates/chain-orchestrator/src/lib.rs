@@ -57,7 +57,7 @@ mod handle;
 pub use handle::{ChainOrchestratorCommand, ChainOrchestratorHandle};
 
 mod metrics;
-pub use metrics::{ChainOrchestratorMetrics, MetricsHandler, Task};
+use metrics::{MetricsHandler, Task};
 
 mod retry;
 pub use retry::Retry;

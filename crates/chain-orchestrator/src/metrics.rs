@@ -5,7 +5,7 @@ use strum::{EnumIter, IntoEnumIterator};
 
 /// The metric handler for the chain orchestrator. Tracks execution duration of various tasks.
 #[derive(Debug)]
-pub struct MetricsHandler {
+pub(crate) struct MetricsHandler {
     /// The chain orchestrator metrics.
     chain_orchestrator_tasks_metrics: HashMap<Task, ChainOrchestratorMetrics>,
     /// The inflight block building meter.
@@ -14,7 +14,7 @@ pub struct MetricsHandler {
 
 impl MetricsHandler {
     /// Returns the [`ChainOrchestratorMetrics`] for the provided task.
-    pub fn get(&self, task: Task) -> Option<&ChainOrchestratorMetrics> {
+    pub(crate) fn get(&self, task: Task) -> Option<&ChainOrchestratorMetrics> {
         self.chain_orchestrator_tasks_metrics.get(&task)
     }
 
@@ -51,7 +51,7 @@ impl Default for MetricsHandler {
 
 /// An enum representing the chain orchestrator tasks.
 #[derive(Debug, PartialEq, Eq, Hash, EnumIter)]
-pub enum Task {
+pub(crate) enum Task {
     /// Batch reconciliation with the unsafe L2 chain.
     BatchReconciliation,
     /// Import of an L2 block received over p2p.
@@ -72,7 +72,7 @@ pub enum Task {
 
 impl Task {
     /// Returns the str representation of the [`ChainOrchestratorItem`].
-    pub const fn as_str(&self) -> &'static str {
+    pub(crate) const fn as_str(&self) -> &'static str {
         match self {
             Self::L1Reorg => "l1_reorg",
             Self::L1Finalization => "l1_finalization",
@@ -89,7 +89,7 @@ impl Task {
 /// The metrics for the [`super::ChainOrchestrator`].
 #[derive(Metrics, Clone)]
 #[metrics(scope = "chain_orchestrator")]
-pub struct ChainOrchestratorMetrics {
+pub(crate) struct ChainOrchestratorMetrics {
     /// The duration of the task for the chain orchestrator.
     pub task_duration: Histogram,
 }
