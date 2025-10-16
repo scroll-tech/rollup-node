@@ -520,7 +520,7 @@ impl<
                 tracing::info!(target: "scroll::chain_orchestrator", "L1 is now synced");
                 self.sync_state.l1_mut().set_synced();
                 if self.sync_state.is_synced() {
-                    metered!(Task::L1Consolidation, self, consolidate_chain())?;
+                    metered!(Task::ChainConsolidation, self, consolidate_chain())?;
                 }
                 self.notify(ChainOrchestratorEvent::L1Synced);
                 Ok(None)

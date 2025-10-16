@@ -57,7 +57,7 @@ pub(crate) enum Task {
     /// Import of an L2 block received over p2p.
     L2BlockImport,
     /// Consolidation of the L2 ledger by validating unsafe blocks.
-    L1Consolidation,
+    ChainConsolidation,
     /// L1 reorg handling.
     L1Reorg,
     /// L1 finalization handling.
@@ -80,7 +80,7 @@ impl Task {
             Self::BatchCommit => "batch_commit",
             Self::BatchFinalization => "batch_finalization",
             Self::BatchReconciliation => "batch_reconciliation",
-            Self::L1Consolidation => "l1_consolidation",
+            Self::ChainConsolidation => "chain_consolidation",
             Self::L2BlockImport => "l2_block_import",
         }
     }
@@ -94,18 +94,17 @@ pub(crate) struct ChainOrchestratorMetrics {
     pub task_duration: Histogram,
 }
 
-/// Block building related metric.
-
-#[derive(Metrics, Clone)]
-#[metrics(scope = "chain_orchestrator")]
-pub(crate) struct BlockBuildingMetric {
-    /// The duration of the block building task.
-    block_building_duration: Histogram,
-}
-
 /// A block building meter.
 #[derive(Debug, Default)]
 pub(crate) struct BlockBuildingMeter {
     metric: BlockBuildingMetric,
     start: Option<Instant>,
+}
+
+/// Block building related metric.
+#[derive(Metrics, Clone)]
+#[metrics(scope = "chain_orchestrator")]
+pub(crate) struct BlockBuildingMetric {
+    /// The duration of the block building task.
+    block_building_duration: Histogram,
 }
