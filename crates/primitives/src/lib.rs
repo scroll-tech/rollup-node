@@ -22,6 +22,9 @@ pub use bounded_vec::BoundedVec;
 mod chain;
 pub use chain::ChainImport;
 
+mod error;
+pub use error::RollupNodePrimitiveError;
+
 mod metadata;
 pub use metadata::Metadata;
 

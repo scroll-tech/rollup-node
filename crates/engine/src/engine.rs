@@ -2,7 +2,6 @@ use super::{EngineError, ForkchoiceState};
 use alloy_rpc_types_engine::{
     ExecutionPayloadV1, ForkchoiceUpdated, PayloadStatus, PayloadStatusEnum,
 };
-use reth_scroll_primitives::ScrollBlock;
 use rollup_node_primitives::BlockInfo;
 use scroll_alloy_provider::ScrollEngineApi;
 use std::sync::Arc;
@@ -100,9 +99,11 @@ where
     }
 
     /// Submit a new payload to the engine.
-    pub async fn new_payload(&self, block: &ScrollBlock) -> Result<PayloadStatus, EngineError> {
-        tracing::trace!(target: "scroll::engine", block_number = block.number, block_hash = ?block.hash_slow(), "Submitting new payload to engine");
-        let payload = ExecutionPayloadV1::from_block_slow(block);
+    pub async fn new_payload(
+        &self,
+        payload: ExecutionPayloadV1,
+    ) -> Result<PayloadStatus, EngineError> {
+        tracing::trace!(target: "scroll::engine", block_number = payload.block_number, block_hash = ?payload.block_hash, "Submitting new payload to engine");
         let result = self.client.new_payload_v1(payload).await?;
 
         match &result.status {
