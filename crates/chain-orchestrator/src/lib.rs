@@ -442,7 +442,9 @@ impl<
                         .get_payload(fcu.payload_id.expect("payload_id can not be None"))
                         .await?;
 
-                    let block_info: L2BlockInfoWithL1Messages = (&payload).into();
+                    let block_info: L2BlockInfoWithL1Messages = (&payload)
+                        .try_into()
+                        .map_err(ChainOrchestratorError::RollupNodePrimitiveError)?;
                     let result = self.engine.new_payload(payload).await?;
                     if result.is_invalid() {
                         return Err(ChainOrchestratorError::InvalidBatch(

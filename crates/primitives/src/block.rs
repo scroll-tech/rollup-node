@@ -1,3 +1,4 @@
+use crate::RollupNodePrimitiveError;
 use alloy_consensus::Header;
 use alloy_eips::{BlockNumHash, Decodable2718};
 use alloy_primitives::{B256, U256};
@@ -179,43 +180,28 @@ impl From<&ScrollBlock> for L2BlockInfoWithL1Messages {
     }
 }
 
-impl From<&ExecutionPayload> for L2BlockInfoWithL1Messages {
-    fn from(value: &ExecutionPayload) -> Self {
-        let block_number = value.block_number();
-        let block_hash = value.block_hash();
-        let l1_messages = value
-            .as_v1()
-            .transactions
-            .iter()
-            .filter_map(|raw| {
-                (raw.as_ref().first() == Some(&L1_MESSAGE_TRANSACTION_TYPE))
-                    .then(|| {
-                        let tx = ScrollTransactionSigned::decode_2718(&mut raw.as_ref()).ok()?;
-                        Some(*tx.tx_hash())
-                    })
-                    .flatten()
-            })
-            .collect();
-        Self { block_info: BlockInfo { number: block_number, hash: block_hash }, l1_messages }
+impl TryFrom<&ExecutionPayload> for L2BlockInfoWithL1Messages {
+    type Error = RollupNodePrimitiveError;
+
+    fn try_from(value: &ExecutionPayload) -> Result<Self, Self::Error> {
+        value.as_v1().try_into()
     }
 }
 
-impl From<&ExecutionPayloadV1> for L2BlockInfoWithL1Messages {
-    fn from(value: &ExecutionPayloadV1) -> Self {
+impl TryFrom<&ExecutionPayloadV1> for L2BlockInfoWithL1Messages {
+    type Error = RollupNodePrimitiveError;
+
+    fn try_from(value: &ExecutionPayloadV1) -> Result<Self, Self::Error> {
         let block_number = value.block_number;
         let block_hash = value.block_hash;
-        let l1_messages = value
-            .transactions
-            .iter()
-            .filter_map(|raw| {
-                (raw.as_ref().first() == Some(&L1_MESSAGE_TRANSACTION_TYPE))
-                    .then(|| {
-                        let tx = ScrollTransactionSigned::decode_2718(&mut raw.as_ref()).ok()?;
-                        Some(*tx.tx_hash())
-                    })
-                    .flatten()
-            })
-            .collect();
-        Self { block_info: BlockInfo { number: block_number, hash: block_hash }, l1_messages }
+
+        let mut l1_messages = vec![];
+        for tx in &value.transactions {
+            if tx.as_ref().first() == Some(&L1_MESSAGE_TRANSACTION_TYPE) {
+                let tx = ScrollTransactionSigned::decode_2718(&mut tx.as_ref())?;
+                l1_messages.push(*tx.tx_hash())
+            }
+        }
+        Ok(Self { block_info: BlockInfo { number: block_number, hash: block_hash }, l1_messages })
     }
 }
