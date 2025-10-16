@@ -12853,6 +12853,7 @@ dependencies = [
  "alloy-rpc-types-eth",
  "eyre",
  "getrandom 0.2.16",
+ "reth-e2e-test-utils",
  "reth-tracing",
  "scroll-alloy-network",
  "serde",
