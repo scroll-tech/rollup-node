@@ -35,13 +35,7 @@ use scroll_engine::Engine;
 use scroll_network::{
     BlockImportOutcome, NewBlockWithPeer, ScrollNetwork, ScrollNetworkManagerEvent,
 };
-use std::{
-    collections::{HashMap, VecDeque},
-    sync::Arc,
-    time::Instant,
-    vec,
-};
-use strum::IntoEnumIterator;
+use std::{collections::VecDeque, sync::Arc, time::Instant, vec};
 use tokio::sync::mpsc::{self, Receiver, UnboundedReceiver};
 
 mod config;
@@ -51,7 +45,7 @@ mod consensus;
 pub use consensus::{Consensus, NoopConsensus, SystemContractConsensus};
 
 mod consolidation;
-use consolidation::reconcile_batch;
+use consolidation::{reconcile_batch, BlockConsolidationAction};
 
 mod event;
 pub use event::ChainOrchestratorEvent;
@@ -63,7 +57,7 @@ mod handle;
 pub use handle::{ChainOrchestratorCommand, ChainOrchestratorHandle};
 
 mod metrics;
-pub use metrics::{ChainOrchestratorItem, ChainOrchestratorMetrics};
+pub use metrics::{ChainOrchestratorMetrics, MetricsHandler, Task};
 
 mod retry;
 pub use retry::Retry;
@@ -74,7 +68,18 @@ pub use sync::SyncState;
 mod status;
 pub use status::ChainOrchestratorStatus;
 
-use crate::consolidation::BlockConsolidationAction;
+/// Wraps a future, metering the completion of it.
+macro_rules! metered {
+    ($task:expr, $self:ident, $method:ident($($args:expr),*)) => {
+        {
+            let metric = $self.metric_handler.get($task).expect("metric exists").clone();
+            let now = Instant::now();
+            let res =$self.$method($($args),*).await;
+            metric.task_duration.record(now.elapsed().as_secs_f64());
+            res
+        }
+    };
+}
 
 /// The mask used to mask the L1 message queue hash.
 const L1_MESSAGE_QUEUE_HASH_MASK: B256 =
@@ -106,8 +111,6 @@ pub struct ChainOrchestrator<
     l2_client: Arc<L2P>,
     /// A reference to the database used to persist the indexed data.
     database: Arc<Database>,
-    /// The metrics for the chain orchestrator.
-    metrics: HashMap<ChainOrchestratorItem, ChainOrchestratorMetrics>,
     /// The current sync state of the [`ChainOrchestrator`].
     sync_state: SyncState,
     /// A receiver for [`L1Notification`]s from the [`rollup_node_watcher::L1Watcher`].
@@ -126,6 +129,8 @@ pub struct ChainOrchestrator<
     derivation_pipeline: DerivationPipeline,
     /// Optional event sender for broadcasting events to listeners.
     event_sender: Option<EventSender<ChainOrchestratorEvent>>,
+    /// The metrics handler.
+    metric_handler: MetricsHandler,
 }
 
 impl<
@@ -159,12 +164,6 @@ impl<
                 l2_client: Arc::new(l2_provider),
                 database,
                 config,
-                metrics: ChainOrchestratorItem::iter()
-                    .map(|i| {
-                        let label = i.as_str();
-                        (i, ChainOrchestratorMetrics::new_with_labels(&[("item", label)]))
-                    })
-                    .collect(),
                 sync_state: SyncState::default(),
                 l1_notification_rx,
                 network,
@@ -175,6 +174,7 @@ impl<
                 derivation_pipeline,
                 handle_rx,
                 event_sender: None,
+                metric_handler: MetricsHandler::default(),
             },
             handle,
         ))
@@ -215,7 +215,7 @@ impl<
                     self.handle_outcome(res);
                 }
                 Some(batch) = self.derivation_pipeline.next() => {
-                    let res = self.handle_derived_batch(batch).await;
+                    let res = metered!(Task::BatchReconciliation, self, handle_derived_batch(batch));
                     self.handle_outcome(res);
                 }
                 Some(event) = self.network.events().next() => {
@@ -249,7 +249,7 @@ impl<
     /// Handles an event from the signer.
     async fn handle_signer_event(
         &self,
-        event: rollup_node_signer::SignerEvent,
+        event: SignerEvent,
     ) -> Result<Option<ChainOrchestratorEvent>, ChainOrchestratorError> {
         tracing::info!(target: "scroll::chain_orchestrator", ?event, "Handling signer event");
         match event {
@@ -267,7 +267,7 @@ impl<
     /// Handles an event from the sequencer.
     async fn handle_sequencer_event(
         &mut self,
-        event: rollup_node_sequencer::SequencerEvent,
+        event: SequencerEvent,
     ) -> Result<Option<ChainOrchestratorEvent>, ChainOrchestratorError> {
         tracing::info!(target: "scroll::chain_orchestrator", ?event, "Handling sequencer event");
         match event {
@@ -278,6 +278,7 @@ impl<
                         .map(|s| &s.address)
                         .expect("signer must be set if sequencer is present"),
                 ) {
+                    self.metric_handler.start_block_building_recording();
                     self.sequencer
                         .as_mut()
                         .expect("sequencer must be present")
@@ -301,6 +302,7 @@ impl<
                         .as_mut()
                         .expect("signer must be present")
                         .sign_block(block.clone())?;
+                    self.metric_handler.finish_block_building_recording();
                     return Ok(Some(ChainOrchestratorEvent::BlockSequenced(block)))
                 }
             }
@@ -497,30 +499,38 @@ impl<
                 tx.commit().await?;
                 Ok(None)
             }
-            L1Notification::Reorg(block_number) => self.handle_l1_reorg(*block_number).await,
+            L1Notification::Reorg(block_number) => {
+                metered!(Task::L1Reorg, self, handle_l1_reorg(*block_number))
+            }
             L1Notification::Consensus(update) => {
                 self.consensus.update_config(update);
                 Ok(None)
             }
             L1Notification::NewBlock(block_number) => self.handle_l1_new_block(*block_number).await,
             L1Notification::Finalized(block_number) => {
-                self.handle_l1_finalized(*block_number).await
+                metered!(Task::L1Finalization, self, handle_l1_finalized(*block_number))
             }
-            L1Notification::BatchCommit(batch) => self.handle_batch_commit(batch.clone()).await,
+            L1Notification::BatchCommit(batch) => {
+                metered!(Task::BatchCommit, self, handle_batch_commit(batch.clone()))
+            }
             L1Notification::L1Message { message, block_number, block_timestamp: _ } => {
-                self.handle_l1_message(message.clone(), *block_number).await
+                metered!(Task::L1Message, self, handle_l1_message(message.clone(), *block_number))
             }
             L1Notification::Synced => {
                 tracing::info!(target: "scroll::chain_orchestrator", "L1 is now synced");
                 self.sync_state.l1_mut().set_synced();
                 if self.sync_state.is_synced() {
-                    self.consolidate_chain().await?;
+                    metered!(Task::L1Consolidation, self, consolidate_chain())?;
                 }
                 self.notify(ChainOrchestratorEvent::L1Synced);
                 Ok(None)
             }
             L1Notification::BatchFinalization { hash: _hash, index, block_number } => {
-                self.handle_l1_batch_finalization(*index, *block_number).await
+                metered!(
+                    Task::BatchFinalization,
+                    self,
+                    handle_batch_finalization(*index, *block_number)
+                )
             }
         }
     }
@@ -547,8 +557,6 @@ impl<
         &mut self,
         block_number: u64,
     ) -> Result<Option<ChainOrchestratorEvent>, ChainOrchestratorError> {
-        let metric = self.metrics.get(&ChainOrchestratorItem::L1Reorg).expect("metric exists");
-        let now = Instant::now();
         let UnwindResult { l1_block_number, queue_index, l2_head_block_number, l2_safe_block_info } =
             Retry::default()
                 .retry("unwind", || async {
@@ -598,8 +606,6 @@ impl<
             self.engine.update_fcs(l2_head_block_info, l2_safe_block_info, None).await?;
         }
 
-        metric.task_duration.record(now.elapsed().as_secs_f64());
-
         let event = ChainOrchestratorEvent::L1Reorg {
             l1_block_number,
             queue_index,
@@ -616,10 +622,6 @@ impl<
         &mut self,
         block_number: u64,
     ) -> Result<Option<ChainOrchestratorEvent>, ChainOrchestratorError> {
-        let metric =
-            self.metrics.get(&ChainOrchestratorItem::L1Finalization).expect("metric exists");
-        let now = Instant::now();
-
         let finalized_batches = Retry::default()
             .retry("handle_finalized", || async {
                 let tx = self.database.tx_mut().await?;
@@ -642,8 +644,6 @@ impl<
             self.derivation_pipeline.push_batch(Arc::new(*batch)).await;
         }
 
-        metric.task_duration.record(now.elapsed().as_secs_f64());
-
         Ok(Some(ChainOrchestratorEvent::L1BlockFinalized(block_number, finalized_batches)))
     }
 
@@ -652,9 +652,6 @@ impl<
         &self,
         batch: BatchCommitData,
     ) -> Result<Option<ChainOrchestratorEvent>, ChainOrchestratorError> {
-        let metric = self.metrics.get(&ChainOrchestratorItem::BatchCommit).expect("metric exists");
-        let now = Instant::now();
-
         let event = Retry::default()
             .retry("handle_batch_commit", || async {
                 let tx = self.database.tx_mut().await?;
@@ -692,13 +689,11 @@ impl<
             })
             .await?;
 
-        metric.task_duration.record(now.elapsed().as_secs_f64());
-
         Ok(event)
     }
 
     /// Handles a batch finalization event by updating the batch input in the database.
-    async fn handle_l1_batch_finalization(
+    async fn handle_batch_finalization(
         &mut self,
         batch_index: u64,
         block_number: u64,
@@ -745,9 +740,6 @@ impl<
         l1_message: TxL1Message,
         l1_block_number: u64,
     ) -> Result<Option<ChainOrchestratorEvent>, ChainOrchestratorError> {
-        let metric = self.metrics.get(&ChainOrchestratorItem::L1Message).expect("metric exists");
-        let now = Instant::now();
-
         let event = ChainOrchestratorEvent::L1MessageCommitted(l1_message.queue_index);
         let queue_hash = compute_l1_message_queue_hash(
             &self.database,
@@ -777,26 +769,8 @@ impl<
             })
             .await?;
 
-        metric.task_duration.record(now.elapsed().as_secs_f64());
-
         Ok(Some(event))
     }
-
-    // /// Wraps a pending chain orchestrator future, metering the completion of it.
-    // pub fn handle_metered(
-    //     &mut self,
-    //     item: ChainOrchestratorItem,
-    //     chain_orchestrator_fut: PendingChainOrchestratorFuture,
-    // ) -> PendingChainOrchestratorFuture {
-    //     let metric = self.metrics.get(&item).expect("metric exists").clone();
-    //     let fut_wrapper = Box::pin(async move {
-    //         let now = Instant::now();
-    //         let res = chain_orchestrator_fut.await;
-    //         metric.task_duration.record(now.elapsed().as_secs_f64());
-    //         res
-    //     });
-    //     fut_wrapper
-    // }
 
     async fn handle_network_event(
         &mut self,
