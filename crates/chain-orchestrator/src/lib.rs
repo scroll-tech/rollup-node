@@ -779,7 +779,7 @@ impl<
         match event {
             ScrollNetworkManagerEvent::NewBlock(block_with_peer) => {
                 self.notify(ChainOrchestratorEvent::NewBlockReceived(block_with_peer.clone()));
-                Ok(self.handle_block_from_peer(block_with_peer).await?)
+                metered!(Task::L2BlockImport, self, handle_block_from_peer(block_with_peer))
             }
         }
     }

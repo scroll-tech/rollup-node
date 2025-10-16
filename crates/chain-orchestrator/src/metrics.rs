@@ -49,22 +49,24 @@ impl Default for MetricsHandler {
     }
 }
 
-/// An enum representing the chain orchestrator tasks
+/// An enum representing the chain orchestrator tasks.
 #[derive(Debug, PartialEq, Eq, Hash, EnumIter)]
 pub enum Task {
     /// Batch reconciliation with the unsafe L2 chain.
     BatchReconciliation,
-    /// L1 consolidation.
+    /// Import of an L2 block received over p2p.
+    L2BlockImport,
+    /// Consolidation of the L2 ledger by validating unsafe blocks.
     L1Consolidation,
-    /// L1 reorg.
+    /// L1 reorg handling.
     L1Reorg,
-    /// L1 finalization.
+    /// L1 finalization handling.
     L1Finalization,
-    /// L1 message.
+    /// L1 message handling.
     L1Message,
-    /// Batch commit.
+    /// Batch commit event handling.
     BatchCommit,
-    /// Batch finalization.
+    /// Batch finalization event handling.
     BatchFinalization,
 }
 
@@ -79,6 +81,7 @@ impl Task {
             Self::BatchFinalization => "batch_finalization",
             Self::BatchReconciliation => "batch_reconciliation",
             Self::L1Consolidation => "l1_consolidation",
+            Self::L2BlockImport => "l2_block_import",
         }
     }
 }
