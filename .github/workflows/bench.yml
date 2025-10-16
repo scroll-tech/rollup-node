@@ -13,7 +13,7 @@ env:
 name: bench
 jobs:
   codspeed:
-    runs-on: codspeed-macro
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
       - uses: rui314/setup-mold@v1
@@ -28,7 +28,7 @@ jobs:
       - name: Build the benchmark target(s)
         run: cargo codspeed build -p scroll-derivation-pipeline --profile profiling
       - name: Run the benchmarks
-        uses: CodSpeedHQ/action@v3
+        uses: CodSpeedHQ/action@v4
         with:
-          mode: walltime
+          mode: instrumentation
           run: cargo codspeed run --workspace
