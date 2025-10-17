@@ -641,11 +641,12 @@ pub trait DatabaseReadOperations {
         n: usize,
     ) -> Result<Vec<L1MessageEnvelope>, DatabaseError>;
 
-    /// Get the extra data for the provided block number.
-    async fn get_l2_block_data_hint(
+    /// Get the extra data for n block, starting at the provided block number.
+    async fn get_n_l2_block_data_hint(
         &self,
         block_number: u64,
-    ) -> Result<Option<BlockDataHint>, DatabaseError>;
+        n: usize,
+    ) -> Result<Vec<BlockDataHint>, DatabaseError>;
 
     /// Get the [`BlockInfo`] and optional [`BatchInfo`] for the provided block hash.
     async fn get_l2_block_and_batch_info_by_hash(
@@ -921,15 +922,19 @@ impl<T: ReadConnectionProvider + Sync + ?Sized> DatabaseReadOperations for T {
         }
     }
 
-    async fn get_l2_block_data_hint(
+    async fn get_n_l2_block_data_hint(
         &self,
         block_number: u64,
-    ) -> Result<Option<BlockDataHint>, DatabaseError> {
+        n: usize,
+    ) -> Result<Vec<BlockDataHint>, DatabaseError> {
         Ok(models::block_data::Entity::find()
             .filter(models::block_data::Column::Number.eq(block_number as i64))
-            .one(self.get_connection())
-            .await
-            .map(|x| x.map(Into::into))?)
+            .limit(Some(n as u64))
+            .all(self.get_connection())
+            .await?
+            .into_iter()
+            .map(Into::into)
+            .collect())
     }
 
     async fn get_l2_block_and_batch_info_by_hash(

@@ -339,11 +339,12 @@ impl DatabaseReadOperations for Database {
         .await
     }
 
-    async fn get_l2_block_data_hint(
+    async fn get_n_l2_block_data_hint(
         &self,
         block_number: u64,
-    ) -> Result<Option<BlockDataHint>, DatabaseError> {
-        self.tx(move |tx| async move { tx.get_l2_block_data_hint(block_number).await }).await
+        n: usize,
+    ) -> Result<Vec<BlockDataHint>, DatabaseError> {
+        self.tx(move |tx| async move { tx.get_n_l2_block_data_hint(block_number, n).await }).await
     }
 
     async fn get_l2_block_and_batch_info_by_hash(
@@ -658,9 +659,9 @@ mod test {
         let db = setup_test_db().await;
 
         // db should contain the seeded data after migration.
-        let data = db.get_l2_block_data_hint(0).await.unwrap();
+        let data = db.get_n_l2_block_data_hint(0, 1).await.unwrap();
 
-        assert!(data.is_some());
+        assert_eq!(data.len(), 1);
     }
 
     #[tokio::test]

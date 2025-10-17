@@ -292,7 +292,14 @@ pub async fn derive<L1P: L1Provider + Sync + Send, DB: DatabaseReadOperations>(
     let blocks = decoded.data.into_l2_blocks();
     let mut attributes = Vec::with_capacity(blocks.len());
 
-    for mut block in blocks {
+    let start = blocks.first().map(|b| b.context.number);
+    let block_data = if let Some(start) = start {
+        db.get_n_l2_block_data_hint(start, blocks.len()).await?
+    } else {
+        vec![]
+    };
+
+    for (i, mut block) in blocks.into_iter().enumerate() {
         // query the appropriate amount of l1 messages.
         let mut txs = Vec::with_capacity(block.context.num_transactions as usize);
         for _ in 0..block.context.num_l1_messages {
@@ -315,8 +322,6 @@ pub async fn derive<L1P: L1Provider + Sync + Send, DB: DatabaseReadOperations>(
 
         // get the block data for the l2 block.
         let number = block.context.number;
-        // TODO(performance): can this be improved by adding block_data_range.
-        let block_data = db.get_l2_block_data_hint(number).await?;
 
         // construct the payload attributes.
         let attribute = DerivedAttributes {
@@ -331,7 +336,7 @@ pub async fn derive<L1P: L1Provider + Sync + Send, DB: DatabaseReadOperations>(
                 },
                 transactions: Some(txs),
                 no_tx_pool: true,
-                block_data_hint: block_data.unwrap_or_else(BlockDataHint::none),
+                block_data_hint: block_data.get(i).cloned().unwrap_or_else(BlockDataHint::none),
                 gas_limit: Some(block.context.gas_limit),
             },
         };
