@@ -115,6 +115,13 @@ significant_drop_tightening = "allow"
 too_long_first_doc_paragraph = "allow"
 large_enum_variant = "allow"
 
+# Use the `--profile profiling` flag to show symbols in release mode.
+# e.g. `cargo build --profile profiling`
+[profile.profiling]
+inherits = "release"
+debug = "full"
+strip = "none"
+
 [workspace.dependencies]
 # alloy
 alloy-chains = { version = "0.2.5", default-features = false }

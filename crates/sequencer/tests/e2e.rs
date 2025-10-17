@@ -22,7 +22,7 @@ use rollup_node_sequencer::{
 use rollup_node_watcher::L1Notification;
 use scroll_alloy_consensus::TxL1Message;
 use scroll_alloy_provider::ScrollAuthApiEngineClient;
-use scroll_db::{test_utils::setup_test_db, DatabaseTransactionProvider, DatabaseWriteOperations};
+use scroll_db::{test_utils::setup_test_db, DatabaseWriteOperations};
 use scroll_engine::{Engine, ForkchoiceState};
 use std::{io::Write, path::PathBuf, sync::Arc};
 use tempfile::NamedTempFile;
@@ -57,9 +57,7 @@ async fn skip_block_with_no_transactions() {
     let provider = database.clone();
 
     // Set the latest block number
-    let tx = provider.tx_mut().await.unwrap();
-    tx.set_latest_l1_block_number(0).await.unwrap();
-    tx.commit().await.unwrap();
+    database.set_latest_l1_block_number(0).await.unwrap();
 
     // create a sequencer
     let config = SequencerConfig {
@@ -114,9 +112,7 @@ async fn can_build_blocks() {
     let provider = database.clone();
 
     // Set the latest block number
-    let tx = provider.tx_mut().await.unwrap();
-    tx.set_latest_l1_block_number(5).await.unwrap();
-    tx.commit().await.unwrap();
+    database.set_latest_l1_block_number(5).await.unwrap();
 
     // create a sequencer
     let config = SequencerConfig {
@@ -185,9 +181,7 @@ async fn can_build_blocks() {
     };
     drop(wallet_lock);
     let l1_message_hash = l1_message.transaction.tx_hash();
-    let tx = database.tx_mut().await.unwrap();
-    tx.insert_l1_message(l1_message).await.unwrap();
-    tx.commit().await.unwrap();
+    database.insert_l1_message(l1_message).await.unwrap();
 
     // sleep 2 seconds (ethereum header timestamp has granularity of seconds and proceeding header
     // must have a greater timestamp than the last)
@@ -244,9 +238,7 @@ async fn can_build_blocks_with_delayed_l1_messages() {
     let provider = database.clone();
 
     // Set the latest block number
-    let tx = provider.tx_mut().await.unwrap();
-    tx.set_latest_l1_block_number(1).await.unwrap();
-    tx.commit().await.unwrap();
+    database.set_latest_l1_block_number(1).await.unwrap();
 
     // create a sequencer
     let config = SequencerConfig {
@@ -282,9 +274,7 @@ async fn can_build_blocks_with_delayed_l1_messages() {
     };
     drop(wallet_lock);
     let l1_message_hash = l1_message.transaction.tx_hash();
-    let tx = database.tx_mut().await.unwrap();
-    tx.insert_l1_message(l1_message).await.unwrap();
-    tx.commit().await.unwrap();
+    database.insert_l1_message(l1_message).await.unwrap();
 
     // add a transaction to the pool
     let mut wallet_lock = wallet.lock().await;
@@ -322,9 +312,7 @@ async fn can_build_blocks_with_delayed_l1_messages() {
     tokio::time::sleep(std::time::Duration::from_secs(2)).await;
 
     // set the l1 block number to 3
-    let tx = database.tx_mut().await.unwrap();
-    tx.set_latest_l1_block_number(3).await.unwrap();
-    tx.commit().await.unwrap();
+    database.set_latest_l1_block_number(3).await.unwrap();
 
     // send a new block request this block should include the L1 message
     sequencer.start_payload_building(&mut engine).await.unwrap();
@@ -373,9 +361,7 @@ async fn can_build_blocks_with_finalized_l1_messages() {
     let database = Arc::new(setup_test_db().await);
     let provider = database.clone();
 
-    let tx = provider.tx_mut().await.unwrap();
-    tx.set_latest_l1_block_number(5).await.unwrap();
-    tx.commit().await.unwrap();
+    database.set_latest_l1_block_number(5).await.unwrap();
 
     // create a sequencer
     let config = SequencerConfig {
@@ -394,9 +380,7 @@ async fn can_build_blocks_with_finalized_l1_messages() {
     let mut sequencer = Sequencer::new(provider, config);
 
     // set L1 finalized block number to 2
-    let tx = database.tx_mut().await.unwrap();
-    tx.set_finalized_l1_block_number(2).await.unwrap();
-    tx.commit().await.unwrap();
+    database.set_finalized_l1_block_number(2).await.unwrap();
 
     // add L1 messages to database
     let wallet_lock = wallet.lock().await;
@@ -435,10 +419,8 @@ async fn can_build_blocks_with_finalized_l1_messages() {
     let finalized_message_hash = finalized_l1_message.transaction.tx_hash();
     let unfinalized_message_hash = unfinalized_l1_message.transaction.tx_hash();
 
-    let tx = database.tx_mut().await.unwrap();
-    tx.insert_l1_message(finalized_l1_message).await.unwrap();
-    tx.insert_l1_message(unfinalized_l1_message).await.unwrap();
-    tx.commit().await.unwrap();
+    database.insert_l1_message(finalized_l1_message).await.unwrap();
+    database.insert_l1_message(unfinalized_l1_message).await.unwrap();
 
     // build payload, should only include finalized message
     sequencer.start_payload_building(&mut engine).await.unwrap();
@@ -458,14 +440,10 @@ async fn can_build_blocks_with_finalized_l1_messages() {
     assert!(!block.body.transactions.iter().any(|tx| tx.tx_hash() == &unfinalized_message_hash));
 
     // Handle the build block with the sequencer in order to update L1 message queue index.
-    let tx = database.tx_mut().await.unwrap();
-    tx.update_l1_messages_with_l2_block((&block).into()).await.unwrap();
-    tx.commit().await.unwrap();
+    database.update_l1_messages_with_l2_block((&block).into()).await.unwrap();
 
     // update finalized block number to 3, now both messages should be available
-    let tx = database.tx_mut().await.unwrap();
-    tx.set_finalized_l1_block_number(3).await.unwrap();
-    tx.commit().await.unwrap();
+    database.set_finalized_l1_block_number(3).await.unwrap();
 
     // sleep 2 seconds (ethereum header timestamp has granularity of seconds and proceeding header
     // must have a greater timestamp than the last)
@@ -893,10 +871,8 @@ async fn should_limit_l1_message_cumulative_gas() {
     let provider = database.clone();
 
     // Set the latest and finalized block number
-    let tx = provider.tx_mut().await.unwrap();
-    tx.set_latest_l1_block_number(5).await.unwrap();
-    tx.set_finalized_l1_block_number(1).await.unwrap();
-    tx.commit().await.unwrap();
+    database.set_latest_l1_block_number(5).await.unwrap();
+    database.set_finalized_l1_block_number(1).await.unwrap();
 
     // create a sequencer
     let config = SequencerConfig {
@@ -944,11 +920,9 @@ async fn should_limit_l1_message_cumulative_gas() {
             },
         },
     ];
-    let tx = database.tx_mut().await.unwrap();
     for l1_message in l1_messages {
-        tx.insert_l1_message(l1_message).await.unwrap();
+        database.insert_l1_message(l1_message).await.unwrap();
     }
-    tx.commit().await.unwrap();
 
     // build payload, should only include first l1 message
     sequencer.start_payload_building(&mut engine).await.unwrap();

@@ -14,6 +14,6 @@ pub async fn setup_test_db() -> Database {
         .tempdir()
         .expect("failed to create temp dir");
     let db = Database::test(dir).await.unwrap();
-    Migrator::<ScrollDevMigrationInfo>::up(db.get_connection(), None).await.unwrap();
+    Migrator::<ScrollDevMigrationInfo>::up(db.inner().get_connection(), None).await.unwrap();
     db
 }

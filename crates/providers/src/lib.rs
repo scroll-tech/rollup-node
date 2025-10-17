@@ -4,9 +4,6 @@
 use alloy_provider::RootProvider;
 use scroll_alloy_network::Scroll;
 
-mod block;
-pub use block::BlockDataProvider;
-
 mod l1;
 pub use l1::{
     blob::{

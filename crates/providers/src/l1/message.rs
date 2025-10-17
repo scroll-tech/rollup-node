@@ -1,8 +1,7 @@
 use crate::L1ProviderError;
 
-use futures::{StreamExt, TryStreamExt};
 use rollup_node_primitives::L1MessageEnvelope;
-use scroll_db::{DatabaseError, DatabaseReadOperations, DatabaseTransactionProvider, L1MessageKey};
+use scroll_db::{DatabaseError, DatabaseReadOperations, L1MessageKey};
 
 /// An instance of the trait can provide L1 messages iterators.
 #[async_trait::async_trait]
@@ -30,7 +29,7 @@ pub trait L1MessageProvider: Send + Sync {
 #[async_trait::async_trait]
 impl<T> L1MessageProvider for T
 where
-    T: DatabaseTransactionProvider + Send + Sync,
+    T: DatabaseReadOperations + Send + Sync,
 {
     type Error = DatabaseError;
 
@@ -39,12 +38,6 @@ where
         start: L1MessageKey,
         n: u64,
     ) -> Result<Vec<L1MessageEnvelope>, Self::Error> {
-        let tx = self.tx().await?;
-        let messages = if let Some(stream) = tx.get_l1_messages(Some(start)).await? {
-            stream.take(n as usize).try_collect().await?
-        } else {
-            vec![]
-        };
-        Ok(messages)
+        self.get_n_l1_messages(Some(start), n as usize).await
     }
 }

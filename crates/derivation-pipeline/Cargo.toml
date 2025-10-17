@@ -26,7 +26,6 @@ scroll-codec.workspace = true
 scroll-db.workspace = true
 
 # misc
-async-trait = { workspace = true, optional = true }
 futures.workspace = true
 metrics.workspace = true
 metrics-derive.workspace = true
@@ -35,7 +34,6 @@ thiserror.workspace = true
 tracing.workspace = true
 
 [dev-dependencies]
-async-trait.workspace = true
 alloy-primitives = { workspace = true, features = ["getrandom"] }
 criterion = { package = "codspeed-criterion-compat", version = "4.0.2", features = ["async", "async_tokio"] }
 eyre.workspace = true
