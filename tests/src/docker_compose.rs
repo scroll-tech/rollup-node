@@ -329,6 +329,9 @@ impl DockerComposeEnv {
     // ===== CONTAINER CONTROL =====
 
     /// Stop a container
+    /// Note: When using stop/start in short succession there can be issues with the container not
+    /// being fully stopped before starting again. Consider using restart_container instead.
+    /// See: https://docs.docker.com/engine/reference/commandline/stop/#notes
     pub async fn stop_container(&self, provider: &NamedProvider) -> Result<()> {
         let service_name = provider.service_name;
         tracing::info!("🛑 Stopping container: {}", service_name);
@@ -341,6 +344,8 @@ impl DockerComposeEnv {
                 "-p",
                 &self.project_name,
                 "stop",
+                "--timeout",
+                "30",
                 service_name,
             ])
             .output()
@@ -406,6 +411,8 @@ impl DockerComposeEnv {
                 "-p",
                 &self.project_name,
                 "restart",
+                "--timeout",
+                "30",
                 service_name,
             ])
             .output()
