@@ -28,9 +28,7 @@ jobs:
       - uses: Swatinem/rust-cache@v2
         with:
           cache-on-failure: true
-      - uses: taiki-e/install-action@v2
-        with:
-          tool: nextest@0.9.98
+      - uses: taiki-e/install-action@nextest
       - name: Run unit tests
         run: cargo nextest run --all-features --workspace --locked -E '!kind(test)'
 
@@ -49,9 +47,7 @@ jobs:
       - uses: Swatinem/rust-cache@v2
         with:
           cache-on-failure: true
-      - uses: taiki-e/install-action@v2
-        with:
-          tool: nextest@0.9.98
+      - uses: taiki-e/install-action@nextest
       - name: Run integration tests
         run: |
           cargo nextest run --all-features --workspace --locked \
@@ -71,9 +67,7 @@ jobs:
       - uses: Swatinem/rust-cache@v2
         with:
           cache-on-failure: true
-      - uses: taiki-e/install-action@v2
-        with:
-          tool: nextest@0.9.98
+      - uses: taiki-e/install-action@nextest
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
       - name: Free up disk space
