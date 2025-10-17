@@ -24,7 +24,7 @@
     "systemContract": {
       "period": 1,
       "blocks_per_second": 2,
-      "system_contract_address": "0x55B150d210356452e4E79cCb6B778b4e1B167091",
+      "system_contract_address": "0x9fE46736679d2D9a65F0992F2272dE9f3c7fa6e0",
       "system_contract_slot": "0x0000000000000000000000000000000000000000000000000000000000000067"
     },
     "scroll": {
@@ -35,7 +35,7 @@
       "l1Config": {
         "l1ChainId": "22222222",
         "l1MessageQueueAddress": "0x0000000000000000000000000000000000000001",
-        "l1MessageQueueV2Address": "0x160dd98613ba6C6E0a14086a87cf36244558422E",
+        "l1MessageQueueV2Address": "0xDc64a140Aa3E981100a9becA4E685f962f0cF6C9",
         "l1MessageQueueV2DeploymentBlock": 0,
         "scrollChainAddress": "0x84044d3a645843bAF0752eA591E1EAB643beD904",
         "l2SystemConfigAddress": "0x2E48aC0df81f1fa57722e115e807C9dB1819bA13",

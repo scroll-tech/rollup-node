@@ -11,11 +11,18 @@ use tokio::{
 pub struct NamedProvider {
     pub provider: Box<dyn Provider<Scroll>>,
     pub name: &'static str,
+    pub service_name: &'static str,
+    pub rpc_url: &'static str,
 }
 
 impl NamedProvider {
-    pub fn new(provider: Box<dyn Provider<Scroll>>, name: &'static str) -> Self {
-        Self { provider, name }
+    pub fn new(
+        provider: Box<dyn Provider<Scroll>>,
+        name: &'static str,
+        service_name: &'static str,
+        rpc_url: &'static str,
+    ) -> Self {
+        Self { provider, name, service_name, rpc_url }
     }
 }
 
@@ -88,8 +95,8 @@ impl DockerComposeEnv {
                 project_name,
                 "up",
                 "-d",
-                "--force-recreate",
-                "--build",
+                "--force-recreate", // comment for for local testing and avoiding rebuilds
+                "--build",          // comment for for local testing and avoiding rebuilds
             ])
             .stdout(std::process::Stdio::piped())
             .stderr(std::process::Stdio::piped())
@@ -158,7 +165,12 @@ impl DockerComposeEnv {
             .connect(RN_SEQUENCER_RPC_URL)
             .await
             .map_err(|e| eyre::eyre!("Failed to connect to RN sequencer: {}", e))?;
-        Ok(NamedProvider::new(Box::new(provider), "RN Sequencer"))
+        Ok(NamedProvider::new(
+            Box::new(provider),
+            "RN Sequencer",
+            "rollup-node-sequencer",
+            RN_SEQUENCER_RPC_URL,
+        ))
     }
 
     /// Get a configured follower provider
@@ -168,7 +180,12 @@ impl DockerComposeEnv {
             .connect(RN_FOLLOWER_RPC_URL)
             .await
             .map_err(|e| eyre::eyre!("Failed to connect to RN follower: {}", e))?;
-        Ok(NamedProvider::new(Box::new(provider), "RN Follower"))
+        Ok(NamedProvider::new(
+            Box::new(provider),
+            "RN Follower",
+            "rollup-node-follower",
+            RN_FOLLOWER_RPC_URL,
+        ))
     }
 
     /// Get a configured l2geth sequencer provider
@@ -178,7 +195,12 @@ impl DockerComposeEnv {
             .connect(L2GETH_SEQUENCER_RPC_URL)
             .await
             .map_err(|e| eyre::eyre!("Failed to connect to l2geth sequencer: {}", e))?;
-        Ok(NamedProvider::new(Box::new(provider), "L2Geth Sequencer"))
+        Ok(NamedProvider::new(
+            Box::new(provider),
+            "L2Geth Sequencer",
+            "l2geth-sequencer",
+            L2GETH_SEQUENCER_RPC_URL,
+        ))
     }
 
     /// Get a configured l2geth follower provider
@@ -188,7 +210,12 @@ impl DockerComposeEnv {
             .connect(L2GETH_FOLLOWER_RPC_URL)
             .await
             .map_err(|e| eyre::eyre!("Failed to connect to l2geth follower: {}", e))?;
-        Ok(NamedProvider::new(Box::new(provider), "L2Geth Follower"))
+        Ok(NamedProvider::new(
+            Box::new(provider),
+            "L2Geth Follower",
+            "l2geth-follower",
+            L2GETH_FOLLOWER_RPC_URL,
+        ))
     }
 
     // ===== UTILITIES =====
@@ -297,6 +324,115 @@ impl DockerComposeEnv {
         }
 
         Ok(ip)
+    }
+
+    // ===== CONTAINER CONTROL =====
+
+    /// Stop a container
+    /// Note: When using stop/start in short succession there can be issues with the container not
+    /// being fully stopped before starting again. Consider using restart_container instead.
+    /// See: <https://docs.docker.com/engine/reference/commandline/stop/#notes>
+    pub async fn stop_container(&self, provider: &NamedProvider) -> Result<()> {
+        let service_name = provider.service_name;
+        tracing::info!("🛑 Stopping container: {}", service_name);
+
+        let output = Command::new("docker")
+            .args([
+                "compose",
+                "-f",
+                &self.compose_file,
+                "-p",
+                &self.project_name,
+                "stop",
+                "--timeout",
+                "30",
+                service_name,
+            ])
+            .output()
+            .map_err(|e| eyre::eyre!("Failed to run docker compose stop: {}", e))?;
+
+        if !output.status.success() {
+            return Err(eyre::eyre!(
+                "Failed to stop container {}: {}",
+                service_name,
+                String::from_utf8_lossy(&output.stderr)
+            ));
+        }
+
+        tracing::info!("✅ Stopped container: {}", service_name);
+        Ok(())
+    }
+
+    /// Start a container
+    pub async fn start_container(&self, provider: &NamedProvider) -> Result<()> {
+        let service_name = provider.service_name;
+        tracing::info!("▶️  Starting container: {}", service_name);
+
+        let output = Command::new("docker")
+            .args([
+                "compose",
+                "-f",
+                &self.compose_file,
+                "-p",
+                &self.project_name,
+                "start",
+                service_name,
+            ])
+            .output()
+            .map_err(|e| eyre::eyre!("Failed to run docker compose start: {}", e))?;
+
+        if !output.status.success() {
+            return Err(eyre::eyre!(
+                "Failed to start container {}: {}",
+                service_name,
+                String::from_utf8_lossy(&output.stderr)
+            ));
+        }
+
+        tracing::info!("✅ Started container: {}", service_name);
+
+        Self::wait_for_l2_node_ready(provider.rpc_url, 5).await.map_err(|e| {
+            eyre::eyre!("Container {} did not become ready after start: {}", service_name, e)
+        })?;
+
+        Ok(())
+    }
+
+    /// Restart a container
+    pub async fn restart_container(&self, provider: &NamedProvider) -> Result<()> {
+        let service_name = provider.service_name;
+        tracing::info!("🔄 Restarting container: {}", service_name);
+
+        let output = Command::new("docker")
+            .args([
+                "compose",
+                "-f",
+                &self.compose_file,
+                "-p",
+                &self.project_name,
+                "restart",
+                "--timeout",
+                "30",
+                service_name,
+            ])
+            .output()
+            .map_err(|e| eyre::eyre!("Failed to run docker compose restart: {}", e))?;
+
+        if !output.status.success() {
+            return Err(eyre::eyre!(
+                "Failed to restart container {}: {}",
+                service_name,
+                String::from_utf8_lossy(&output.stderr)
+            ));
+        }
+
+        tracing::info!("✅ Restarted container: {}", service_name);
+
+        Self::wait_for_l2_node_ready(provider.rpc_url, 30).await.map_err(|e| {
+            eyre::eyre!("Container {} did not become ready after start: {}", service_name, e)
+        })?;
+
+        Ok(())
     }
 
     /// Get the rollup node sequencer enode URL with resolved IP address

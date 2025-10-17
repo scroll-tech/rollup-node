@@ -77,8 +77,11 @@ async fn docker_test_heterogeneous_client_sync_and_sequencer_handoff() -> Result
         utils::run_continuous_tx_sender(stop_clone, &[&rn_follower_clone, &l2geth_follower_clone])
             .await
     });
+    let stop_clone = stop.clone();
+    let l1_message_sender =
+        tokio::spawn(async move { utils::run_continuous_l1_message_sender(stop_clone).await });
 
-    tracing::info!("🔄 Started continuous transaction sender for entire test");
+    tracing::info!("🔄 Started continuous L1 message and L2 transaction sender for entire test");
 
     // Wait for at least 10 blocks to be produced
     let target_block = 10;
@@ -121,6 +124,24 @@ async fn docker_test_heterogeneous_client_sync_and_sequencer_handoff() -> Result
     tracing::info!("Enabling sequencing on RN sequencer");
     utils::enable_automatic_sequencing(&rn_sequencer).await?;
     let target_block = latest_block + 10;
+
+    // restart RN follower to test it can recover its state after a restart
+    tracing::info!("Restarting RN follower");
+    utils::admin_remove_peer(&rn_follower, &env.l2geth_sequencer_enode()?).await?;
+    let latest_block_before_restart = rn_follower.get_block_number().await?;
+    let chain_status_before_restart = utils::rollup_node_status(&rn_follower).await?;
+    env.restart_container(&rn_follower).await?;
+    let rn_follower = env.get_rn_follower_provider().await?; // without this line rn_follower isn't always reachable after restart
+    utils::assert_latest_block(&[&rn_follower], latest_block_before_restart).await?;
+    let chain_status_after_restart = utils::rollup_node_status(&rn_follower).await?;
+    assert!(
+        chain_status_after_restart.l2 == chain_status_before_restart.l2,
+        "L2 Chain status after restart does not match the one before restart {:?} != {:?}",
+        chain_status_after_restart.l2,
+        chain_status_before_restart.l2
+    );
+    utils::admin_add_peer(&rn_follower, &env.l2geth_sequencer_enode()?).await?;
+
     utils::wait_for_block(&nodes, target_block).await?;
 
     utils::disable_automatic_sequencing(&rn_sequencer).await?;
@@ -156,6 +177,24 @@ async fn docker_test_heterogeneous_client_sync_and_sequencer_handoff() -> Result
         l2geth_follower.get_block_number().await?
     );
 
+    // restart RN sequencer to test it can recover its state after a restart
+    tracing::info!("Restarting RN sequencer");
+    utils::disable_automatic_sequencing(&rn_sequencer).await?;
+    let latest_block_before_restart = rn_sequencer.get_block_number().await?;
+    let chain_status_before_restart = utils::rollup_node_status(&rn_sequencer).await?;
+    env.stop_container(&rn_sequencer).await?;
+    env.start_container(&rn_sequencer).await?;
+    utils::assert_latest_block(&[&rn_sequencer], latest_block_before_restart).await?;
+    let chain_status_after_restart = utils::rollup_node_status(&rn_sequencer).await?;
+    assert!(
+        chain_status_after_restart.l2 == chain_status_before_restart.l2,
+        "L2 Chain status after restart does not match the one before restart {:?} != {:?}",
+        chain_status_after_restart.l2,
+        chain_status_before_restart.l2
+    );
+    utils::admin_add_peer(&rn_follower, &env.rn_sequencer_enode()?).await?;
+    utils::enable_automatic_sequencing(&rn_sequencer).await?;
+
     // Reconnect l2geth follower to l2geth sequencer and let them sync
     // topology:
     //  rn_follower -> rn_sequencer
@@ -183,7 +222,13 @@ async fn docker_test_heterogeneous_client_sync_and_sequencer_handoff() -> Result
     utils::wait_for_block(&nodes, target_block).await?;
     assert_blocks_match(&nodes, target_block).await?;
 
-    utils::stop_continuous_tx_sender(stop, tx_sender).await?;
+    utils::stop_continuous_tx_sender(stop.clone(), tx_sender).await?;
+    utils::stop_continuous_l1_message_sender(stop, l1_message_sender).await?;
+
+    // Make sure l1 message queue is processed on all l2geth nodes
+    let q = utils::get_l1_message_index_at_finalized().await?;
+    utils::wait_for_l1_message_queue_index_reached(&[&l2geth_sequencer, &l2geth_follower], q)
+        .await?;
 
     Ok(())
 }

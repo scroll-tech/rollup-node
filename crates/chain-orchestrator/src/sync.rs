@@ -42,7 +42,7 @@ impl SyncState {
 }
 
 /// The sync mode of the chain orchestrator.
-#[derive(Debug, Default, Clone)]
+#[derive(Debug, Default, Clone, PartialEq, Eq)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub enum SyncMode {
     /// Syncing mode.
