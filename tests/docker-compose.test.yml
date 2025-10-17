@@ -1,6 +1,6 @@
 services:
   l1-node:
-    image: ghcr.io/foundry-rs/foundry:latest
+    image: ghcr.io/foundry-rs/foundry:v1.2.3
     entrypoint: ["bash", "/launch_l1.bash"]
     ports:
       - "8544:8545"
