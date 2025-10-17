@@ -657,7 +657,7 @@ pub struct SequencerArgs {
         long = "sequencer.l1-inclusion-mode",
         id = "sequencer_l1_inclusion_mode",
         value_name = "MODE",
-        default_value = "finalized",
+        default_value = "finalized:2",
         help = "L1 message inclusion mode. Use 'finalized' for finalized messages only, or 'depth:{number}' for block depth confirmation (e.g. 'depth:10')"
     )]
     pub l1_message_inclusion_mode: L1MessageInclusionMode,
