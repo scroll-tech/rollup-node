@@ -89,4 +89,7 @@ pub enum ChainOrchestratorError {
         /// The derived block number.
         derived_block_number: u64,
     },
+    /// An error occurred while handling rollup node primitives.
+    #[error("An error occurred while handling rollup node primitives: {0}")]
+    RollupNodePrimitiveError(rollup_node_primitives::RollupNodePrimitiveError),
 }

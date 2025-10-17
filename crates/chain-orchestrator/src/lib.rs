@@ -4,12 +4,11 @@
 use alloy_eips::Encodable2718;
 use alloy_primitives::{b256, bytes::Bytes, keccak256, B256};
 use alloy_provider::Provider;
-use alloy_rpc_types_engine::ExecutionData;
+use alloy_rpc_types_engine::ExecutionPayloadV1;
 use futures::StreamExt;
 use reth_chainspec::EthChainSpec;
 use reth_network_api::{BlockDownloaderProvider, FullNetwork};
 use reth_network_p2p::FullBlockClient;
-use reth_scroll_engine_primitives::try_into_block;
 use reth_scroll_node::ScrollNetworkPrimitives;
 use reth_scroll_primitives::ScrollBlock;
 use reth_tasks::shutdown::Shutdown;
@@ -442,22 +441,19 @@ impl<
                         .engine
                         .get_payload(fcu.payload_id.expect("payload_id can not be None"))
                         .await?;
-                    let block: ScrollBlock = try_into_block(
-                        ExecutionData { payload: payload.into(), sidecar: Default::default() },
-                        self.config.chain_spec().clone(),
-                    )
-                    .expect("block must be valid");
 
-                    let result = self.engine.new_payload(&block).await?;
+                    let block_info: L2BlockInfoWithL1Messages = (&payload)
+                        .try_into()
+                        .map_err(ChainOrchestratorError::RollupNodePrimitiveError)?;
+                    let result = self.engine.new_payload(payload).await?;
                     if result.is_invalid() {
                         return Err(ChainOrchestratorError::InvalidBatch(
-                            (&block).into(),
+                            block_info.block_info,
                             batch_info,
                         ));
                     }
 
                     // Update the forkchoice state to the new head.
-                    let block_info: L2BlockInfoWithL1Messages = (&block).into();
                     self.engine
                         .update_fcs(
                             Some(block_info.block_info),
@@ -1034,7 +1030,8 @@ impl<
 
         // Validate the new blocks by sending them to the engine.
         for block in &chain {
-            let status = self.engine.new_payload(block).await?;
+            let payload = ExecutionPayloadV1::from_block_slow(block);
+            let status = self.engine.new_payload(payload).await?;
             tracing::debug!(target: "scroll::chain_orchestrator", block_number = block.number, block_hash = ?block.hash_slow(), ?status, "New payload status from engine");
 
             if status.is_invalid() {
