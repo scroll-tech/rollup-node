@@ -67,3 +67,14 @@ arbitrary = [
     "alloy-chains/arbitrary",
     "reth-chainspec/arbitrary",
 ]
+serde = [
+    "alloy-chains/serde",
+    "alloy-consensus/serde",
+    "alloy-eips/serde",
+    "alloy-primitives/serde",
+    "alloy-rpc-types-engine/serde",
+    "reth-primitives-traits/serde",
+    "reth-scroll-primitives/serde",
+    "scroll-alloy-consensus/serde",
+    "scroll-alloy-rpc-types-engine/serde",
+]
