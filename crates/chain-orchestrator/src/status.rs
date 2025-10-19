@@ -2,7 +2,7 @@ use crate::sync::{SyncMode, SyncState};
 use scroll_engine::ForkchoiceState;
 
 /// The current status of the chain orchestrator.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct ChainOrchestratorStatus {
     /// The chain status for L1.
@@ -33,7 +33,7 @@ impl ChainOrchestratorStatus {
 }
 
 /// The status of the L1 chain.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct L1ChainStatus {
     /// The sync mode of the chain.
@@ -47,7 +47,7 @@ pub struct L1ChainStatus {
 }
 
 /// The status of the L2 chain.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct L2ChainStatus {
     /// The sync mode of the chain.
