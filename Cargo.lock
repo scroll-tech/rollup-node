@@ -11612,7 +11612,6 @@ dependencies = [
 name = "scroll-db"
 version = "0.0.1"
 dependencies = [
- "alloy-eips 1.0.30",
  "alloy-primitives",
  "arbitrary",
  "async-trait",
@@ -11640,7 +11639,6 @@ dependencies = [
  "alloy-eips 1.0.30",
  "alloy-primitives",
  "alloy-rpc-types-engine 1.0.30",
- "async-trait",
  "codspeed-criterion-compat",
  "eyre",
  "futures",
@@ -12853,10 +12851,13 @@ dependencies = [
  "alloy-primitives",
  "alloy-provider",
  "alloy-rpc-types-eth",
+ "alloy-signer-local",
+ "alloy-sol-types",
  "eyre",
  "getrandom 0.2.16",
  "reth-e2e-test-utils",
  "reth-tracing",
+ "rollup-node-chain-orchestrator",
  "scroll-alloy-network",
  "serde",
  "serde_json",
