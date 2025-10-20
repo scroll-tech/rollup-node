@@ -1,7 +1,7 @@
 use super::transaction::{DatabaseTransactionProvider, TXMut, TX};
 use crate::{
     error::DatabaseError,
-    metrics::DatabaseMetrics,
+    metrics::{DatabaseMetrics, DatabaseOperation, DatabaseOperationMetrics},
     service::{query::DatabaseQuery, retry::Retry, DatabaseService, DatabaseServiceError},
     DatabaseConnectionProvider, DatabaseReadOperations, DatabaseWriteOperations, L1MessageKey,
     UnwindResult,
@@ -16,7 +16,10 @@ use sea_orm::{
     sqlx::sqlite::{SqliteConnectOptions, SqlitePoolOptions},
     DatabaseConnection, SqlxSqliteConnector, TransactionTrait,
 };
-use std::{fmt::Debug, future::Future, str::FromStr, sync::Arc, time::Duration};
+use std::{
+    collections::HashMap, fmt::Debug, future::Future, str::FromStr, sync::Arc, time::Duration,
+};
+use strum::IntoEnumIterator;
 use tokio::sync::{Mutex, Semaphore};
 
 // TODO: make these configurable via CLI.
@@ -36,13 +39,23 @@ const ACQUIRE_TIMEOUT_SECS: u64 = 5;
 #[derive(Debug)]
 pub struct Database {
     database: Retry<Arc<DatabaseInner>>,
+    metrics: HashMap<DatabaseOperation, DatabaseOperationMetrics>,
 }
 
 impl Database {
     /// Creates a new [`Database`] instance associated with the provided database URL.
     pub async fn new(database_url: &str) -> Result<Self, DatabaseError> {
         let db = Arc::new(DatabaseInner::new(database_url).await?);
-        Ok(Self { database: Retry::new_with_default_config(db) })
+        Ok(Self { database: Retry::new_with_default_config(db), metrics: Self::metrics() })
+    }
+
+    fn metrics() -> HashMap<DatabaseOperation, DatabaseOperationMetrics> {
+        DatabaseOperation::iter()
+            .map(|i| {
+                let label = i.as_str();
+                (i, DatabaseOperationMetrics::new_with_labels(&[("item", label)]))
+            })
+            .collect()
     }
 
     /// Creates a new [`Database`] instance with SQLite-specific optimizations and custom pool
@@ -64,7 +77,7 @@ impl Database {
             )
             .await?,
         );
-        Ok(Self { database: Retry::new_with_default_config(db) })
+        Ok(Self { database: Retry::new_with_default_config(db), metrics: Self::metrics() })
     }
 
     /// Creates a new [`Database`] instance for testing purposes, using the provided temporary
@@ -72,7 +85,7 @@ impl Database {
     #[cfg(feature = "test-utils")]
     pub async fn test(dir: tempfile::TempDir) -> Result<Self, DatabaseError> {
         let db = Arc::new(DatabaseInner::test(dir).await?);
-        Ok(Self { database: Retry::new_with_default_config(db) })
+        Ok(Self { database: Retry::new_with_default_config(db), metrics: HashMap::new() })
     }
 
     /// Returns a reference to the database tmp dir.
@@ -113,14 +126,28 @@ impl Database {
     }
 }
 
+/// Wraps a future, metering the completion of it.
+macro_rules! metered {
+    ($task:expr, $this: ident, $method:ident($($args:expr),*)) => {{
+        let metric = $this.metrics.get(&$task).expect("metric exists").clone();
+        let now = std::time::Instant::now();
+        let res = $this.$method($($args),*).await;
+        metric.task_duration.record(now.elapsed().as_secs_f64());
+        res
+    }};
+}
+
 #[async_trait::async_trait]
 impl DatabaseWriteOperations for Database {
     async fn insert_batch(&self, batch_commit: BatchCommitData) -> Result<(), DatabaseError> {
-        self.tx_mut(move |tx| {
-            let batch_commit = batch_commit.clone();
-            async move { tx.insert_batch(batch_commit).await }
-        })
-        .await
+        metered!(
+            DatabaseOperation::InsertBatch,
+            self,
+            tx_mut(move |tx| {
+                let batch_commit = batch_commit.clone();
+                async move { tx.insert_batch(batch_commit).await }
+            })
+        )
     }
 
     async fn finalize_batches_up_to_index(
@@ -128,94 +155,136 @@ impl DatabaseWriteOperations for Database {
         batch_index: u64,
         block_number: u64,
     ) -> Result<(), DatabaseError> {
-        self.tx_mut(move |tx| async move {
-            tx.finalize_batches_up_to_index(batch_index, block_number).await
-        })
-        .await
+        metered!(
+            DatabaseOperation::FinalizeBatchesUpToIndex,
+            self,
+            tx_mut(move |tx| async move {
+                tx.finalize_batches_up_to_index(batch_index, block_number).await
+            })
+        )
     }
 
     async fn set_latest_l1_block_number(&self, block_number: u64) -> Result<(), DatabaseError> {
-        self.tx_mut(move |tx| async move { tx.set_latest_l1_block_number(block_number).await })
-            .await
+        metered!(
+            DatabaseOperation::SetLatestL1BlockNumber,
+            self,
+            tx_mut(move |tx| async move { tx.set_latest_l1_block_number(block_number).await })
+        )
     }
 
     async fn set_finalized_l1_block_number(&self, block_number: u64) -> Result<(), DatabaseError> {
-        self.tx_mut(move |tx| async move { tx.set_finalized_l1_block_number(block_number).await })
-            .await
+        metered!(
+            DatabaseOperation::SetFinalizedL1BlockNumber,
+            self,
+            tx_mut(move |tx| async move { tx.set_finalized_l1_block_number(block_number).await })
+        )
     }
 
     async fn set_processed_l1_block_number(&self, block_number: u64) -> Result<(), DatabaseError> {
-        self.tx_mut(move |tx| async move { tx.set_processed_l1_block_number(block_number).await })
-            .await
+        metered!(
+            DatabaseOperation::SetProcessedL1BlockNumber,
+            self,
+            tx_mut(move |tx| async move { tx.set_processed_l1_block_number(block_number).await })
+        )
     }
 
     async fn set_l2_head_block_number(&self, number: u64) -> Result<(), DatabaseError> {
-        self.tx_mut(move |tx| async move { tx.set_l2_head_block_number(number).await }).await
+        metered!(
+            DatabaseOperation::SetL2HeadBlockNumber,
+            self,
+            tx_mut(move |tx| async move { tx.set_l2_head_block_number(number).await })
+        )
     }
 
     async fn fetch_and_update_unprocessed_finalized_batches(
         &self,
         finalized_l1_block_number: u64,
     ) -> Result<Vec<BatchInfo>, DatabaseError> {
-        self.tx_mut(move |tx| async move {
-            tx.fetch_and_update_unprocessed_finalized_batches(finalized_l1_block_number).await
-        })
-        .await
+        metered!(
+            DatabaseOperation::FetchAndUpdateUnprocessedFinalizedBatches,
+            self,
+            tx_mut(move |tx| async move {
+                tx.fetch_and_update_unprocessed_finalized_batches(finalized_l1_block_number).await
+            })
+        )
     }
 
     async fn delete_batches_gt_block_number(
         &self,
         block_number: u64,
     ) -> Result<u64, DatabaseError> {
-        self.tx_mut(
-            move |tx| async move { tx.delete_l2_blocks_gt_block_number(block_number).await },
+        metered!(
+            DatabaseOperation::DeleteBatchesGtBlockNumber,
+            self,
+            tx_mut(
+                move |tx| async move { tx.delete_l2_blocks_gt_block_number(block_number).await }
+            )
         )
-        .await
     }
 
     async fn delete_batches_gt_batch_index(&self, batch_index: u64) -> Result<u64, DatabaseError> {
-        self.tx_mut(move |tx| async move { tx.delete_batches_gt_batch_index(batch_index).await })
-            .await
+        metered!(
+            DatabaseOperation::DeleteBatchesGtBatchIndex,
+            self,
+            tx_mut(move |tx| async move { tx.delete_batches_gt_batch_index(batch_index).await })
+        )
     }
 
     async fn insert_l1_message(&self, l1_message: L1MessageEnvelope) -> Result<(), DatabaseError> {
-        self.tx_mut(move |tx| {
-            let l1_message = l1_message.clone();
-            async move { tx.insert_l1_message(l1_message).await }
-        })
-        .await
+        metered!(
+            DatabaseOperation::InsertL1Message,
+            self,
+            tx_mut(move |tx| {
+                let l1_message = l1_message.clone();
+                async move { tx.insert_l1_message(l1_message).await }
+            })
+        )
     }
 
     async fn delete_l1_messages_gt(
         &self,
         l1_block_number: u64,
     ) -> Result<Vec<L1MessageEnvelope>, DatabaseError> {
-        self.tx_mut(move |tx| async move { tx.delete_l1_messages_gt(l1_block_number).await }).await
+        metered!(
+            DatabaseOperation::DeleteL1MessagesGt,
+            self,
+            tx_mut(move |tx| async move { tx.delete_l1_messages_gt(l1_block_number).await })
+        )
     }
 
     async fn prepare_on_startup(
         &self,
         genesis_hash: B256,
     ) -> Result<(Option<BlockInfo>, Option<u64>), DatabaseError> {
-        self.tx_mut(move |tx| async move { tx.prepare_on_startup(genesis_hash).await }).await
+        metered!(
+            DatabaseOperation::PrepareOnStartup,
+            self,
+            tx_mut(move |tx| async move { tx.prepare_on_startup(genesis_hash).await })
+        )
     }
 
     async fn delete_l2_blocks_gt_block_number(
         &self,
         block_number: u64,
     ) -> Result<u64, DatabaseError> {
-        self.tx_mut(
-            move |tx| async move { tx.delete_l2_blocks_gt_block_number(block_number).await },
+        metered!(
+            DatabaseOperation::DeleteL2BlocksGtBlockNumber,
+            self,
+            tx_mut(
+                move |tx| async move { tx.delete_l2_blocks_gt_block_number(block_number).await }
+            )
         )
-        .await
     }
 
     async fn delete_l2_blocks_gt_batch_index(
         &self,
         batch_index: u64,
     ) -> Result<u64, DatabaseError> {
-        self.tx_mut(move |tx| async move { tx.delete_l2_blocks_gt_batch_index(batch_index).await })
-            .await
+        metered!(
+            DatabaseOperation::DeleteL2BlocksGtBatchIndex,
+            self,
+            tx_mut(move |tx| async move { tx.delete_l2_blocks_gt_batch_index(batch_index).await })
+        )
     }
 
     async fn insert_blocks(
@@ -223,11 +292,14 @@ impl DatabaseWriteOperations for Database {
         blocks: Vec<BlockInfo>,
         batch_info: BatchInfo,
     ) -> Result<(), DatabaseError> {
-        self.tx_mut(move |tx| {
-            let blocks = blocks.clone();
-            async move { tx.insert_blocks(blocks, batch_info).await }
-        })
-        .await
+        metered!(
+            DatabaseOperation::InsertBlocks,
+            self,
+            tx_mut(move |tx| {
+                let blocks = blocks.clone();
+                async move { tx.insert_blocks(blocks, batch_info).await }
+            })
+        )
     }
 
     async fn insert_block(
@@ -235,54 +307,74 @@ impl DatabaseWriteOperations for Database {
         block_info: BlockInfo,
         batch_info: BatchInfo,
     ) -> Result<(), DatabaseError> {
-        self.tx_mut(move |tx| async move { tx.insert_block(block_info, batch_info).await }).await
+        metered!(
+            DatabaseOperation::InsertBlock,
+            self,
+            tx_mut(move |tx| async move { tx.insert_block(block_info, batch_info).await })
+        )
     }
 
     async fn insert_genesis_block(&self, genesis_hash: B256) -> Result<(), DatabaseError> {
-        self.tx_mut(move |tx| async move { tx.insert_genesis_block(genesis_hash).await }).await
+        metered!(
+            DatabaseOperation::InsertGenesisBlock,
+            self,
+            tx_mut(move |tx| async move { tx.insert_genesis_block(genesis_hash).await })
+        )
     }
 
     async fn update_l1_messages_from_l2_blocks(
         &self,
         blocks: Vec<L2BlockInfoWithL1Messages>,
     ) -> Result<(), DatabaseError> {
-        self.tx_mut(move |tx| {
-            let blocks = blocks.clone();
-            async move { tx.update_l1_messages_from_l2_blocks(blocks).await }
-        })
-        .await
+        metered!(
+            DatabaseOperation::UpdateL1MessagesFromL2Blocks,
+            self,
+            tx_mut(move |tx| {
+                let blocks = blocks.clone();
+                async move { tx.update_l1_messages_from_l2_blocks(blocks).await }
+            })
+        )
     }
 
     async fn update_l1_messages_with_l2_block(
         &self,
         block_info: L2BlockInfoWithL1Messages,
     ) -> Result<(), DatabaseError> {
-        self.tx_mut(move |tx| {
-            let block_info = block_info.clone();
-            async move { tx.update_l1_messages_with_l2_block(block_info).await }
-        })
-        .await
+        metered!(
+            DatabaseOperation::UpdateL1MessagesWithL2Block,
+            self,
+            tx_mut(move |tx| {
+                let block_info = block_info.clone();
+                async move { tx.update_l1_messages_with_l2_block(block_info).await }
+            })
+        )
     }
 
     async fn purge_l1_message_to_l2_block_mappings(
         &self,
         block_number: Option<u64>,
     ) -> Result<(), DatabaseError> {
-        self.tx_mut(move |tx| async move {
-            tx.purge_l1_message_to_l2_block_mappings(block_number).await
-        })
-        .await
+        metered!(
+            DatabaseOperation::PurgeL1MessageToL2BlockMappings,
+            self,
+            tx_mut(move |tx| async move {
+                tx.purge_l1_message_to_l2_block_mappings(block_number).await
+            })
+        )
     }
 
     async fn insert_batch_consolidation_outcome(
         &self,
         outcome: BatchConsolidationOutcome,
     ) -> Result<(), DatabaseError> {
-        self.tx_mut(move |tx| {
-            let outcome = outcome.clone();
-            async move { tx.insert_batch_consolidation_outcome(outcome).await }
-        })
-        .await
+        metered!(
+            DatabaseOperation::InsertBatchConsolidationOutcome,
+            self,
+            tx_mut(move |tx| {
+                let outcome = outcome.clone();
+                async move { tx.insert_batch_consolidation_outcome(outcome).await }
+            })
+        )
     }
 
     async fn unwind(
@@ -290,7 +382,11 @@ impl DatabaseWriteOperations for Database {
         genesis_hash: B256,
         l1_block_number: u64,
     ) -> Result<UnwindResult, DatabaseError> {
-        self.tx_mut(move |tx| async move { tx.unwind(genesis_hash, l1_block_number).await }).await
+        metered!(
+            DatabaseOperation::Unwind,
+            self,
+            tx_mut(move |tx| async move { tx.unwind(genesis_hash, l1_block_number).await })
+        )
     }
 
     async fn insert_signature(
@@ -298,7 +394,11 @@ impl DatabaseWriteOperations for Database {
         block_hash: B256,
         signature: Signature,
     ) -> Result<(), DatabaseError> {
-        self.tx_mut(move |tx| async move { tx.insert_signature(block_hash, signature).await }).await
+        metered!(
+            DatabaseOperation::InsertSignature,
+            self,
+            tx_mut(move |tx| async move { tx.insert_signature(block_hash, signature).await })
+        )
     }
 }
 
@@ -308,23 +408,43 @@ impl DatabaseReadOperations for Database {
         &self,
         batch_index: u64,
     ) -> Result<Option<BatchCommitData>, DatabaseError> {
-        self.tx(move |tx| async move { tx.get_batch_by_index(batch_index).await }).await
+        metered!(
+            DatabaseOperation::GetBatchByIndex,
+            self,
+            tx(move |tx| async move { tx.get_batch_by_index(batch_index).await })
+        )
     }
 
     async fn get_latest_l1_block_number(&self) -> Result<u64, DatabaseError> {
-        self.tx(|tx| async move { tx.get_latest_l1_block_number().await }).await
+        metered!(
+            DatabaseOperation::GetLatestL1BlockNumber,
+            self,
+            tx(|tx| async move { tx.get_latest_l1_block_number().await })
+        )
     }
 
     async fn get_finalized_l1_block_number(&self) -> Result<u64, DatabaseError> {
-        self.tx(|tx| async move { tx.get_finalized_l1_block_number().await }).await
+        metered!(
+            DatabaseOperation::GetFinalizedL1BlockNumber,
+            self,
+            tx(|tx| async move { tx.get_finalized_l1_block_number().await })
+        )
     }
 
     async fn get_processed_l1_block_number(&self) -> Result<u64, DatabaseError> {
-        self.tx(|tx| async move { tx.get_processed_l1_block_number().await }).await
+        metered!(
+            DatabaseOperation::GetProcessedL1BlockNumber,
+            self,
+            tx(|tx| async move { tx.get_processed_l1_block_number().await })
+        )
     }
 
     async fn get_l2_head_block_number(&self) -> Result<u64, DatabaseError> {
-        self.tx(|tx| async move { tx.get_l2_head_block_number().await }).await
+        metered!(
+            DatabaseOperation::GetL2HeadBlockNumber,
+            self,
+            tx(|tx| async move { tx.get_l2_head_block_number().await })
+        )
     }
 
     async fn get_n_l1_messages(
@@ -332,11 +452,14 @@ impl DatabaseReadOperations for Database {
         start: Option<L1MessageKey>,
         n: usize,
     ) -> Result<Vec<L1MessageEnvelope>, DatabaseError> {
-        self.tx(move |tx| {
-            let start = start.clone();
-            async move { tx.get_n_l1_messages(start, n).await }
-        })
-        .await
+        metered!(
+            DatabaseOperation::GetNL1Messages,
+            self,
+            tx(move |tx| {
+                let start = start.clone();
+                async move { tx.get_n_l1_messages(start, n).await }
+            })
+        )
     }
 
     async fn get_n_l2_block_data_hint(
@@ -344,48 +467,73 @@ impl DatabaseReadOperations for Database {
         block_number: u64,
         n: usize,
     ) -> Result<Vec<BlockDataHint>, DatabaseError> {
-        self.tx(move |tx| async move { tx.get_n_l2_block_data_hint(block_number, n).await }).await
+        metered!(
+            DatabaseOperation::GetNL2BlockDataHint,
+            self,
+            tx(move |tx| async move { tx.get_n_l2_block_data_hint(block_number, n).await })
+        )
     }
 
     async fn get_l2_block_and_batch_info_by_hash(
         &self,
         block_hash: B256,
     ) -> Result<Option<(BlockInfo, BatchInfo)>, DatabaseError> {
-        self.tx(move |tx| async move { tx.get_l2_block_and_batch_info_by_hash(block_hash).await })
-            .await
+        metered!(
+            DatabaseOperation::GetL2BlockAndBatchInfoByHash,
+            self,
+            tx(move |tx| async move { tx.get_l2_block_and_batch_info_by_hash(block_hash).await })
+        )
     }
 
     async fn get_l2_block_info_by_number(
         &self,
         block_number: u64,
     ) -> Result<Option<BlockInfo>, DatabaseError> {
-        self.tx(move |tx| async move { tx.get_l2_block_info_by_number(block_number).await }).await
+        metered!(
+            DatabaseOperation::GetL2BlockInfoByNumber,
+            self,
+            tx(move |tx| async move { tx.get_l2_block_info_by_number(block_number).await })
+        )
     }
 
     async fn get_latest_safe_l2_info(
         &self,
     ) -> Result<Option<(BlockInfo, BatchInfo)>, DatabaseError> {
-        self.tx(|tx| async move { tx.get_latest_safe_l2_info().await }).await
+        metered!(
+            DatabaseOperation::GetLatestSafeL2Info,
+            self,
+            tx(|tx| async move { tx.get_latest_safe_l2_info().await })
+        )
     }
 
     async fn get_highest_block_for_batch_hash(
         &self,
         batch_hash: B256,
     ) -> Result<Option<BlockInfo>, DatabaseError> {
-        self.tx(move |tx| async move { tx.get_highest_block_for_batch_hash(batch_hash).await })
-            .await
+        metered!(
+            DatabaseOperation::GetHighestBlockForBatchHash,
+            self,
+            tx(move |tx| async move { tx.get_highest_block_for_batch_hash(batch_hash).await })
+        )
     }
 
     async fn get_highest_block_for_batch_index(
         &self,
         batch_index: u64,
     ) -> Result<Option<BlockInfo>, DatabaseError> {
-        self.tx(move |tx| async move { tx.get_highest_block_for_batch_index(batch_index).await })
-            .await
+        metered!(
+            DatabaseOperation::GetHighestBlockForBatchIndex,
+            self,
+            tx(move |tx| async move { tx.get_highest_block_for_batch_index(batch_index).await })
+        )
     }
 
     async fn get_signature(&self, block_hash: B256) -> Result<Option<Signature>, DatabaseError> {
-        self.tx(move |tx| async move { tx.get_signature(block_hash).await }).await
+        metered!(
+            DatabaseOperation::GetSignature,
+            self,
+            tx(move |tx| async move { tx.get_signature(block_hash).await })
+        )
     }
 }
 
@@ -482,8 +630,12 @@ impl DatabaseTransactionProvider for DatabaseInner {
     /// Creates a new [`TX`] which can be used for read-only operations.
     async fn tx(&self) -> Result<TX, DatabaseError> {
         tracing::trace!(target: "scroll::db", "Creating new read-only transaction");
+        let now = std::time::Instant::now();
         let permit = self.read_locks.clone().acquire_owned().await.unwrap();
-        Ok(TX::new(self.connection.clone().begin().await?, permit))
+        let tx = TX::new(self.connection.clone().begin().await?, permit);
+        let duration = now.elapsed().as_millis() as f64;
+        self.metrics.read_lock_acquire_duration.record(duration);
+        Ok(tx)
     }
 
     /// Creates a new [`TXMut`] which can be used for atomic read and write operations.
@@ -493,7 +645,7 @@ impl DatabaseTransactionProvider for DatabaseInner {
         let guard = self.write_lock.clone().lock_owned().await;
         let tx_mut = TXMut::new(self.connection.clone().begin().await?, guard);
         let duration = now.elapsed().as_millis() as f64;
-        self.metrics.lock_acquire_duration.record(duration);
+        self.metrics.write_lock_acquire_duration.record(duration);
         tracing::trace!(target: "scroll::db", "Acquired write lock in {} ms", duration);
         Ok(tx_mut)
     }

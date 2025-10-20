@@ -54,7 +54,7 @@ futures.workspace = true
 metrics.workspace = true
 metrics-derive.workspace = true
 serde = { workspace = true, optional = true, features = ["derive"] }
-strum = "0.27.1"
+strum.workspace = true
 thiserror.workspace = true
 tokio = { workspace = true, features = ["full"] }
 tokio-stream.workspace = true
