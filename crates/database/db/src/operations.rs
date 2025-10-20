@@ -757,6 +757,23 @@ impl<T: ReadConnectionProvider + Sync + ?Sized> DatabaseReadOperations for T {
         start: Option<L1MessageKey>,
         n: usize,
     ) -> Result<Vec<L1MessageEnvelope>, DatabaseError> {
+        // function that returns the queue index of the L1 message after the last included L1
+        // message.
+        let next_l1_message_queue_index = async || {
+            Ok::<i64, DatabaseError>(
+                models::l1_message::Entity::find()
+                    .select_only()
+                    .filter(models::l1_message::Column::L2BlockNumber.is_not_null())
+                    .column_as(models::l1_message::Column::QueueIndex.max(), "max_queue_index")
+                    .into_tuple::<Option<i64>>()
+                    .one(self.get_connection())
+                    .await?
+                    .flatten()
+                    .map(|idx| idx + 1)
+                    .unwrap_or(0),
+            )
+        };
+
         match start {
             // Provides n L1 messages with increasing queue index starting from the provided queue
             // index.
@@ -865,12 +882,16 @@ impl<T: ReadConnectionProvider + Sync + ?Sized> DatabaseReadOperations for T {
                         return Ok(vec![]);
                     };
 
+                // Get the next L1 message queue index after the last included L1 message.
+                let next_l1_message_queue_index = next_l1_message_queue_index().await?;
+
                 // Create a filter condition for messages that have an L1 block number less than or
                 // equal to the finalized block number and have not been included in an L2 block
                 // (i.e. L2BlockNumber is null).
                 let condition = Condition::all()
                     .add(models::l1_message::Column::L1BlockNumber.lte(target_block_number as i64))
-                    .add(models::l1_message::Column::L2BlockNumber.is_null());
+                    .add(models::l1_message::Column::L2BlockNumber.is_null())
+                    .add(models::l1_message::Column::QueueIndex.gte(next_l1_message_queue_index));
                 // Yield n messages matching the condition ordered by increasing queue index.
                 Ok(models::l1_message::Entity::find()
                     .filter(condition)
@@ -897,12 +918,17 @@ impl<T: ReadConnectionProvider + Sync + ?Sized> DatabaseReadOperations for T {
                     } else {
                         return Ok(vec![]);
                     };
+
+                // Get the next L1 message queue index after the last included L1 message.
+                let next_l1_message_queue_index = next_l1_message_queue_index().await?;
+
                 // Create a filter condition for messages that have an L1 block number less than
                 // or equal to the target block number and have not been included in an L2 block
                 // (i.e. L2BlockNumber is null).
                 let condition = Condition::all()
                     .add(models::l1_message::Column::L1BlockNumber.lte(target_block_number as i64))
-                    .add(models::l1_message::Column::L2BlockNumber.is_null());
+                    .add(models::l1_message::Column::L2BlockNumber.is_null())
+                    .add(models::l1_message::Column::QueueIndex.gte(next_l1_message_queue_index));
                 // Yield n messages matching the condition ordered by increasing queue index.
                 Ok(models::l1_message::Entity::find()
                     .filter(condition)
