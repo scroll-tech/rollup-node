@@ -19,4 +19,10 @@ pub enum DatabaseError {
     /// The L1 message was not found in database.
     #[error("L1 message at key [{0}] not found in database")]
     L1MessageNotFound(L1MessageKey),
+    /// Failed to commit the transaction to database.
+    #[error("TXMut commit failed")]
+    CommitFailed,
+    /// Failed to rollback the transaction.
+    #[error("TXMut rollback failed")]
+    RollbackFailed,
 }
