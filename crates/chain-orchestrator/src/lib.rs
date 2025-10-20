@@ -59,7 +59,7 @@ mod error;
 pub use error::ChainOrchestratorError;
 
 mod handle;
-pub use handle::{ChainOrchestratorCommand, ChainOrchestratorHandle};
+pub use handle::{ChainOrchestratorCommand, ChainOrchestratorHandle, DatabaseQuery};
 
 mod metrics;
 pub use metrics::{ChainOrchestratorItem, ChainOrchestratorMetrics};
@@ -376,6 +376,16 @@ impl<
                     let _ = tx.send(false);
                 }
             }
+            ChainOrchestratorCommand::DatabaseQuery(query) => match query {
+                DatabaseQuery::GetL1MessageByIndex(index, sender) => {
+                    let l1_message = self
+                        .database
+                        .get_n_l1_messages(Some(L1MessageKey::from_queue_index(index)), 1)
+                        .await?
+                        .pop();
+                    let _ = sender.send(l1_message);
+                }
+            },
             #[cfg(feature = "test-utils")]
             ChainOrchestratorCommand::SetGossip((enabled, tx)) => {
                 self.network.handle().set_gossip(enabled).await;

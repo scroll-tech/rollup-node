@@ -7,6 +7,7 @@ use jsonrpsee::{
 use reth_network_api::FullNetwork;
 use reth_scroll_node::ScrollNetworkPrimitives;
 use rollup_node_chain_orchestrator::{ChainOrchestratorHandle, ChainOrchestratorStatus};
+use rollup_node_primitives::L1MessageEnvelope;
 use tokio::sync::{oneshot, Mutex, OnceCell};
 
 /// RPC extension for rollup node management operations.
@@ -79,6 +80,10 @@ pub trait RollupNodeExtApi {
     /// Returns the current status of the rollup node.
     #[method(name = "status")]
     async fn status(&self) -> RpcResult<ChainOrchestratorStatus>;
+
+    /// Returns the L1 message by index.
+    #[method(name = "getL1MessageByIndex")]
+    async fn get_l1_message_by_index(&self, index: u64) -> RpcResult<Option<L1MessageEnvelope>>;
 }
 
 #[async_trait]
@@ -135,6 +140,24 @@ where
             ErrorObjectOwned::owned(
                 error::INTERNAL_ERROR_CODE,
                 format!("Failed to get rollup node status: {}", e),
+                None::<()>,
+            )
+        })
+    }
+
+    async fn get_l1_message_by_index(&self, index: u64) -> RpcResult<Option<L1MessageEnvelope>> {
+        let handle = self.rollup_manager_handle().await.map_err(|e| {
+            ErrorObjectOwned::owned(
+                error::INTERNAL_ERROR_CODE,
+                format!("Failed to get rollup manager handle: {}", e),
+                None::<()>,
+            )
+        })?;
+
+        handle.get_l1_message_by_index(index).await.map_err(|e| {
+            ErrorObjectOwned::owned(
+                error::INTERNAL_ERROR_CODE,
+                format!("Failed to get L1 message by index: {}", e),
                 None::<()>,
             )
         })

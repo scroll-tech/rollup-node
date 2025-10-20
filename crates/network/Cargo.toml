@@ -50,6 +50,7 @@ serde = [
     "reth-primitives-traits/serde",
     "reth-storage-api/serde",
     "scroll-alloy-hardforks/serde",
+    "rollup-node-primitives/serde",
 ]
 test-utils = [
     "reth-chainspec/test-utils",
