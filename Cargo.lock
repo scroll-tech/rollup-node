@@ -11612,7 +11612,6 @@ dependencies = [
 name = "scroll-db"
 version = "0.0.1"
 dependencies = [
- "alloy-eips 1.0.30",
  "alloy-primitives",
  "arbitrary",
  "async-trait",
@@ -11640,7 +11639,6 @@ dependencies = [
  "alloy-eips 1.0.30",
  "alloy-primitives",
  "alloy-rpc-types-engine 1.0.30",
- "async-trait",
  "codspeed-criterion-compat",
  "eyre",
  "futures",
