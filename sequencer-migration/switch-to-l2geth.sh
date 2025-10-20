@@ -19,6 +19,10 @@ perform_sequencing_switch() {
     log_info "--- Phase 1: Disabling L2RETH sequencing ---"
     disable_l2reth_sequencing
 
+    # wait for l2geth to catch up with l2reth
+    log_info "-- Phase 1.5: Waiting for L2GETH to catch up with L2RETH ---"
+    wait_for_l2geth_to_catch_up_with_l2reth
+
     # Phase 2: Enable L2GETH sequencing
     log_info "--- Phase 2: Enabling L2GETH sequencing ---"
     start_l2geth_mining
@@ -36,6 +40,15 @@ perform_sequencing_switch() {
         log_success "L2GETH is successfully producing blocks"
     else
         log_error "L2GETH failed to produce new blocks after sequencing was enabled"
+        exit 1
+    fi
+
+    log_info "Verifying L2RETH is following blocks..."
+
+    if wait_for_l2reth_to_catch_up_with_l2geth; then
+        log_success "L2RETH is successfully following blocks"
+    else
+        log_error "L2RETH failed to follow new blocks after L2GETH sequencing was enabled"
         exit 1
     fi
 }
