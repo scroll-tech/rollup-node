@@ -270,7 +270,6 @@ impl ScrollRollupNodeConfig {
                 let l2_head_block_number = tx.get_l2_head_block_number().await?;
                 tx.purge_l1_message_to_l2_block_mappings(Some(l2_head_block_number + 1)).await?;
 
-                let l2_head_block_number = tx.get_l2_head_block_number().await?;
                 Ok::<_, DatabaseError>((l1_start_block_number, l2_head_block_number))
             })
             .await?;
