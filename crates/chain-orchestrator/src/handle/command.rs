@@ -4,6 +4,7 @@ use reth_network_api::FullNetwork;
 use reth_scroll_node::ScrollNetworkPrimitives;
 use reth_tokio_util::EventStream;
 use rollup_node_primitives::{BlockInfo, L1MessageEnvelope};
+use scroll_db::L1MessageKey;
 use scroll_network::ScrollNetworkHandle;
 use tokio::sync::oneshot;
 
@@ -35,5 +36,5 @@ pub enum ChainOrchestratorCommand<N: FullNetwork<Primitives = ScrollNetworkPrimi
 #[derive(Debug)]
 pub enum DatabaseQuery {
     /// Get L1 message by its index.
-    GetL1MessageByIndex(u64, oneshot::Sender<Option<L1MessageEnvelope>>),
+    GetL1MessageByIndex(L1MessageKey, oneshot::Sender<Option<L1MessageEnvelope>>),
 }

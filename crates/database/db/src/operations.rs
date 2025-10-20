@@ -1040,7 +1040,7 @@ impl<T: ReadConnectionProvider + Sync + ?Sized> DatabaseReadOperations for T {
 /// A key for an L1 message stored in the database.
 ///
 /// It can either be the queue index, queue hash or the transaction hash.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub enum L1MessageKey {
     /// The queue index of the message.
     QueueIndex(u64),
@@ -1078,7 +1078,7 @@ impl L1MessageKey {
 
 /// This type defines where to start when fetching L1 messages that have not been included in a
 /// block yet.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub enum NotIncludedStart {
     /// Start from finalized messages that have not been included in a block yet and have a L1
     /// block number that is a specified number of blocks below the current finalized L1 block

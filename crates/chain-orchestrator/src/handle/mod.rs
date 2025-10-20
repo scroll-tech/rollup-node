@@ -6,6 +6,7 @@ use reth_network_api::FullNetwork;
 use reth_scroll_node::ScrollNetworkPrimitives;
 use reth_tokio_util::EventStream;
 use rollup_node_primitives::{BlockInfo, L1MessageEnvelope};
+use scroll_db::L1MessageKey;
 use scroll_network::ScrollNetworkHandle;
 use tokio::sync::{mpsc, oneshot};
 use tracing::error;
@@ -91,9 +92,9 @@ impl<N: FullNetwork<Primitives = ScrollNetworkPrimitives>> ChainOrchestratorHand
     }
 
     /// Get an L1 message by its index.
-    pub async fn get_l1_message_by_index(
+    pub async fn get_l1_message_by_key(
         &self,
-        index: u64,
+        index: L1MessageKey,
     ) -> Result<Option<L1MessageEnvelope>, oneshot::error::RecvError> {
         let (tx, rx) = oneshot::channel();
         self.send_command(ChainOrchestratorCommand::DatabaseQuery(
