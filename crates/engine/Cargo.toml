@@ -32,14 +32,10 @@ reth-primitives-traits.workspace = true
 # reth-scroll
 reth-scroll-chainspec.workspace = true
 reth-scroll-primitives.workspace = true
-reth-scroll-engine-primitives = { git = "https://github.com/scroll-tech/reth.git", default-features = false }
+reth-scroll-engine-primitives.workspace = true
 
 # rollup-node
 rollup-node-primitives.workspace = true
-rollup-node-providers.workspace = true
-
-# scroll
-scroll-network.workspace = true
 
 # misc
 async-trait = { workspace = true, optional = true }
@@ -47,6 +43,7 @@ eyre.workspace = true
 futures.workspace = true
 metrics.workspace = true
 metrics-derive.workspace = true
+serde = { workspace = true, optional = true, features = ["derive"] }
 thiserror.workspace = true
 tokio.workspace = true
 tracing.workspace = true
@@ -55,22 +52,18 @@ tracing.workspace = true
 alloy-consensus.workspace = true
 arbitrary.workspace = true
 async-trait.workspace = true
-reth-testing-utils = { git = "https://github.com/scroll-tech/reth.git", default-features = false }
-rollup-node-providers = { workspace = true, features = ["test-utils"] }
+reth-testing-utils.workspace = true
 scroll-alloy-consensus.workspace = true
 scroll-alloy-rpc-types-engine = { workspace = true, features = ["arbitrary"] }
-scroll-engine = { path = "../engine", features = ["test-utils"] }
 
 [features]
 test-utils = [
     "dep:async-trait",
-    "scroll-engine/test-utils",
-    "rollup-node-providers/test-utils",
-    "rollup-node-providers/test-utils",
     "reth-chainspec/test-utils",
     "reth-primitives-traits/test-utils",
 ]
 serde = [
+    "dep:serde",
     "alloy-eips/serde",
     "alloy-primitives/serde",
     "alloy-rpc-types-engine/serde",
@@ -78,8 +71,6 @@ serde = [
     "scroll-alloy-rpc-types-engine/serde",
     "alloy-chains/serde",
     "reth-network-api/serde",
-    "scroll-network/serde",
-    "scroll-engine/serde",
     "scroll-alloy-hardforks/serde",
     "reth-primitives-traits/serde",
     "alloy-consensus/serde",

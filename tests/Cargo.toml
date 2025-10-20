@@ -12,8 +12,15 @@ alloy-primitives = { workspace = true }
 alloy-network = { workspace = true }
 alloy-provider = { workspace = true, features = ["reqwest", "ws"] }
 alloy-rpc-types-eth = { workspace = true }
+alloy-signer-local = { workspace = true }
+alloy-sol-types = { workspace = true }
 scroll-alloy-network = { workspace = true }
-tokio = { workspace = true, features = ["rt", "time"] }
+rollup-node-chain-orchestrator = { path = "../crates/chain-orchestrator", features = ["serde"] }
+tokio = { workspace = true, features = ["rt", "time", "process"] }
 eyre = { workspace = true }
 getrandom = { workspace = true }
 tracing = { workspace = true }
+reth-tracing = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+reth-e2e-test-utils.workspace = true

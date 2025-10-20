@@ -71,6 +71,20 @@ test:
 	--no-fail-fast \
 	-E 'not test(docker)'
 
+.PHONY: test-docker
+test-docker:
+	cargo nextest run \
+	--workspace \
+	--locked \
+	--all-features \
+	--no-fail-fast \
+	--no-tests=pass \
+	-E 'test(docker)' \
+	--test-threads=1 \
+	--failure-output immediate \
+	--success-output never \
+	--verbose
+
 # Used to update the mainnet-sample.sql data. Provide the path to the sqlite database that should be read from
 # using `DB_PATH`.
 .PHONY: test-data
@@ -83,7 +97,7 @@ export-sample-test-data:
 
 .PHONY: docs
 docs:
-	cargo docs --document-private-items
+	cargo docs --document-private-items --exclude rollup-node-chain-orchestrator
 
 .PHONY: pr
 pr: lint test docs
@@ -92,9 +106,17 @@ pr: lint test docs
 docker:
 	docker build -t scrolltech/rollup-node:latest . -f Dockerfile
 
+.PHONY: docker-nightly
+docker-nightly:
+	docker build -t scrolltech/rollup-node:latest-nightly --build-arg CARGO_FEATURES=js-tracer . -f Dockerfile
+
 .PHONY: docker-multiarch
 docker-multiarch:
 	docker buildx build --platform linux/amd64,linux/arm64 -t scrolltech/rollup-node:latest . -f Dockerfile
+
+.PHONY: docker-multiarch-nightly
+docker-multiarch-nightly:
+	docker buildx build --platform linux/amd64,linux/arm64 -t scrolltech/rollup-node:latest-nightly --build-arg CARGO_FEATURES=js-tracer . -f Dockerfile
 
 .PHONY: docker-setup-buildx
 docker-setup-buildx:

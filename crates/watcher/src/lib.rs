@@ -89,6 +89,8 @@ pub struct L1Watcher<EP> {
 /// The L1 notification type yielded by the [`L1Watcher`].
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum L1Notification {
+    /// A notification that the L1 watcher has processed up to a given block number.
+    Processed(u64),
     /// A notification for a reorg of the L1 up to a given block number.
     Reorg(u64),
     /// A new batch has been committed on the L1 rollup contract.
@@ -124,6 +126,7 @@ pub enum L1Notification {
 impl Display for L1Notification {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match self {
+            Self::Processed(n) => write!(f, "Processed({n})"),
             Self::Reorg(n) => write!(f, "Reorg({n:?})"),
             Self::BatchCommit(b) => {
                 write!(f, "BatchCommit {{ hash: {}, index: {} }}", b.hash, b.index)
@@ -183,7 +186,7 @@ where
         let watcher = Self {
             execution_provider,
             unfinalized_blocks: BoundedVec::new(HEADER_CAPACITY),
-            current_block_number: start_block.unwrap_or(config.start_l1_block) - 1,
+            current_block_number: start_block.unwrap_or(config.start_l1_block).saturating_sub(1),
             l1_state,
             sender: tx,
             config,
@@ -266,7 +269,7 @@ where
             self.notify_all(notifications).await?;
 
             // update the latest block the l1 watcher has indexed.
-            self.update_current_block(&latest);
+            self.update_current_block(&latest).await?;
         }
 
         Ok(())
@@ -344,7 +347,7 @@ where
                 .iter()
                 .zip(chain.iter())
                 .find(|(old, new)| old.hash != new.hash)
-                .map(|(old, _)| old.number - 1);
+                .map(|(old, _)| old.number.saturating_sub(1));
 
             // set the unfinalized chain.
             self.unfinalized_blocks = chain;
@@ -564,12 +567,14 @@ where
                 break (pos, chain);
             }
 
-            tracing::trace!(target: "scroll::watcher", number = ?(current_block.number - 1), "fetching block");
+            tracing::trace!(target: "scroll::watcher", number = ?(current_block.number.saturating_sub(1)), "fetching block");
             let block = self
                 .execution_provider
-                .get_block((current_block.number - 1).into())
+                .get_block((current_block.number.saturating_sub(1)).into())
                 .await?
-                .ok_or(EthRequestError::MissingBlock(current_block.number - 1))?;
+                .ok_or_else(|| {
+                    EthRequestError::MissingBlock(current_block.number.saturating_sub(1))
+                })?;
             chain.push(block.header.clone());
             current_block = block.header;
         };
@@ -604,11 +609,12 @@ where
     }
 
     /// Updates the current block number, saturating at the head of the chain.
-    fn update_current_block(&mut self, latest: &Block) {
+    async fn update_current_block(&mut self, latest: &Block) -> L1WatcherResult<()> {
         self.current_block_number = self
             .current_block_number
             .saturating_add(LOGS_QUERY_BLOCK_RANGE)
             .min(latest.header.number);
+        self.notify(L1Notification::Processed(self.current_block_number)).await
     }
 
     /// Returns the latest L1 block.
@@ -653,7 +659,7 @@ where
 
         // skip a block for `from_block` since `self.current_block_number` is the last indexed
         // block.
-        filter = filter.from_block(self.current_block_number + 1).to_block(to_block);
+        filter = filter.from_block(self.current_block_number.saturating_add(1)).to_block(to_block);
 
         tracing::trace!(target: "scroll::watcher", ?filter, "fetching logs");
 

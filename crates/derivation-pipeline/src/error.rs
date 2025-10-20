@@ -8,6 +8,14 @@ pub enum DerivationPipelineError {
     /// Missing L1 messages cursor.
     #[error("missing l1 message queue cursor")]
     MissingL1MessageQueueCursor,
+    /// Invalid L1 messages count.
+    #[error("invalid l1 messages count: expected {expected}, got {got}")]
+    InvalidL1MessagesCount {
+        /// The expected count.
+        expected: u64,
+        /// The actual count.
+        got: u64,
+    },
     /// Missing L1 message.
     #[error("missing l1 message for L2 block {0:?}")]
     MissingL1Message(L2Block),

@@ -23,8 +23,9 @@ fn main() {
     if let Err(err) = Cli::<ScrollChainSpecParser, ScrollRollupNodeConfig>::parse().run(
         |builder, args| async move {
             info!(target: "reth::cli", "Launching node");
+            let config = builder.config().clone();
             let handle = builder
-                .node(ScrollRollupNode::new(args))
+                .node(ScrollRollupNode::new(args, config).await)
                 .launch_with_fn(|builder| {
                     info!(target: "reth::cli", config = ?builder.config().chain.config, "Running with config");
 
@@ -37,7 +38,7 @@ fn main() {
                         .config()
                         .engine
                         .tree_config()
-                        .with_always_process_payload_attributes_on_canonical_head(true);
+                        .with_always_process_payload_attributes_on_canonical_head(true).with_persistence_threshold(0);
                     let launcher = EngineNodeLauncher::new(
                         builder.task_executor().clone(),
                         builder.config().datadir(),

@@ -14,7 +14,6 @@ members = [
     "crates/engine",
     "crates/chain-orchestrator",
     "crates/l1",
-    "crates/manager",
     "crates/network",
     "crates/node",
     "crates/primitives",
@@ -118,50 +117,71 @@ large_enum_variant = "allow"
 
 [workspace.dependencies]
 # alloy
-alloy-chains = { version = "0.2.0", default-features = false }
-alloy-consensus = { version = "1.0.13", default-features = false }
-alloy-eips = { version = "1.0.13", default-features = false }
-alloy-json-rpc = { version = "1.0.13", default-features = false }
-alloy-network = { version = "1.0.13", default-features = false }
-alloy-primitives = { version = "1.2.0", default-features = false }
-alloy-provider = { version = "1.0.13", default-features = false }
-alloy-rpc-client = { version = "1.0.13", default-features = false }
-alloy-rpc-types-engine = { version = "1.0.13", default-features = false }
-alloy-rpc-types-eth = { version = "1.0.13", default-features = false }
-alloy-sol-types = { version = "1.2.0", default-features = false }
-alloy-signer = { version = "1.0.13", default-features = false }
-alloy-signer-local = { version = "1.0.13", default-features = false }
-alloy-transport = { version = "1.0.13", default-features = false }
+alloy-chains = { version = "0.2.5", default-features = false }
+alloy-consensus = { version = "1.0.30", default-features = false }
+alloy-eips = { version = "1.0.30", default-features = false }
+alloy-json-rpc = { version = "1.0.30", default-features = false }
+alloy-network = { version = "1.0.30", default-features = false }
+alloy-primitives = { version = "1.3.1", default-features = false }
+alloy-provider = { version = "1.0.30", default-features = false }
+alloy-rpc-client = { version = "1.0.30", default-features = false }
+alloy-rpc-types-engine = { version = "1.0.30", default-features = false }
+alloy-rpc-types-eth = { version = "1.0.30", default-features = false }
+alloy-sol-types = { version = "1.3.1", default-features = false }
+alloy-signer = { version = "1.0.30", default-features = false }
+alloy-signer-local = { version = "1.0.30", default-features = false }
+alloy-transport = { version = "1.0.30", default-features = false }
 
 # scroll-alloy
 scroll-alloy-consensus = { git = "https://github.com/scroll-tech/reth.git", default-features = false }
 scroll-alloy-hardforks = { git = "https://github.com/scroll-tech/reth.git", default-features = false }
 scroll-alloy-network = { git = "https://github.com/scroll-tech/reth.git", default-features = false }
 scroll-alloy-provider = { git = "https://github.com/scroll-tech/reth.git", default-features = false }
+scroll-alloy-evm = { git = "https://github.com/scroll-tech/reth.git", default-features = false }
+scroll-alloy-rpc-types = { git = "https://github.com/scroll-tech/reth.git", default-features = false }
 scroll-alloy-rpc-types-engine = { git = "https://github.com/scroll-tech/reth.git", default-features = false }
 
 # reth
 reth-chainspec = { git = "https://github.com/scroll-tech/reth.git", default-features = false }
 reth-e2e-test-utils = { git = "https://github.com/scroll-tech/reth.git" }
+reth-eth-wire = { git = "https://github.com/scroll-tech/reth.git", default-features = false }
 reth-eth-wire-types = { git = "https://github.com/scroll-tech/reth.git", default-features = false }
 reth-network = { git = "https://github.com/scroll-tech/reth.git", default-features = false }
 reth-network-api = { git = "https://github.com/scroll-tech/reth.git", default-features = false }
+reth-network-p2p = { git = "https://github.com/scroll-tech/reth.git", default-features = false }
 reth-network-peers = { git = "https://github.com/scroll-tech/reth.git", default-features = false }
+reth-network-types = { git = "https://github.com/scroll-tech/reth.git", default-features = false }
 reth-node-builder = { git = "https://github.com/scroll-tech/reth.git", default-features = false }
 reth-node-core = { git = "https://github.com/scroll-tech/reth.git", default-features = false }
+reth-node-api = { git = "https://github.com/scroll-tech/reth.git", default-features = false }
+reth-node-types = { git = "https://github.com/scroll-tech/reth.git", default-features = false }
 reth-payload-primitives = { git = "https://github.com/scroll-tech/reth.git", default-features = false }
 reth-primitives = { git = "https://github.com/scroll-tech/reth.git", default-features = false }
 reth-primitives-traits = { git = "https://github.com/scroll-tech/reth.git", default-features = false }
 reth-provider = { git = "https://github.com/scroll-tech/reth.git", default-features = false }
 reth-rpc-builder = { git = "https://github.com/scroll-tech/reth.git", default-features = false }
+reth-rpc-api = { git = "https://github.com/scroll-tech/reth.git", default-features = false }
+reth-rpc-eth-api = { git = "https://github.com/scroll-tech/reth.git", default-features = false }
+reth-rpc-eth-types = { git = "https://github.com/scroll-tech/reth.git", default-features = false }
 reth-rpc-server-types = { git = "https://github.com/scroll-tech/reth.git", default-features = false }
 reth-storage-api = { git = "https://github.com/scroll-tech/reth.git", default-features = false }
 reth-tasks = { git = "https://github.com/scroll-tech/reth.git", default-features = false }
 reth-tokio-util = { git = "https://github.com/scroll-tech/reth.git", default-features = false }
 reth-tracing = { git = "https://github.com/scroll-tech/reth.git", default-features = false }
+reth-transaction-pool = { git = "https://github.com/scroll-tech/reth.git", default-features = false }
+reth-trie-db = { git = "https://github.com/scroll-tech/reth.git", default-features = false }
+reth-testing-utils = { git = "https://github.com/scroll-tech/reth.git", default-features = false }
+reth-revm = { git = "https://github.com/scroll-tech/reth.git", default-features = false }
+reth-evm = { git = "https://github.com/scroll-tech/reth.git", default-features = false }
+reth-engine-local = { git = "https://github.com/scroll-tech/reth.git", default-features = false }
+reth-cli-util = { git = "https://github.com/scroll-tech/reth.git", default-features = false }
 
 # reth-scroll
 reth-scroll-chainspec = { git = "https://github.com/scroll-tech/reth.git", default-features = false }
+reth-scroll-consensus = { git = "https://github.com/scroll-tech/reth.git", default-features = false }
+reth-scroll-cli = { git = "https://github.com/scroll-tech/reth.git", default-features = false }
+reth-scroll-evm = { git = "https://github.com/scroll-tech/reth.git", default-features = false }
+reth-scroll-rpc = { git = "https://github.com/scroll-tech/reth.git", default-features = false }
 reth-scroll-engine-primitives = { git = "https://github.com/scroll-tech/reth.git", default-features = false }
 reth-scroll-forks = { git = "https://github.com/scroll-tech/reth.git", default-features = false }
 reth-scroll-node = { git = "https://github.com/scroll-tech/reth.git", default-features = false }
@@ -170,7 +190,6 @@ reth-scroll-primitives = { git = "https://github.com/scroll-tech/reth.git", defa
 # rollup node
 rollup-node = { path = "crates/node" }
 rollup-node-chain-orchestrator = { path = "crates/chain-orchestrator" }
-rollup-node-manager = { path = "crates/manager" }
 rollup-node-primitives = { path = "crates/primitives" }
 rollup-node-providers = { path = "crates/providers" }
 rollup-node-sequencer = { path = "crates/sequencer" }
@@ -186,7 +205,7 @@ scroll-wire = { path = "crates/scroll-wire" }
 scroll-migration = { path = "crates/database/migration" }
 
 # misc
-arbitrary = { version = "1.4", default-features = false }
+arbitrary = { version = "1.4", default-features = false, features = ["derive"] }
 async-trait = "0.1"
 auto_impl = "1.2"
 bitvec = { version = "1.0", default-features = false }
@@ -200,6 +219,7 @@ parking_lot = "0.12"
 rand = { version = "0.9" }
 reqwest = "0.12"
 serde = { version = "1.0" }
+serde_json = { version = "1.0" }
 sea-orm = { version = "1.1.0" }
 thiserror = "2.0"
 tokio = { version = "1.39", default-features = false, features = ["tracing"] }
@@ -212,7 +232,6 @@ revm = { git = "https://github.com/scroll-tech/revm" }
 op-revm = { git = "https://github.com/scroll-tech/revm" }
 
 # [patch."https://github.com/scroll-tech/reth.git"]
-# reth crates
 # reth-chainspec = { path = "../reth/crates/chainspec" }
 # reth-e2e-test-utils = { path = "../reth/crates/e2e-test-utils" }
 # reth-eth-wire-types = { path = "../reth/crates/net/eth-wire-types" }
@@ -246,8 +265,6 @@ op-revm = { git = "https://github.com/scroll-tech/revm" }
 # reth-cli-util = { path = "../reth/crates/cli/util" }
 # reth-engine-local = { path = "../reth/crates/engine/local" }
 # reth-eth-wire = { path = "../reth/crates/net/eth-wire" }
-
-# scroll-alloy crates
 # scroll-alloy-consensus = { path = "../reth/crates/scroll/alloy/consensus" }
 # scroll-alloy-hardforks = { path = "../reth/crates/scroll/alloy/hardforks" }
 # scroll-alloy-network = { path = "../reth/crates/scroll/alloy/network" }
@@ -255,8 +272,6 @@ op-revm = { git = "https://github.com/scroll-tech/revm" }
 # scroll-alloy-rpc-types-engine = { path = "../reth/crates/scroll/alloy/rpc-types-engine" }
 # scroll-alloy-evm = { path = "../reth/crates/scroll/alloy/evm" }
 # scroll-alloy-rpc-types = { path = "../reth/crates/scroll/alloy/rpc-types" }
-
-# reth-scroll crates
 # reth-scroll-chainspec = { path = "../reth/crates/scroll/chainspec" }
 # reth-scroll-engine-primitives = { path = "../reth/crates/scroll/engine-primitives" }
 # reth-scroll-forks = { path = "../reth/crates/scroll/hardforks" }

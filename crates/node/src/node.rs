@@ -1,6 +1,6 @@
 //! Node specific implementations for Scroll rollup node.
 
-use crate::{args::ScrollRollupNodeConfig, constants};
+use crate::{args::ScrollRollupNodeConfig, builder::network::ScrollNetworkBuilder, constants};
 use std::time::Duration;
 
 use super::add_ons::ScrollRollupNodeAddOns;
@@ -8,11 +8,12 @@ use reth_network::protocol::IntoRlpxSubProtocol;
 use reth_node_api::NodeTypes;
 use reth_node_builder::{
     components::{BasicPayloadServiceBuilder, ComponentsBuilder},
-    FullNodeTypes, Node, NodeAdapter, NodeComponentsBuilder,
+    FullNodeTypes, Node, NodeAdapter, NodeComponentsBuilder, NodeConfig,
 };
+use reth_scroll_chainspec::ScrollChainSpec;
 use reth_scroll_node::{
-    ScrollConsensusBuilder, ScrollExecutorBuilder, ScrollNetworkBuilder, ScrollNode,
-    ScrollPayloadBuilderBuilder, ScrollPoolBuilder,
+    ScrollConsensusBuilder, ScrollExecutorBuilder, ScrollNode, ScrollPayloadBuilderBuilder,
+    ScrollPoolBuilder,
 };
 use scroll_wire::{ScrollWireConfig, ScrollWireEvent, ScrollWireProtocolHandler};
 use std::sync::Arc;
@@ -27,11 +28,19 @@ pub struct ScrollRollupNode {
 
 impl ScrollRollupNode {
     /// Create a new instance of [`ScrollRollupNode`].
-    pub fn new(config: ScrollRollupNodeConfig) -> Self {
+    pub async fn new(
+        mut config: ScrollRollupNodeConfig,
+        node_config: NodeConfig<ScrollChainSpec>,
+    ) -> Self {
         config
             .validate()
             .map_err(|e| eyre::eyre!("Configuration validation failed: {}", e))
             .expect("Configuration validation failed");
+        config
+            .hydrate(node_config)
+            .await
+            .map_err(|e| eyre::eyre!("Configuration hydration failed: {}", e))
+            .expect("Configuration hydration failed");
 
         Self { config, scroll_wire_events: Arc::new(Mutex::new(None)) }
     }
@@ -69,8 +78,11 @@ where
                 block_da_size_limit: Some(constants::DEFAULT_PAYLOAD_SIZE_LIMIT),
             }))
             .network(
-                ScrollNetworkBuilder::new()
-                    .with_sub_protocol(scroll_wire_handler.into_rlpx_sub_protocol()),
+                ScrollNetworkBuilder::new(
+                    self.config.database.clone().expect("database is set via hydration"),
+                )
+                .with_sub_protocol(scroll_wire_handler.into_rlpx_sub_protocol())
+                .with_signer(self.config.network_args.signer_address),
             )
     }
 
@@ -85,7 +97,6 @@ where
 impl NodeTypes for ScrollRollupNode {
     type Primitives = <ScrollNode as NodeTypes>::Primitives;
     type ChainSpec = <ScrollNode as NodeTypes>::ChainSpec;
-    type StateCommitment = <ScrollNode as NodeTypes>::StateCommitment;
     type Storage = <ScrollNode as NodeTypes>::Storage;
     type Payload = <ScrollNode as NodeTypes>::Payload;
 }
