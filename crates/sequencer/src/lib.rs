@@ -101,6 +101,7 @@ where
         engine: &mut Engine<EC>,
     ) -> Result<(), SequencerError> {
         tracing::info!(target: "rollup_node::sequencer", "New payload attributes request received.");
+        let now = Instant::now();
 
         let timestamp = SystemTime::now()
             .duration_since(UNIX_EPOCH)
@@ -114,7 +115,6 @@ where
             withdrawals: None,
         };
 
-        let now = Instant::now();
         let mut l1_messages = vec![];
         let mut cumulative_gas_used = 0;
 
@@ -212,8 +212,8 @@ pub struct PayloadBuildingJob {
     future: PayloadBuildingJobFuture,
 }
 
-impl std::fmt::Debug for PayloadBuildingJob {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+impl fmt::Debug for PayloadBuildingJob {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("PayloadBuildingJob")
             .field("l1_origin", &self.l1_origin)
             .field("future", &"PayloadBuildingJobFuture")
@@ -265,8 +265,8 @@ impl<SMP, CS> Stream for Sequencer<SMP, CS> {
     }
 }
 
-impl<SMP, CS: std::fmt::Debug> fmt::Debug for Sequencer<SMP, CS> {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+impl<SMP, CS: fmt::Debug> fmt::Debug for Sequencer<SMP, CS> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("Sequencer")
             .field("provider", &"SequencerMessageProvider")
             .field("config", &self.config)

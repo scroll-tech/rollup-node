@@ -82,7 +82,7 @@ impl Stream for DerivationPipeline {
     fn poll_next(
         self: Pin<&mut Self>,
         cx: &mut std::task::Context<'_>,
-    ) -> std::task::Poll<Option<Self::Item>> {
+    ) -> Poll<Option<Self::Item>> {
         let this = self.get_mut();
         match Pin::new(&mut this.result_receiver).poll_recv(cx) {
             Poll::Ready(Some(result)) => {
