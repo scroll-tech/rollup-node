@@ -61,7 +61,9 @@ async fn test_should_consolidate_to_block_15k() -> eyre::Result<()> {
             ..Default::default()
         },
         blob_provider_args: BlobProviderArgs {
-            beacon_node_urls: Some(vec![Url::parse("https://eth-beacon-chain.drpc.org/rest/")?]),
+            s3_url: Some(Url::parse(
+                "https://scroll-sepolia-blob-data.s3.us-west-2.amazonaws.com/",
+            )?),
             compute_units_per_second: 100,
             max_retries: 10,
             initial_backoff: 100,

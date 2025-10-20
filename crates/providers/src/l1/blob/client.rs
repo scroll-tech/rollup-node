@@ -96,7 +96,11 @@ impl BeaconClientProvider {
         base: &str,
         client: &Client,
     ) -> Result<APIResponse<ReducedConfigData>, reqwest::Error> {
-        let first = client.get(format!("{}/{}", base, Self::SPEC_METHOD)).send().await?;
+        let first = client
+            .get(format!("{}/{}", base, Self::SPEC_METHOD))
+            .send()
+            .await?
+            .error_for_status()?;
         first.json::<APIResponse<ReducedConfigData>>().await
     }
 
@@ -105,7 +109,11 @@ impl BeaconClientProvider {
         base: &str,
         client: &Client,
     ) -> Result<APIResponse<ReducedGenesisData>, reqwest::Error> {
-        let first = client.get(format!("{}/{}", base, Self::GENESIS_METHOD)).send().await?;
+        let first = client
+            .get(format!("{}/{}", base, Self::GENESIS_METHOD))
+            .send()
+            .await?
+            .error_for_status()?;
         first.json::<APIResponse<ReducedGenesisData>>().await
     }
 
