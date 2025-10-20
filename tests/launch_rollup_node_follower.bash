@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -e
 
-export RUST_LOG=sqlx=off,scroll=trace,reth=trace,rollup=trace,trace
+export RUST_LOG=sqlx=off,scroll=trace,reth=info,rollup=trace,info
 
 exec rollup-node node --chain /l2reth/l2reth-genesis-e2e.json --datadir=/l2reth --metrics=0.0.0.0:6060 \
   --disable-discovery \
