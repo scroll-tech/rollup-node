@@ -228,6 +228,46 @@ wait_for_block() {
     done
 }
 
+wait_for_l2reth_to_catch_up_with_l2geth() {
+    log_info "Waiting for L2RETH to catch up with L2GETH..."
+
+    local l2geth_info
+    if ! l2geth_info=$(get_latest_block_info "$L2GETH_RPC_URL"); then
+        log_error "Failed to get latest block info from L2GETH"
+        exit 1
+    fi
+
+    local target_block=$(echo "$l2geth_info" | awk '{print $1}')
+    local target_hash=$(echo "$l2geth_info" | awk '{print $2}')
+
+    if wait_for_block "L2RETH" "$L2RETH_RPC_URL" "$target_block" "$target_hash"; then
+        log_success "L2RETH has caught up with L2GETH at block #$target_block"
+    else
+        log_error "L2RETH failed to catch up with L2GETH"
+        exit 1
+    fi
+}
+
+wait_for_l2geth_to_catch_up_with_l2reth() {
+    log_info "Waiting for L2GETH to catch up with L2RETH..."
+
+    local l2reth_info
+    if ! l2reth_info=$(get_latest_block_info "$L2RETH_RPC_URL"); then
+        log_error "Failed to get latest block info from L2RETH"
+        exit 1
+    fi
+
+    local target_block=$(echo "$l2reth_info" | awk '{print $1}')
+    local target_hash=$(echo "$l2reth_info" | awk '{print $2}')
+
+    if wait_for_block "L2GETH" "$L2GETH_RPC_URL" "$target_block" "$target_hash"; then
+        log_success "L2GETH has caught up with L2RETH at block #$target_block"
+    else
+        log_error "L2GETH failed to catch up with L2RETH"
+        exit 1
+    fi
+}
+
 # Check RPC connectivity for both nodes
 check_rpc_connectivity() {
     log_info "Checking RPC connectivity..."

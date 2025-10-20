@@ -3,7 +3,7 @@ use crate::{ChainOrchestratorEvent, ChainOrchestratorStatus};
 use reth_network_api::FullNetwork;
 use reth_scroll_node::ScrollNetworkPrimitives;
 use reth_tokio_util::EventStream;
-use rollup_node_primitives::BlockInfo;
+use rollup_node_primitives::{BlockInfo, L1MessageEnvelope};
 use scroll_network::ScrollNetworkHandle;
 use tokio::sync::oneshot;
 
@@ -24,7 +24,16 @@ pub enum ChainOrchestratorCommand<N: FullNetwork<Primitives = ScrollNetworkPrimi
     EnableAutomaticSequencing(oneshot::Sender<bool>),
     /// Disable automatic sequencing.
     DisableAutomaticSequencing(oneshot::Sender<bool>),
+    /// Send a database query to the rollup manager.
+    DatabaseQuery(DatabaseQuery),
     /// Enable gossiping of blocks to peers.
     #[cfg(feature = "test-utils")]
     SetGossip((bool, oneshot::Sender<()>)),
+}
+
+/// The database queries that can be sent to the rollup manager.
+#[derive(Debug)]
+pub enum DatabaseQuery {
+    /// Get L1 message by its index.
+    GetL1MessageByIndex(u64, oneshot::Sender<Option<L1MessageEnvelope>>),
 }

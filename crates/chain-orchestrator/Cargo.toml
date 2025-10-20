@@ -117,4 +117,5 @@ serde = [
     "scroll-alloy-hardforks/serde",
     "scroll-engine/serde",
     "scroll-network/serde",
+    "rollup-node-primitives/serde",
 ]

@@ -5,13 +5,13 @@ use super::ChainOrchestratorEvent;
 use reth_network_api::FullNetwork;
 use reth_scroll_node::ScrollNetworkPrimitives;
 use reth_tokio_util::EventStream;
-use rollup_node_primitives::BlockInfo;
+use rollup_node_primitives::{BlockInfo, L1MessageEnvelope};
 use scroll_network::ScrollNetworkHandle;
 use tokio::sync::{mpsc, oneshot};
 use tracing::error;
 
 mod command;
-pub use command::ChainOrchestratorCommand;
+pub use command::{ChainOrchestratorCommand, DatabaseQuery};
 
 mod metrics;
 use metrics::ChainOrchestratorHandleMetrics;
@@ -87,6 +87,18 @@ impl<N: FullNetwork<Primitives = ScrollNetworkPrimitives>> ChainOrchestratorHand
     pub async fn status(&self) -> Result<ChainOrchestratorStatus, oneshot::error::RecvError> {
         let (tx, rx) = oneshot::channel();
         self.send_command(ChainOrchestratorCommand::Status(tx));
+        rx.await
+    }
+
+    /// Get an L1 message by its index.
+    pub async fn get_l1_message_by_index(
+        &self,
+        index: u64,
+    ) -> Result<Option<L1MessageEnvelope>, oneshot::error::RecvError> {
+        let (tx, rx) = oneshot::channel();
+        self.send_command(ChainOrchestratorCommand::DatabaseQuery(
+            DatabaseQuery::GetL1MessageByIndex(index, tx),
+        ));
         rx.await
     }
 
