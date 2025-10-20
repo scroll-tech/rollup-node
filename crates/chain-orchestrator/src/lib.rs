@@ -378,8 +378,11 @@ impl<
             }
             ChainOrchestratorCommand::DatabaseQuery(query) => match query {
                 DatabaseQuery::GetL1MessageByIndex(index, sender) => {
-                    let tx = self.database.tx().await?;
-                    let l1_message = tx.get_l1_message_by_index(index).await?;
+                    let l1_message = self
+                        .database
+                        .get_n_l1_messages(Some(L1MessageKey::from_queue_index(index)), 1)
+                        .await?
+                        .pop();
                     let _ = sender.send(l1_message);
                 }
             },
