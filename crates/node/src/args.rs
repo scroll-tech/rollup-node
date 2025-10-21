@@ -327,7 +327,18 @@ impl ScrollRollupNodeConfig {
         let (l1_notification_tx, l1_notification_rx): (Option<Sender<Arc<L1Notification>>>, _) =
             if let Some(provider) = l1_provider.filter(|_| !self.test) {
                 tracing::info!(target: "scroll::node::args", ?l1_start_block_number, "Starting L1 watcher");
-                (None, Some(L1Watcher::spawn(provider, l1_start_block_number, node_config).await))
+                (
+                    None,
+                    Some(
+                        L1Watcher::spawn(
+                            provider,
+                            l1_start_block_number,
+                            node_config,
+                            self.l1_provider_args.logs_query_block_range,
+                        )
+                        .await,
+                    ),
+                )
             } else {
                 // Create a channel for L1 notifications that we can use to inject L1 messages for
                 // testing
@@ -604,6 +615,9 @@ pub struct L1ProviderArgs {
     /// The initial backoff for the provider.
     #[arg(long = "l1.initial-backoff", id = "l1_initial_backoff", value_name = "L1_INITIAL_BACKOFF", default_value_t = constants::L1_PROVIDER_INITIAL_BACKOFF)]
     pub initial_backoff: u64,
+    /// The logs query block range.
+    #[arg(long = "l1.query-range", id = "l1_query_range", value_name = "L1_QUERY_RANGE", default_value_t = constants::LOGS_QUERY_BLOCK_RANGE)]
+    pub logs_query_block_range: u64,
 }
 
 /// The arguments for the Beacon provider.
