@@ -639,7 +639,8 @@ where
 
     /// Returns the next range of logs, for the block range in
     /// \[[`current_block`](field@L1Watcher::current_block_number);
-    /// [`current_block`](field@L1Watcher::current_block_number) + [`LOGS_QUERY_BLOCK_RANGE`]\].
+    /// [`current_block`](field@L1Watcher::current_block_number) +
+    /// [`field@L1Watcher::log_query_block_range`]\].
     async fn next_filtered_logs(&self, latest_block_number: u64) -> L1WatcherResult<Vec<Log>> {
         // set the block range for the query
         let address_book = &self.config.address_book;
