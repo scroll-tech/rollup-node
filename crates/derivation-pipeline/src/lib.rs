@@ -244,6 +244,8 @@ pub struct BatchDerivationResult {
     pub attributes: Vec<DerivedAttributes>,
     /// The batch info associated with the derived attributes.
     pub batch_info: BatchInfo,
+    /// The list of skipped L1 messages indexes.
+    pub skipped_l1_messages: Vec<u64>,
 }
 
 /// The derived attributes along with the block number they correspond to.
@@ -287,8 +289,11 @@ pub async fn derive<L1P: L1Provider + Sync + Send, DB: DatabaseReadOperations>(
         iter_l1_messages_from_payload(&l1_provider, payload_data, l1_v2_message_queue_start_index)
             .await?;
 
-    let skipped_l1_messages = decoded.data.skipped_l1_message_bitmap.clone().unwrap_or_default();
-    let mut skipped_l1_messages = skipped_l1_messages.into_iter();
+    let skipped_l1_messages_bitmap =
+        decoded.data.skipped_l1_message_bitmap.clone().unwrap_or_default();
+    let mut skipped_l1_messages_bitmap = skipped_l1_messages_bitmap.into_iter();
+    let mut skipped_l1_messages = Vec::new();
+
     let blocks = decoded.data.into_l2_blocks();
     let mut attributes = Vec::with_capacity(blocks.len());
 
@@ -304,8 +309,10 @@ pub async fn derive<L1P: L1Provider + Sync + Send, DB: DatabaseReadOperations>(
         let mut txs = Vec::with_capacity(block.context.num_transactions as usize);
         for _ in 0..block.context.num_l1_messages {
             // check if the next l1 message should be skipped.
-            if matches!(skipped_l1_messages.next(), Some(bit) if bit) {
-                let _ = l1_messages_iter.next();
+            if matches!(skipped_l1_messages_bitmap.next(), Some(bit) if bit) {
+                if let Some(msg) = l1_messages_iter.next() {
+                    skipped_l1_messages.push(msg.transaction.queue_index)
+                }
                 continue;
             }
 
@@ -346,6 +353,7 @@ pub async fn derive<L1P: L1Provider + Sync + Send, DB: DatabaseReadOperations>(
     Ok(BatchDerivationResult {
         attributes,
         batch_info: BatchInfo { index: batch.index, hash: batch.hash },
+        skipped_l1_messages,
     })
 }
 
