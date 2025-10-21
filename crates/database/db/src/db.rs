@@ -167,10 +167,8 @@ impl DatabaseWriteOperations for Database {
         &self,
         block_number: u64,
     ) -> Result<u64, DatabaseError> {
-        self.tx_mut(
-            move |tx| async move { tx.delete_l2_blocks_gt_block_number(block_number).await },
-        )
-        .await
+        self.tx_mut(move |tx| async move { tx.delete_batches_gt_block_number(block_number).await })
+            .await
     }
 
     async fn delete_batches_gt_batch_index(&self, batch_index: u64) -> Result<u64, DatabaseError> {
