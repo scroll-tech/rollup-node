@@ -8,6 +8,9 @@ pub(crate) const L1_PROVIDER_MAX_RETRIES: u32 = 10;
 /// The initial backoff for the L1 provider.
 pub(crate) const L1_PROVIDER_INITIAL_BACKOFF: u64 = 100;
 
+/// The block range used to fetch L1 logs.
+pub(crate) const LOGS_QUERY_BLOCK_RANGE: u64 = 500;
+
 /// The max retries for the L2 provider.
 pub(crate) const L2_PROVIDER_MAX_RETRIES: u32 = u32::MAX;
 
