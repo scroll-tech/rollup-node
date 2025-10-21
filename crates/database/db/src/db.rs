@@ -216,9 +216,7 @@ impl DatabaseWriteOperations for Database {
         metered!(
             DatabaseOperation::DeleteBatchesGtBlockNumber,
             self,
-            tx_mut(
-                move |tx| async move { tx.delete_l2_blocks_gt_block_number(block_number).await }
-            )
+            tx_mut(move |tx| async move { tx.delete_batches_gt_block_number(block_number).await })
         )
     }
 
