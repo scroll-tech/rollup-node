@@ -493,7 +493,10 @@ impl<
             batch_reconciliation_result.into_batch_consolidation_outcome(reorg_results).await?;
 
         // Insert the batch consolidation outcome into the database.
-        let consolidation_outcome = batch_consolidation_outcome.clone();
+        let mut consolidation_outcome = batch_consolidation_outcome.clone();
+        consolidation_outcome
+            .with_skipped_l1_messages(batch_consolidation_outcome.skipped_l1_messages.clone());
+
         self.database.insert_batch_consolidation_outcome(consolidation_outcome).await?;
 
         Ok(Some(ChainOrchestratorEvent::BatchConsolidated(batch_consolidation_outcome)))

@@ -186,6 +186,14 @@ impl DatabaseWriteOperations for Database {
         .await
     }
 
+    async fn update_skipped_l1_messages(&self, indexes: Vec<u64>) -> Result<(), DatabaseError> {
+        self.tx_mut(move |tx| {
+            let indexes = indexes.clone();
+            async move { tx.update_skipped_l1_messages(indexes).await }
+        })
+        .await
+    }
+
     async fn delete_l1_messages_gt(
         &self,
         l1_block_number: u64,

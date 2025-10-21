@@ -46,4 +46,5 @@ pub(crate) enum L1Message {
     Value,
     Sender,
     Input,
+    Skipped,
 }
