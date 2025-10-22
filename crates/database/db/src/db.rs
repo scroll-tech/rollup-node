@@ -85,7 +85,7 @@ impl Database {
     #[cfg(feature = "test-utils")]
     pub async fn test(dir: tempfile::TempDir) -> Result<Self, DatabaseError> {
         let db = Arc::new(DatabaseInner::test(dir).await?);
-        Ok(Self { database: Retry::new_with_default_config(db), metrics: HashMap::new() })
+        Ok(Self { database: Retry::new_with_default_config(db), metrics: Self::metrics() })
     }
 
     /// Returns a reference to the database tmp dir.
