@@ -60,17 +60,24 @@ pub struct BatchConsolidationOutcome {
     pub batch_info: BatchInfo,
     /// The consolidation outcomes for each block in the batch.
     pub blocks: Vec<L2BlockInfoWithL1Messages>,
+    /// The list of skipped L1 messages index.
+    pub skipped_l1_messages: Vec<u64>,
 }
 
 impl BatchConsolidationOutcome {
     /// Creates a new empty batch consolidation outcome for the given batch info.
     pub const fn new(batch_info: BatchInfo) -> Self {
-        Self { batch_info, blocks: Vec::new() }
+        Self { batch_info, blocks: Vec::new(), skipped_l1_messages: Vec::new() }
     }
 
     /// Pushes a block consolidation outcome to the batch.
     pub fn push_block(&mut self, block: L2BlockInfoWithL1Messages) {
         self.blocks.push(block);
+    }
+
+    /// Adds the skipped L1 messages indexes.
+    pub fn with_skipped_l1_messages(&mut self, skipped: Vec<u64>) {
+        self.skipped_l1_messages = skipped;
     }
 }
 

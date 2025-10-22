@@ -58,6 +58,9 @@ pub trait DatabaseWriteOperations {
     /// Insert an [`L1MessageEnvelope`] into the database.
     async fn insert_l1_message(&self, l1_message: L1MessageEnvelope) -> Result<(), DatabaseError>;
 
+    /// Sets the `skipped` column to true for the provided list of L1 messages queue indexes.
+    async fn update_skipped_l1_messages(&self, indexes: Vec<u64>) -> Result<(), DatabaseError>;
+
     /// Delete all [`L1MessageEnvelope`]s with a block number greater than the provided block
     /// number and return them.
     async fn delete_l1_messages_gt(
@@ -329,6 +332,15 @@ impl<T: WriteConnectionProvider + ?Sized + Sync> DatabaseWriteOperations for T {
         }
     }
 
+    async fn update_skipped_l1_messages(&self, indexes: Vec<u64>) -> Result<(), DatabaseError> {
+        Ok(models::l1_message::Entity::update_many()
+            .col_expr(models::l1_message::Column::Skipped, Expr::value(true))
+            .filter(models::l1_message::Column::QueueIndex.is_in(indexes.iter().map(|&x| x as i64)))
+            .exec(self.get_connection())
+            .await
+            .map(|_| ())?)
+    }
+
     async fn delete_l1_messages_gt(
         &self,
         l1_block_number: u64,
@@ -531,6 +543,7 @@ impl<T: WriteConnectionProvider + ?Sized + Sync> DatabaseWriteOperations for T {
             self.insert_block(block.block_info, outcome.batch_info).await?;
             self.update_l1_messages_with_l2_block(block).await?;
         }
+        self.update_skipped_l1_messages(outcome.skipped_l1_messages).await?;
         Ok(())
     }
 
@@ -867,9 +880,10 @@ impl<T: ReadConnectionProvider + Sync + ?Sized> DatabaseReadOperations for T {
 
                 // Create a filter condition for messages that have an L1 block number less than or
                 // equal to the finalized block number and have not been included in an L2 block
-                // (i.e. L2BlockNumber is null).
+                // (i.e. L2BlockNumber is null) nor skipped.
                 let condition = Condition::all()
                     .add(models::l1_message::Column::L1BlockNumber.lte(target_block_number as i64))
+                    .add(models::l1_message::Column::Skipped.eq(false))
                     .add(models::l1_message::Column::L2BlockNumber.is_null());
                 // Yield n messages matching the condition ordered by increasing queue index.
                 Ok(models::l1_message::Entity::find()
@@ -899,9 +913,10 @@ impl<T: ReadConnectionProvider + Sync + ?Sized> DatabaseReadOperations for T {
                     };
                 // Create a filter condition for messages that have an L1 block number less than
                 // or equal to the target block number and have not been included in an L2 block
-                // (i.e. L2BlockNumber is null).
+                // (i.e. L2BlockNumber is null) nor skipped.
                 let condition = Condition::all()
                     .add(models::l1_message::Column::L1BlockNumber.lte(target_block_number as i64))
+                    .add(models::l1_message::Column::Skipped.eq(false))
                     .add(models::l1_message::Column::L2BlockNumber.is_null());
                 // Yield n messages matching the condition ordered by increasing queue index.
                 Ok(models::l1_message::Entity::find()

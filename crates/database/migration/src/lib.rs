@@ -15,6 +15,8 @@ mod m20250929_161536_add_additional_indexes;
 mod m20251001_125444_add_index_processed;
 mod m20251005_160938_add_initial_l1_block_numbers;
 mod m20251013_140946_add_initial_l1_processed_block_number;
+mod m20251021_070729_add_skipped_column;
+mod m20251021_144852_add_queue_index_index;
 
 mod migration_info;
 pub use migration_info::{
@@ -42,6 +44,8 @@ impl<MI: MigrationInfo + Send + Sync + 'static> MigratorTrait for Migrator<MI> {
             Box::new(m20251001_125444_add_index_processed::Migration),
             Box::new(m20251005_160938_add_initial_l1_block_numbers::Migration),
             Box::new(m20251013_140946_add_initial_l1_processed_block_number::Migration),
+            Box::new(m20251021_070729_add_skipped_column::Migration),
+            Box::new(m20251021_144852_add_queue_index_index::Migration),
         ]
     }
 }

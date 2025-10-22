@@ -423,6 +423,7 @@ impl<
         let batch_info = batch.batch_info;
         tracing::info!(target: "scroll::chain_orchestrator", batch_info = ?batch_info, num_blocks = batch.attributes.len(), "Handling derived batch");
 
+        let skipped_l1_messages = batch.skipped_l1_messages.clone();
         let batch_reconciliation_result =
             reconcile_batch(&self.l2_client, batch, self.engine.fcs()).await?;
         let aggregated_actions = batch_reconciliation_result.aggregate_actions();
@@ -490,7 +491,9 @@ impl<
             batch_reconciliation_result.into_batch_consolidation_outcome(reorg_results).await?;
 
         // Insert the batch consolidation outcome into the database.
-        let consolidation_outcome = batch_consolidation_outcome.clone();
+        let mut consolidation_outcome = batch_consolidation_outcome.clone();
+        consolidation_outcome.with_skipped_l1_messages(skipped_l1_messages);
+
         self.database.insert_batch_consolidation_outcome(consolidation_outcome).await?;
 
         Ok(Some(ChainOrchestratorEvent::BatchConsolidated(batch_consolidation_outcome)))

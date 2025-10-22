@@ -18,6 +18,7 @@ pub struct Model {
     sender: Vec<u8>,
     input: Vec<u8>,
     pub(crate) l2_block_number: Option<i64>,
+    skipped: bool,
 }
 
 /// The relation for the L1 message model.
@@ -40,6 +41,7 @@ impl From<L1MessageEnvelope> for ActiveModel {
             sender: ActiveValue::Set(value.transaction.sender.to_vec()),
             input: ActiveValue::Set(value.transaction.input.to_vec()),
             l2_block_number: ActiveValue::Set(value.l2_block_number.map(|b| b as i64)),
+            skipped: ActiveValue::Set(false),
         }
     }
 }
