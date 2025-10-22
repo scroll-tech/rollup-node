@@ -429,13 +429,14 @@ where
     /// Handles the batch commits events.
     #[tracing::instrument(skip_all)]
     async fn handle_batch_commits(&self, logs: &[Log]) -> L1WatcherResult<Vec<L1Notification>> {
-        // filter commit logs.
+        // filter commit logs and skip genesis batch (batch_index == 0).
         let mut commit_logs_with_tx = logs
             .iter()
             .map(|l| (l, l.transaction_hash))
             .filter_map(|(log, tx_hash)| {
                 let tx_hash = tx_hash?;
                 try_decode_log::<CommitBatch>(&log.inner)
+                    .filter(|decoded| !decoded.data.batch_index.is_zero())
                     .map(|decoded| (log, decoded.data, tx_hash))
             })
             .collect::<Vec<_>>();
@@ -509,11 +510,13 @@ where
         &self,
         logs: &[Log],
     ) -> L1WatcherResult<Vec<L1Notification>> {
-        // filter finalize logs.
+        // filter finalize logs and skip genesis batch (batch_index == 0).
         logs.iter()
             .map(|l| (l, l.block_number))
             .filter_map(|(log, bn)| {
-                try_decode_log::<FinalizeBatch>(&log.inner).map(|decoded| (decoded.data, bn))
+                try_decode_log::<FinalizeBatch>(&log.inner)
+                    .filter(|decoded| !decoded.data.batch_index.is_zero())
+                    .map(|decoded| (decoded.data, bn))
             })
             .map(|(decoded_log, maybe_block_number)| {
                 // fetch the finalize transaction.
