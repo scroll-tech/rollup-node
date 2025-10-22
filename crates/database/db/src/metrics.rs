@@ -2,7 +2,7 @@ use metrics::Histogram;
 use metrics_derive::Metrics;
 use strum::EnumIter;
 
-/// The metrics for the [`super::DatabaseInner`].
+/// The metrics for the [`super::db::DatabaseInner`].
 #[derive(Metrics, Clone)]
 #[metrics(scope = "database")]
 pub(crate) struct DatabaseMetrics {
