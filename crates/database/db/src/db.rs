@@ -240,11 +240,14 @@ impl DatabaseWriteOperations for Database {
     }
 
     async fn update_skipped_l1_messages(&self, indexes: Vec<u64>) -> Result<(), DatabaseError> {
-        self.tx_mut(move |tx| {
-            let indexes = indexes.clone();
-            async move { tx.update_skipped_l1_messages(indexes).await }
-        })
-        .await
+        metered!(
+            DatabaseOperation::UpdateSkippedL1Messages,
+            self,
+            tx_mut(move |tx| {
+                let indexes = indexes.clone();
+                async move { tx.update_skipped_l1_messages(indexes).await }
+            })
+        )
     }
 
     async fn delete_l1_messages_gt(
