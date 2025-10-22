@@ -16,7 +16,7 @@ pub use models::*;
 
 mod operations;
 pub use operations::{
-    DatabaseReadOperations, DatabaseWriteOperations, L1MessageKey, NotIncludedStart, UnwindResult,
+    DatabaseReadOperations, DatabaseWriteOperations, L1MessageKey, NotIncludedKey, UnwindResult,
 };
 
 pub use sea_orm::EntityTrait;
