@@ -11627,6 +11627,7 @@ dependencies = [
  "sea-orm",
  "serde",
  "serde_json",
+ "strum 0.27.2",
  "tempfile",
  "thiserror 2.0.16",
  "tokio",
