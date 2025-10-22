@@ -95,7 +95,7 @@ impl Stream for DerivationPipeline {
 }
 
 /// The maximum number of concurrent batch derivation futures.
-const DERIVATION_PIPELINE_WORKER_CONCURRENCY: usize = 5;
+const DERIVATION_PIPELINE_WORKER_CONCURRENCY: usize = 3;
 
 /// A structure holding the current unresolved futures for the derivation pipeline.
 #[derive(Debug)]

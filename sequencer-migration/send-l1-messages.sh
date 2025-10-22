@@ -78,5 +78,7 @@ main() {
     log_info "Next queue index:  $next_queue_index "
     done
 
-    echo "Done"
+    log_info "Done"
 }
+
+main "$@"
