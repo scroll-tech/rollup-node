@@ -388,7 +388,7 @@ impl<T: WriteConnectionProvider + ?Sized + Sync> DatabaseWriteOperations for T {
         let Some((block_info, batch_info)) =
             self.get_latest_safe_l2_info().await?.filter(|(block_info, _)| block_info.number > 0)
         else {
-            return Ok((None, None))
+            return Ok((None, None));
         };
         let batch = self.get_batch_by_index(batch_info.index).await?.expect("batch must exist");
         Ok((Some(block_info), Some(batch.block_number.saturating_add(1))))
@@ -864,7 +864,7 @@ impl<T: ReadConnectionProvider + Sync + ?Sized> DatabaseReadOperations for T {
             // Provides a stream over all L1 messages with increasing queue index starting that have
             // not been included in an L2 block and have a block number less than or equal to the
             // finalized L1 block number (they have been finalized on L1).
-            Some(L1MessageKey::NotIncluded(NotIncludedStart::FinalizedWithBlockDepth(depth))) => {
+            Some(L1MessageKey::NotIncluded(NotIncludedKey::FinalizedWithBlockDepth(depth))) => {
                 // Lookup the finalized L1 block number.
                 let finalized_block_number = self.get_finalized_l1_block_number().await?;
 
@@ -898,7 +898,7 @@ impl<T: ReadConnectionProvider + Sync + ?Sized> DatabaseReadOperations for T {
             // included in an L2 block and have a block number less than or equal to the
             // latest L1 block number minus the provided depth (they have been sufficiently deep
             // on L1 to be considered safe to include - reorg risk is low).
-            Some(L1MessageKey::NotIncluded(NotIncludedStart::BlockDepth(depth))) => {
+            Some(L1MessageKey::NotIncluded(NotIncludedKey::BlockDepth(depth))) => {
                 // Lookup the latest L1 block number.
                 let latest_block_number = self.get_latest_l1_block_number().await?;
 
@@ -1055,7 +1055,8 @@ impl<T: ReadConnectionProvider + Sync + ?Sized> DatabaseReadOperations for T {
 /// A key for an L1 message stored in the database.
 ///
 /// It can either be the queue index, queue hash or the transaction hash.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub enum L1MessageKey {
     /// The queue index of the message.
     QueueIndex(u64),
@@ -1066,7 +1067,7 @@ pub enum L1MessageKey {
     /// Start from the first message for the provided block number.
     BlockNumber(u64),
     /// Start from messages that have not been included in a block yet.
-    NotIncluded(NotIncludedStart),
+    NotIncluded(NotIncludedKey),
 }
 
 impl L1MessageKey {
@@ -1093,13 +1094,15 @@ impl L1MessageKey {
 
 /// This type defines where to start when fetching L1 messages that have not been included in a
 /// block yet.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum NotIncludedStart {
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub enum NotIncludedKey {
     /// Start from finalized messages that have not been included in a block yet and have a L1
     /// block number that is a specified number of blocks below the current finalized L1 block
     /// number.
+    #[serde(rename = "notIncludedFinalizedWithBlockDepth")]
     FinalizedWithBlockDepth(u64),
     /// Start from unfinalized messages that are included in L1 blocks at a specific depth.
+    #[serde(rename = "notIncludedBlockDepth")]
     BlockDepth(u64),
 }
 
@@ -1115,10 +1118,10 @@ impl fmt::Display for L1MessageKey {
             Self::TransactionHash(hash) => write!(f, "TransactionHash({hash:#x})"),
             Self::BlockNumber(number) => write!(f, "BlockNumber({number})"),
             Self::NotIncluded(start) => match start {
-                NotIncludedStart::FinalizedWithBlockDepth(depth) => {
+                NotIncludedKey::FinalizedWithBlockDepth(depth) => {
                     write!(f, "NotIncluded(Finalized:{depth})")
                 }
-                NotIncludedStart::BlockDepth(depth) => {
+                NotIncludedKey::BlockDepth(depth) => {
                     write!(f, "NotIncluded(BlockDepth({depth}))")
                 }
             },
@@ -1138,4 +1141,72 @@ pub struct UnwindResult {
     pub l2_head_block_number: Option<u64>,
     /// The L2 safe block info after the unwind. This is only populated if the L2 safe has reorged.
     pub l2_safe_block_info: Option<BlockInfo>,
+}
+
+mod tests {
+
+    #[test]
+    fn test_l1_message_key_serialization() {
+        use crate::{L1MessageKey, NotIncludedKey};
+        use alloy_primitives::B256;
+        use std::str::FromStr;
+
+        // Test for `L1MessageKey::QueueIndex`
+        let key = L1MessageKey::QueueIndex(42);
+        let json = serde_json::to_string(&key).unwrap();
+        let decoded: L1MessageKey = serde_json::from_str(&json).unwrap();
+        assert_eq!(key, decoded);
+
+        // Test for `L1MessageKey::TransactionHash`
+        let key = L1MessageKey::TransactionHash(
+            B256::from_str("0xa46f0b1dbe17b3d0d86fa70cef4a23dca5efcd35858998cc8c53140d01429746")
+                .unwrap(),
+        );
+        let json = serde_json::to_string(&key).unwrap();
+        let decoded: L1MessageKey = serde_json::from_str(&json).unwrap();
+        assert_eq!(key, decoded);
+
+        // Test for `L1MessageKey::NotIncluded`
+        let key = L1MessageKey::NotIncluded(NotIncludedKey::FinalizedWithBlockDepth(100));
+        let json = serde_json::to_string(&key).unwrap();
+        let decoded: L1MessageKey = serde_json::from_str(&json).unwrap();
+        assert_eq!(key, decoded);
+    }
+
+    #[test]
+    fn test_l1_message_key_manual_serialization() {
+        use crate::{L1MessageKey, NotIncludedKey};
+        use alloy_primitives::B256;
+        use std::str::FromStr;
+
+        // Test for `L1MessageKey::QueueIndex`
+        let json_string_queue_index = r#"{"queueIndex":42}"#;
+        let decoded_queue_index: L1MessageKey =
+            serde_json::from_str(json_string_queue_index).unwrap();
+        assert_eq!(decoded_queue_index, L1MessageKey::QueueIndex(42));
+
+        // Test for `L1MessageKey::TransactionHash`
+        let json_string_transaction_hash = r#"{"transactionHash":"0xa46f0b1dbe17b3d0d86fa70cef4a23dca5efcd35858998cc8c53140d01429746"}"#;
+        let decoded_transaction_hash: L1MessageKey =
+            serde_json::from_str(json_string_transaction_hash).unwrap();
+        assert_eq!(
+            decoded_transaction_hash,
+            L1MessageKey::TransactionHash(
+                B256::from_str(
+                    "0xa46f0b1dbe17b3d0d86fa70cef4a23dca5efcd35858998cc8c53140d01429746"
+                )
+                .unwrap()
+            )
+        );
+
+        // Test for `L1MessageKey::NotIncluded`
+        let json_string_not_included_key =
+            r#"{"notIncluded":{"notIncludedFinalizedWithBlockDepth":100}}"#;
+        let decoded_not_included_key: L1MessageKey =
+            serde_json::from_str(json_string_not_included_key).unwrap();
+        assert_eq!(
+            decoded_not_included_key,
+            L1MessageKey::NotIncluded(NotIncludedKey::FinalizedWithBlockDepth(100))
+        );
+    }
 }

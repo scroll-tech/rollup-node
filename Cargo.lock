@@ -11625,6 +11625,7 @@ dependencies = [
  "scroll-alloy-rpc-types-engine",
  "scroll-migration",
  "sea-orm",
+ "serde",
  "serde_json",
  "strum 0.27.2",
  "tempfile",
