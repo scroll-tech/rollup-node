@@ -53,10 +53,10 @@ pub const DEV_SYSTEM_CONTRACT_ADDRESS: Address =
     address!("000000000000000000000000000000000003dead");
 
 /// The L1 start block for Mainnet.
-pub const MAINNET_L1_START_BLOCK_NUMBER: u64 = 18318215;
+pub const MAINNET_L1_START_BLOCK_NUMBER: u64 = 18306000;
 
 /// The L1 start block for Sepolia.
-pub const SEPOLIA_L1_START_BLOCK_NUMBER: u64 = 4041343;
+pub const SEPOLIA_L1_START_BLOCK_NUMBER: u64 = 4038000;
 
 /// The L1 start block for Devnet.
 pub const DEV_L1_START_BLOCK_NUMBER: u64 = 0;
