@@ -15,8 +15,8 @@ alloy-eips = { workspace = true, features = ["kzg"] }
 alloy-primitives.workspace = true
 alloy-provider.workspace = true
 alloy-rpc-client.workspace = true
-alloy-rpc-types-beacon = "0.14"
-alloy-serde = { version = "0.15.5", default-features = false }
+alloy-rpc-types-beacon = "1.0.37"
+alloy-serde = { version = "1.0.37", default-features = false }
 alloy-transport.workspace = true
 
 # scroll

@@ -1,10 +1,9 @@
 //! e2e tests for the sequencer.
 
-use alloy_consensus::BlockHeader;
+use alloy_consensus::{transaction::TxHashRef, BlockHeader};
 use alloy_primitives::{hex, Address, U256};
 use futures::stream::StreamExt;
 use reth_e2e_test_utils::transaction::TransactionTestContext;
-use reth_node_core::primitives::SignedTransaction;
 use reth_scroll_chainspec::SCROLL_DEV;
 use reth_scroll_node::test_utils::setup;
 use rollup_node::{
