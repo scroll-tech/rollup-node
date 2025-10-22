@@ -18,8 +18,6 @@ exec rollup-node node --chain /l2reth/l2reth-genesis-e2e.json --datadir=/l2reth 
   --rpc.rollup-node \
   --log.stdout.format log-fmt -vvv \
   --sequencer.enabled \
-  --sequencer.auto-start \
-  --sequencer.max-l1-messages 10 \
   --sequencer.allow-empty-blocks \
   --signer.key-file /l2reth/sequencer-key \
   --sequencer.block-time 500 \
