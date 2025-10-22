@@ -20,7 +20,7 @@ use rollup_node_sequencer::{
     L1MessageInclusionMode, PayloadBuildingConfig, Sequencer, SequencerConfig, SequencerEvent,
 };
 use rollup_node_watcher::L1Notification;
-use scroll_alloy_consensus::TxL1Message;
+use scroll_alloy_consensus::{ScrollTransaction, TxL1Message};
 use scroll_alloy_provider::ScrollAuthApiEngineClient;
 use scroll_db::{test_utils::setup_test_db, DatabaseWriteOperations};
 use scroll_engine::{Engine, ForkchoiceState};
@@ -955,4 +955,135 @@ async fn should_limit_l1_message_cumulative_gas() {
     // now should include the next l1 message.
     assert_eq!(block.body.transactions.len(), 1);
     assert_eq!(block.header.gas_used(), 21_000);
+}
+
+#[tokio::test]
+async fn should_not_add_skipped_messages() {
+    reth_tracing::init_test_tracing();
+
+    // setup a test node
+    let chain_spec = SCROLL_DEV.clone();
+    let (mut nodes, _tasks, wallet) =
+        setup_engine(default_test_scroll_rollup_node_config(), 1, chain_spec, false, false)
+            .await
+            .unwrap();
+    let node = nodes.pop().unwrap();
+    let wallet = Arc::new(Mutex::new(wallet));
+
+    // create a forkchoice state
+    let genesis_hash = node.inner.chain_spec().genesis_hash();
+    let fcs = ForkchoiceState::new(
+        BlockInfo { hash: genesis_hash, number: 0 },
+        Default::default(),
+        Default::default(),
+    );
+
+    // create the engine driver connected to the node
+    let auth_client = node.inner.engine_http_client();
+    let engine_client = ScrollAuthApiEngineClient::new(auth_client);
+    let mut engine = Engine::new(Arc::new(engine_client), fcs);
+
+    // create a test database
+    let database = Arc::new(setup_test_db().await);
+    let provider = database.clone();
+
+    // Set the latest and finalized block number
+    database.set_latest_l1_block_number(5).await.unwrap();
+    database.set_finalized_l1_block_number(1).await.unwrap();
+
+    // create a sequencer
+    let config = SequencerConfig {
+        chain_spec: node.inner.chain_spec(),
+        fee_recipient: Address::random(),
+        auto_start: false,
+        payload_building_config: PayloadBuildingConfig {
+            block_gas_limit: SCROLL_GAS_LIMIT,
+            max_l1_messages_per_block: 4,
+            l1_message_inclusion_mode: L1MessageInclusionMode::FinalizedWithBlockDepth(0),
+        },
+        block_time: 0,
+        payload_building_duration: 0,
+        allow_empty_blocks: true,
+    };
+    let mut sequencer = Sequencer::new(provider, config);
+
+    // add L1 messages to database
+    let wallet_lock = wallet.lock().await;
+    let l1_messages = [
+        L1MessageEnvelope {
+            l1_block_number: 1,
+            l2_block_number: None,
+            queue_hash: None,
+            transaction: TxL1Message {
+                queue_index: 0,
+                gas_limit: 100_000,
+                to: Address::random(),
+                value: U256::from(1),
+                sender: wallet_lock.inner.address(),
+                input: vec![].into(),
+            },
+        },
+        L1MessageEnvelope {
+            l1_block_number: 1,
+            l2_block_number: None,
+            queue_hash: None,
+            transaction: TxL1Message {
+                queue_index: 1,
+                gas_limit: 100_000,
+                to: Address::random(),
+                value: U256::from(1),
+                sender: wallet_lock.inner.address(),
+                input: vec![].into(),
+            },
+        },
+        L1MessageEnvelope {
+            l1_block_number: 1,
+            l2_block_number: None,
+            queue_hash: None,
+            transaction: TxL1Message {
+                queue_index: 2,
+                gas_limit: 100_000,
+                to: Address::random(),
+                value: U256::from(1),
+                sender: wallet_lock.inner.address(),
+                input: vec![].into(),
+            },
+        },
+        L1MessageEnvelope {
+            l1_block_number: 1,
+            l2_block_number: None,
+            queue_hash: None,
+            transaction: TxL1Message {
+                queue_index: 3,
+                gas_limit: 100_000,
+                to: Address::random(),
+                value: U256::from(1),
+                sender: wallet_lock.inner.address(),
+                input: vec![].into(),
+            },
+        },
+    ];
+    for l1_message in l1_messages {
+        database.insert_l1_message(l1_message).await.unwrap();
+    }
+    // mark the first two messages as skipped.
+    database.update_skipped_l1_messages(vec![0, 1]).await.unwrap();
+
+    // build payload, should only include the last two messages.
+    sequencer.start_payload_building(&mut engine).await.unwrap();
+    let block = if let SequencerEvent::PayloadReady(payload_id) = sequencer.next().await.unwrap() {
+        let block = sequencer.finalize_payload_building(payload_id, &mut engine).await.unwrap();
+        assert!(block.is_some(), "expected a new payload, but got: {:?}", block);
+        block.unwrap()
+    } else {
+        panic!("expected a payload ready event");
+    };
+
+    // verify only one L1 message is included
+    assert_eq!(block.body.transactions.len(), 2);
+    assert_eq!(
+        block.body.transactions.into_iter().filter_map(|x| x.queue_index()).collect::<Vec<_>>(),
+        vec![2, 3]
+    );
+    assert_eq!(block.header.gas_used, 42_000);
 }

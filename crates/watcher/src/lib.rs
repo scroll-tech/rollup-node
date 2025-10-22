@@ -29,8 +29,6 @@ use std::{
 };
 use tokio::sync::mpsc;
 
-/// The block range used to fetch L1 logs.
-pub const LOGS_QUERY_BLOCK_RANGE: u64 = 500;
 /// The maximum count of unfinalized blocks we can have in Ethereum.
 pub const MAX_UNFINALIZED_BLOCK_COUNT: usize = 96;
 
@@ -84,6 +82,8 @@ pub struct L1Watcher<EP> {
     metrics: WatcherMetrics,
     /// Whether the watcher is synced to the L1 head.
     is_synced: bool,
+    /// The log query block range.
+    log_query_block_range: u64,
 }
 
 /// The L1 notification type yielded by the [`L1Watcher`].
@@ -158,10 +158,11 @@ where
         execution_provider: EP,
         start_block: Option<u64>,
         config: Arc<NodeConfig>,
+        log_query_block_range: u64,
     ) -> mpsc::Receiver<Arc<L1Notification>> {
         tracing::trace!(target: "scroll::watcher", ?start_block, ?config, "spawning L1 watcher");
 
-        let (tx, rx) = mpsc::channel(LOGS_QUERY_BLOCK_RANGE as usize);
+        let (tx, rx) = mpsc::channel(log_query_block_range as usize);
 
         let fetch_block_number = async |tag: BlockNumberOrTag| {
             let block = loop {
@@ -192,6 +193,7 @@ where
             config,
             metrics: WatcherMetrics::default(),
             is_synced: false,
+            log_query_block_range,
         };
 
         // notify at spawn.
@@ -612,7 +614,7 @@ where
     async fn update_current_block(&mut self, latest: &Block) -> L1WatcherResult<()> {
         self.current_block_number = self
             .current_block_number
-            .saturating_add(LOGS_QUERY_BLOCK_RANGE)
+            .saturating_add(self.log_query_block_range)
             .min(latest.header.number);
         self.notify(L1Notification::Processed(self.current_block_number)).await
     }
@@ -637,7 +639,8 @@ where
 
     /// Returns the next range of logs, for the block range in
     /// \[[`current_block`](field@L1Watcher::current_block_number);
-    /// [`current_block`](field@L1Watcher::current_block_number) + [`LOGS_QUERY_BLOCK_RANGE`]\].
+    /// [`current_block`](field@L1Watcher::current_block_number) +
+    /// [`field@L1Watcher::log_query_block_range`]\].
     async fn next_filtered_logs(&self, latest_block_number: u64) -> L1WatcherResult<Vec<Log>> {
         // set the block range for the query
         let address_book = &self.config.address_book;
@@ -654,7 +657,7 @@ where
             ]);
         let to_block = self
             .current_block_number
-            .saturating_add(LOGS_QUERY_BLOCK_RANGE)
+            .saturating_add(self.log_query_block_range)
             .min(latest_block_number);
 
         // skip a block for `from_block` since `self.current_block_number` is the last indexed
@@ -679,6 +682,8 @@ mod tests {
     use arbitrary::Arbitrary;
     use scroll_l1::abi::calls::commitBatchCall;
 
+    const LOG_QUERY_BLOCK_RANGE: u64 = 500;
+
     // Returns a L1Watcher along with the receiver end of the L1Notifications.
     fn l1_watcher(
         unfinalized_blocks: Vec<Header>,
@@ -699,7 +704,7 @@ mod tests {
             vec![latest],
         );
 
-        let (tx, rx) = mpsc::channel(LOGS_QUERY_BLOCK_RANGE as usize);
+        let (tx, rx) = mpsc::channel(LOG_QUERY_BLOCK_RANGE as usize);
         (
             L1Watcher {
                 execution_provider: provider,
@@ -710,6 +715,7 @@ mod tests {
                 config: Arc::new(NodeConfig::mainnet()),
                 metrics: WatcherMetrics::default(),
                 is_synced: false,
+                log_query_block_range: LOG_QUERY_BLOCK_RANGE,
             },
             rx,
         )

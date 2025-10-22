@@ -18,6 +18,7 @@ use tokio::select;
 async fn test_should_not_index_latest_block_multiple_times() -> eyre::Result<()> {
     const CHAIN_LEN: usize = 200;
     const HALF_CHAIN_LEN: usize = 100;
+    const LOGS_QUERY_BLOCK_RANGE: u64 = 500;
 
     // Given
     let (finalized, latest, headers) = chain(CHAIN_LEN);
@@ -58,7 +59,8 @@ async fn test_should_not_index_latest_block_multiple_times() -> eyre::Result<()>
     );
 
     // spawn the watcher and verify received notifications are consistent.
-    let mut l1_watcher = L1Watcher::spawn(mock_provider, None, Arc::new(config)).await;
+    let mut l1_watcher =
+        L1Watcher::spawn(mock_provider, None, Arc::new(config), LOGS_QUERY_BLOCK_RANGE).await;
     let mut prev_block_number = 0;
     let mut ticker = tokio::time::interval(tokio::time::Duration::from_secs(2));
     let _ = ticker.tick().await;
