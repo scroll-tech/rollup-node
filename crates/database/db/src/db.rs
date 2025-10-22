@@ -27,13 +27,22 @@ use tokio::sync::{Mutex, Semaphore};
 const BUSY_TIMEOUT_SECS: u64 = 5;
 
 /// The maximum number of connections in the database connection pool.
-const MAX_CONNECTIONS: u32 = 32;
+const MAX_CONNECTIONS: u32 = 6;
 
 /// The minimum number of connections in the database connection pool.
-const MIN_CONNECTIONS: u32 = 5;
+const MIN_CONNECTIONS: u32 = 2;
 
 /// The timeout for acquiring a connection from the pool.
 const ACQUIRE_TIMEOUT_SECS: u64 = 5;
+
+/// The cache size in KB
+const CACHE_SIZE_KB: &str = "-131072"; // 128 MB
+
+/// The mmap size in bytes
+const MMAP_SIZE_BYTES: &str = "536870912"; // 512 MB
+
+/// The wal auto checkpoint size in pages
+const WAL_AUTO_CHECKPOINT_PAGES: &str = "50000"; // 200 MB (with default page size of 4 KB)
 
 /// A wrapper around `DatabaseInner` which provides retry features.
 #[derive(Debug)]
@@ -595,7 +604,11 @@ impl DatabaseInner {
             .journal_mode(sea_orm::sqlx::sqlite::SqliteJournalMode::Wal)
             .busy_timeout(Duration::from_secs(busy_timeout_secs))
             .foreign_keys(true)
-            .synchronous(sea_orm::sqlx::sqlite::SqliteSynchronous::Normal);
+            .synchronous(sea_orm::sqlx::sqlite::SqliteSynchronous::Normal)
+            .pragma("cache_size", CACHE_SIZE_KB)
+            .pragma("mmap_size", MMAP_SIZE_BYTES)
+            .pragma("wal_autocheckpoint", WAL_AUTO_CHECKPOINT_PAGES)
+            .pragma("temp_store", "MEMORY");
 
         let sqlx_pool = SqlitePoolOptions::new()
             .max_connections(max_connections)
