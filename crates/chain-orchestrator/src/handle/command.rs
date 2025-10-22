@@ -36,5 +36,5 @@ pub enum ChainOrchestratorCommand<N: FullNetwork<Primitives = ScrollNetworkPrimi
 #[derive(Debug)]
 pub enum DatabaseQuery {
     /// Get L1 message by its index.
-    GetL1MessageByIndex(L1MessageKey, oneshot::Sender<Option<L1MessageEnvelope>>),
+    GetL1MessageByKey(L1MessageKey, oneshot::Sender<Option<L1MessageEnvelope>>),
 }

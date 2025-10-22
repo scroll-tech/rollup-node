@@ -94,11 +94,11 @@ impl<N: FullNetwork<Primitives = ScrollNetworkPrimitives>> ChainOrchestratorHand
     /// Get an L1 message by its index.
     pub async fn get_l1_message_by_key(
         &self,
-        index: L1MessageKey,
+        key: L1MessageKey,
     ) -> Result<Option<L1MessageEnvelope>, oneshot::error::RecvError> {
         let (tx, rx) = oneshot::channel();
         self.send_command(ChainOrchestratorCommand::DatabaseQuery(
-            DatabaseQuery::GetL1MessageByIndex(index, tx),
+            DatabaseQuery::GetL1MessageByKey(key, tx),
         ));
         rx.await
     }
