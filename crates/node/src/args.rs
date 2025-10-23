@@ -259,7 +259,7 @@ impl ScrollRollupNodeConfig {
             ForkchoiceState::from_provider(&l2_provider).await.unwrap_or_else(chain_spec_fcs);
 
         let genesis_hash = chain_spec.genesis_hash();
-        let (l1_start_block_number, l2_head_block_number) = db
+        let (l1_start_block_number, mut l2_head_block_number) = db
             .tx_mut(move |tx| async move {
                 // On startup we replay the latest batch of blocks from the database as such we set
                 // the safe block hash to the latest block hash associated with the
@@ -268,24 +268,42 @@ impl ScrollRollupNodeConfig {
                     tx.prepare_on_startup(genesis_hash).await?;
 
                 let l2_head_block_number = tx.get_l2_head_block_number().await?;
-                tx.purge_l1_message_to_l2_block_mappings(Some(l2_head_block_number + 1)).await?;
 
                 Ok::<_, DatabaseError>((l1_start_block_number, l2_head_block_number))
             })
             .await?;
 
-        // Update the head block info if available and ahead of finalized.
-        if l2_head_block_number > fcs.finalized_block_info().number {
-            let block = l2_provider
+        // Loop to find the latest block that we have in the EN and purge L1 message mappings to
+        // account for the startup block
+        //
+        // This is necessary as there is an edge case in which the EN may not have persisted the
+        // latest block.
+        let finalized_block_number = fcs.finalized_block_info().number;
+        while l2_head_block_number > finalized_block_number {
+            tracing::info!(target: "scroll::node::args", ?l2_head_block_number, "Checking for L2 head block in EN");
+
+            // Check if the block exists in the EN and update the forkchoice state and L2 head block
+            // number
+            if let Some(block) = l2_provider
                 .get_block(l2_head_block_number.into())
                 .full()
                 .await?
-                .expect("latest block from db should exist")
-                .into_consensus()
-                .map_transactions(|tx| tx.inner.into_inner());
-            let block_info: BlockInfo = (&block).into();
+                .map(|b| b.into_consensus().map_transactions(|tx| tx.inner.into_inner()))
+            {
+                tracing::info!(target: "scroll::node::args", ?l2_head_block_number, "Found L2 head block in EN");
+                let block_info: BlockInfo = (&block).into();
+                fcs.update(Some(block_info), None, None)?;
+                db.tx_mut(move |tx| async move {
+                    tx.set_l2_head_block_number(l2_head_block_number).await?;
+                    tx.purge_l1_message_to_l2_block_mappings(Some(l2_head_block_number + 1)).await
+                })
+                .await?;
+                break;
+            }
 
-            fcs.update(Some(block_info), None, None)?;
+            // Decrement the L2 head block number and try again
+            tracing::info!(target: "scroll::node::args", ?l2_head_block_number, "L2 head block not found in EN, decrementing");
+            l2_head_block_number -= 1;
         }
 
         let chain_spec = Arc::new(chain_spec.clone());
