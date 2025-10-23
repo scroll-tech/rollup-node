@@ -1,5 +1,5 @@
 use alloy_primitives::Address;
-use scroll_db::{L1MessageKey, NotIncludedStart};
+use scroll_db::{L1MessageKey, NotIncludedKey};
 use std::{fmt, str::FromStr, sync::Arc};
 
 /// Configuration for the sequencer.
@@ -82,10 +82,10 @@ impl From<L1MessageInclusionMode> for L1MessageKey {
     fn from(mode: L1MessageInclusionMode) -> Self {
         match mode {
             L1MessageInclusionMode::FinalizedWithBlockDepth(depth) => {
-                Self::NotIncluded(NotIncludedStart::FinalizedWithBlockDepth(depth))
+                Self::NotIncluded(NotIncludedKey::FinalizedWithBlockDepth(depth))
             }
             L1MessageInclusionMode::BlockDepth(depth) => {
-                Self::NotIncluded(NotIncludedStart::BlockDepth(depth))
+                Self::NotIncluded(NotIncludedKey::BlockDepth(depth))
             }
         }
     }

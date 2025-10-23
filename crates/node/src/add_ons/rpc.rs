@@ -8,6 +8,7 @@ use reth_network_api::FullNetwork;
 use reth_scroll_node::ScrollNetworkPrimitives;
 use rollup_node_chain_orchestrator::{ChainOrchestratorHandle, ChainOrchestratorStatus};
 use rollup_node_primitives::L1MessageEnvelope;
+use scroll_db::L1MessageKey;
 use tokio::sync::{oneshot, Mutex, OnceCell};
 
 /// RPC extension for rollup node management operations.
@@ -84,6 +85,13 @@ pub trait RollupNodeExtApi {
     /// Returns the L1 message by index.
     #[method(name = "getL1MessageByIndex")]
     async fn get_l1_message_by_index(&self, index: u64) -> RpcResult<Option<L1MessageEnvelope>>;
+
+    /// Returns the L1 message by key.
+    #[method(name = "getL1MessageByKey")]
+    async fn get_l1_message_by_key(
+        &self,
+        l1_message_key: L1MessageKey,
+    ) -> RpcResult<Option<L1MessageEnvelope>>;
 }
 
 #[async_trait]
@@ -154,10 +162,31 @@ where
             )
         })?;
 
-        handle.get_l1_message_by_index(index).await.map_err(|e| {
+        handle.get_l1_message_by_key(L1MessageKey::from_queue_index(index)).await.map_err(|e| {
             ErrorObjectOwned::owned(
                 error::INTERNAL_ERROR_CODE,
                 format!("Failed to get L1 message by index: {}", e),
+                None::<()>,
+            )
+        })
+    }
+
+    async fn get_l1_message_by_key(
+        &self,
+        l1_message_key: L1MessageKey,
+    ) -> RpcResult<Option<L1MessageEnvelope>> {
+        let handle = self.rollup_manager_handle().await.map_err(|e| {
+            ErrorObjectOwned::owned(
+                error::INTERNAL_ERROR_CODE,
+                format!("Failed to get rollup manager handle: {}", e),
+                None::<()>,
+            )
+        })?;
+
+        handle.get_l1_message_by_key(l1_message_key).await.map_err(|e| {
+            ErrorObjectOwned::owned(
+                error::INTERNAL_ERROR_CODE,
+                format!("Failed to get L1 message by key: {}", e),
                 None::<()>,
             )
         })
