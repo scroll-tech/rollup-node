@@ -91,6 +91,7 @@ where
             .launch_with_fn(|builder| {
                 let tree_config = TreeConfig::default()
                     .with_always_process_payload_attributes_on_canonical_head(true)
+                    .with_unwind_canonical_header(true)
                     .with_persistence_threshold(0);
                 let launcher = EngineNodeLauncher::new(
                     builder.task_executor().clone(),

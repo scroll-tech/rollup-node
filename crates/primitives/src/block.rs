@@ -1,5 +1,5 @@
 use crate::RollupNodePrimitiveError;
-use alloy_consensus::Header;
+use alloy_consensus::{transaction::TxHashRef, Header};
 use alloy_eips::{BlockNumHash, Decodable2718};
 use alloy_primitives::{B256, U256};
 use alloy_rpc_types_engine::{ExecutionPayload, ExecutionPayloadV1};
@@ -9,7 +9,6 @@ use core::{
     pin::Pin,
     task::{ready, Context, Poll},
 };
-use reth_primitives_traits::transaction::signed::SignedTransaction;
 use reth_scroll_primitives::{ScrollBlock, ScrollTransactionSigned};
 use scroll_alloy_consensus::L1_MESSAGE_TRANSACTION_TYPE;
 use std::vec::Vec;
