@@ -178,6 +178,13 @@ impl<
 
     /// Drives the [`ChainOrchestrator`] future until a [`Shutdown`] signal is received.
     pub async fn run_until_shutdown(mut self, mut shutdown: Shutdown) {
+        // On startup we should issue a fcu to the engine to ensure it is synced with the current
+        // state.
+        self.engine
+            .update_fcs(None, None, None)
+            .await
+            .expect("initial forkchoice update on chain orchestrator startup should succeed");
+
         loop {
             tokio::select! {
                 biased;
