@@ -476,7 +476,9 @@ impl<T: WriteConnectionProvider + ?Sized + Sync> DatabaseWriteOperations for T {
         if blocks.is_empty() {
             return Ok(());
         }
-        tracing::trace!(target: "scroll::db", num_blocks = blocks.len(), "Updating executed L1 messages from blocks with L2 block number in the database.");
+        let start = blocks.first().unwrap().block_info.number;
+        let end = blocks.last().unwrap().block_info.number;
+        tracing::trace!(target: "scroll::db", start_block = start, end_block = end, "Updating executed L1 messages from blocks with L2 block number in the database.");
 
         let mut case = CaseStatement::new();
         let mut all_hashes = Vec::new();
