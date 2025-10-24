@@ -320,18 +320,6 @@ impl DatabaseWriteOperations for Database {
         )
     }
 
-    async fn insert_block(
-        &self,
-        block_info: BlockInfo,
-        batch_info: BatchInfo,
-    ) -> Result<(), DatabaseError> {
-        metered!(
-            DatabaseOperation::InsertBlock,
-            self,
-            tx_mut(move |tx| async move { tx.insert_block(block_info, batch_info).await })
-        )
-    }
-
     async fn insert_genesis_block(&self, genesis_hash: B256) -> Result<(), DatabaseError> {
         metered!(
             DatabaseOperation::InsertGenesisBlock,
@@ -354,16 +342,16 @@ impl DatabaseWriteOperations for Database {
         )
     }
 
-    async fn update_l1_messages_with_l2_block(
+    async fn update_l1_messages_with_l2_blocks(
         &self,
-        block_info: L2BlockInfoWithL1Messages,
+        blocks: Vec<L2BlockInfoWithL1Messages>,
     ) -> Result<(), DatabaseError> {
         metered!(
             DatabaseOperation::UpdateL1MessagesWithL2Block,
             self,
             tx_mut(move |tx| {
-                let block_info = block_info.clone();
-                async move { tx.update_l1_messages_with_l2_block(block_info).await }
+                let blocks = blocks.clone();
+                async move { tx.update_l1_messages_with_l2_blocks(blocks).await }
             })
         )
     }
@@ -854,12 +842,14 @@ mod test {
         let batch_info: BatchInfo = data.clone().into();
         db.insert_batch(data).await.unwrap();
 
+        let mut blocks = Vec::new();
         for _ in 0..10 {
             let block_info =
                 BlockInfo { number: block_number, hash: B256::arbitrary(&mut u).unwrap() };
-            db.insert_block(block_info, batch_info).await.unwrap();
             block_number += 1;
+            blocks.push(block_info);
         }
+        db.insert_blocks(blocks, batch_info).await.unwrap();
 
         // Fetch the highest block for the batch hash and verify number.
         let highest_block_info =
@@ -893,12 +883,14 @@ mod test {
         db.insert_batch(first_batch).await.unwrap();
         db.insert_batch(second_batch).await.unwrap();
 
+        let mut blocks = Vec::new();
         for _ in 0..10 {
             let block_info =
                 BlockInfo { number: block_number, hash: B256::arbitrary(&mut u).unwrap() };
-            db.insert_block(block_info, first_batch_info).await.unwrap();
             block_number += 1;
+            blocks.push(block_info);
         }
+        db.insert_blocks(blocks, first_batch_info).await.unwrap();
 
         // Fetch the highest block for the batch hash and verify number.
         let highest_block_info =
@@ -1136,10 +1128,9 @@ mod test {
         let mut block_infos = Vec::new();
         for i in 200..205 {
             let block_info = BlockInfo { number: i, hash: B256::arbitrary(&mut u).unwrap() };
-            let l2_block = block_info;
             block_infos.push(block_info);
-            db.insert_block(l2_block, batch_info).await.unwrap();
         }
+        db.insert_blocks(block_infos.clone(), batch_info).await.unwrap();
 
         // Test getting existing blocks
         for expected_block in block_infos {
@@ -1177,9 +1168,7 @@ mod test {
         let safe_block_1 = BlockInfo { number: 200, hash: B256::arbitrary(&mut u).unwrap() };
         let safe_block_2 = BlockInfo { number: 201, hash: B256::arbitrary(&mut u).unwrap() };
 
-        db.insert_block(safe_block_1, batch_info).await.unwrap();
-
-        db.insert_block(safe_block_2, batch_info).await.unwrap();
+        db.insert_blocks(vec![safe_block_1, safe_block_2], batch_info).await.unwrap();
 
         // Should return the highest safe block (block 201)
         let latest_safe = db.get_latest_safe_l2_info().await.unwrap();
@@ -1198,11 +1187,12 @@ mod test {
 
         // Insert multiple L2 blocks with batch info
         let batch_info = BatchInfo { index: 0, hash: B256::default() };
+        let mut blocks = Vec::new();
         for i in 400..410 {
             let block_info = BlockInfo { number: i, hash: B256::arbitrary(&mut u).unwrap() };
-
-            db.insert_block(block_info, batch_info).await.unwrap();
+            blocks.push(block_info);
         }
+        db.insert_blocks(blocks, batch_info).await.unwrap();
 
         // Delete blocks with number > 405
         let deleted_count = db.delete_l2_blocks_gt_block_number(405).await.unwrap();
@@ -1245,10 +1235,9 @@ mod test {
         for i in 100..110 {
             let batch_data = db.get_batch_by_index(i).await.unwrap().unwrap();
             let batch_info: BatchInfo = batch_data.into();
-
             let block_info = BlockInfo { number: 500 + i, hash: B256::arbitrary(&mut u).unwrap() };
 
-            db.insert_block(block_info, batch_info).await.unwrap();
+            db.insert_blocks(vec![block_info], batch_info).await.unwrap();
         }
 
         // Delete L2 blocks with batch index > 105
@@ -1304,8 +1293,8 @@ mod test {
             L2BlockInfoWithL1Messages { block_info, l1_messages: l1_message_hashes.clone() };
 
         // Insert block
-        db.insert_block(l2_block.block_info, batch_info).await.unwrap();
-        db.update_l1_messages_with_l2_block(l2_block).await.unwrap();
+        db.insert_blocks(vec![l2_block.block_info], batch_info).await.unwrap();
+        db.update_l1_messages_with_l2_blocks(vec![l2_block]).await.unwrap();
 
         // Verify block was inserted
         let retrieved_block = db.get_l2_block_info_by_number(500).await.unwrap();
@@ -1340,7 +1329,7 @@ mod test {
 
         // Insert initial block
         let block_info = BlockInfo { number: 600, hash: B256::arbitrary(&mut u).unwrap() };
-        db.insert_block(block_info, batch_info_1).await.unwrap();
+        db.insert_blocks(vec![block_info], batch_info_1).await.unwrap();
 
         // Verify initial insertion
         let retrieved_block = db.get_l2_block_info_by_number(600).await.unwrap();
@@ -1359,7 +1348,7 @@ mod test {
         assert_eq!(initial_batch_info, batch_info_1);
 
         // Update the same block with different batch info (upsert)
-        db.insert_block(block_info, batch_info_2).await.unwrap();
+        db.insert_blocks(vec![block_info], batch_info_2).await.unwrap();
 
         // Verify the block still exists and was updated
         let retrieved_block = db.get_l2_block_info_by_number(600).await.unwrap().unwrap();
@@ -1393,15 +1382,14 @@ mod test {
         let block_1 = BlockInfo { number: 1, hash: B256::arbitrary(&mut u).unwrap() };
         let block_2 = BlockInfo { number: 2, hash: B256::arbitrary(&mut u).unwrap() };
         db.insert_batch(batch_data_1.clone()).await.unwrap();
-        db.insert_block(block_1, batch_data_1.clone().into()).await.unwrap();
-        db.insert_block(block_2, batch_data_1.clone().into()).await.unwrap();
+        db.insert_blocks(vec![block_1, block_2], batch_data_1.clone().into()).await.unwrap();
 
         // Insert batch 2 and associate it with one block in the database
         let batch_data_2 =
             BatchCommitData { index: 2, block_number: 20, ..Arbitrary::arbitrary(&mut u).unwrap() };
         let block_3 = BlockInfo { number: 3, hash: B256::arbitrary(&mut u).unwrap() };
         db.insert_batch(batch_data_2.clone()).await.unwrap();
-        db.insert_block(block_3, batch_data_2.clone().into()).await.unwrap();
+        db.insert_blocks(vec![block_3], batch_data_2.clone().into()).await.unwrap();
 
         // Insert batch 3 produced at the same block number as batch 2 and associate it with one
         // block
@@ -1409,7 +1397,7 @@ mod test {
             BatchCommitData { index: 3, block_number: 20, ..Arbitrary::arbitrary(&mut u).unwrap() };
         let block_4 = BlockInfo { number: 4, hash: B256::arbitrary(&mut u).unwrap() };
         db.insert_batch(batch_data_3.clone()).await.unwrap();
-        db.insert_block(block_4, batch_data_3.clone().into()).await.unwrap();
+        db.insert_blocks(vec![block_4], batch_data_3.clone().into()).await.unwrap();
 
         db.set_finalized_l1_block_number(21).await.unwrap();
 
