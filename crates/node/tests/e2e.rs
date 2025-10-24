@@ -1428,6 +1428,10 @@ async fn can_handle_l1_message_reorg() -> eyre::Result<()> {
     )
     .await?;
 
+    // Assert both nodes are at block 10.
+    assert_latest_block_on_rpc_by_number(&node0, 10).await;
+    assert_latest_block_on_rpc_by_number(&node1, 10).await;
+
     // Since the L1 reorg reverted the L1 message included in block 11, the sequencer
     // should produce a new block at height 11.
     node0_rnm_handle.build_block();
