@@ -8,7 +8,7 @@ use rollup_node_primitives::{
 };
 use scroll_alloy_rpc_types_engine::BlockDataHint;
 use sea_orm::{
-    sea_query::{Expr, OnConflict},
+    sea_query::{CaseStatement, Expr, OnConflict},
     ColumnTrait, Condition, DbErr, EntityTrait, QueryFilter, QueryOrder, QuerySelect,
 };
 use std::fmt;
@@ -99,13 +99,6 @@ pub trait DatabaseWriteOperations {
         batch_info: BatchInfo,
     ) -> Result<(), DatabaseError>;
 
-    /// Insert a new block in the database.
-    async fn insert_block(
-        &self,
-        block_info: BlockInfo,
-        batch_info: BatchInfo,
-    ) -> Result<(), DatabaseError>;
-
     /// Insert the genesis block into the database.
     async fn insert_genesis_block(&self, genesis_hash: B256) -> Result<(), DatabaseError>;
 
@@ -116,9 +109,9 @@ pub trait DatabaseWriteOperations {
     ) -> Result<(), DatabaseError>;
 
     /// Update the executed L1 messages with the provided L2 block number in the database.
-    async fn update_l1_messages_with_l2_block(
+    async fn update_l1_messages_with_l2_blocks(
         &self,
-        block_info: L2BlockInfoWithL1Messages,
+        block_info: Vec<L2BlockInfoWithL1Messages>,
     ) -> Result<(), DatabaseError>;
 
     /// Purge all L1 message to L2 block mappings from the database for blocks greater or equal to
@@ -427,28 +420,17 @@ impl<T: WriteConnectionProvider + ?Sized + Sync> DatabaseWriteOperations for T {
         blocks: Vec<BlockInfo>,
         batch_info: BatchInfo,
     ) -> Result<(), DatabaseError> {
-        for block in blocks {
-            self.insert_block(block, batch_info).await?;
-        }
-        Ok(())
-    }
-
-    async fn insert_block(
-        &self,
-        block_info: BlockInfo,
-        batch_info: BatchInfo,
-    ) -> Result<(), DatabaseError> {
         // We only insert safe blocks into the database, we do not persist unsafe blocks.
         tracing::trace!(
             target: "scroll::db",
             batch_hash = ?batch_info.hash,
             batch_index = batch_info.index,
-            block_number = block_info.number,
-            block_hash = ?block_info.hash,
-            "Inserting block into database."
+            blocks = ?blocks,
+            "Inserting blocks into database."
         );
-        let l2_block: models::l2_block::ActiveModel = (block_info, batch_info).into();
-        models::l2_block::Entity::insert(l2_block)
+        let l2_blocks: Vec<models::l2_block::ActiveModel> =
+            blocks.into_iter().map(|b| (b, batch_info).into()).collect();
+        models::l2_block::Entity::insert_many(l2_blocks)
             .on_conflict(
                 OnConflict::column(models::l2_block::Column::BlockNumber)
                     .update_columns([
@@ -458,6 +440,7 @@ impl<T: WriteConnectionProvider + ?Sized + Sync> DatabaseWriteOperations for T {
                     ])
                     .to_owned(),
             )
+            .on_empty_do_nothing()
             .exec(self.get_connection())
             .await?;
 
@@ -467,7 +450,7 @@ impl<T: WriteConnectionProvider + ?Sized + Sync> DatabaseWriteOperations for T {
     async fn insert_genesis_block(&self, genesis_hash: B256) -> Result<(), DatabaseError> {
         let genesis_block = BlockInfo::new(0, genesis_hash);
         let genesis_batch = BatchInfo::new(0, B256::ZERO);
-        self.insert_block(genesis_block, genesis_batch).await
+        self.insert_blocks(vec![genesis_block], genesis_batch).await
     }
 
     async fn update_l1_messages_from_l2_blocks(
@@ -481,31 +464,63 @@ impl<T: WriteConnectionProvider + ?Sized + Sync> DatabaseWriteOperations for T {
             .await?;
 
         // Then, update the executed L1 messages for each block.
-        for block in blocks {
-            self.update_l1_messages_with_l2_block(block).await?;
-        }
+        self.update_l1_messages_with_l2_blocks(blocks).await?;
+
         Ok(())
     }
 
-    async fn update_l1_messages_with_l2_block(
+    async fn update_l1_messages_with_l2_blocks(
         &self,
-        block_info: L2BlockInfoWithL1Messages,
+        blocks: Vec<L2BlockInfoWithL1Messages>,
     ) -> Result<(), DatabaseError> {
-        tracing::trace!(
-            target: "scroll::db",
-            block_number = block_info.block_info.number,
-            l1_messages = ?block_info.l1_messages,
-            "Updating executed L1 messages from block with L2 block number in the database."
-        );
-        models::l1_message::Entity::update_many()
-            .col_expr(
-                models::l1_message::Column::L2BlockNumber,
+        if blocks.is_empty() {
+            return Ok(());
+        }
+        let start = blocks.first().unwrap().block_info.number;
+        let end = blocks.last().unwrap().block_info.number;
+        tracing::trace!(target: "scroll::db", start_block = start, end_block = end, "Updating executed L1 messages from blocks with L2 block number in the database.");
+
+        let mut case = CaseStatement::new();
+        let mut all_hashes = Vec::new();
+
+        for block_info in blocks {
+            if block_info.l1_messages.is_empty() {
+                continue;
+            }
+
+            tracing::trace!(
+                target: "scroll::db",
+                block_number = block_info.block_info.number,
+                l1_messages = ?block_info.l1_messages,
+                "Including L1 messages from block in batch update."
+            );
+
+            let hashes: Vec<Vec<u8>> = block_info.l1_messages.iter().map(|x| x.to_vec()).collect();
+
+            case = case.case(
+                models::l1_message::Column::Hash.is_in(hashes.clone()),
                 Expr::value(block_info.block_info.number as i64),
-            )
-            .filter(
-                models::l1_message::Column::Hash
-                    .is_in(block_info.l1_messages.iter().map(|x| x.to_vec())),
-            )
+            );
+
+            all_hashes.extend(hashes);
+        }
+
+        if all_hashes.is_empty() {
+            return Ok(());
+        }
+
+        // query translates to the following sql:
+        // UPDATE l1_message
+        // SET l2_block_number = CASE
+        //     WHEN hash IN (block1_hashes) THEN block1_number
+        //     WHEN hash IN (block2_hashes) THEN block2_number
+        //     WHEN hash IN (block3_hashes) THEN block3_number
+        //     ELSE 0
+        // END
+        // WHERE hash IN (all_hashes)
+        models::l1_message::Entity::update_many()
+            .col_expr(models::l1_message::Column::L2BlockNumber, case.into())
+            .filter(models::l1_message::Column::Hash.is_in(all_hashes))
             .exec(self.get_connection())
             .await?;
 
@@ -539,10 +554,12 @@ impl<T: WriteConnectionProvider + ?Sized + Sync> DatabaseWriteOperations for T {
         &self,
         outcome: BatchConsolidationOutcome,
     ) -> Result<(), DatabaseError> {
-        for block in outcome.blocks {
-            self.insert_block(block.block_info, outcome.batch_info).await?;
-            self.update_l1_messages_with_l2_block(block).await?;
-        }
+        self.insert_blocks(
+            outcome.blocks.iter().map(|b| b.block_info).collect(),
+            outcome.batch_info,
+        )
+        .await?;
+        self.update_l1_messages_with_l2_blocks(outcome.blocks).await?;
         self.update_skipped_l1_messages(outcome.skipped_l1_messages).await?;
         Ok(())
     }

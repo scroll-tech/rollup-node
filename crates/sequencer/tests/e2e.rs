@@ -439,7 +439,7 @@ async fn can_build_blocks_with_finalized_l1_messages() {
     assert!(!block.body.transactions.iter().any(|tx| tx.tx_hash() == &unfinalized_message_hash));
 
     // Handle the build block with the sequencer in order to update L1 message queue index.
-    database.update_l1_messages_with_l2_block((&block).into()).await.unwrap();
+    database.update_l1_messages_with_l2_blocks(vec![(&block).into()]).await.unwrap();
 
     // update finalized block number to 3, now both messages should be available
     database.set_finalized_l1_block_number(3).await.unwrap();
