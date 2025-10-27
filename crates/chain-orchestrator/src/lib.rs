@@ -8,7 +8,7 @@ use alloy_rpc_types_engine::ExecutionPayloadV1;
 use futures::StreamExt;
 use reth_chainspec::EthChainSpec;
 use reth_network_api::{BlockDownloaderProvider, FullNetwork};
-use reth_network_p2p::FullBlockClient;
+use reth_network_p2p::{sync::SyncState as RethSyncState, FullBlockClient};
 use reth_scroll_node::ScrollNetworkPrimitives;
 use reth_scroll_primitives::ScrollBlock;
 use reth_tasks::shutdown::Shutdown;
@@ -1088,36 +1088,34 @@ impl<
 
         if head_block_number == safe_block_number {
             tracing::trace!(target: "scroll::chain_orchestrator", "No unsafe blocks to consolidate");
+        } else {
+            let start_block_number = safe_block_number + 1;
+            // TODO: Make fetching parallel but ensure concurrency limits are respected.
+            let mut blocks_to_validate = vec![];
+            for block_number in start_block_number..=head_block_number {
+                let block = self
+                    .l2_client
+                    .get_block_by_number(block_number.into())
+                    .full()
+                    .await?
+                    .ok_or(ChainOrchestratorError::L2BlockNotFoundInL2Client(block_number))?
+                    .into_consensus()
+                    .map_transactions(|tx| tx.inner.into_inner());
+                blocks_to_validate.push(block);
+            }
 
-            self.notify(ChainOrchestratorEvent::ChainConsolidated {
-                from: safe_block_number,
-                to: head_block_number,
-            });
-            return Ok(());
-        }
+            self.validate_l1_messages(&blocks_to_validate).await?;
 
-        let start_block_number = safe_block_number + 1;
-        // TODO: Make fetching parallel but ensure concurrency limits are respected.
-        let mut blocks_to_validate = vec![];
-        for block_number in start_block_number..=head_block_number {
-            let block = self
-                .l2_client
-                .get_block_by_number(block_number.into())
-                .full()
-                .await?
-                .ok_or(ChainOrchestratorError::L2BlockNotFoundInL2Client(block_number))?
-                .into_consensus()
-                .map_transactions(|tx| tx.inner.into_inner());
-            blocks_to_validate.push(block);
-        }
+            self.database
+                .update_l1_messages_from_l2_blocks(
+                    blocks_to_validate.into_iter().map(|b| (&b).into()).collect(),
+                )
+                .await?;
+        };
 
-        self.validate_l1_messages(&blocks_to_validate).await?;
-
-        self.database
-            .update_l1_messages_from_l2_blocks(
-                blocks_to_validate.into_iter().map(|b| (&b).into()).collect(),
-            )
-            .await?;
+        // send a notification to the network that the chain is synced such that it accepts
+        // transactions into the transaction pool.
+        self.network.handle().inner().update_sync_state(RethSyncState::Idle);
 
         self.notify(ChainOrchestratorEvent::ChainConsolidated {
             from: safe_block_number,

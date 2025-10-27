@@ -111,6 +111,7 @@ where
 
         // Connect each node in a chain.
         if let Some(previous_node) = nodes.last_mut() {
+            println!("connecting nodes");
             previous_node.connect(&mut node).await;
         }
 
