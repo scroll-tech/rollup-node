@@ -1122,7 +1122,7 @@ impl<
                     self.validate_l1_messages(blocks_to_validate.as_slice()).await?;
                     self.database
                         .update_l1_messages_from_l2_blocks(
-                            blocks_to_validate.as_slice().into_iter().map(|b| b.into()).collect(),
+                            blocks_to_validate.as_slice().iter().map(|b| b.into()).collect(),
                         )
                         .await?;
                 }
@@ -1134,7 +1134,7 @@ impl<
                 self.validate_l1_messages(blocks_to_validate.as_slice()).await?;
                 self.database
                     .update_l1_messages_from_l2_blocks(
-                        blocks_to_validate.as_slice().into_iter().map(|b| b.into()).collect(),
+                        blocks_to_validate.as_slice().iter().map(|b| b.into()).collect(),
                     )
                     .await?;
             }
