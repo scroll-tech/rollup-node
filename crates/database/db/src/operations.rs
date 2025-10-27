@@ -900,8 +900,8 @@ impl<T: ReadConnectionProvider + Sync + ?Sized> DatabaseReadOperations for T {
                 // (i.e. L2BlockNumber is null) nor skipped.
                 let condition = Condition::all()
                     .add(models::l1_message::Column::L1BlockNumber.lte(target_block_number as i64))
-                    .add(models::l1_message::Column::Skipped.eq(false))
-                    .add(models::l1_message::Column::L2BlockNumber.is_null());
+                    .add(models::l1_message::Column::L2BlockNumber.is_null())
+                    .add(models::l1_message::Column::Skipped.eq(false));
                 // Yield n messages matching the condition ordered by increasing queue index.
                 Ok(models::l1_message::Entity::find()
                     .filter(condition)
