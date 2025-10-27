@@ -10,7 +10,7 @@ use reth_tokio_util::EventStream;
 use rollup_node::{
     test_utils::{
         default_sequencer_test_scroll_rollup_node_config, default_test_scroll_rollup_node_config,
-        setup_engine,
+        generate_tx, setup_engine,
     },
     BlobProviderArgs, ChainOrchestratorArgs, ConsensusArgs, EngineDriverArgs, L1ProviderArgs,
     RollupNodeDatabaseArgs, RollupNodeGasPriceOracleArgs, RollupNodeNetworkArgs, RpcArgs,
@@ -94,6 +94,68 @@ async fn test_should_consolidate_to_block_15k() -> eyre::Result<()> {
         block_hash_15k.hash_slow(),
         b256!("86901ebce1840ee45c1d5c70bf85ce6924f7a066ef11575d0f381858c83845d4")
     );
+
+    Ok(())
+}
+
+#[allow(clippy::large_stack_frames)]
+#[tokio::test]
+async fn test_node_produces_block_on_startup() -> eyre::Result<()> {
+    reth_tracing::init_test_tracing();
+
+    let mut sequencer_node_config = default_sequencer_test_scroll_rollup_node_config();
+    sequencer_node_config.sequencer_args.auto_start = true;
+    sequencer_node_config.sequencer_args.allow_empty_blocks = false;
+
+    let (mut nodes, _tasks, wallet) =
+        setup_engine(sequencer_node_config, 2, (*SCROLL_DEV).clone(), false, false).await?;
+
+    let follower = nodes.pop().unwrap();
+    let mut follower_events =
+        follower.inner.add_ons_handle.rollup_manager_handle.get_event_listener().await?;
+    let follower_l1_watcher_tx = follower.inner.add_ons_handle.l1_watcher_tx.clone().unwrap();
+
+    let sequencer = nodes.pop().unwrap();
+    let mut sequencer_events =
+        sequencer.inner.add_ons_handle.rollup_manager_handle.get_event_listener().await?;
+    let sequencer_l1_watcher_tx = sequencer.inner.add_ons_handle.l1_watcher_tx.clone().unwrap();
+
+    // Send a notification to the sequencer and follower nodes that the L1 watcher is synced.
+    sequencer_l1_watcher_tx.send(Arc::new(L1Notification::Synced)).await.unwrap();
+    follower_l1_watcher_tx.send(Arc::new(L1Notification::Synced)).await.unwrap();
+
+    // wait for both nodes to be synced.
+    wait_n_events(
+        &mut sequencer_events,
+        |e| matches!(e, ChainOrchestratorEvent::ChainConsolidated { from: _, to: _ }),
+        1,
+    )
+    .await;
+    wait_n_events(
+        &mut follower_events,
+        |e| matches!(e, ChainOrchestratorEvent::ChainConsolidated { from: _, to: _ }),
+        1,
+    )
+    .await;
+
+    // construct a transaction and send it to the follower node.
+    let wallet = Arc::new(tokio::sync::Mutex::new(wallet));
+    let handle = tokio::spawn(async move {
+        loop {
+            let tx = generate_tx(wallet.clone()).await;
+            follower.rpc.inject_tx(tx).await.unwrap();
+        }
+    });
+
+    // Assert that the follower node receives the new block.
+    wait_n_events(
+        &mut follower_events,
+        |e| matches!(e, ChainOrchestratorEvent::ChainExtended(_)),
+        1,
+    )
+    .await;
+
+    drop(handle);
 
     Ok(())
 }
