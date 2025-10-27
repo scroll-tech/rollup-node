@@ -37,11 +37,8 @@ where
         finalized: Option<BlockInfo>,
     ) -> Result<ForkchoiceUpdated, EngineError> {
         tracing::trace!(target: "scroll::engine", ?head, ?safe, ?finalized, current = ?self.fcs, "Updating fork choice state");
-        // If no updates are provided, execute a fork choice update with the current state
         if head.is_none() && safe.is_none() && finalized.is_none() {
-            let result =
-                self.client.fork_choice_updated_v1(self.fcs().get_alloy_fcs(), None).await?;
-            return Ok(result);
+            return Err(EngineError::fcs_no_update_provided());
         }
 
         // clone the fcs before updating it
