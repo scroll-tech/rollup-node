@@ -15,8 +15,11 @@ jobs:
       - uses: peaceiris/actions-mdbook@v2
         with:
           mdbook-version: 'latest'
-      - run: mdbook build
+
+      - name: Build book
+        run: mdbook build book  # Add "book" to specify the directory
+
       - uses: peaceiris/actions-gh-pages@v4
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
-          publish_dir: ./book
+          publish_dir: ./book/book
