@@ -5,7 +5,7 @@ use alloy_eips::Encodable2718;
 use alloy_primitives::{b256, bytes::Bytes, keccak256, B256};
 use alloy_provider::Provider;
 use alloy_rpc_types_engine::ExecutionPayloadV1;
-use futures::{stream, StreamExt};
+use futures::{stream, StreamExt, TryStreamExt};
 use reth_chainspec::EthChainSpec;
 use reth_network_api::{BlockDownloaderProvider, FullNetwork};
 use reth_network_p2p::{sync::SyncState as RethSyncState, FullBlockClient};
@@ -87,11 +87,6 @@ const HEADER_FETCH_COUNT: u64 = 100;
 /// The size of the event channel used to broadcast events to listeners.
 const EVENT_CHANNEL_SIZE: usize = 5000;
 
-/// The maximum number of concurrent tasks that can be executed.
-#[cfg(not(any(test, feature = "test-utils")))]
-const CONCURRENCY_LIMIT: usize = 10;
-#[cfg(any(test, feature = "test-utils"))]
-const CONCURRENCY_LIMIT: usize = 1;
 /// The batch size for batch validation.
 #[cfg(not(any(test, feature = "test-utils")))]
 const BATCH_SIZE: usize = 100;
@@ -1108,33 +1103,26 @@ impl<
                             })
                     }
                 })
-                .buffer_unordered(CONCURRENCY_LIMIT);
+                .buffered(BATCH_SIZE);
 
-            let mut buffered = vec![];
-            futures::pin_mut!(block_stream);
+            let mut block_chunks = block_stream.try_chunks(BATCH_SIZE);
 
-            while let Some(block_result) = block_stream.next().await {
-                let block = block_result?;
-                buffered.push(block);
+            while let Some(blocks_result) = block_chunks.next().await {
+                let blocks_to_validate =
+                    blocks_result.map_err(|_| ChainOrchestratorError::InvalidBlock)?;
 
-                if buffered.len() >= BATCH_SIZE {
-                    let blocks_to_validate = std::mem::take(&mut buffered);
-                    self.validate_l1_messages(blocks_to_validate.as_slice()).await?;
-                    self.database
-                        .update_l1_messages_from_l2_blocks(
-                            blocks_to_validate.as_slice().iter().map(|b| b.into()).collect(),
-                        )
-                        .await?;
+                if let Err(e) = self.validate_l1_messages(&blocks_to_validate).await {
+                    tracing::error!(
+                        target: "scroll::chain_orchestrator",
+                        error = ?e,
+                        "Validation failed — purging all L1→L2 message mappings"
+                    );
+                    self.database.purge_l1_message_to_l2_block_mappings(None).await?;
+                    return Err(e);
                 }
-            }
-
-            // Process any remaining blocks
-            if !buffered.is_empty() {
-                let blocks_to_validate = std::mem::take(&mut buffered);
-                self.validate_l1_messages(blocks_to_validate.as_slice()).await?;
                 self.database
                     .update_l1_messages_from_l2_blocks(
-                        blocks_to_validate.as_slice().iter().map(|b| b.into()).collect(),
+                        blocks_to_validate.iter().map(|b| b.into()).collect(),
                     )
                     .await?;
             }
