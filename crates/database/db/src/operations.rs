@@ -855,11 +855,13 @@ impl<T: ReadConnectionProvider + Sync + ?Sized> DatabaseReadOperations for T {
                     .await?
                 {
                     // Yield n messages starting from the found queue index + 1.
+                    // Only return messages that haven't been skipped (skipped = false).
                     Ok(models::l1_message::Entity::find()
                         .filter(
                             // We add 1 to the queue index to constrain across block boundaries
                             models::l1_message::Column::QueueIndex.gte(record.queue_index + 1),
                         )
+                        .filter(models::l1_message::Column::Skipped.eq(false))
                         .order_by_asc(models::l1_message::Column::QueueIndex)
                         .limit(Some(n as u64))
                         .all(self.get_connection())
