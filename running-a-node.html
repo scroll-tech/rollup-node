@@ -1,0 +1,483 @@
+<!DOCTYPE HTML>
+<html lang="en" class="light sidebar-visible" dir="ltr">
+    <head>
+        <!-- Book generated using mdBook -->
+        <meta charset="UTF-8">
+        <title>Running a Node - Rollup node</title>
+
+
+        <!-- Custom HTML head -->
+
+        <meta name="description" content="">
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <meta name="theme-color" content="#ffffff">
+
+        <link rel="icon" href="favicon.svg">
+        <link rel="shortcut icon" href="favicon.png">
+        <link rel="stylesheet" href="css/variables.css">
+        <link rel="stylesheet" href="css/general.css">
+        <link rel="stylesheet" href="css/chrome.css">
+        <link rel="stylesheet" href="css/print.css" media="print">
+
+        <!-- Fonts -->
+        <link rel="stylesheet" href="FontAwesome/css/font-awesome.css">
+        <link rel="stylesheet" href="fonts/fonts.css">
+
+        <!-- Highlight.js Stylesheets -->
+        <link rel="stylesheet" id="highlight-css" href="highlight.css">
+        <link rel="stylesheet" id="tomorrow-night-css" href="tomorrow-night.css">
+        <link rel="stylesheet" id="ayu-highlight-css" href="ayu-highlight.css">
+
+        <!-- Custom theme stylesheets -->
+
+
+        <!-- Provide site root and default themes to javascript -->
+        <script>
+            const path_to_root = "";
+            const default_light_theme = "light";
+            const default_dark_theme = "navy";
+            window.path_to_searchindex_js = "searchindex.js";
+        </script>
+        <!-- Start loading toc.js asap -->
+        <script src="toc.js"></script>
+    </head>
+    <body>
+    <div id="mdbook-help-container">
+        <div id="mdbook-help-popup">
+            <h2 class="mdbook-help-title">Keyboard shortcuts</h2>
+            <div>
+                <p>Press <kbd>←</kbd> or <kbd>→</kbd> to navigate between chapters</p>
+                <p>Press <kbd>S</kbd> or <kbd>/</kbd> to search in the book</p>
+                <p>Press <kbd>?</kbd> to show this help</p>
+                <p>Press <kbd>Esc</kbd> to hide this help</p>
+            </div>
+        </div>
+    </div>
+    <div id="body-container">
+        <!-- Work around some values being stored in localStorage wrapped in quotes -->
+        <script>
+            try {
+                let theme = localStorage.getItem('mdbook-theme');
+                let sidebar = localStorage.getItem('mdbook-sidebar');
+
+                if (theme.startsWith('"') && theme.endsWith('"')) {
+                    localStorage.setItem('mdbook-theme', theme.slice(1, theme.length - 1));
+                }
+
+                if (sidebar.startsWith('"') && sidebar.endsWith('"')) {
+                    localStorage.setItem('mdbook-sidebar', sidebar.slice(1, sidebar.length - 1));
+                }
+            } catch (e) { }
+        </script>
+
+        <!-- Set the theme before any content is loaded, prevents flash -->
+        <script>
+            const default_theme = window.matchMedia("(prefers-color-scheme: dark)").matches ? default_dark_theme : default_light_theme;
+            let theme;
+            try { theme = localStorage.getItem('mdbook-theme'); } catch(e) { }
+            if (theme === null || theme === undefined) { theme = default_theme; }
+            const html = document.documentElement;
+            html.classList.remove('light')
+            html.classList.add(theme);
+            html.classList.add("js");
+        </script>
+
+        <input type="checkbox" id="sidebar-toggle-anchor" class="hidden">
+
+        <!-- Hide / unhide sidebar before it is displayed -->
+        <script>
+            let sidebar = null;
+            const sidebar_toggle = document.getElementById("sidebar-toggle-anchor");
+            if (document.body.clientWidth >= 1080) {
+                try { sidebar = localStorage.getItem('mdbook-sidebar'); } catch(e) { }
+                sidebar = sidebar || 'visible';
+            } else {
+                sidebar = 'hidden';
+                sidebar_toggle.checked = false;
+            }
+            if (sidebar === 'visible') {
+                sidebar_toggle.checked = true;
+            } else {
+                html.classList.remove('sidebar-visible');
+            }
+        </script>
+
+        <nav id="sidebar" class="sidebar" aria-label="Table of contents">
+            <!-- populated by js -->
+            <mdbook-sidebar-scrollbox class="sidebar-scrollbox"></mdbook-sidebar-scrollbox>
+            <noscript>
+                <iframe class="sidebar-iframe-outer" src="toc.html"></iframe>
+            </noscript>
+            <div id="sidebar-resize-handle" class="sidebar-resize-handle">
+                <div class="sidebar-resize-indicator"></div>
+            </div>
+        </nav>
+
+        <div id="page-wrapper" class="page-wrapper">
+
+            <div class="page">
+                <div id="menu-bar-hover-placeholder"></div>
+                <div id="menu-bar" class="menu-bar sticky">
+                    <div class="left-buttons">
+                        <label id="sidebar-toggle" class="icon-button" for="sidebar-toggle-anchor" title="Toggle Table of Contents" aria-label="Toggle Table of Contents" aria-controls="sidebar">
+                            <i class="fa fa-bars"></i>
+                        </label>
+                        <button id="theme-toggle" class="icon-button" type="button" title="Change theme" aria-label="Change theme" aria-haspopup="true" aria-expanded="false" aria-controls="theme-list">
+                            <i class="fa fa-paint-brush"></i>
+                        </button>
+                        <ul id="theme-list" class="theme-popup" aria-label="Themes" role="menu">
+                            <li role="none"><button role="menuitem" class="theme" id="default_theme">Auto</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="light">Light</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="rust">Rust</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="coal">Coal</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="navy">Navy</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="ayu">Ayu</button></li>
+                        </ul>
+                        <button id="search-toggle" class="icon-button" type="button" title="Search (`/`)" aria-label="Toggle Searchbar" aria-expanded="false" aria-keyshortcuts="/ s" aria-controls="searchbar">
+                            <i class="fa fa-search"></i>
+                        </button>
+                    </div>
+
+                    <h1 class="menu-title">Rollup node</h1>
+
+                    <div class="right-buttons">
+                        <a href="print.html" title="Print this book" aria-label="Print this book">
+                            <i id="print-button" class="fa fa-print"></i>
+                        </a>
+
+                    </div>
+                </div>
+
+                <div id="search-wrapper" class="hidden">
+                    <form id="searchbar-outer" class="searchbar-outer">
+                        <div class="search-wrapper">
+                            <input type="search" id="searchbar" name="searchbar" placeholder="Search this book ..." aria-controls="searchresults-outer" aria-describedby="searchresults-header">
+                            <div class="spinner-wrapper">
+                                <i class="fa fa-spinner fa-spin"></i>
+                            </div>
+                        </div>
+                    </form>
+                    <div id="searchresults-outer" class="searchresults-outer hidden">
+                        <div id="searchresults-header" class="searchresults-header"></div>
+                        <ul id="searchresults">
+                        </ul>
+                    </div>
+                </div>
+
+                <!-- Apply ARIA attributes after the sidebar and the sidebar toggle button are added to the DOM -->
+                <script>
+                    document.getElementById('sidebar-toggle').setAttribute('aria-expanded', sidebar === 'visible');
+                    document.getElementById('sidebar').setAttribute('aria-hidden', sidebar !== 'visible');
+                    Array.from(document.querySelectorAll('#sidebar a')).forEach(function(link) {
+                        link.setAttribute('tabIndex', sidebar === 'visible' ? 0 : -1);
+                    });
+                </script>
+
+                <div id="content" class="content">
+                    <main>
+                        <h1 id="running-a-scroll-rollup-node"><a class="header" href="#running-a-scroll-rollup-node">Running a Scroll Rollup Node</a></h1>
+<p>This guide covers how to run a Scroll rollup node as a follower node.</p>
+<h2 id="hardware-requirements"><a class="header" href="#hardware-requirements">Hardware Requirements</a></h2>
+<p>The following are the recommended hardware specifications for running a Scroll rollup node:</p>
+<h3 id="recommended-requirements"><a class="header" href="#recommended-requirements">Recommended Requirements</a></h3>
+<ul>
+<li><strong>CPU</strong>: 2 cores @ 3 GHz</li>
+<li><strong>Memory</strong>: 16 GB RAM</li>
+</ul>
+<p>These specifications are based on production deployments and should provide sufficient resources for stable operation as
+a follower node.</p>
+<h2 id="building-the-node"><a class="header" href="#building-the-node">Building the Node</a></h2>
+<h3 id="prerequisites"><a class="header" href="#prerequisites">Prerequisites</a></h3>
+<ul>
+<li>Rust toolchain (stable)</li>
+<li>Cargo package manager</li>
+</ul>
+<h3 id="compilation"><a class="header" href="#compilation">Compilation</a></h3>
+<p>To build the rollup node binary:</p>
+<pre><code class="language-bash">cargo build --release --bin rollup-node
+</code></pre>
+<p>This will create an optimized production binary at <code>target/release/rollup-node</code>.</p>
+<p>For development builds (faster compilation, slower runtime):</p>
+<pre><code class="language-bash">cargo build --bin rollup-node
+</code></pre>
+<h2 id="running-the-node"><a class="header" href="#running-the-node">Running the Node</a></h2>
+<h3 id="basic-command"><a class="header" href="#basic-command">Basic Command</a></h3>
+<p>To run the node as a follower:</p>
+<pre><code class="language-bash">./target/release/rollup-node node \
+  --chain &lt;CHAIN_NAME&gt; \
+  --l1.url &lt;L1_RPC_URL&gt; \
+  --blob.s3_url &lt;BLOB_SOURCE_URL&gt; \
+  --http \
+  --http.addr 0.0.0.0 \
+  --http.port 8545
+</code></pre>
+<p>Replace:</p>
+<ul>
+<li><code>&lt;CHAIN_NAME&gt;</code>: The chain to follow (e.g., <code>scroll-mainnet</code>, <code>scroll-sepolia</code>, or <code>dev</code>)</li>
+<li><code>&lt;L1_RPC_URL&gt;</code>: HTTP(S) URL of an Ethereum L1 RPC endpoint</li>
+<li><code>&lt;BLOB_SOURCE_URL&gt;</code>: Blob data source URL (use Scroll's S3 URLs or your own beacon node)</li>
+</ul>
+<h3 id="essential-configuration-flags"><a class="header" href="#essential-configuration-flags">Essential Configuration Flags</a></h3>
+<h4 id="chain-configuration"><a class="header" href="#chain-configuration">Chain Configuration</a></h4>
+<ul>
+<li><code>--chain &lt;CHAIN&gt;</code>: Specify the chain to sync (<code>scroll-mainnet</code>, <code>scroll-sepolia</code>, or <code>dev</code>)</li>
+<li><code>-d, --datadir &lt;PATH&gt;</code>: Directory for node data storage (default: platform-specific)</li>
+</ul>
+<h4 id="l1-provider-configuration"><a class="header" href="#l1-provider-configuration">L1 Provider Configuration</a></h4>
+<ul>
+<li><code>--l1.url &lt;URL&gt;</code>: L1 Ethereum RPC endpoint URL (required for follower nodes)</li>
+<li><code>--l1.cups &lt;NUMBER&gt;</code>: Compute units per second for rate limiting (default: 1000)</li>
+<li><code>--l1.max-retries &lt;NUMBER&gt;</code>: Maximum retry attempts for L1 requests (default: 10)</li>
+<li><code>--l1.initial-backoff &lt;MS&gt;</code>: Initial backoff duration for retries in milliseconds (default: 100)</li>
+<li><code>--l1.query-range &lt;BLOCKS&gt;</code>: Block range for querying L1 logs (default: 2000)</li>
+</ul>
+<h4 id="blob-provider-configuration"><a class="header" href="#blob-provider-configuration">Blob Provider Configuration</a></h4>
+<p>The node requires access to blob data for derivation. Configure one or more blob sources:</p>
+<ul>
+<li><code>--blob.beacon_node_urls &lt;URL&gt;</code>: Beacon node URLs for fetching blobs (comma-separated for multiple)</li>
+<li><code>--blob.s3_url &lt;URL&gt;</code>: S3-compatible storage URL for blob data</li>
+<li><code>--blob.anvil_url &lt;URL&gt;</code>: Anvil blob provider URL (for testing)</li>
+</ul>
+<p><strong>Scroll-Provided S3 Blob Storage:</strong></p>
+<p>Scroll provides public S3 blob storage endpoints for both networks:</p>
+<ul>
+<li><strong>Mainnet</strong>: <code>https://scroll-mainnet-blob-data.s3.us-west-2.amazonaws.com/</code></li>
+<li><strong>Sepolia</strong>: <code>https://scroll-sepolia-blob-data.s3.us-west-2.amazonaws.com/</code></li>
+</ul>
+<p>These can be used as reliable blob sources without requiring your own beacon node infrastructure.</p>
+<h4 id="consensus-configuration"><a class="header" href="#consensus-configuration">Consensus Configuration</a></h4>
+<ul>
+<li><code>--consensus.algorithm &lt;ALGORITHM&gt;</code>: Consensus algorithm to use
+<ul>
+<li><code>system-contract</code> (default): Validates blocks against authorized signer from L1</li>
+<li><code>noop</code>: No consensus validation (testing only)</li>
+</ul>
+</li>
+<li><code>--consensus.authorized-signer &lt;ADDRESS&gt;</code>: Static authorized signer address (when using system-contract without L1
+provider)</li>
+</ul>
+<h4 id="database-configuration"><a class="header" href="#database-configuration">Database Configuration</a></h4>
+<ul>
+<li><code>--rollup-node-db.path &lt;PATH&gt;</code>: Custom database path (default: <code>&lt;datadir&gt;/scroll.db</code>)</li>
+</ul>
+<h4 id="network-configuration"><a class="header" href="#network-configuration">Network Configuration</a></h4>
+<ul>
+<li><code>--network.bridge</code>: Enable bridging blocks from eth wire to scroll wire protocol (default: true)</li>
+<li><code>--network.scroll-wire</code>: Enable the scroll wire protocol (default: true)</li>
+<li><code>--network.sequencer-url &lt;URL&gt;</code>: Sequencer RPC URL for following the sequencer</li>
+<li><code>--network.valid_signer &lt;ADDRESS&gt;</code>: Valid signer address for network validation</li>
+</ul>
+<h4 id="chain-orchestrator-configuration"><a class="header" href="#chain-orchestrator-configuration">Chain Orchestrator Configuration</a></h4>
+<ul>
+<li><code>--chain.optimistic-sync-trigger &lt;BLOCKS&gt;</code>: Block gap that triggers optimistic sync (default: 100)</li>
+<li><code>--chain.chain-buffer-size &lt;SIZE&gt;</code>: In-memory chain buffer size (default: 100)</li>
+</ul>
+<h4 id="engine-configuration"><a class="header" href="#engine-configuration">Engine Configuration</a></h4>
+<ul>
+<li><code>--engine.sync-at-startup</code>: Attempt to sync on startup (default: true)</li>
+</ul>
+<h4 id="http-rpc-configuration"><a class="header" href="#http-rpc-configuration">HTTP RPC Configuration</a></h4>
+<ul>
+<li><code>--http</code>: Enable HTTP RPC server</li>
+<li><code>--http.addr &lt;ADDRESS&gt;</code>: HTTP server listening address (default: 127.0.0.1)</li>
+<li><code>--http.port &lt;PORT&gt;</code>: HTTP server port (default: 8545)</li>
+<li><code>--http.api &lt;APIS&gt;</code>: Enabled RPC API namespaces (comma-separated)
+<ul>
+<li>Available: <code>admin</code>, <code>debug</code>, <code>eth</code>, <code>net</code>, <code>trace</code>, <code>txpool</code>, <code>web3</code>, <code>rpc</code>, <code>reth</code>, <code>ots</code></li>
+</ul>
+</li>
+<li><code>--http.corsdomain &lt;ORIGINS&gt;</code>: CORS allowed origins (comma-separated)</li>
+</ul>
+<h4 id="rollup-node-rpc"><a class="header" href="#rollup-node-rpc">Rollup Node RPC</a></h4>
+<ul>
+<li><code>--rpc.rollup-node</code>: Enable the rollup node RPC namespace (provides rollup-specific methods)</li>
+</ul>
+<h3 id="example-configurations"><a class="header" href="#example-configurations">Example Configurations</a></h3>
+<h4 id="scroll-mainnet-follower"><a class="header" href="#scroll-mainnet-follower">Scroll Mainnet Follower</a></h4>
+<pre><code class="language-bash">./target/release/rollup-node node \
+  --chain scroll-mainnet \
+  --datadir /var/lib/scroll-node \
+  --l1.url https://eth-mainnet.g.alchemy.com/v2/YOUR_API_KEY \
+  --blob.s3_url https://scroll-mainnet-blob-data.s3.us-west-2.amazonaws.com/ \
+  --http \
+  --http.addr 0.0.0.0 \
+  --http.port 8545 \
+  --http.api eth,net,web3,debug,trace
+</code></pre>
+<h4 id="scroll-sepolia-testnet-follower"><a class="header" href="#scroll-sepolia-testnet-follower">Scroll Sepolia Testnet Follower</a></h4>
+<pre><code class="language-bash">./target/release/rollup-node node \
+  --chain scroll-sepolia \
+  --datadir /var/lib/scroll-node-sepolia \
+  --l1.url https://eth-sepolia.g.alchemy.com/v2/YOUR_API_KEY \
+  --blob.s3_url https://scroll-sepolia-blob-data.s3.us-west-2.amazonaws.com/ \
+  --http \
+  --http.addr 0.0.0.0 \
+  --http.port 8545 \
+  --http.api eth,net,web3
+</code></pre>
+<h2 id="logging-and-debugging"><a class="header" href="#logging-and-debugging">Logging and Debugging</a></h2>
+<p>The node uses Rust's <code>tracing</code> framework for structured logging. Configure log levels using the <code>RUST_LOG</code> environment
+variable.</p>
+<h3 id="log-level-configuration"><a class="header" href="#log-level-configuration">Log Level Configuration</a></h3>
+<p>The general format is: <code>RUST_LOG=&lt;default_level&gt;,&lt;target&gt;=&lt;level&gt;,...</code></p>
+<h4 id="recommended-log-configuration"><a class="header" href="#recommended-log-configuration">Recommended Log Configuration</a></h4>
+<p>For production with detailed rollup-specific logging:</p>
+<pre><code class="language-bash">RUST_LOG=info,scroll=trace,rollup=trace,sqlx=off,scroll_txpool=trace ./target/release/rollup-node node ...
+</code></pre>
+<p>This configuration:</p>
+<ul>
+<li>Sets default log level to <code>info</code></li>
+<li>Enables detailed <code>trace</code> logging for scroll-specific components</li>
+<li>Enables detailed <code>trace</code> logging for rollup components</li>
+<li>Disables verbose sqlx database query logging</li>
+<li>Enables detailed <code>trace</code> logging for transaction pool operations</li>
+</ul>
+<h3 id="useful-log-targets"><a class="header" href="#useful-log-targets">Useful Log Targets</a></h3>
+<p>For debugging specific components, you can adjust individual log targets:</p>
+<h4 id="l1-watcher"><a class="header" href="#l1-watcher">L1 Watcher</a></h4>
+<pre><code class="language-bash">RUST_LOG=scroll::watcher=debug
+</code></pre>
+<p>Monitor L1 event watching, batch commits, and chain reorganizations.</p>
+<h4 id="derivation-pipeline"><a class="header" href="#derivation-pipeline">Derivation Pipeline</a></h4>
+<pre><code class="language-bash">RUST_LOG=scroll::derivation_pipeline=debug
+</code></pre>
+<p>Track batch decoding and payload attribute streaming.</p>
+<h4 id="engine-driver"><a class="header" href="#engine-driver">Engine Driver</a></h4>
+<pre><code class="language-bash">RUST_LOG=scroll::engine=debug
+</code></pre>
+<p>Debug engine API interactions and forkchoice updates.</p>
+<h4 id="network-layer"><a class="header" href="#network-layer">Network Layer</a></h4>
+<pre><code class="language-bash">RUST_LOG=scroll::network=debug
+</code></pre>
+<p>Monitor P2P networking and block propagation.</p>
+<h4 id="database-operations"><a class="header" href="#database-operations">Database Operations</a></h4>
+<pre><code class="language-bash">RUST_LOG=scroll::db=debug
+</code></pre>
+<p>Debug database queries and operations.</p>
+<h3 id="log-level-options"><a class="header" href="#log-level-options">Log Level Options</a></h3>
+<p>Available log levels (from least to most verbose):</p>
+<ul>
+<li><code>error</code>: Only error messages</li>
+<li><code>warn</code>: Warnings and errors</li>
+<li><code>info</code>: General informational messages (recommended for production)</li>
+<li><code>debug</code>: Detailed debugging information</li>
+<li><code>trace</code>: Very detailed trace information (use for specific debugging)</li>
+</ul>
+<h3 id="combined-example-with-logging"><a class="header" href="#combined-example-with-logging">Combined Example with Logging</a></h3>
+<pre><code class="language-bash">RUST_LOG=info,scroll=debug,rollup=debug,sqlx=off \
+./target/release/rollup-node node \
+  --chain scroll \
+  --datadir /var/lib/scroll-node \
+  --l1.url https://eth-mainnet.g.alchemy.com/v2/YOUR_API_KEY \
+  --blob.s3_url https://scroll-mainnet-blob-data.s3.us-west-2.amazonaws.com/ \
+  --http \
+  --http.addr 0.0.0.0 \
+  --http.port 8545 \
+  --http.api eth,net,web3
+</code></pre>
+<h2 id="verifying-node-operation"><a class="header" href="#verifying-node-operation">Verifying Node Operation</a></h2>
+<h3 id="check-sync-status"><a class="header" href="#check-sync-status">Check Sync Status</a></h3>
+<p>Once the node is running, you can verify it's syncing properly:</p>
+<pre><code class="language-bash">curl -X POST http://localhost:8545 \
+  -H "Content-Type: application/json" \
+  -d '{
+    "jsonrpc": "2.0",
+    "method": "eth_syncing",
+    "params": [],
+    "id": 1
+  }'
+</code></pre>
+<h3 id="get-latest-block"><a class="header" href="#get-latest-block">Get Latest Block</a></h3>
+<pre><code class="language-bash">curl -X POST http://localhost:8545 \
+  -H "Content-Type: application/json" \
+  -d '{
+    "jsonrpc": "2.0",
+    "method": "eth_blockNumber",
+    "params": [],
+    "id": 1
+  }'
+</code></pre>
+<h3 id="check-node-health"><a class="header" href="#check-node-health">Check Node Health</a></h3>
+<p>Monitor the node logs for:</p>
+<ul>
+<li>Successful L1 event processing</li>
+<li>Block derivation progress</li>
+<li>Engine API health</li>
+<li>Database operations</li>
+</ul>
+<p>Look for log entries indicating successful block processing and chain advancement.</p>
+<h2 id="troubleshooting"><a class="header" href="#troubleshooting">Troubleshooting</a></h2>
+<h3 id="common-issues"><a class="header" href="#common-issues">Common Issues</a></h3>
+<p><strong>Node not syncing:</strong></p>
+<ul>
+<li>Verify L1 RPC endpoint is accessible and synced</li>
+<li>Ensure beacon node URLs are correct and responsive</li>
+<li>Check network connectivity</li>
+<li>Review logs with <code>RUST_LOG=debug</code> for detailed error messages</li>
+</ul>
+<p><strong>High memory usage:</strong></p>
+<ul>
+<li>Adjust <code>--chain.chain-buffer-size</code> to reduce memory footprint</li>
+<li>Ensure system has adequate RAM (16GB recommended)</li>
+</ul>
+<p><strong>Database errors:</strong></p>
+<ul>
+<li>Verify disk space is available</li>
+<li>Check file permissions on datadir</li>
+<li>Consider using a different database path with <code>--datadir</code></li>
+</ul>
+<p><strong>L1 connection errors:</strong></p>
+<ul>
+<li>Verify L1 RPC endpoint is reliable and has sufficient rate limits</li>
+<li>Adjust <code>--l1.max-retries</code> and <code>--l1.initial-backoff</code> for unstable connections</li>
+<li>Consider using a dedicated or archive L1 node</li>
+</ul>
+<p>For additional support and detailed implementation information, refer to the project's CLAUDE.md and source code
+documentation.</p>
+
+                    </main>
+
+                    <nav class="nav-wrapper" aria-label="Page navigation">
+                        <!-- Mobile navigation buttons -->
+                            <a rel="prev" href="chapter_1.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                                <i class="fa fa-angle-left"></i>
+                            </a>
+
+
+                        <div style="clear: both"></div>
+                    </nav>
+                </div>
+            </div>
+
+            <nav class="nav-wide-wrapper" aria-label="Page navigation">
+                    <a rel="prev" href="chapter_1.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                        <i class="fa fa-angle-left"></i>
+                    </a>
+
+            </nav>
+
+        </div>
+
+
+
+
+        <script>
+            window.playground_copyable = true;
+        </script>
+
+
+        <script src="elasticlunr.min.js"></script>
+        <script src="mark.min.js"></script>
+        <script src="searcher.js"></script>
+
+        <script src="clipboard.min.js"></script>
+        <script src="highlight.js"></script>
+        <script src="book.js"></script>
+
+        <!-- Custom JS scripts -->
+
+
+
+    </div>
+    </body>
+</html>
