@@ -854,9 +854,9 @@ impl<T: ReadConnectionProvider + Sync + ?Sized> DatabaseReadOperations for T {
                     .one(self.get_connection())
                     .await?
                 {
-                    // Yield n messages starting from the found queue index + 1. Only return messages
-                    // that have not been skipped (skipped = false) to handle the edge case where the
-                    // last message in a batch is skipped.
+                    // Yield n messages starting from the found queue index + 1. Only return
+                    // messages that have not been skipped (skipped = false) to handle the edge
+                    // case where the last message in a batch is skipped.
                     Ok(models::l1_message::Entity::find()
                         .filter(
                             // We add 1 to the queue index to constrain across block boundaries
