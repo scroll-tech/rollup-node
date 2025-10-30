@@ -857,12 +857,12 @@ impl<T: ReadConnectionProvider + Sync + ?Sized> DatabaseReadOperations for T {
                     // Yield n messages starting from the found queue index + 1. Only return
                     // messages that have not been skipped (skipped = false) to handle the edge
                     // case where the last message in a batch is skipped.
+                    let condition = Condition::all()
+                        // We add 1 to the queue index to constrain across block boundaries
+                        .add(models::l1_message::Column::QueueIndex.gte(record.queue_index + 1))
+                        .add(models::l1_message::Column::Skipped.eq(false));
                     Ok(models::l1_message::Entity::find()
-                        .filter(
-                            // We add 1 to the queue index to constrain across block boundaries
-                            models::l1_message::Column::QueueIndex.gte(record.queue_index + 1),
-                        )
-                        .filter(models::l1_message::Column::Skipped.eq(false))
+                        .filter(condition)
                         .order_by_asc(models::l1_message::Column::QueueIndex)
                         .limit(Some(n as u64))
                         .all(self.get_connection())
