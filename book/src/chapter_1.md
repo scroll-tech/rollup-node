@@ -11,16 +11,13 @@ security guarantees.
 
 ## What is the Rollup Node?
 
-The rollup node is responsible for constructing the Scroll L2 chain from data posted to Ethereum L1. At its core, the
-rollup node implements a derivation function: given the L1 chain state, it deterministically produces the corresponding
-L2 chain.
+The rollup node is responsible for following the Scroll L2 chain using P2P data from the Scroll network, and
+consolidating this information with data posted to Ethereum L1.
+At its core, the rollup node implements a derivation function: given the L1 chain state, it deterministically produces
+the corresponding L2 chain. This allows it to follow the correct L2 chain in case malicious blocks are propagated on
+the P2P network.
 
-### Core Function
-
-While conceptually the rollup node computes L2 as a pure function of L1 data, in practice it operates
-incrementally—processing new L1 blocks as they arrive and handling reorganizations when the L1 chain restructures. This
-incremental approach allows the node to efficiently maintain synchronization without reprocessing the entire chain
-history.
+### Derivation Function
 
 The derivation process works by:
 
@@ -38,13 +35,13 @@ communicate through async channels:
 - **Derivation Pipeline**: Transforms batch data from L1 into executable L2 payloads
 - **Engine Driver**: Interfaces with the execution engine via the Engine API
 - **Chain Orchestrator**: Coordinates the overall flow from L1 events to L2 blocks
-- **Network Layer**: Propagates blocks across the P2P network for faster synchronization
+- **Network Layer**: Participates in the Scroll and Ethereum P2P network
 
 ### Node Modes
 
 The rollup node can operate in different configurations:
 
-- **Follower Node**: Derives L2 blocks by processing batch data posted to L1, participating in P2P block propagation
+- **Follower Node**: Follows the L2 chain via P2P propagated blocks, consolidated by processing batch data posted to L1
 - **Sequencer Node**: Actively sequences new transactions into blocks and posts batches to L1
 
 ## About This Documentation
