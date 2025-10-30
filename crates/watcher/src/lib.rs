@@ -30,7 +30,7 @@ use std::{
     sync::Arc,
     time::Duration,
 };
-use tokio::sync::mpsc;
+use tokio::{select, sync::mpsc};
 
 /// The maximum count of unfinalized blocks we can have in Ethereum.
 pub const MAX_UNFINALIZED_BLOCK_COUNT: usize = 96;
@@ -191,7 +191,7 @@ where
         };
 
         // init the watcher.
-        let watcher = Self {
+        let mut watcher = Self {
             execution_provider,
             unfinalized_blocks: BoundedVec::new(HEADER_CAPACITY),
             current_block_number: start_block.unwrap_or(config.start_l1_block).saturating_sub(1),
@@ -657,7 +657,7 @@ where
     }
 
     /// Send all notifications on the channel.
-    async fn notify_all(&self, notifications: Vec<L1Notification>) -> L1WatcherResult<()> {
+    async fn notify_all(&mut self, notifications: Vec<L1Notification>) -> L1WatcherResult<()> {
         for notification in notifications {
             self.metrics.process_l1_notification(&notification);
             tracing::trace!(target: "scroll::watcher", %notification, "sending l1 notification");
@@ -667,11 +667,30 @@ where
     }
 
     /// Send the notification in the channel.
-    async fn notify(&self, notification: L1Notification) -> L1WatcherResult<()> {
-        // TODO: make sure that this is not blocking if the channel is full.
-        Ok(self.sender.send(Arc::new(notification)).await.inspect_err(
-            |err| tracing::error!(target: "scroll::watcher", ?err, "failed to send notification"),
-        )?)
+    async fn notify(&mut self, notification: L1Notification) -> L1WatcherResult<()> {
+        select! {
+            biased;
+
+            Some(command) = self.command_rx.recv() => {
+                // If a command is received while trying to send a notification,
+                // we prioritize handling the command first.
+                // This prevents potential deadlocks if the channel is full.
+                tracing::trace!(target: "scroll::watcher", "command received while sending notification, prioritizing command handling");
+
+                if let Err(err) = self.handle_command(command).await {
+                    tracing::error!(target: "scroll::watcher", ?err, "error handling command");
+                }
+
+                return Ok(());
+            }
+            result = self.sender.send(Arc::new(notification)) => {
+                result.inspect_err(
+                    |err| tracing::error!(target: "scroll::watcher", ?err, "failed to send notification"),
+                )?;
+            }
+        }
+
+        Ok(())
     }
 
     /// Updates the current block number, saturating at the head of the chain.
