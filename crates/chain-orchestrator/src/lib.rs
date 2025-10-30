@@ -546,6 +546,15 @@ impl<
                         // Return no event, recovery will re-process
                         Ok(None)
                     }
+                    Err(ChainOrchestratorError::DuplicateBatchCommit(batch_info)) => {
+                        tracing::info!(
+                            target: "scroll::chain_orchestrator",
+                            "Duplicate batch commit detected at {:?}, skipping",
+                            batch_info
+                        );
+                        // Return no event, as the batch has already been processed
+                        Ok(None)
+                    }
                     result => result,
                 }
             }
@@ -572,6 +581,15 @@ impl<
                         self.trigger_gap_recovery(reset_block, "L1 message queue gap").await?;
 
                         // Return no event, recovery will re-process
+                        Ok(None)
+                    }
+                    Err(ChainOrchestratorError::DuplicateL1Message(queue_index)) => {
+                        tracing::info!(
+                            target: "scroll::chain_orchestrator",
+                            "Duplicate L1 message detected at {:?}, skipping",
+                            queue_index
+                        );
+                        // Return no event, as the message has already been processed
                         Ok(None)
                     }
                     result => result,
@@ -705,8 +723,21 @@ impl<
                         return Err(ChainOrchestratorError::BatchCommitGap(batch_clone.index));
                     }
 
-                    // TODO: check for duplicate batch commit and skip if same hash
-                    // -> if different hash then we missed a batch revert event.
+                    // Check if batch already exists in DB.
+                    if let Some(existing_batch) = tx.get_batch_by_index(batch_clone.index).await? {
+                        if existing_batch.hash == batch_clone.hash {
+                            // This means we have already processed this batch commit, we will skip
+                            // it.
+                            return Err(ChainOrchestratorError::DuplicateBatchCommit(
+                                BatchInfo::new(batch_clone.index, batch_clone.hash),
+                            ));
+                        } else {
+                            // TODO: once batch reverts are implemented, we need to handle this
+                            // case.
+                            // If we have a batch at the same index in the DB this means we have
+                            // missed a batch revert event.
+                        }
+                    }
 
                     // remove any batches with an index greater than the previous batch.
                     let affected = tx.delete_batches_gt_batch_index(prev_batch_index).await?;
@@ -795,6 +826,7 @@ impl<
                 // TODO: check for duplicate L1 message and skip if same hash
                 let l1_message = l1_message.clone();
                 async move {
+                    // check for gaps in the L1 message queue
                     if l1_message.transaction.queue_index > 0 &&
                         tx.get_n_l1_messages(
                             Some(L1MessageKey::from_queue_index(
@@ -808,6 +840,37 @@ impl<
                         return Err(ChainOrchestratorError::L1MessageQueueGap(
                             l1_message.transaction.queue_index,
                         ));
+                    }
+
+                    // check if the L1 message already exists in the DB
+                    if let Some(existing_message) = tx
+                        .get_n_l1_messages(
+                            Some(L1MessageKey::from_queue_index(
+                                l1_message.transaction.queue_index,
+                            )),
+                            1,
+                        )
+                        .await?
+                        .pop()
+                    {
+                        if existing_message.transaction.tx_hash() ==
+                            l1_message.transaction.tx_hash()
+                        {
+                            // We have already processed this L1 message, we will skip it.
+                            return Err(ChainOrchestratorError::DuplicateL1Message(
+                                l1_message.transaction.queue_index,
+                            ));
+                        } else {
+                            // This should not happen in normal operation as messages should be
+                            // deleted when a L1 reorg is handled, log warning.
+                            tracing::warn!(
+                                target: "scroll::chain_orchestrator",
+                                "L1 message queue index {} already exists with different hash in DB {:?} vs {:?}",
+                                l1_message.transaction.queue_index,
+                                existing_message.transaction.tx_hash(),
+                                l1_message.transaction.tx_hash()
+                            );
+                        }
                     }
 
                     tx.insert_l1_message(l1_message.clone()).await?;
