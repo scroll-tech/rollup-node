@@ -5,7 +5,7 @@ use alloy_eips::Encodable2718;
 use alloy_primitives::{b256, bytes::Bytes, keccak256, B256};
 use alloy_provider::Provider;
 use alloy_rpc_types_engine::ExecutionPayloadV1;
-use futures::StreamExt;
+use futures::{stream, StreamExt, TryStreamExt};
 use reth_chainspec::EthChainSpec;
 use reth_network_api::{BlockDownloaderProvider, FullNetwork};
 use reth_network_p2p::{sync::SyncState as RethSyncState, FullBlockClient};
@@ -86,6 +86,12 @@ const HEADER_FETCH_COUNT: u64 = 100;
 
 /// The size of the event channel used to broadcast events to listeners.
 const EVENT_CHANNEL_SIZE: usize = 5000;
+
+/// The batch size for batch validation.
+#[cfg(not(any(test, feature = "test-utils")))]
+const BATCH_SIZE: usize = 100;
+#[cfg(any(test, feature = "test-utils"))]
+const BATCH_SIZE: usize = 1;
 
 /// The [`ChainOrchestrator`] is responsible for orchestrating the progression of the L2 chain
 /// based on data consolidated from L1 and the data received over the p2p network.
@@ -1082,28 +1088,44 @@ impl<
         if head_block_number == safe_block_number {
             tracing::trace!(target: "scroll::chain_orchestrator", "No unsafe blocks to consolidate");
         } else {
-            let start_block_number = safe_block_number + 1;
-            // TODO: Make fetching parallel but ensure concurrency limits are respected.
-            let mut blocks_to_validate = vec![];
-            for block_number in start_block_number..=head_block_number {
-                let block = self
-                    .l2_client
-                    .get_block_by_number(block_number.into())
-                    .full()
-                    .await?
-                    .ok_or(ChainOrchestratorError::L2BlockNotFoundInL2Client(block_number))?
-                    .into_consensus()
-                    .map_transactions(|tx| tx.inner.into_inner());
-                blocks_to_validate.push(block);
+            let block_stream = stream::iter(safe_block_number + 1..=head_block_number)
+                .map(|block_number| {
+                    let client = self.l2_client.clone();
+
+                    async move {
+                        client
+                            .get_block_by_number(block_number.into())
+                            .full()
+                            .await?
+                            .ok_or(ChainOrchestratorError::L2BlockNotFoundInL2Client(block_number))
+                            .map(|b| {
+                                b.into_consensus().map_transactions(|tx| tx.inner.into_inner())
+                            })
+                    }
+                })
+                .buffered(BATCH_SIZE);
+
+            let mut block_chunks = block_stream.try_chunks(BATCH_SIZE);
+
+            while let Some(blocks_result) = block_chunks.next().await {
+                let blocks_to_validate =
+                    blocks_result.map_err(|_| ChainOrchestratorError::InvalidBlock)?;
+
+                if let Err(e) = self.validate_l1_messages(&blocks_to_validate).await {
+                    tracing::error!(
+                        target: "scroll::chain_orchestrator",
+                        error = ?e,
+                        "Validation failed — purging all L1→L2 message mappings"
+                    );
+                    self.database.purge_l1_message_to_l2_block_mappings(None).await?;
+                    return Err(e);
+                }
+                self.database
+                    .update_l1_messages_from_l2_blocks(
+                        blocks_to_validate.iter().map(|b| b.into()).collect(),
+                    )
+                    .await?;
             }
-
-            self.validate_l1_messages(&blocks_to_validate).await?;
-
-            self.database
-                .update_l1_messages_from_l2_blocks(
-                    blocks_to_validate.into_iter().map(|b| (&b).into()).collect(),
-                )
-                .await?;
         };
 
         // send a notification to the network that the chain is synced such that it accepts
