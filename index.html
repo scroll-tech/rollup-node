@@ -183,14 +183,12 @@ zero-knowledge proofs. By moving computation and state storage off-chain while p
 proofs to Ethereum L1, Scroll achieves higher throughput and lower transaction costs while inheriting Ethereum's
 security guarantees.</p>
 <h2 id="what-is-the-rollup-node"><a class="header" href="#what-is-the-rollup-node">What is the Rollup Node?</a></h2>
-<p>The rollup node is responsible for constructing the Scroll L2 chain from data posted to Ethereum L1. At its core, the
-rollup node implements a derivation function: given the L1 chain state, it deterministically produces the corresponding
-L2 chain.</p>
-<h3 id="core-function"><a class="header" href="#core-function">Core Function</a></h3>
-<p>While conceptually the rollup node computes L2 as a pure function of L1 data, in practice it operates
-incrementally—processing new L1 blocks as they arrive and handling reorganizations when the L1 chain restructures. This
-incremental approach allows the node to efficiently maintain synchronization without reprocessing the entire chain
-history.</p>
+<p>The rollup node is responsible for following the Scroll L2 chain using P2P data from the Scroll network, and
+consolidating this information with data posted to Ethereum L1.
+At its core, the rollup node implements a derivation function: given the L1 chain state, it deterministically produces
+the corresponding L2 chain. This allows it to follow the correct L2 chain in case malicious blocks are propagated on
+the P2P network.</p>
+<h3 id="derivation-function"><a class="header" href="#derivation-function">Derivation Function</a></h3>
 <p>The derivation process works by:</p>
 <ol>
 <li><strong>Monitoring L1</strong>: Watching for batch commitments, finalization events, and cross-chain messages posted to Ethereum</li>
@@ -206,12 +204,12 @@ communicate through async channels:</p>
 <li><strong>Derivation Pipeline</strong>: Transforms batch data from L1 into executable L2 payloads</li>
 <li><strong>Engine Driver</strong>: Interfaces with the execution engine via the Engine API</li>
 <li><strong>Chain Orchestrator</strong>: Coordinates the overall flow from L1 events to L2 blocks</li>
-<li><strong>Network Layer</strong>: Propagates blocks across the P2P network for faster synchronization</li>
+<li><strong>Network Layer</strong>: Participates in the Scroll and Ethereum P2P network</li>
 </ul>
 <h3 id="node-modes"><a class="header" href="#node-modes">Node Modes</a></h3>
 <p>The rollup node can operate in different configurations:</p>
 <ul>
-<li><strong>Follower Node</strong>: Derives L2 blocks by processing batch data posted to L1, participating in P2P block propagation</li>
+<li><strong>Follower Node</strong>: Follows the L2 chain via P2P propagated blocks, consolidated by processing batch data posted to L1</li>
 <li><strong>Sequencer Node</strong>: Actively sequences new transactions into blocks and posts batches to L1</li>
 </ul>
 <h2 id="about-this-documentation"><a class="header" href="#about-this-documentation">About This Documentation</a></h2>
