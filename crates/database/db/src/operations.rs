@@ -874,6 +874,7 @@ impl<T: ReadConnectionProvider + Sync + ?Sized> DatabaseReadOperations for T {
                 // index starting from the beginning.
                 else {
                     Ok(models::l1_message::Entity::find()
+                        .filter(models::l1_message::Column::Skipped.eq(false))
                         .order_by_asc(models::l1_message::Column::QueueIndex)
                         .limit(Some(n as u64))
                         .all(self.get_connection())
