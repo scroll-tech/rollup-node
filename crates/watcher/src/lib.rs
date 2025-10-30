@@ -3,6 +3,9 @@
 mod error;
 pub use error::{EthRequestError, FilterLogError, L1WatcherError};
 
+pub mod handle;
+pub use handle::{L1WatcherCommand, L1WatcherHandle};
+
 mod metrics;
 pub use metrics::WatcherMetrics;
 
@@ -76,6 +79,8 @@ pub struct L1Watcher<EP> {
     current_block_number: BlockNumber,
     /// The sender part of the channel for [`L1Notification`].
     sender: mpsc::Sender<Arc<L1Notification>>,
+    /// The receiver part of the channel for [`L1WatcherCommand`].
+    command_rx: mpsc::UnboundedReceiver<L1WatcherCommand>,
     /// The rollup node configuration.
     config: Arc<NodeConfig>,
     /// The metrics for the watcher.
@@ -153,16 +158,18 @@ where
     EP: Provider + SystemContractProvider + 'static,
 {
     /// Spawn a new [`L1Watcher`], starting at `start_block`. The watcher will iterate the L1,
-    /// returning [`L1Notification`] in the returned channel.
+    /// returning [`L1Notification`] in the returned channel and a handle for sending commands.
     pub async fn spawn(
         execution_provider: EP,
         start_block: Option<u64>,
         config: Arc<NodeConfig>,
         log_query_block_range: u64,
-    ) -> mpsc::Receiver<Arc<L1Notification>> {
+    ) -> (mpsc::Receiver<Arc<L1Notification>>, L1WatcherHandle) {
         tracing::trace!(target: "scroll::watcher", ?start_block, ?config, "spawning L1 watcher");
 
         let (tx, rx) = mpsc::channel(log_query_block_range as usize);
+        let (command_tx, command_rx) = mpsc::unbounded_channel();
+        let handle = L1WatcherHandle::new(command_tx);
 
         let fetch_block_number = async |tag: BlockNumberOrTag| {
             let block = loop {
@@ -190,6 +197,7 @@ where
             current_block_number: start_block.unwrap_or(config.start_l1_block).saturating_sub(1),
             l1_state,
             sender: tx,
+            command_rx,
             config,
             metrics: WatcherMetrics::default(),
             is_synced: false,
@@ -208,12 +216,30 @@ where
 
         tokio::spawn(watcher.run());
 
-        rx
+        (rx, handle)
     }
 
     /// Main execution loop for the [`L1Watcher`].
     pub async fn run(mut self) {
         loop {
+            // Poll for commands first (non-blocking check)
+            match self.command_rx.try_recv() {
+                Ok(command) => {
+                    if let Err(err) = self.handle_command(command).await {
+                        tracing::error!(target: "scroll::watcher", ?err, "error handling command");
+                    }
+                    // Continue to process commands without stepping, in case there are more
+                    continue;
+                }
+                Err(mpsc::error::TryRecvError::Empty) => {
+                    // No commands, proceed with normal operation
+                }
+                Err(mpsc::error::TryRecvError::Disconnected) => {
+                    tracing::warn!(target: "scroll::watcher", "command channel closed, stopping the watcher");
+                    break;
+                }
+            }
+
             // step the watcher.
             if let Err(L1WatcherError::SendError(_)) = self
                 .step()
@@ -238,6 +264,40 @@ where
                 self.is_synced = true;
             }
         }
+    }
+
+    /// Handle a command sent via the handle.
+    async fn handle_command(&mut self, command: L1WatcherCommand) -> L1WatcherResult<()> {
+        match command {
+            L1WatcherCommand::ResetToBlock { block, new_sender, response_sender } => {
+                self.handle_reset(block, new_sender, response_sender).await?;
+            }
+        }
+        Ok(())
+    }
+
+    /// Reset the watcher to a specific block number with a fresh notification channel.
+    async fn handle_reset(
+        &mut self,
+        block: u64,
+        new_sender: mpsc::Sender<Arc<L1Notification>>,
+        response_tx: tokio::sync::oneshot::Sender<()>,
+    ) -> L1WatcherResult<()> {
+        tracing::warn!(target: "scroll::watcher", "resetting L1 watcher to block {}", block);
+
+        // Reset state
+        self.current_block_number = block;
+        self.unfinalized_blocks.clear();
+        self.is_synced = false;
+
+        // Replace the sender with the fresh channel
+        // This discards the old channel and any stale notifications in it
+        self.sender = new_sender;
+
+        // Signal command completion via oneshot
+        let _ = response_tx.send(());
+
+        Ok(())
     }
 
     /// A step of work for the [`L1Watcher`].
@@ -608,6 +668,7 @@ where
 
     /// Send the notification in the channel.
     async fn notify(&self, notification: L1Notification) -> L1WatcherResult<()> {
+        // TODO: make sure that this is not blocking if the channel is full.
         Ok(self.sender.send(Arc::new(notification)).await.inspect_err(
             |err| tracing::error!(target: "scroll::watcher", ?err, "failed to send notification"),
         )?)
@@ -708,6 +769,7 @@ mod tests {
         );
 
         let (tx, rx) = mpsc::channel(LOG_QUERY_BLOCK_RANGE as usize);
+        let (_command_tx, command_rx) = mpsc::unbounded_channel();
         (
             L1Watcher {
                 execution_provider: provider,
@@ -715,6 +777,7 @@ mod tests {
                 l1_state: L1State { head: 0, finalized: 0 },
                 current_block_number: 0,
                 sender: tx,
+                command_rx,
                 config: Arc::new(NodeConfig::mainnet()),
                 metrics: WatcherMetrics::default(),
                 is_synced: false,

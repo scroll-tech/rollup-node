@@ -92,6 +92,9 @@ pub enum ChainOrchestratorError {
     /// An error occurred while handling rollup node primitives.
     #[error("An error occurred while handling rollup node primitives: {0}")]
     RollupNodePrimitiveError(rollup_node_primitives::RollupNodePrimitiveError),
+    /// An error occurred during gap reset.
+    #[error("Gap reset error: {0}")]
+    GapResetError(String),
 }
 
 impl CanRetry for ChainOrchestratorError {

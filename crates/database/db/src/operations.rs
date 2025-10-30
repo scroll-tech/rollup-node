@@ -663,6 +663,12 @@ pub trait DatabaseReadOperations {
     /// Get the latest L2 head block info.
     async fn get_l2_head_block_number(&self) -> Result<u64, DatabaseError>;
 
+    /// Get the L1 block number of the last batch commit in the database.
+    async fn get_last_batch_commit_l1_block(&self) -> Result<Option<u64>, DatabaseError>;
+
+    /// Get the L1 block number of the last L1 message in the database.
+    async fn get_last_l1_message_l1_block(&self) -> Result<Option<u64>, DatabaseError>;
+
     /// Get a vector of n [`L1MessageEnvelope`]s in the database starting from the provided `start`
     /// point.
     async fn get_n_l1_messages(
@@ -780,6 +786,28 @@ impl<T: ReadConnectionProvider + Sync + ?Sized> DatabaseReadOperations for T {
             .expect("l2_head_block should always be set")
             .parse::<u64>()
             .expect("l2_head_block should always be a valid u64"))
+    }
+
+    async fn get_last_batch_commit_l1_block(&self) -> Result<Option<u64>, DatabaseError> {
+        Ok(models::batch_commit::Entity::find()
+            .order_by_desc(models::batch_commit::Column::BlockNumber)
+            .select_only()
+            .column(models::batch_commit::Column::BlockNumber)
+            .into_tuple::<i64>()
+            .one(self.get_connection())
+            .await?
+            .map(|block_number| block_number as u64))
+    }
+
+    async fn get_last_l1_message_l1_block(&self) -> Result<Option<u64>, DatabaseError> {
+        Ok(models::l1_message::Entity::find()
+            .order_by_desc(models::l1_message::Column::L1BlockNumber)
+            .select_only()
+            .column(models::l1_message::Column::L1BlockNumber)
+            .into_tuple::<i64>()
+            .one(self.get_connection())
+            .await?
+            .map(|block_number| block_number as u64))
     }
 
     async fn get_n_l1_messages(

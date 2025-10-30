@@ -63,7 +63,7 @@ async fn test_should_not_miss_logs_on_reorg() -> eyre::Result<()> {
     );
 
     // spawn the watcher and verify received notifications are consistent.
-    let mut l1_watcher =
+    let (mut l1_watcher, _) =
         L1Watcher::spawn(mock_provider, None, Arc::new(config), LOGS_QUERY_BLOCK_RANGE).await;
     let mut received_logs = Vec::new();
     loop {

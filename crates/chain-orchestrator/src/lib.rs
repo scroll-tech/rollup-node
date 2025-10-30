@@ -111,6 +111,8 @@ pub struct ChainOrchestrator<
     sync_state: SyncState,
     /// A receiver for [`L1Notification`]s from the [`rollup_node_watcher::L1Watcher`].
     l1_notification_rx: Receiver<Arc<L1Notification>>,
+    /// Handle to send commands to the L1 watcher (e.g., for gap recovery).
+    l1_watcher_handle: Option<rollup_node_watcher::L1WatcherHandle>,
     /// The network manager that manages the scroll p2p network.
     network: ScrollNetwork<N>,
     /// The consensus algorithm used by the rollup node.
@@ -145,6 +147,7 @@ impl<
         block_client: Arc<FullBlockClient<<N as BlockDownloaderProvider>::Client>>,
         l2_provider: L2P,
         l1_notification_rx: Receiver<Arc<L1Notification>>,
+        l1_watcher_handle: Option<rollup_node_watcher::L1WatcherHandle>,
         network: ScrollNetwork<N>,
         consensus: Box<dyn Consensus + 'static>,
         engine: Engine<EC>,
@@ -162,6 +165,7 @@ impl<
                 config,
                 sync_state: SyncState::default(),
                 l1_notification_rx,
+                l1_watcher_handle,
                 network,
                 consensus,
                 engine,
@@ -522,10 +526,56 @@ impl<
                 metered!(Task::L1Finalization, self, handle_l1_finalized(*block_number))
             }
             L1Notification::BatchCommit(batch) => {
-                metered!(Task::BatchCommit, self, handle_batch_commit(batch.clone()))
+                match metered!(Task::BatchCommit, self, handle_batch_commit(batch.clone())) {
+                    Err(ChainOrchestratorError::BatchCommitGap(batch_index)) => {
+                        // Query database for the L1 block of the last known batch
+                        let reset_block =
+                            self.database.get_last_batch_commit_l1_block().await?.unwrap_or(0);
+                        // TODO: handle None case (no batches in DB)
+
+                        tracing::warn!(
+                            target: "scroll::chain_orchestrator",
+                            "Batch commit gap detected at index {}, last known batch at L1 block {}",
+                            batch_index,
+                            reset_block
+                        );
+
+                        // Trigger gap recovery
+                        self.trigger_gap_recovery(reset_block, "batch commit gap").await?;
+
+                        // Return no event, recovery will re-process
+                        Ok(None)
+                    }
+                    result => result,
+                }
             }
             L1Notification::L1Message { message, block_number, block_timestamp: _ } => {
-                metered!(Task::L1Message, self, handle_l1_message(message.clone(), *block_number))
+                match metered!(
+                    Task::L1Message,
+                    self,
+                    handle_l1_message(message.clone(), *block_number)
+                ) {
+                    Err(ChainOrchestratorError::L1MessageQueueGap(queue_index)) => {
+                        // Query database for the L1 block of the last known L1 message
+                        let reset_block =
+                            self.database.get_last_l1_message_l1_block().await?.unwrap_or(0);
+                        // TODO: handle None case (no messages in DB)
+
+                        tracing::warn!(
+                            target: "scroll::chain_orchestrator",
+                            "L1 message queue gap detected at index {}, last known message at L1 block {}",
+                            queue_index,
+                            reset_block
+                        );
+
+                        // Trigger gap recovery
+                        self.trigger_gap_recovery(reset_block, "L1 message queue gap").await?;
+
+                        // Return no event, recovery will re-process
+                        Ok(None)
+                    }
+                    result => result,
+                }
             }
             L1Notification::Synced => {
                 tracing::info!(target: "scroll::chain_orchestrator", "L1 is now synced");
@@ -655,6 +705,9 @@ impl<
                         return Err(ChainOrchestratorError::BatchCommitGap(batch_clone.index));
                     }
 
+                    // TODO: check for duplicate batch commit and skip if same hash
+                    // -> if different hash then we missed a batch revert event.
+
                     // remove any batches with an index greater than the previous batch.
                     let affected = tx.delete_batches_gt_batch_index(prev_batch_index).await?;
 
@@ -739,6 +792,7 @@ impl<
         // Perform a consistency check to ensure the previous L1 message exists in the database.
         self.database
             .tx_mut(move |tx| {
+                // TODO: check for duplicate L1 message and skip if same hash
                 let l1_message = l1_message.clone();
                 async move {
                     if l1_message.transaction.queue_index > 0 &&
@@ -763,6 +817,57 @@ impl<
             .await?;
 
         Ok(Some(event))
+    }
+
+    /// Triggers gap recovery by resetting the L1 watcher to a specific block with a fresh channel.
+    ///
+    /// This method is called when a gap is detected in batch commits or L1 messages.
+    /// It will:
+    /// 1. Create a fresh notification channel
+    /// 2. Send a reset command to the L1 watcher with the new sender
+    /// 3. Replace the orchestrator's receiver with the new one
+    /// 4. The old channel and any stale notifications are automatically discarded
+    ///
+    /// # Arguments
+    /// * `reset_block` - The L1 block number to reset to (last known good state)
+    /// * `gap_type` - Description of the gap type for logging
+    async fn trigger_gap_recovery(
+        &mut self,
+        reset_block: u64,
+        gap_type: &str,
+    ) -> Result<(), ChainOrchestratorError> {
+        if let Some(handle) = &self.l1_watcher_handle {
+            // Create a fresh notification channel
+            // Use the same capacity as the original channel
+            let capacity = self.l1_notification_rx.max_capacity();
+            let (new_tx, new_rx) = mpsc::channel(capacity);
+
+            // Send reset command with the new sender and wait for confirmation
+            handle.reset_to_block(reset_block, new_tx).await.map_err(|err| {
+                ChainOrchestratorError::GapResetError(format!(
+                    "Failed to reset L1 watcher: {:?}",
+                    err
+                ))
+            })?;
+
+            // Replace the receiver with the fresh channel
+            // The old channel is automatically dropped, discarding all stale notifications
+            self.l1_notification_rx = new_rx;
+
+            tracing::info!(
+                target: "scroll::chain_orchestrator",
+                "Gap recovery complete for {} at block {}, fresh channel established",
+                gap_type,
+                reset_block
+            );
+        } else {
+            tracing::error!(
+                target: "scroll::chain_orchestrator",
+                "Cannot trigger gap recovery: L1 watcher handle not available (test mode?)"
+            );
+        }
+
+        Ok(())
     }
 
     async fn handle_network_event(

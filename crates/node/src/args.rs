@@ -342,35 +342,34 @@ impl ScrollRollupNodeConfig {
         };
         let consensus = self.consensus_args.consensus(authorized_signer)?;
 
-        let (l1_notification_tx, l1_notification_rx): (Option<Sender<Arc<L1Notification>>>, _) =
-            if let Some(provider) = l1_provider.filter(|_| !self.test) {
-                tracing::info!(target: "scroll::node::args", ?l1_start_block_number, "Starting L1 watcher");
-                (
-                    None,
-                    Some(
-                        L1Watcher::spawn(
-                            provider,
-                            l1_start_block_number,
-                            node_config,
-                            self.l1_provider_args.logs_query_block_range,
-                        )
-                        .await,
-                    ),
-                )
-            } else {
-                // Create a channel for L1 notifications that we can use to inject L1 messages for
-                // testing
-                #[cfg(feature = "test-utils")]
-                {
-                    let (tx, rx) = tokio::sync::mpsc::channel(1000);
-                    (Some(tx), Some(rx))
-                }
+        let (l1_notification_tx, l1_notification_rx, l1_watcher_handle): (
+            Option<Sender<Arc<L1Notification>>>,
+            _,
+            Option<rollup_node_watcher::L1WatcherHandle>,
+        ) = if let Some(provider) = l1_provider.filter(|_| !self.test) {
+            tracing::info!(target: "scroll::node::args", ?l1_start_block_number, "Starting L1 watcher");
+            let (rx, handle) = L1Watcher::spawn(
+                provider,
+                l1_start_block_number,
+                node_config,
+                self.l1_provider_args.logs_query_block_range,
+            )
+            .await;
+            (None, Some(rx), Some(handle))
+        } else {
+            // Create a channel for L1 notifications that we can use to inject L1 messages for
+            // testing
+            #[cfg(feature = "test-utils")]
+            {
+                let (tx, rx) = tokio::sync::mpsc::channel(1000);
+                (Some(tx), Some(rx), None)
+            }
 
-                #[cfg(not(feature = "test-utils"))]
-                {
-                    (None, None)
-                }
-            };
+            #[cfg(not(feature = "test-utils"))]
+            {
+                (None, None, None)
+            }
+        };
 
         // Construct the l1 provider.
         let l1_messages_provider = db.clone();
@@ -450,6 +449,7 @@ impl ScrollRollupNodeConfig {
             Arc::new(block_client),
             l2_provider,
             l1_notification_rx.expect("L1 notification receiver should be set"),
+            l1_watcher_handle,
             scroll_network_handle.into_scroll_network().await,
             consensus,
             engine,
