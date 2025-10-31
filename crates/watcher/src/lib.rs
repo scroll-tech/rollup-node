@@ -1121,4 +1121,45 @@ mod tests {
 
         Ok(())
     }
+
+    #[tokio::test]
+    async fn test_handle_deadlock_prevention() -> eyre::Result<()> {
+        let (finalized, latest, chain) = chain(10);
+        let unfinalized_blocks = chain[1..5].to_vec();
+        let (mut watcher, _rx, handle) =
+            l1_watcher(unfinalized_blocks.clone(), chain, vec![], finalized, latest);
+
+        // When: Fill the channel to capacity LOG_QUERY_BLOCK_RANGE
+        for i in 0..LOG_QUERY_BLOCK_RANGE {
+            watcher.notify(L1Notification::NewBlock(i)).await?;
+        }
+
+        // Channel is now full. Spawn a task that will try to send another notification
+        // This blocks until we send the command to reset.
+        let watcher_handle_task = tokio::spawn(async move {
+            // This would normally block, but the reset command should interrupt it
+            let result = watcher.notify(L1Notification::NewBlock(1000)).await;
+            // After reset is handled, the notify returns without sending
+            (watcher, result)
+        });
+
+        // Give the notify a chance to start blocking
+        tokio::time::sleep(Duration::from_millis(50)).await;
+
+        // Then: Send reset command - this should NOT deadlock
+        let (new_tx, _new_rx) = mpsc::channel(2);
+        let reset_result = tokio::time::timeout(
+            Duration::from_secs(1),
+            handle.reset_to_block(100, new_tx),
+        ).await;
+
+        assert!(reset_result?.is_ok(), "Reset should succeed");
+
+        // Verify the watcher processed the reset
+        let (watcher, notify_result) = watcher_handle_task.await?;
+        assert!(notify_result.is_ok(), "Notify should complete after handling reset");
+        assert_eq!(watcher.current_block_number, 100, "Watcher should be reset to block 100");
+
+        Ok(())
+    }
 }
