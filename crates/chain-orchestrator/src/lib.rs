@@ -823,7 +823,6 @@ impl<
         // Perform a consistency check to ensure the previous L1 message exists in the database.
         self.database
             .tx_mut(move |tx| {
-                // TODO: check for duplicate L1 message and skip if same hash
                 let l1_message = l1_message.clone();
                 async move {
                     // check for gaps in the L1 message queue
