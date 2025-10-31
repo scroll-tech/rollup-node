@@ -214,29 +214,40 @@ where
             .await
             .expect("channel is open in this context");
 
-        tokio::spawn(watcher.run());
+        tokio::spawn(async move { watcher.run().await });
 
         (rx, handle)
     }
 
     /// Main execution loop for the [`L1Watcher`].
-    pub async fn run(mut self) {
+    pub async fn run(&mut self) {
         loop {
-            // Poll for commands first (non-blocking check)
-            match self.command_rx.try_recv() {
-                Ok(command) => {
-                    if let Err(err) = self.handle_command(command).await {
-                        tracing::error!(target: "scroll::watcher", ?err, "error handling command");
+            // Determine sleep duration based on sync state
+            let sleep_duration = if self.is_synced {
+                SLOW_SYNC_INTERVAL
+            } else {
+                Duration::ZERO
+            };
+
+            // Select between receiving commands and sleeping
+            select! {
+                result = self.command_rx.recv() => {
+                    match result {
+                        Some(command) => {
+                            if let Err(err) = self.handle_command(command).await {
+                                tracing::error!(target: "scroll::watcher", ?err, "error handling command");
+                            }
+                            // Continue to process commands without stepping, in case there are more
+                            continue;
+                        }
+                        None => {
+                            tracing::warn!(target: "scroll::watcher", "command channel closed, stopping the watcher");
+                            break;
+                        }
                     }
-                    // Continue to process commands without stepping, in case there are more
-                    continue;
                 }
-                Err(mpsc::error::TryRecvError::Empty) => {
-                    // No commands, proceed with normal operation
-                }
-                Err(mpsc::error::TryRecvError::Disconnected) => {
-                    tracing::warn!(target: "scroll::watcher", "command channel closed, stopping the watcher");
-                    break;
+                _ = tokio::time::sleep(sleep_duration) => {
+                    // Sleep completed, proceed to step
                 }
             }
 
@@ -250,10 +261,8 @@ where
                 break;
             }
 
-            // sleep if we are synced.
-            if self.is_synced {
-                tokio::time::sleep(SLOW_SYNC_INTERVAL).await;
-            } else if self.current_block_number == self.l1_state.head {
+            // Check if we just synced to the head
+            if !self.is_synced && self.current_block_number == self.l1_state.head {
                 // if we have synced to the head of the L1, notify the channel and set the
                 // `is_synced`` flag.
                 if let Err(L1WatcherError::SendError(_)) = self.notify(L1Notification::Synced).await
