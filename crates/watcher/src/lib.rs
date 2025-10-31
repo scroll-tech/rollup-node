@@ -3,6 +3,9 @@
 mod error;
 pub use error::{EthRequestError, FilterLogError, L1WatcherError};
 
+pub mod handle;
+pub use handle::{L1WatcherCommand, L1WatcherHandle};
+
 mod metrics;
 pub use metrics::WatcherMetrics;
 
@@ -27,7 +30,7 @@ use std::{
     sync::Arc,
     time::Duration,
 };
-use tokio::sync::mpsc;
+use tokio::{select, sync::mpsc};
 
 /// The maximum count of unfinalized blocks we can have in Ethereum.
 pub const MAX_UNFINALIZED_BLOCK_COUNT: usize = 96;
@@ -76,6 +79,8 @@ pub struct L1Watcher<EP> {
     current_block_number: BlockNumber,
     /// The sender part of the channel for [`L1Notification`].
     sender: mpsc::Sender<Arc<L1Notification>>,
+    /// The receiver part of the channel for [`L1WatcherCommand`].
+    command_rx: mpsc::UnboundedReceiver<L1WatcherCommand>,
     /// The rollup node configuration.
     config: Arc<NodeConfig>,
     /// The metrics for the watcher.
@@ -153,16 +158,18 @@ where
     EP: Provider + SystemContractProvider + 'static,
 {
     /// Spawn a new [`L1Watcher`], starting at `start_block`. The watcher will iterate the L1,
-    /// returning [`L1Notification`] in the returned channel.
+    /// returning [`L1Notification`] in the returned channel and a handle for sending commands.
     pub async fn spawn(
         execution_provider: EP,
         start_block: Option<u64>,
         config: Arc<NodeConfig>,
         log_query_block_range: u64,
-    ) -> mpsc::Receiver<Arc<L1Notification>> {
+    ) -> (mpsc::Receiver<Arc<L1Notification>>, L1WatcherHandle) {
         tracing::trace!(target: "scroll::watcher", ?start_block, ?config, "spawning L1 watcher");
 
         let (tx, rx) = mpsc::channel(log_query_block_range as usize);
+        let (command_tx, command_rx) = mpsc::unbounded_channel();
+        let handle = L1WatcherHandle::new(command_tx);
 
         let fetch_block_number = async |tag: BlockNumberOrTag| {
             let block = loop {
@@ -184,12 +191,13 @@ where
         };
 
         // init the watcher.
-        let watcher = Self {
+        let mut watcher = Self {
             execution_provider,
             unfinalized_blocks: BoundedVec::new(HEADER_CAPACITY),
             current_block_number: start_block.unwrap_or(config.start_l1_block).saturating_sub(1),
             l1_state,
             sender: tx,
+            command_rx,
             config,
             metrics: WatcherMetrics::default(),
             is_synced: false,
@@ -206,14 +214,39 @@ where
             .await
             .expect("channel is open in this context");
 
-        tokio::spawn(watcher.run());
+        tokio::spawn(async move { watcher.run().await });
 
-        rx
+        (rx, handle)
     }
 
     /// Main execution loop for the [`L1Watcher`].
-    pub async fn run(mut self) {
+    pub async fn run(&mut self) {
         loop {
+            // Determine sleep duration based on sync state
+            let sleep_duration = if self.is_synced { SLOW_SYNC_INTERVAL } else { Duration::ZERO };
+
+            // Select between receiving commands and sleeping
+            select! {
+                result = self.command_rx.recv() => {
+                    match result {
+                        Some(command) => {
+                            if let Err(err) = self.handle_command(command).await {
+                                tracing::error!(target: "scroll::watcher", ?err, "error handling command");
+                            }
+                            // Continue to process commands without stepping, in case there are more
+                            continue;
+                        }
+                        None => {
+                            tracing::warn!(target: "scroll::watcher", "command channel closed, stopping the watcher");
+                            break;
+                        }
+                    }
+                }
+                _ = tokio::time::sleep(sleep_duration) => {
+                    // Sleep completed, proceed to step
+                }
+            }
+
             // step the watcher.
             if let Err(L1WatcherError::SendError(_)) = self
                 .step()
@@ -224,10 +257,8 @@ where
                 break;
             }
 
-            // sleep if we are synced.
-            if self.is_synced {
-                tokio::time::sleep(SLOW_SYNC_INTERVAL).await;
-            } else if self.current_block_number == self.l1_state.head {
+            // Check if we just synced to the head
+            if !self.is_synced && self.current_block_number == self.l1_state.head {
                 // if we have synced to the head of the L1, notify the channel and set the
                 // `is_synced`` flag.
                 if let Err(L1WatcherError::SendError(_)) = self.notify(L1Notification::Synced).await
@@ -238,6 +269,40 @@ where
                 self.is_synced = true;
             }
         }
+    }
+
+    /// Handle a command sent via the handle.
+    async fn handle_command(&mut self, command: L1WatcherCommand) -> L1WatcherResult<()> {
+        match command {
+            L1WatcherCommand::ResetToBlock { block, new_sender, response_sender } => {
+                self.handle_reset(block, new_sender, response_sender).await?;
+            }
+        }
+        Ok(())
+    }
+
+    /// Reset the watcher to a specific block number with a fresh notification channel.
+    async fn handle_reset(
+        &mut self,
+        block: u64,
+        new_sender: mpsc::Sender<Arc<L1Notification>>,
+        response_tx: tokio::sync::oneshot::Sender<()>,
+    ) -> L1WatcherResult<()> {
+        tracing::warn!(target: "scroll::watcher", "resetting L1 watcher to block {}", block);
+
+        // Reset state
+        self.current_block_number = block;
+        self.unfinalized_blocks.clear();
+        self.is_synced = false;
+
+        // Replace the sender with the fresh channel
+        // This discards the old channel and any stale notifications in it
+        self.sender = new_sender;
+
+        // Signal command completion via oneshot
+        let _ = response_tx.send(());
+
+        Ok(())
     }
 
     /// A step of work for the [`L1Watcher`].
@@ -597,7 +662,7 @@ where
     }
 
     /// Send all notifications on the channel.
-    async fn notify_all(&self, notifications: Vec<L1Notification>) -> L1WatcherResult<()> {
+    async fn notify_all(&mut self, notifications: Vec<L1Notification>) -> L1WatcherResult<()> {
         for notification in notifications {
             self.metrics.process_l1_notification(&notification);
             tracing::trace!(target: "scroll::watcher", %notification, "sending l1 notification");
@@ -607,10 +672,30 @@ where
     }
 
     /// Send the notification in the channel.
-    async fn notify(&self, notification: L1Notification) -> L1WatcherResult<()> {
-        Ok(self.sender.send(Arc::new(notification)).await.inspect_err(
-            |err| tracing::error!(target: "scroll::watcher", ?err, "failed to send notification"),
-        )?)
+    async fn notify(&mut self, notification: L1Notification) -> L1WatcherResult<()> {
+        select! {
+            biased;
+
+            Some(command) = self.command_rx.recv() => {
+                // If a command is received while trying to send a notification,
+                // we prioritize handling the command first.
+                // This prevents potential deadlocks if the channel is full.
+                tracing::trace!(target: "scroll::watcher", "command received while sending notification, prioritizing command handling");
+
+                if let Err(err) = self.handle_command(command).await {
+                    tracing::error!(target: "scroll::watcher", ?err, "error handling command");
+                }
+
+                return Ok(());
+            }
+            result = self.sender.send(Arc::new(notification)) => {
+                result.inspect_err(
+                    |err| tracing::error!(target: "scroll::watcher", ?err, "failed to send notification"),
+                )?;
+            }
+        }
+
+        Ok(())
     }
 
     /// Updates the current block number, saturating at the head of the chain.
@@ -694,7 +779,7 @@ mod tests {
         transactions: Vec<Transaction>,
         finalized: Header,
         latest: Header,
-    ) -> (L1Watcher<MockProvider>, mpsc::Receiver<Arc<L1Notification>>) {
+    ) -> (L1Watcher<MockProvider>, mpsc::Receiver<Arc<L1Notification>>, L1WatcherHandle) {
         let provider_blocks =
             provider_blocks.into_iter().map(|h| Block { header: h, ..Default::default() });
         let finalized = Block { header: finalized, ..Default::default() };
@@ -708,6 +793,9 @@ mod tests {
         );
 
         let (tx, rx) = mpsc::channel(LOG_QUERY_BLOCK_RANGE as usize);
+        let (command_tx, command_rx) = mpsc::unbounded_channel();
+        let handle = L1WatcherHandle::new(command_tx);
+
         (
             L1Watcher {
                 execution_provider: provider,
@@ -715,12 +803,14 @@ mod tests {
                 l1_state: L1State { head: 0, finalized: 0 },
                 current_block_number: 0,
                 sender: tx,
+                command_rx,
                 config: Arc::new(NodeConfig::mainnet()),
                 metrics: WatcherMetrics::default(),
                 is_synced: false,
                 log_query_block_range: LOG_QUERY_BLOCK_RANGE,
             },
             rx,
+            handle,
         )
     }
 
@@ -730,7 +820,7 @@ mod tests {
         let (finalized, latest, chain) = chain(21);
         let unfinalized_blocks = chain[1..11].to_vec();
 
-        let (watcher, _) = l1_watcher(
+        let (watcher, _, _) = l1_watcher(
             unfinalized_blocks,
             chain.clone(),
             vec![],
@@ -755,7 +845,7 @@ mod tests {
         let mut provider_blocks = chain_from(&chain[10], 10);
         let latest = provider_blocks[9].clone();
 
-        let (watcher, _) = l1_watcher(
+        let (watcher, _, _) = l1_watcher(
             unfinalized_blocks,
             provider_blocks.clone(),
             vec![],
@@ -778,7 +868,7 @@ mod tests {
     async fn test_should_handle_finalized_with_empty_state() -> eyre::Result<()> {
         // Given
         let (finalized, latest, _) = chain(2);
-        let (mut watcher, _rx) = l1_watcher(vec![], vec![], vec![], finalized.clone(), latest);
+        let (mut watcher, _rx, _) = l1_watcher(vec![], vec![], vec![], finalized.clone(), latest);
 
         // When
         watcher.handle_finalized_block(&finalized).await?;
@@ -794,7 +884,7 @@ mod tests {
         // Given
         let (_, latest, chain) = chain(10);
         let finalized = chain[5].clone();
-        let (mut watcher, _rx) = l1_watcher(chain, vec![], vec![], finalized.clone(), latest);
+        let (mut watcher, _rx, _) = l1_watcher(chain, vec![], vec![], finalized.clone(), latest);
 
         // When
         watcher.handle_finalized_block(&finalized).await?;
@@ -810,7 +900,7 @@ mod tests {
         // Given
         let (_, latest, chain) = chain(10);
         let finalized = latest.clone();
-        let (mut watcher, _rx) = l1_watcher(chain, vec![], vec![], finalized.clone(), latest);
+        let (mut watcher, _rx, _) = l1_watcher(chain, vec![], vec![], finalized.clone(), latest);
 
         // When
         watcher.handle_finalized_block(&finalized).await?;
@@ -825,7 +915,8 @@ mod tests {
     async fn test_should_match_unfinalized_tail() -> eyre::Result<()> {
         // Given
         let (finalized, latest, chain) = chain(10);
-        let (mut watcher, _) = l1_watcher(chain, vec![], vec![], finalized.clone(), latest.clone());
+        let (mut watcher, _, _) =
+            l1_watcher(chain, vec![], vec![], finalized.clone(), latest.clone());
 
         // When
         watcher.handle_latest_block(&finalized, &latest).await?;
@@ -842,7 +933,7 @@ mod tests {
         // Given
         let (finalized, latest, chain) = chain(10);
         let unfinalized_chain = chain[..9].to_vec();
-        let (mut watcher, _rx) =
+        let (mut watcher, _rx, _) =
             l1_watcher(unfinalized_chain, vec![], vec![], finalized.clone(), latest.clone());
 
         assert_eq!(watcher.unfinalized_blocks.len(), 9);
@@ -862,7 +953,7 @@ mod tests {
         // Given
         let (finalized, latest, chain) = chain(10);
         let unfinalized_chain = chain[..5].to_vec();
-        let (mut watcher, mut receiver) =
+        let (mut watcher, mut receiver, _) =
             l1_watcher(unfinalized_chain, chain, vec![], finalized.clone(), latest.clone());
 
         // When
@@ -883,7 +974,7 @@ mod tests {
         let (finalized, _, chain) = chain(10);
         let reorged = chain_from(&chain[5], 10);
         let latest = reorged[9].clone();
-        let (mut watcher, mut receiver) =
+        let (mut watcher, mut receiver, _) =
             l1_watcher(chain.clone(), reorged, vec![], finalized.clone(), latest.clone());
 
         // When
@@ -906,7 +997,7 @@ mod tests {
     async fn test_should_handle_l1_messages() -> eyre::Result<()> {
         // Given
         let (finalized, latest, chain) = chain(10);
-        let (watcher, _) = l1_watcher(chain, vec![], vec![], finalized.clone(), latest.clone());
+        let (watcher, _, _) = l1_watcher(chain, vec![], vec![], finalized.clone(), latest.clone());
 
         // build test logs.
         let mut logs = (0..10).map(|_| random!(Log)).collect::<Vec<_>>();
@@ -944,7 +1035,7 @@ mod tests {
             effective_gas_price: None,
         };
 
-        let (watcher, _) =
+        let (watcher, _, _) =
             l1_watcher(chain, vec![], vec![tx.clone()], finalized.clone(), latest.clone());
 
         // build test logs.
@@ -973,7 +1064,7 @@ mod tests {
     async fn test_should_handle_finalize_commits() -> eyre::Result<()> {
         // Given
         let (finalized, latest, chain) = chain(10);
-        let (watcher, _) = l1_watcher(chain, vec![], vec![], finalized.clone(), latest.clone());
+        let (watcher, _, _) = l1_watcher(chain, vec![], vec![], finalized.clone(), latest.clone());
 
         // build test logs.
         let mut logs = (0..10).map(|_| random!(Log)).collect::<Vec<_>>();
@@ -991,6 +1082,78 @@ mod tests {
 
         // Then
         assert!(matches!(notification, L1Notification::BatchFinalization { .. }));
+
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn test_handle_state_reset() -> eyre::Result<()> {
+        // Given: A watcher with state
+        let (finalized, latest, chain) = chain(10);
+        let unfinalized_blocks = chain[1..5].to_vec();
+        let (mut watcher, _rx, handle) =
+            l1_watcher(unfinalized_blocks.clone(), chain, vec![], finalized, latest);
+
+        watcher.current_block_number = unfinalized_blocks.last().unwrap().number;
+        watcher.is_synced = true;
+        assert_eq!(watcher.unfinalized_blocks.len(), 4);
+
+        let join = tokio::spawn(async move {
+            // When: Reset to block 2
+            let (new_tx, _new_rx) = mpsc::channel(LOG_QUERY_BLOCK_RANGE as usize);
+            handle.reset_to_block(2, new_tx).await.expect("reset to block");
+
+            // close channel to end watcher run loop
+            drop(handle);
+        });
+
+        watcher.run().await;
+
+        join.await?;
+
+        // Then: State should be reset
+        assert_eq!(watcher.current_block_number, 2);
+        assert_eq!(watcher.unfinalized_blocks.len(), 0, "unfinalized blocks should be cleared");
+        assert!(!watcher.is_synced, "is_synced should be reset to false");
+
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn test_handle_deadlock_prevention() -> eyre::Result<()> {
+        let (finalized, latest, chain) = chain(10);
+        let unfinalized_blocks = chain[1..5].to_vec();
+        let (mut watcher, _rx, handle) =
+            l1_watcher(unfinalized_blocks.clone(), chain, vec![], finalized, latest);
+
+        // When: Fill the channel to capacity LOG_QUERY_BLOCK_RANGE
+        for i in 0..LOG_QUERY_BLOCK_RANGE {
+            watcher.notify(L1Notification::NewBlock(i)).await?;
+        }
+
+        // Channel is now full. Spawn a task that will try to send another notification
+        // This blocks until we send the command to reset.
+        let watcher_handle_task = tokio::spawn(async move {
+            // This would normally block, but the reset command should interrupt it
+            let result = watcher.notify(L1Notification::NewBlock(1000)).await;
+            // After reset is handled, the notify returns without sending
+            (watcher, result)
+        });
+
+        // Give the notify a chance to start blocking
+        tokio::time::sleep(Duration::from_millis(50)).await;
+
+        // Then: Send reset command - this should NOT deadlock
+        let (new_tx, _new_rx) = mpsc::channel(2);
+        let reset_result =
+            tokio::time::timeout(Duration::from_secs(1), handle.reset_to_block(100, new_tx)).await;
+
+        assert!(reset_result?.is_ok(), "Reset should succeed");
+
+        // Verify the watcher processed the reset
+        let (watcher, notify_result) = watcher_handle_task.await?;
+        assert!(notify_result.is_ok(), "Notify should complete after handling reset");
+        assert_eq!(watcher.current_block_number, 100, "Watcher should be reset to block 100");
 
         Ok(())
     }

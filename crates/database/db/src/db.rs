@@ -453,6 +453,22 @@ impl DatabaseReadOperations for Database {
         )
     }
 
+    async fn get_last_batch_commit_l1_block(&self) -> Result<Option<u64>, DatabaseError> {
+        metered!(
+            DatabaseOperation::GetLastBatchCommitL1Block,
+            self,
+            tx(|tx| async move { tx.get_last_batch_commit_l1_block().await })
+        )
+    }
+
+    async fn get_last_l1_message_l1_block(&self) -> Result<Option<u64>, DatabaseError> {
+        metered!(
+            DatabaseOperation::GetLastL1MessageL1Block,
+            self,
+            tx(|tx| async move { tx.get_last_l1_message_l1_block().await })
+        )
+    }
+
     async fn get_n_l1_messages(
         &self,
         start: Option<L1MessageKey>,

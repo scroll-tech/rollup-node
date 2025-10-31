@@ -59,7 +59,7 @@ async fn test_should_not_index_latest_block_multiple_times() -> eyre::Result<()>
     );
 
     // spawn the watcher and verify received notifications are consistent.
-    let mut l1_watcher =
+    let (mut l1_watcher, _) =
         L1Watcher::spawn(mock_provider, None, Arc::new(config), LOGS_QUERY_BLOCK_RANGE).await;
     let mut prev_block_number = 0;
     let mut ticker = tokio::time::interval(tokio::time::Duration::from_secs(2));
