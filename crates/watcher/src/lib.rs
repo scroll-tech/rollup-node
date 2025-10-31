@@ -223,11 +223,7 @@ where
     pub async fn run(&mut self) {
         loop {
             // Determine sleep duration based on sync state
-            let sleep_duration = if self.is_synced {
-                SLOW_SYNC_INTERVAL
-            } else {
-                Duration::ZERO
-            };
+            let sleep_duration = if self.is_synced { SLOW_SYNC_INTERVAL } else { Duration::ZERO };
 
             // Select between receiving commands and sleeping
             select! {
@@ -919,7 +915,8 @@ mod tests {
     async fn test_should_match_unfinalized_tail() -> eyre::Result<()> {
         // Given
         let (finalized, latest, chain) = chain(10);
-        let (mut watcher, _, _) = l1_watcher(chain, vec![], vec![], finalized.clone(), latest.clone());
+        let (mut watcher, _, _) =
+            l1_watcher(chain, vec![], vec![], finalized.clone(), latest.clone());
 
         // When
         watcher.handle_latest_block(&finalized, &latest).await?;
@@ -1148,10 +1145,8 @@ mod tests {
 
         // Then: Send reset command - this should NOT deadlock
         let (new_tx, _new_rx) = mpsc::channel(2);
-        let reset_result = tokio::time::timeout(
-            Duration::from_secs(1),
-            handle.reset_to_block(100, new_tx),
-        ).await;
+        let reset_result =
+            tokio::time::timeout(Duration::from_secs(1), handle.reset_to_block(100, new_tx)).await;
 
         assert!(reset_result?.is_ok(), "Reset should succeed");
 

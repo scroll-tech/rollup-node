@@ -731,12 +731,11 @@ impl<
                             return Err(ChainOrchestratorError::DuplicateBatchCommit(
                                 BatchInfo::new(batch_clone.index, batch_clone.hash),
                             ));
-                        } else {
-                            // TODO: once batch reverts are implemented, we need to handle this
-                            // case.
-                            // If we have a batch at the same index in the DB this means we have
-                            // missed a batch revert event.
                         }
+                        // TODO: once batch reverts are implemented, we need to handle this
+                        // case.
+                        // If we have a batch at the same index in the DB this means we have
+                        // missed a batch revert event.
                     }
 
                     // remove any batches with an index greater than the previous batch.
@@ -833,8 +832,8 @@ impl<
                             )),
                             1,
                         )
-                        .await?
-                        .is_empty()
+                            .await?
+                            .is_empty()
                     {
                         return Err(ChainOrchestratorError::L1MessageQueueGap(
                             l1_message.transaction.queue_index,
@@ -859,17 +858,17 @@ impl<
                             return Err(ChainOrchestratorError::DuplicateL1Message(
                                 l1_message.transaction.queue_index,
                             ));
-                        } else {
-                            // This should not happen in normal operation as messages should be
-                            // deleted when a L1 reorg is handled, log warning.
-                            tracing::warn!(
+                        }
+
+                        // This should not happen in normal operation as messages should be
+                        // deleted when a L1 reorg is handled, log warning.
+                        tracing::warn!(
                                 target: "scroll::chain_orchestrator",
                                 "L1 message queue index {} already exists with different hash in DB {:?} vs {:?}",
                                 l1_message.transaction.queue_index,
                                 existing_message.transaction.tx_hash(),
                                 l1_message.transaction.tx_hash()
                             );
-                        }
                     }
 
                     tx.insert_l1_message(l1_message.clone()).await?;
