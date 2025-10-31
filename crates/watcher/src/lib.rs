@@ -783,7 +783,7 @@ mod tests {
         transactions: Vec<Transaction>,
         finalized: Header,
         latest: Header,
-    ) -> (L1Watcher<MockProvider>, mpsc::Receiver<Arc<L1Notification>>) {
+    ) -> (L1Watcher<MockProvider>, mpsc::Receiver<Arc<L1Notification>>, L1WatcherHandle) {
         let provider_blocks =
             provider_blocks.into_iter().map(|h| Block { header: h, ..Default::default() });
         let finalized = Block { header: finalized, ..Default::default() };
@@ -797,7 +797,9 @@ mod tests {
         );
 
         let (tx, rx) = mpsc::channel(LOG_QUERY_BLOCK_RANGE as usize);
-        let (_command_tx, command_rx) = mpsc::unbounded_channel();
+        let (command_tx, command_rx) = mpsc::unbounded_channel();
+        let handle = L1WatcherHandle::new(command_tx);
+
         (
             L1Watcher {
                 execution_provider: provider,
@@ -812,6 +814,7 @@ mod tests {
                 log_query_block_range: LOG_QUERY_BLOCK_RANGE,
             },
             rx,
+            handle,
         )
     }
 
@@ -821,7 +824,7 @@ mod tests {
         let (finalized, latest, chain) = chain(21);
         let unfinalized_blocks = chain[1..11].to_vec();
 
-        let (watcher, _) = l1_watcher(
+        let (watcher, _, _) = l1_watcher(
             unfinalized_blocks,
             chain.clone(),
             vec![],
@@ -846,7 +849,7 @@ mod tests {
         let mut provider_blocks = chain_from(&chain[10], 10);
         let latest = provider_blocks[9].clone();
 
-        let (watcher, _) = l1_watcher(
+        let (watcher, _, _) = l1_watcher(
             unfinalized_blocks,
             provider_blocks.clone(),
             vec![],
@@ -869,7 +872,7 @@ mod tests {
     async fn test_should_handle_finalized_with_empty_state() -> eyre::Result<()> {
         // Given
         let (finalized, latest, _) = chain(2);
-        let (mut watcher, _rx) = l1_watcher(vec![], vec![], vec![], finalized.clone(), latest);
+        let (mut watcher, _rx, _) = l1_watcher(vec![], vec![], vec![], finalized.clone(), latest);
 
         // When
         watcher.handle_finalized_block(&finalized).await?;
@@ -885,7 +888,7 @@ mod tests {
         // Given
         let (_, latest, chain) = chain(10);
         let finalized = chain[5].clone();
-        let (mut watcher, _rx) = l1_watcher(chain, vec![], vec![], finalized.clone(), latest);
+        let (mut watcher, _rx, _) = l1_watcher(chain, vec![], vec![], finalized.clone(), latest);
 
         // When
         watcher.handle_finalized_block(&finalized).await?;
@@ -901,7 +904,7 @@ mod tests {
         // Given
         let (_, latest, chain) = chain(10);
         let finalized = latest.clone();
-        let (mut watcher, _rx) = l1_watcher(chain, vec![], vec![], finalized.clone(), latest);
+        let (mut watcher, _rx, _) = l1_watcher(chain, vec![], vec![], finalized.clone(), latest);
 
         // When
         watcher.handle_finalized_block(&finalized).await?;
@@ -916,7 +919,7 @@ mod tests {
     async fn test_should_match_unfinalized_tail() -> eyre::Result<()> {
         // Given
         let (finalized, latest, chain) = chain(10);
-        let (mut watcher, _) = l1_watcher(chain, vec![], vec![], finalized.clone(), latest.clone());
+        let (mut watcher, _, _) = l1_watcher(chain, vec![], vec![], finalized.clone(), latest.clone());
 
         // When
         watcher.handle_latest_block(&finalized, &latest).await?;
@@ -933,7 +936,7 @@ mod tests {
         // Given
         let (finalized, latest, chain) = chain(10);
         let unfinalized_chain = chain[..9].to_vec();
-        let (mut watcher, _rx) =
+        let (mut watcher, _rx, _) =
             l1_watcher(unfinalized_chain, vec![], vec![], finalized.clone(), latest.clone());
 
         assert_eq!(watcher.unfinalized_blocks.len(), 9);
@@ -953,7 +956,7 @@ mod tests {
         // Given
         let (finalized, latest, chain) = chain(10);
         let unfinalized_chain = chain[..5].to_vec();
-        let (mut watcher, mut receiver) =
+        let (mut watcher, mut receiver, _) =
             l1_watcher(unfinalized_chain, chain, vec![], finalized.clone(), latest.clone());
 
         // When
@@ -974,7 +977,7 @@ mod tests {
         let (finalized, _, chain) = chain(10);
         let reorged = chain_from(&chain[5], 10);
         let latest = reorged[9].clone();
-        let (mut watcher, mut receiver) =
+        let (mut watcher, mut receiver, _) =
             l1_watcher(chain.clone(), reorged, vec![], finalized.clone(), latest.clone());
 
         // When
@@ -997,7 +1000,7 @@ mod tests {
     async fn test_should_handle_l1_messages() -> eyre::Result<()> {
         // Given
         let (finalized, latest, chain) = chain(10);
-        let (watcher, _) = l1_watcher(chain, vec![], vec![], finalized.clone(), latest.clone());
+        let (watcher, _, _) = l1_watcher(chain, vec![], vec![], finalized.clone(), latest.clone());
 
         // build test logs.
         let mut logs = (0..10).map(|_| random!(Log)).collect::<Vec<_>>();
@@ -1035,7 +1038,7 @@ mod tests {
             effective_gas_price: None,
         };
 
-        let (watcher, _) =
+        let (watcher, _, _) =
             l1_watcher(chain, vec![], vec![tx.clone()], finalized.clone(), latest.clone());
 
         // build test logs.
@@ -1064,7 +1067,7 @@ mod tests {
     async fn test_should_handle_finalize_commits() -> eyre::Result<()> {
         // Given
         let (finalized, latest, chain) = chain(10);
-        let (watcher, _) = l1_watcher(chain, vec![], vec![], finalized.clone(), latest.clone());
+        let (watcher, _, _) = l1_watcher(chain, vec![], vec![], finalized.clone(), latest.clone());
 
         // build test logs.
         let mut logs = (0..10).map(|_| random!(Log)).collect::<Vec<_>>();
@@ -1082,6 +1085,39 @@ mod tests {
 
         // Then
         assert!(matches!(notification, L1Notification::BatchFinalization { .. }));
+
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn test_handle_state_reset() -> eyre::Result<()> {
+        // Given: A watcher with state
+        let (finalized, latest, chain) = chain(10);
+        let unfinalized_blocks = chain[1..5].to_vec();
+        let (mut watcher, _rx, handle) =
+            l1_watcher(unfinalized_blocks.clone(), chain, vec![], finalized, latest);
+
+        watcher.current_block_number = unfinalized_blocks.last().unwrap().number;
+        watcher.is_synced = true;
+        assert_eq!(watcher.unfinalized_blocks.len(), 4);
+
+        let join = tokio::spawn(async move {
+            // When: Reset to block 2
+            let (new_tx, _new_rx) = mpsc::channel(LOG_QUERY_BLOCK_RANGE as usize);
+            handle.reset_to_block(2, new_tx).await.expect("reset to block");
+
+            // close channel to end watcher run loop
+            drop(handle);
+        });
+
+        watcher.run().await;
+
+        join.await?;
+
+        // Then: State should be reset
+        assert_eq!(watcher.current_block_number, 2);
+        assert_eq!(watcher.unfinalized_blocks.len(), 0, "unfinalized blocks should be cleared");
+        assert!(!watcher.is_synced, "is_synced should be reset to false");
 
         Ok(())
     }
