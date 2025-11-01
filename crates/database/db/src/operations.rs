@@ -543,6 +543,7 @@ impl<T: WriteConnectionProvider + ?Sized + Sync> DatabaseWriteOperations for T {
 
         models::l1_message::Entity::update_many()
             .col_expr(models::l1_message::Column::L2BlockNumber, Expr::value(None::<i64>))
+            .col_expr(models::l1_message::Column::Skipped, Expr::value(false))
             .filter(filter)
             .exec(self.get_connection())
             .await?;
