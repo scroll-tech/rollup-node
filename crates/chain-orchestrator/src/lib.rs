@@ -21,7 +21,7 @@ use rollup_node_providers::L1MessageProvider;
 use rollup_node_sequencer::{Sequencer, SequencerEvent};
 use rollup_node_signer::{SignatureAsBytes, SignerEvent, SignerHandle};
 use rollup_node_watcher::L1Notification;
-use scroll_alloy_consensus::TxL1Message;
+use scroll_alloy_consensus::{ScrollTxEnvelope, TxL1Message};
 use scroll_alloy_hardforks::ScrollHardforks;
 use scroll_alloy_network::Scroll;
 use scroll_alloy_provider::ScrollEngineApi;
@@ -570,26 +570,41 @@ impl<
         let UnwindResult { l1_block_number, queue_index, l2_head_block_number, l2_safe_block_info } =
             self.database.unwind(genesis_hash, block_number).await?;
 
-        let l2_head_block_info = if let Some(block_number) = l2_head_block_number {
-            // Fetch the block hash of the new L2 head block.
-            let block_hash = self
-                .l2_client
-                .get_block_by_number(block_number.into())
-                .full()
-                .await?
-                .expect("L2 head block must exist")
-                .header
-                .hash_slow();
+        let (l2_head_block_info, reverted_transactions) =
+            if let Some(block_number) = l2_head_block_number {
+                // Fetch the block hash of the new L2 head block.
+                let block_hash = self
+                    .l2_client
+                    .get_block_by_number(block_number.into())
+                    .full()
+                    .await?
+                    .expect("L2 head block must exist")
+                    .header
+                    .hash_slow();
 
-            // Cancel the inflight payload building job if the head has changed.
-            if let Some(s) = self.sequencer.as_mut() {
-                s.cancel_payload_building_job();
+                // Cancel the inflight payload building job if the head has changed.
+                if let Some(s) = self.sequencer.as_mut() {
+                    s.cancel_payload_building_job();
+                };
+
+                // Collect transactions of reverted blocks from l2 client.
+                let mut reverted_transactions: Vec<ScrollTxEnvelope> = Vec::new();
+                for number in block_number..=self.engine.fcs().head_block_info().number {
+                    let block = self
+                        .l2_client
+                        .get_block_by_number(number.into())
+                        .full()
+                        .await?
+                        .ok_or_else(|| ChainOrchestratorError::L2BlockNotFoundInL2Client(number))?;
+
+                    let block = block.into_consensus().map_transactions(|tx| tx.inner.into_inner());
+                    reverted_transactions.extend(block.body.transactions().cloned());
+                }
+
+                (Some(BlockInfo { number: block_number, hash: block_hash }), reverted_transactions)
+            } else {
+                (None, Vec::new())
             };
-
-            Some(BlockInfo { number: block_number, hash: block_hash })
-        } else {
-            None
-        };
 
         // If the L1 reorg is before the origin of the inflight payload building job, cancel it.
         if Some(l1_block_number) <
@@ -606,6 +621,18 @@ impl<
         // TODO: Add retry logic
         if l2_head_block_info.is_some() || l2_safe_block_info.is_some() {
             self.engine.update_fcs(l2_head_block_info, l2_safe_block_info, None).await?;
+        }
+
+        // add all reverted transactions to the transation pool.
+        for tx in reverted_transactions {
+            let encoded_tx = tx.encoded_2718();
+            if let Err(err) = self.l2_client.send_raw_transaction(&encoded_tx).await {
+                tracing::warn!(
+                    target: "scroll::chain_orchestrator",
+                    ?err,
+                    "failed to reinsert reverted transaction into pool"
+                );
+            }
         }
 
         let event = ChainOrchestratorEvent::L1Reorg {
