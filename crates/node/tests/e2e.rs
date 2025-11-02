@@ -1,6 +1,6 @@
 //! End-to-end tests for the rollup node.
 
-use alloy_eips::BlockNumberOrTag;
+use alloy_eips::{eip2718::Encodable2718, BlockNumberOrTag};
 use alloy_primitives::{address, b256, Address, Bytes, Signature, B256, U256};
 use alloy_rpc_types_eth::Block;
 use alloy_signer::Signer;
@@ -1451,6 +1451,88 @@ async fn can_handle_l1_message_reorg() -> eyre::Result<()> {
     Ok(())
 }
 
+#[tokio::test]
+async fn requeues_transactions_after_l1_reorg() -> eyre::Result<()> {
+    reth_tracing::init_test_tracing();
+
+    let chain_spec = (*SCROLL_DEV).clone();
+    let mut config = default_sequencer_test_scroll_rollup_node_config();
+    // keep automatic sequencing disabled so that blocks are only produced on demand
+    config.sequencer_args.auto_start = false;
+    config.sequencer_args.block_time = 0;
+
+    let (mut nodes, _tasks, wallet) =
+        setup_engine(config, 1, chain_spec.clone(), false, false).await?;
+    let node = nodes.pop().expect("node exists");
+
+    let rnm_handle = node.inner.add_ons_handle.rollup_manager_handle.clone();
+    let mut events = rnm_handle.get_event_listener().await?;
+    let l1_watcher_tx = node.inner.add_ons_handle.l1_watcher_tx.clone().unwrap();
+
+    l1_watcher_tx.send(Arc::new(L1Notification::Synced)).await?;
+    let _ = events.next().await;
+    let _ = events.next().await;
+
+    // Let the sequencer build 10 blocks.
+    for i in 1..=10 {
+        rnm_handle.build_block();
+        let b = wait_for_block_sequenced_5s(&mut events, i).await?;
+        tracing::info!(target: "scroll::test", block_number = ?b.header.number, block_hash = ?b.header.hash_slow(), "Sequenced block");
+    }
+
+    // Send a L1 message and wait for it to be indexed.
+    let l1_message_notification = L1Notification::L1Message {
+        message: TxL1Message {
+            queue_index: 0,
+            gas_limit: 21000,
+            to: Default::default(),
+            value: Default::default(),
+            sender: Default::default(),
+            input: Default::default(),
+        },
+        block_number: 2,
+        block_timestamp: 0,
+    };
+
+    // Build a L2 block with L1 message, so we can revert it later.
+    l1_watcher_tx.send(Arc::new(l1_message_notification.clone())).await?;
+    l1_watcher_tx.send(Arc::new(L1Notification::NewBlock(2))).await?;
+    wait_for_event_5s(&mut events, ChainOrchestratorEvent::L1MessageCommitted(0)).await?;
+    wait_for_event_5s(&mut events, ChainOrchestratorEvent::NewL1Block(2)).await?;
+    rnm_handle.build_block();
+    wait_for_block_sequenced_5s(&mut events, 11).await?;
+
+    // inject a user transaction and force the sequencer to include it in the next block
+    let wallet = Arc::new(Mutex::new(wallet));
+    let tx = generate_tx(wallet.clone()).await;
+    let injected_tx_bytes: Vec<u8> = tx.clone().into();
+    node.rpc.inject_tx(tx).await?;
+
+    rnm_handle.build_block();
+    let block_with_tx = wait_for_block_sequenced_5s(&mut events, 12).await?;
+    assert!(
+        block_contains_raw_tx(&block_with_tx, &injected_tx_bytes),
+        "block 11 should contain the injected transaction before the reorg"
+    );
+
+    // trigger an L1 reorg that reverts the block containing the transaction
+    l1_watcher_tx.send(Arc::new(L1Notification::Reorg(1))).await?;
+    wait_for_event_predicate_5s(&mut events, |event| {
+        matches!(event, ChainOrchestratorEvent::L1Reorg { l1_block_number: 1, .. })
+    })
+    .await?;
+
+    // build the next block – the reverted transaction should have been requeued
+    rnm_handle.build_block();
+    let reseq_block = wait_for_block_sequenced_5s(&mut events, 11).await?;
+    assert!(
+        block_contains_raw_tx(&reseq_block, &injected_tx_bytes),
+        "re-sequenced block should contain the reverted transaction"
+    );
+
+    Ok(())
+}
+
 /// Tests that a sequencer and follower node can produce blocks using a custom local genesis
 /// configuration and properly propagate them between nodes.
 #[tokio::test]
@@ -2175,4 +2257,8 @@ async fn assert_latest_block_on_rpc_by_hash(
         || async { latest_block(node).await.unwrap().header.hash_slow() == block_hash },
     )
     .await;
+}
+
+fn block_contains_raw_tx(block: &ScrollBlock, raw_tx: &[u8]) -> bool {
+    block.body.transactions.iter().any(|tx| tx.encoded_2718().as_slice() == raw_tx)
 }

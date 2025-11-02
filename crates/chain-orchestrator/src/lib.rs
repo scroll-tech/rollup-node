@@ -570,26 +570,29 @@ impl<
         let UnwindResult { l1_block_number, queue_index, l2_head_block_number, l2_safe_block_info } =
             self.database.unwind(genesis_hash, block_number).await?;
 
-        let (l2_head_block_info, reverted_transactions) =
-            if let Some(block_number) = l2_head_block_number {
-                // Fetch the block hash of the new L2 head block.
-                let block_hash = self
-                    .l2_client
-                    .get_block_by_number(block_number.into())
-                    .full()
-                    .await?
-                    .expect("L2 head block must exist")
-                    .header
-                    .hash_slow();
+        let (l2_head_block_info, reverted_transactions) = if let Some(block_number) =
+            l2_head_block_number
+        {
+            // Fetch the block hash of the new L2 head block.
+            let block_hash = self
+                .l2_client
+                .get_block_by_number(block_number.into())
+                .full()
+                .await?
+                .expect("L2 head block must exist")
+                .header
+                .hash_slow();
 
-                // Cancel the inflight payload building job if the head has changed.
-                if let Some(s) = self.sequencer.as_mut() {
-                    s.cancel_payload_building_job();
-                };
+            // Cancel the inflight payload building job if the head has changed.
+            if let Some(s) = self.sequencer.as_mut() {
+                s.cancel_payload_building_job();
+            };
 
-                // Collect transactions of reverted blocks from l2 client.
-                let mut reverted_transactions: Vec<ScrollTxEnvelope> = Vec::new();
-                for number in block_number..=self.engine.fcs().head_block_info().number {
+            // Collect transactions of reverted blocks from l2 client.
+            let mut reverted_transactions: Vec<ScrollTxEnvelope> = Vec::new();
+            let current_head_number = self.engine.fcs().head_block_info().number;
+            if block_number < current_head_number {
+                for number in (block_number + 1)..=current_head_number {
                     let block = self
                         .l2_client
                         .get_block_by_number(number.into())
@@ -600,11 +603,12 @@ impl<
                     let block = block.into_consensus().map_transactions(|tx| tx.inner.into_inner());
                     reverted_transactions.extend(block.body.transactions().cloned());
                 }
+            }
 
-                (Some(BlockInfo { number: block_number, hash: block_hash }), reverted_transactions)
-            } else {
-                (None, Vec::new())
-            };
+            (Some(BlockInfo { number: block_number, hash: block_hash }), reverted_transactions)
+        } else {
+            (None, Vec::new())
+        };
 
         // If the L1 reorg is before the origin of the inflight payload building job, cancel it.
         if Some(l1_block_number) <
@@ -623,8 +627,11 @@ impl<
             self.engine.update_fcs(l2_head_block_info, l2_safe_block_info, None).await?;
         }
 
-        // add all reverted transactions to the transaction pool.
+        // Add all reverted transactions to the transaction pool.
         for tx in reverted_transactions {
+            if tx.is_l1_message() {
+                continue;
+            }
             let encoded_tx = tx.encoded_2718();
             if let Err(err) = self.l2_client.send_raw_transaction(&encoded_tx).await {
                 tracing::warn!(
