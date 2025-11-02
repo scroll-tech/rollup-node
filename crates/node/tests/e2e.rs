@@ -1451,13 +1451,14 @@ async fn can_handle_l1_message_reorg() -> eyre::Result<()> {
     Ok(())
 }
 
+/// Test that when L2 block reorg happens due to an L1 reorg, the transactions that were reverted
+/// are requeued.
 #[tokio::test]
 async fn requeues_transactions_after_l1_reorg() -> eyre::Result<()> {
     reth_tracing::init_test_tracing();
 
     let chain_spec = (*SCROLL_DEV).clone();
     let mut config = default_sequencer_test_scroll_rollup_node_config();
-    // keep automatic sequencing disabled so that blocks are only produced on demand
     config.sequencer_args.auto_start = false;
     config.sequencer_args.block_time = 0;
 
@@ -1502,7 +1503,7 @@ async fn requeues_transactions_after_l1_reorg() -> eyre::Result<()> {
     rnm_handle.build_block();
     wait_for_block_sequenced_5s(&mut events, 11).await?;
 
-    // inject a user transaction and force the sequencer to include it in the next block
+    // Inject a user transaction and force the sequencer to include it in the next block
     let wallet = Arc::new(Mutex::new(wallet));
     let tx = generate_tx(wallet.clone()).await;
     let injected_tx_bytes: Vec<u8> = tx.clone().into();
@@ -1515,14 +1516,14 @@ async fn requeues_transactions_after_l1_reorg() -> eyre::Result<()> {
         "block 11 should contain the injected transaction before the reorg"
     );
 
-    // trigger an L1 reorg that reverts the block containing the transaction
+    // Trigger an L1 reorg that reverts the block containing the transaction
     l1_watcher_tx.send(Arc::new(L1Notification::Reorg(1))).await?;
     wait_for_event_predicate_5s(&mut events, |event| {
         matches!(event, ChainOrchestratorEvent::L1Reorg { l1_block_number: 1, .. })
     })
     .await?;
 
-    // build the next block – the reverted transaction should have been requeued
+    // Build the next block – the reverted transaction should have been requeued
     rnm_handle.build_block();
     let reseq_block = wait_for_block_sequenced_5s(&mut events, 11).await?;
     assert!(
