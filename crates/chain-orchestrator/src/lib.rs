@@ -623,7 +623,7 @@ impl<
             self.engine.update_fcs(l2_head_block_info, l2_safe_block_info, None).await?;
         }
 
-        // add all reverted transactions to the transation pool.
+        // add all reverted transactions to the transaction pool.
         for tx in reverted_transactions {
             let encoded_tx = tx.encoded_2718();
             if let Err(err) = self.l2_client.send_raw_transaction(&encoded_tx).await {
