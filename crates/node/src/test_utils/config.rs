@@ -89,7 +89,7 @@ impl TestConfigBuilder {
         self
     }
 
-    /// Use an in-memory SQLite database.
+    /// Use an in-memory `SQLite` database.
     pub fn with_memory_db(&mut self) -> &mut Self {
         self.config.database_args.rn_db_path = Some(PathBuf::from("sqlite::memory:"));
         self

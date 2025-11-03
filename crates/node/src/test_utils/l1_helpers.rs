@@ -22,7 +22,7 @@ impl<'a, EC> L1Helper<'a, EC> {
     }
 
     /// Target a specific node for L1 notifications (default is all nodes).
-    pub fn for_node(mut self, index: usize) -> Self {
+    pub const fn for_node(mut self, index: usize) -> Self {
         self.target_node_index = Some(index);
         self
     }
@@ -113,25 +113,25 @@ impl<'a, EC> L1MessageBuilder<'a, EC> {
     }
 
     /// Set the L1 block number for this message.
-    pub fn at_block(mut self, block_number: u64) -> Self {
+    pub const fn at_block(mut self, block_number: u64) -> Self {
         self.l1_block_number = block_number;
         self
     }
 
     /// Set the queue index for this message.
-    pub fn queue_index(mut self, index: u64) -> Self {
+    pub const fn queue_index(mut self, index: u64) -> Self {
         self.queue_index = index;
         self
     }
 
     /// Set the gas limit for this message.
-    pub fn gas_limit(mut self, limit: u64) -> Self {
+    pub const fn gas_limit(mut self, limit: u64) -> Self {
         self.gas_limit = limit;
         self
     }
 
     /// Set the recipient address.
-    pub fn to(mut self, address: Address) -> Self {
+    pub const fn to(mut self, address: Address) -> Self {
         self.to = address;
         self
     }
@@ -143,7 +143,7 @@ impl<'a, EC> L1MessageBuilder<'a, EC> {
     }
 
     /// Set the sender address.
-    pub fn sender(mut self, address: Address) -> Self {
+    pub const fn sender(mut self, address: Address) -> Self {
         self.sender = Some(address);
         self
     }

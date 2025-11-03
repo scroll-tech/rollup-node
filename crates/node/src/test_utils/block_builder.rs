@@ -44,25 +44,25 @@ impl<'a, EC: EngineApiClient<ScrollEngineTypes> + Sync + Send + 'static> BlockBu
     }
 
     /// Expect a specific number of transactions in the block.
-    pub fn expect_tx_count(mut self, count: usize) -> Self {
+    pub const fn expect_tx_count(mut self, count: usize) -> Self {
         self.expected_tx_count = Some(count);
         self
     }
 
     /// Expect a specific base fee per gas.
-    pub fn expect_base_fee(mut self, base_fee: u64) -> Self {
+    pub const fn expect_base_fee(mut self, base_fee: u64) -> Self {
         self.expected_base_fee = Some(base_fee);
         self
     }
 
     /// Expect at least one L1 message in the block.
-    pub fn expect_l1_message(mut self) -> Self {
+    pub const fn expect_l1_message(mut self) -> Self {
         self.expect_l1_message = true;
         self
     }
 
     /// Expect a specific number of L1 messages in the block.
-    pub fn expect_l1_message_count(mut self, count: usize) -> Self {
+    pub const fn expect_l1_message_count(mut self, count: usize) -> Self {
         self.expected_l1_message_count = Some(count);
         self
     }

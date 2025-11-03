@@ -18,7 +18,7 @@ impl<'a, EC> TxHelper<'a, EC> {
     }
 
     /// Target a specific node for transaction injection (default is sequencer).
-    pub fn for_node(mut self, index: usize) -> Self {
+    pub const fn for_node(mut self, index: usize) -> Self {
         self.target_node_index = index;
         self
     }
@@ -59,7 +59,7 @@ impl<'a, EC> TransferTxBuilder<'a, EC> {
     }
 
     /// Set the recipient address.
-    pub fn to(mut self, address: Address) -> Self {
+    pub const fn to(mut self, address: Address) -> Self {
         self.to = Some(address);
         self
     }

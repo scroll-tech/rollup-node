@@ -228,7 +228,7 @@ impl TestFixtureBuilder {
     }
 
     /// Set the number of nodes to create.
-    pub fn with_nodes(mut self, count: usize) -> Self {
+    pub const fn with_nodes(mut self, count: usize) -> Self {
         self.num_nodes = count;
         self
     }
@@ -243,19 +243,19 @@ impl TestFixtureBuilder {
     }
 
     /// Enable dev mode.
-    pub fn with_dev_mode(mut self, enabled: bool) -> Self {
+    pub const fn with_dev_mode(mut self, enabled: bool) -> Self {
         self.is_dev = enabled;
         self
     }
 
     /// Disable local transaction propagation.
-    pub fn no_local_tx_propagation(mut self) -> Self {
+    pub const fn no_local_tx_propagation(mut self) -> Self {
         self.no_local_transactions_propagation = true;
         self
     }
 
     /// Include a test database in the fixture.
-    pub fn with_test_database(mut self) -> Self {
+    pub const fn with_test_database(mut self) -> Self {
         self.with_database = true;
         self
     }
@@ -300,6 +300,7 @@ impl TestFixtureBuilder {
         )
         .await?;
 
+        #[allow(clippy::if_then_some_else_none)]
         let database = if self.with_database {
             Some(Arc::new(scroll_db::test_utils::setup_test_db().await))
         } else {

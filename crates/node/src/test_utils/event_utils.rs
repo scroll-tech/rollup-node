@@ -22,7 +22,7 @@ impl<'a, EC> EventWaiter<'a, EC> {
     }
 
     /// Set a custom timeout for waiting.
-    pub fn timeout(mut self, duration: Duration) -> Self {
+    pub const fn timeout(mut self, duration: Duration) -> Self {
         self.timeout_duration = duration;
         self
     }
@@ -53,50 +53,26 @@ impl<'a, EC> EventWaiter<'a, EC> {
 
     /// Wait for a chain extended event.
     pub async fn chain_extended(self) -> eyre::Result<()> {
-        self.wait_for_event(|e| {
-            if matches!(e, ChainOrchestratorEvent::ChainExtended(_)) {
-                Some(())
-            } else {
-                None
-            }
-        })
-        .await
+        self.wait_for_event(|e| matches!(e, ChainOrchestratorEvent::ChainExtended(_)).then_some(()))
+            .await
     }
 
     /// Wait for a chain reorged event.
     pub async fn chain_reorged(self) -> eyre::Result<()> {
-        self.wait_for_event(|e| {
-            if matches!(e, ChainOrchestratorEvent::ChainReorged(_)) {
-                Some(())
-            } else {
-                None
-            }
-        })
-        .await
+        self.wait_for_event(|e| matches!(e, ChainOrchestratorEvent::ChainReorged(_)).then_some(()))
+            .await
     }
 
     /// Wait for an L1 synced event.
     pub async fn l1_synced(self) -> eyre::Result<()> {
-        self.wait_for_event(|e| {
-            if matches!(e, ChainOrchestratorEvent::L1Synced) {
-                Some(())
-            } else {
-                None
-            }
-        })
-        .await
+        self.wait_for_event(|e| matches!(e, ChainOrchestratorEvent::L1Synced).then_some(()))
+            .await
     }
 
     /// Wait for an optimistic sync event.
     pub async fn optimistic_sync(self) -> eyre::Result<()> {
-        self.wait_for_event(|e| {
-            if matches!(e, ChainOrchestratorEvent::OptimisticSync(_)) {
-                Some(())
-            } else {
-                None
-            }
-        })
-        .await
+        self.wait_for_event(|e| matches!(e, ChainOrchestratorEvent::OptimisticSync(_)).then_some(()))
+            .await
     }
 
     /// Wait for a new L1 block event.
@@ -114,11 +90,7 @@ impl<'a, EC> EventWaiter<'a, EC> {
     /// Wait for an L1 message committed event.
     pub async fn l1_message_committed(self) -> eyre::Result<()> {
         self.wait_for_event(|e| {
-            if matches!(e, ChainOrchestratorEvent::L1MessageCommitted(_)) {
-                Some(())
-            } else {
-                None
-            }
+            matches!(e, ChainOrchestratorEvent::L1MessageCommitted(_)).then_some(())
         })
         .await
     }
@@ -211,7 +183,7 @@ impl<'a, EC> EventSequence<'a, EC> {
     }
 
     /// Set a custom timeout for all events in the sequence.
-    pub fn timeout(mut self, duration: Duration) -> Self {
+    pub const fn timeout(mut self, duration: Duration) -> Self {
         self.timeout_duration = duration;
         self
     }
@@ -253,7 +225,7 @@ impl<'a, EC> EventSequence<'a, EC> {
     }
 }
 
-/// Extension trait for TestFixture to add event waiting capabilities.
+/// Extension trait for `TestFixture` to add event waiting capabilities.
 pub trait EventAssertions<EC> {
     /// Wait for an event on the sequencer node.
     fn expect_event(&mut self) -> EventWaiter<'_, EC>;
