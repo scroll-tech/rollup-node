@@ -1,10 +1,48 @@
-//! This crate contains utilities for running end-to-end tests for the scroll reth node.
+//! Test utilities for the Scroll rollup node.
+//!
+//! This module provides a high-level test framework for creating and managing
+//! test nodes, building blocks, managing L1 interactions, and asserting on events.
+//!
+//! # Quick Start
+//!
+//! ```rust,ignore
+//! use rollup_node::test_utils::TestFixture;
+//!
+//! #[tokio::test]
+//! async fn test_basic_block_production() -> eyre::Result<()> {
+//!     let mut fixture = TestFixture::sequencer().build().await?;
+//!
+//!     // Inject a transaction
+//!     let tx_hash = fixture.inject_transfer().await?;
+//!
+//!     // Build a block
+//!     let block = fixture.build_block()
+//!         .expect_tx(tx_hash)
+//!         .await_block()
+//!         .await?;
+//!
+//!     Ok(())
+//! }
+//! ```
 
-use crate::{ConsensusArgs, RollupNodeGasPriceOracleArgs};
+// Module declarations
+pub mod block_builder;
+pub mod config;
+pub mod event_utils;
+pub mod fixture;
+pub mod l1_helpers;
+pub mod tx_helpers;
 
-use super::{
-    BlobProviderArgs, ChainOrchestratorArgs, EngineDriverArgs, L1ProviderArgs,
-    RollupNodeDatabaseArgs, RpcArgs, ScrollRollupNode, ScrollRollupNodeConfig, SequencerArgs,
+// Re-export main types for convenience
+pub use config::{test_config, TestConfigBuilder};
+pub use event_utils::{EventAssertions, EventSequence, EventWaiter};
+pub use fixture::{NodeHandle, TestFixture, TestFixtureBuilder};
+
+// Legacy utilities - keep existing functions for backward compatibility
+use crate::{
+    BlobProviderArgs, ChainOrchestratorArgs, ConsensusArgs, EngineDriverArgs, L1ProviderArgs,
+    RollupNodeDatabaseArgs, RollupNodeNetworkArgs, RpcArgs, ScrollRollupNode,
+    ScrollRollupNodeConfig, SequencerArgs,
 };
 use alloy_primitives::Bytes;
 use reth_chainspec::EthChainSpec;
@@ -14,8 +52,9 @@ use reth_e2e_test_utils::{
 };
 use reth_engine_local::LocalPayloadAttributesBuilder;
 use reth_node_builder::{
-    rpc::RpcHandleProvider, EngineNodeLauncher, Node, NodeBuilder, NodeConfig, NodeHandle,
-    NodeTypes, NodeTypesWithDBAdapter, PayloadAttributesBuilder, PayloadTypes, TreeConfig,
+    rpc::RpcHandleProvider, EngineNodeLauncher, Node, NodeBuilder, NodeConfig,
+    NodeHandle as RethNodeHandle, NodeTypes, NodeTypesWithDBAdapter, PayloadAttributesBuilder,
+    PayloadTypes, TreeConfig,
 };
 use reth_node_core::args::{DiscoveryArgs, NetworkArgs, RpcServerArgs, TxPoolArgs};
 use reth_provider::providers::BlockchainProvider;
@@ -27,6 +66,9 @@ use tokio::sync::Mutex;
 use tracing::{span, Level};
 
 /// Creates the initial setup with `num_nodes` started and interconnected.
+///
+/// This is the legacy setup function that's used by existing tests.
+/// For new tests, consider using the `TestFixture` API instead.
 pub async fn setup_engine(
     mut scroll_node_config: ScrollRollupNodeConfig,
     num_nodes: usize,
@@ -84,7 +126,7 @@ where
         let testing_node = NodeBuilder::new(node_config.clone()).testing_node(exec.clone());
         let testing_config = testing_node.config().clone();
         let node = ScrollRollupNode::new(scroll_node_config.clone(), testing_config).await;
-        let NodeHandle { node, node_exit_future: _ } = testing_node
+        let RethNodeHandle { node, node_exit_future: _ } = testing_node
             .with_types_and_provider::<ScrollRollupNode, BlockchainProvider<_>>()
             .with_components(node.components_builder())
             .with_add_ons(node.add_ons())
@@ -143,7 +185,7 @@ pub async fn generate_tx(wallet: Arc<Mutex<Wallet>>) -> Bytes {
 pub fn default_test_scroll_rollup_node_config() -> ScrollRollupNodeConfig {
     ScrollRollupNodeConfig {
         test: true,
-        network_args: crate::args::RollupNodeNetworkArgs::default(),
+        network_args: RollupNodeNetworkArgs::default(),
         database_args: RollupNodeDatabaseArgs::default(),
         l1_provider_args: L1ProviderArgs::default(),
         engine_driver_args: EngineDriverArgs { sync_at_startup: true },
@@ -158,7 +200,7 @@ pub fn default_test_scroll_rollup_node_config() -> ScrollRollupNodeConfig {
         },
         blob_provider_args: BlobProviderArgs { mock: true, ..Default::default() },
         signer_args: Default::default(),
-        gas_price_oracle_args: RollupNodeGasPriceOracleArgs::default(),
+        gas_price_oracle_args: crate::RollupNodeGasPriceOracleArgs::default(),
         consensus_args: ConsensusArgs::noop(),
         database: None,
         rpc_args: RpcArgs { enabled: true },
@@ -176,7 +218,7 @@ pub fn default_test_scroll_rollup_node_config() -> ScrollRollupNodeConfig {
 pub fn default_sequencer_test_scroll_rollup_node_config() -> ScrollRollupNodeConfig {
     ScrollRollupNodeConfig {
         test: true,
-        network_args: crate::args::RollupNodeNetworkArgs::default(),
+        network_args: RollupNodeNetworkArgs::default(),
         database_args: RollupNodeDatabaseArgs {
             rn_db_path: Some(PathBuf::from("sqlite::memory:")),
         },
@@ -198,7 +240,7 @@ pub fn default_sequencer_test_scroll_rollup_node_config() -> ScrollRollupNodeCon
         },
         blob_provider_args: BlobProviderArgs { mock: true, ..Default::default() },
         signer_args: Default::default(),
-        gas_price_oracle_args: RollupNodeGasPriceOracleArgs::default(),
+        gas_price_oracle_args: crate::RollupNodeGasPriceOracleArgs::default(),
         consensus_args: ConsensusArgs::noop(),
         database: None,
         rpc_args: RpcArgs { enabled: true },

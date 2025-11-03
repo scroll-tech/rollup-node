@@ -1,0 +1,184 @@
+//! Block building helpers for test fixtures.
+
+use super::fixture::TestFixture;
+use alloy_primitives::B256;
+use futures::StreamExt;
+use reth_primitives_traits::transaction::TxHashRef;
+use reth_rpc_api::EngineApiClient;
+use reth_scroll_chainspec::ScrollChainSpec;
+use reth_scroll_engine_primitives::ScrollEngineTypes;
+use reth_scroll_primitives::ScrollBlock;
+use rollup_node_sequencer::SequencerEvent;
+use scroll_alloy_consensus::ScrollTransaction;
+use scroll_alloy_provider::ScrollAuthApiEngineClient;
+use scroll_db::Database;
+
+/// Builder for constructing and validating blocks in tests.
+#[derive(Debug)]
+pub struct BlockBuilder<'a, EC> {
+    fixture: &'a mut TestFixture<EC>,
+    expected_tx_hashes: Vec<B256>,
+    expected_tx_count: Option<usize>,
+    expected_base_fee: Option<u64>,
+    expect_l1_message: bool,
+    expected_l1_message_count: Option<usize>,
+}
+
+impl<'a, EC: EngineApiClient<ScrollEngineTypes> + Sync + Send + 'static> BlockBuilder<'a, EC> {
+    /// Create a new block builder.
+    pub(crate) fn new(fixture: &'a mut TestFixture<EC>) -> Self {
+        Self {
+            fixture,
+            expected_tx_hashes: Vec::new(),
+            expected_tx_count: None,
+            expected_base_fee: None,
+            expect_l1_message: false,
+            expected_l1_message_count: None,
+        }
+    }
+
+    /// Expect a specific transaction to be included in the block.
+    pub fn expect_tx(mut self, tx_hash: B256) -> Self {
+        self.expected_tx_hashes.push(tx_hash);
+        self
+    }
+
+    /// Expect a specific number of transactions in the block.
+    pub fn expect_tx_count(mut self, count: usize) -> Self {
+        self.expected_tx_count = Some(count);
+        self
+    }
+
+    /// Expect a specific base fee per gas.
+    pub fn expect_base_fee(mut self, base_fee: u64) -> Self {
+        self.expected_base_fee = Some(base_fee);
+        self
+    }
+
+    /// Expect at least one L1 message in the block.
+    pub fn expect_l1_message(mut self) -> Self {
+        self.expect_l1_message = true;
+        self
+    }
+
+    /// Expect a specific number of L1 messages in the block.
+    pub fn expect_l1_message_count(mut self, count: usize) -> Self {
+        self.expected_l1_message_count = Some(count);
+        self
+    }
+
+    /// Build the block and validate against expectations.
+    pub async fn await_block(self) -> eyre::Result<ScrollBlock> {
+        let sequencer_node = &mut self.fixture.nodes[0];
+
+        // Get the sequencer from the rollup manager handle
+        let handle = &mut sequencer_node.rollup_manager_handle;
+
+        // Trigger block building
+        handle.build_block();
+
+        // Wait for the block to be built by listening to the event stream
+        let events = &mut sequencer_node.chain_orchestrator_rx;
+
+        loop {
+            if let Some(event) = events.next().await {
+                if let rollup_node_chain_orchestrator::ChainOrchestratorEvent::BlockSequenced(
+                    block,
+                ) = event
+                {
+                    return self.validate_block(&block);
+                }
+            } else {
+                return Err(eyre::eyre!("Event stream ended without block sequenced event"));
+            }
+        }
+    }
+
+    /// Build a block using the low-level sequencer API (for direct sequencer tests).
+    pub async fn build_with_sequencer(
+        self,
+        sequencer: &mut rollup_node_sequencer::Sequencer<Database, ScrollChainSpec>,
+        engine: &mut scroll_engine::Engine<ScrollAuthApiEngineClient<EC>>,
+    ) -> eyre::Result<Option<ScrollBlock>> {
+        // Start payload building
+        sequencer.start_payload_building(engine).await?;
+
+        // Wait for the payload to be ready
+        let payload_id = loop {
+            if let Some(SequencerEvent::PayloadReady(id)) = sequencer.next().await {
+                break id;
+            }
+        };
+
+        // Finalize the payload building
+        let block_opt = sequencer.finalize_payload_building(payload_id, engine).await?;
+
+        if let Some(ref block) = block_opt {
+            self.validate_block(block)?;
+        }
+
+        Ok(block_opt)
+    }
+
+    /// Validate the block against expectations.
+    fn validate_block(self, block: &ScrollBlock) -> eyre::Result<ScrollBlock> {
+        // Check transaction count
+        if let Some(expected_count) = self.expected_tx_count {
+            if block.body.transactions.len() != expected_count {
+                return Err(eyre::eyre!(
+                    "Expected {} transactions, but block has {}",
+                    expected_count,
+                    block.body.transactions.len()
+                ));
+            }
+        }
+
+        // Check specific transaction hashes
+        for expected_hash in &self.expected_tx_hashes {
+            if !block.body.transactions.iter().any(|tx| tx.tx_hash() == expected_hash) {
+                return Err(eyre::eyre!(
+                    "Expected transaction {:?} not found in block",
+                    expected_hash
+                ));
+            }
+        }
+
+        // Check base fee
+        if let Some(expected_base_fee) = self.expected_base_fee {
+            let actual_base_fee = block
+                .header
+                .base_fee_per_gas
+                .ok_or_else(|| eyre::eyre!("Block has no base fee"))?;
+            if actual_base_fee != expected_base_fee {
+                return Err(eyre::eyre!(
+                    "Expected base fee {}, but block has {}",
+                    expected_base_fee,
+                    actual_base_fee
+                ));
+            }
+        }
+
+        // Check L1 messages
+        if self.expect_l1_message {
+            let l1_message_count =
+                block.body.transactions.iter().filter(|tx| tx.queue_index().is_some()).count();
+            if l1_message_count == 0 {
+                return Err(eyre::eyre!("Expected at least one L1 message, but block has none"));
+            }
+        }
+
+        if let Some(expected_count) = self.expected_l1_message_count {
+            let l1_message_count =
+                block.body.transactions.iter().filter(|tx| tx.queue_index().is_some()).count();
+            if l1_message_count != expected_count {
+                return Err(eyre::eyre!(
+                    "Expected {} L1 messages, but block has {}",
+                    expected_count,
+                    l1_message_count
+                ));
+            }
+        }
+
+        Ok(block.clone())
+    }
+}

@@ -24,7 +24,7 @@ use rollup_node::{
     constants::SCROLL_GAS_LIMIT,
     test_utils::{
         default_sequencer_test_scroll_rollup_node_config, default_test_scroll_rollup_node_config,
-        generate_tx, setup_engine,
+        fixture::DefaultEngineClient, generate_tx, setup_engine, EventAssertions, TestFixture,
     },
     BlobProviderArgs, ChainOrchestratorArgs, ConsensusAlgorithm, ConsensusArgs, EngineDriverArgs,
     L1ProviderArgs, RollupNodeContext, RollupNodeDatabaseArgs, RollupNodeExtApiClient,
@@ -55,188 +55,72 @@ use tracing::trace;
 async fn can_bridge_l1_messages() -> eyre::Result<()> {
     reth_tracing::init_test_tracing();
 
-    // Create the chain spec for scroll mainnet with Feynman activated and a test genesis.
-    let chain_spec = (*SCROLL_DEV).clone();
-    let node_args = ScrollRollupNodeConfig {
-        test: true,
-        network_args: ScrollNetworkArgs::default(),
-        database_args: RollupNodeDatabaseArgs {
-            rn_db_path: Some(PathBuf::from("sqlite::memory:")),
-        },
-        l1_provider_args: L1ProviderArgs::default(),
-        engine_driver_args: EngineDriverArgs::default(),
-        chain_orchestrator_args: ChainOrchestratorArgs::default(),
-        sequencer_args: SequencerArgs {
-            sequencer_enabled: true,
-            auto_start: false,
-            block_time: 0,
-            l1_message_inclusion_mode: L1MessageInclusionMode::BlockDepth(0),
-            allow_empty_blocks: true,
-            ..SequencerArgs::default()
-        },
-        blob_provider_args: BlobProviderArgs { mock: true, ..Default::default() },
-        signer_args: Default::default(),
-        gas_price_oracle_args: RollupNodeGasPriceOracleArgs::default(),
-        consensus_args: ConsensusArgs::noop(),
-        database: None,
-        rpc_args: RpcArgs::default(),
-    };
-    let (mut nodes, _tasks, _wallet) = setup_engine(node_args, 1, chain_spec, false, false).await?;
-    let node = nodes.pop().unwrap();
-
-    let chain_orchestrator = node.inner.add_ons_handle.rollup_manager_handle.clone();
-    let mut events = chain_orchestrator.get_event_listener().await?;
-    let l1_watcher_tx = node.inner.add_ons_handle.l1_watcher_tx.clone().unwrap();
-
-    // Send a notification to set the L1 to synced
-    l1_watcher_tx.send(Arc::new(L1Notification::Synced)).await?;
-
-    let l1_message = TxL1Message {
-        queue_index: 0,
-        gas_limit: 21000,
-        sender: Address::random(),
-        to: Address::random(),
-        value: U256::from(1),
-        input: Default::default(),
-    };
-    l1_watcher_tx
-        .send(Arc::new(L1Notification::L1Message {
-            message: l1_message.clone(),
-            block_number: 0,
-            block_timestamp: 1000,
-        }))
+    // Create a sequencer test fixture
+    let mut fixture = TestFixture::<DefaultEngineClient>::sequencer()
+        .with_l1_message_delay(0)
+        .allow_empty_blocks(true)
+        .build()
         .await?;
 
-    wait_n_events(
-        &mut events,
-        |e| {
-            if let ChainOrchestratorEvent::L1MessageCommitted(index) = e {
-                assert_eq!(index, 0);
-                true
-            } else {
-                false
-            }
-        },
-        1,
-    )
-    .await;
+    // Send a notification to set the L1 to synced
+    fixture.l1().sync().await?;
 
-    chain_orchestrator.build_block();
+    // Create and send an L1 message
+    fixture
+        .l1()
+        .add_message()
+        .queue_index(0)
+        .gas_limit(21000)
+        .sender(Address::random())
+        .to(Address::random())
+        .value(1u32)
+        .at_block(0)
+        .send()
+        .await?;
 
-    wait_n_events(
-        &mut events,
-        |e| {
-            if let ChainOrchestratorEvent::BlockSequenced(block) = e {
-                assert_eq!(block.body.transactions.len(), 1);
-                assert_eq!(
-                    block.body.transactions[0].as_l1_message().unwrap().inner(),
-                    &l1_message
-                );
-                true
-            } else {
-                false
-            }
-        },
-        1,
-    )
-    .await;
+    // Wait for the L1 message to be committed
+    fixture.expect_event().l1_message_committed().await?;
+
+    // Build a block and expect it to contain the L1 message
+    fixture.build_block().expect_l1_message_count(1).await_block().await?;
 
     Ok(())
 }
 
 #[tokio::test]
-async fn can_sequence_and_gossip_blocks() {
+async fn can_sequence_and_gossip_blocks() -> eyre::Result<()> {
     reth_tracing::init_test_tracing();
 
-    // create 2 nodes
-    let chain_spec = (*SCROLL_DEV).clone();
-    let rollup_manager_args = ScrollRollupNodeConfig {
-        test: true,
-        network_args: ScrollNetworkArgs {
-            enable_eth_scroll_wire_bridge: true,
-            enable_scroll_wire: true,
-            sequencer_url: None,
-            signer_address: None,
-        },
-        database_args: RollupNodeDatabaseArgs {
-            rn_db_path: Some(PathBuf::from("sqlite::memory:")),
-        },
-        l1_provider_args: L1ProviderArgs::default(),
-        engine_driver_args: EngineDriverArgs::default(),
-        chain_orchestrator_args: ChainOrchestratorArgs::default(),
-        sequencer_args: SequencerArgs {
-            sequencer_enabled: true,
-            auto_start: false,
-            block_time: 0,
-            l1_message_inclusion_mode: L1MessageInclusionMode::BlockDepth(0),
-            payload_building_duration: 1000,
-            allow_empty_blocks: true,
-            ..SequencerArgs::default()
-        },
-        blob_provider_args: BlobProviderArgs { mock: true, ..Default::default() },
-        signer_args: Default::default(),
-        gas_price_oracle_args: RollupNodeGasPriceOracleArgs::default(),
-        consensus_args: ConsensusArgs::noop(),
-        database: None,
-        rpc_args: RpcArgs::default(),
-    };
+    // create 2 nodes with the new TestFixture API
+    let mut builder = TestFixture::<DefaultEngineClient>::sequencer()
+        .with_nodes(2)
+        .block_time(0)
+        .allow_empty_blocks(true);
 
-    let (nodes, _tasks, wallet) =
-        setup_engine(rollup_manager_args, 2, chain_spec, false, false).await.unwrap();
-    let wallet = Arc::new(Mutex::new(wallet));
+    builder
+        .config_mut()
+        .with_eth_scroll_bridge(true)
+        .with_scroll_wire(true)
+        .payload_building_duration(1000);
+    let mut fixture = builder.build().await?;
 
-    // generate rollup node manager event streams for each node
-    let sequencer_rnm_handle = nodes[0].inner.add_ons_handle.rollup_manager_handle.clone();
-    let mut sequencer_events = sequencer_rnm_handle.get_event_listener().await.unwrap();
-    let sequencer_l1_watcher_tx = nodes[0].inner.add_ons_handle.l1_watcher_tx.clone().unwrap();
-    let mut follower_events =
-        nodes[1].inner.add_ons_handle.rollup_manager_handle.get_event_listener().await.unwrap();
+    // Send L1 synced notification to the sequencer
+    fixture.l1().for_node(0).sync().await?;
 
-    // Send a notification to set the L1 to synced
-    sequencer_l1_watcher_tx.send(Arc::new(L1Notification::Synced)).await.unwrap();
+    // Inject a transaction into the sequencer node
+    let tx_hash = fixture.inject_transfer().await?;
 
-    // inject a transaction into the pool of the first node
-    let tx = generate_tx(wallet).await;
-    nodes[0].rpc.inject_tx(tx).await.unwrap();
-    sequencer_rnm_handle.build_block();
+    // Build a block and wait for it to be sequenced
+    fixture.build_block().expect_tx(tx_hash).expect_tx_count(1).await_block().await?;
 
-    // wait for the sequencer to build a block
-    wait_n_events(
-        &mut sequencer_events,
-        |e| {
-            if let ChainOrchestratorEvent::BlockSequenced(block) = e {
-                assert_eq!(block.body.transactions.len(), 1);
-                true
-            } else {
-                false
-            }
-        },
-        1,
-    )
-    .await;
+    // Assert that the follower node receives the block from the network
+    let received_block = fixture.expect_event_on(1).new_block_received().await?;
+    assert_eq!(received_block.body.transactions.len(), 1);
 
-    // assert that the follower node has received the block from the peer
-    wait_n_events(
-        &mut follower_events,
-        |e| {
-            if let ChainOrchestratorEvent::NewBlockReceived(block_with_peer) = e {
-                assert_eq!(block_with_peer.block.body.transactions.len(), 1);
-                true
-            } else {
-                false
-            }
-        },
-        1,
-    )
-    .await;
+    // Assert that a chain extension is triggered on the follower node
+    fixture.expect_event_on(1).chain_extended().await?;
 
-    // assert that a chain extension is triggered on the follower node
-    wait_n_events(
-        &mut follower_events,
-        |e| matches!(e, ChainOrchestratorEvent::ChainExtended(_)),
-        1,
-    )
-    .await;
+    Ok(())
 }
 
 #[tokio::test]
