@@ -1,7 +1,7 @@
 //! Core test fixture for setting up and managing test nodes.
 
 use super::{
-    block_builder::BlockBuilder, config::TestConfigBuilder, l1_helpers::L1Helper,
+    block_builder::BlockBuilder, config::TestConfigBuilder, l1_helpers::L1Helper, setup_engine,
     tx_helpers::TxHelper,
 };
 use crate::ScrollRollupNode;
@@ -19,6 +19,7 @@ use reth_node_types::NodeTypesWithDBAdapter;
 use reth_provider::providers::BlockchainProvider;
 use reth_rpc_api::EngineApiClient;
 use reth_rpc_layer::AuthClientService;
+use reth_scroll_chainspec::SCROLL_DEV;
 use reth_scroll_engine_primitives::ScrollEngineTypes;
 use reth_scroll_primitives::ScrollPrimitives;
 use reth_tasks::TaskManager;
@@ -285,9 +286,6 @@ impl TestFixtureBuilder {
 
     /// Build the test fixture.
     pub async fn build(self) -> eyre::Result<TestFixture<impl EngineApiClient<ScrollEngineTypes>>> {
-        use crate::test_utils::setup_engine;
-        use reth_scroll_chainspec::SCROLL_DEV;
-
         let config = self.config_builder.build();
         let chain_spec = self.chain_spec.unwrap_or_else(|| SCROLL_DEV.clone());
 
