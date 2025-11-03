@@ -65,14 +65,15 @@ impl<'a, EC> EventWaiter<'a, EC> {
 
     /// Wait for an L1 synced event.
     pub async fn l1_synced(self) -> eyre::Result<()> {
-        self.wait_for_event(|e| matches!(e, ChainOrchestratorEvent::L1Synced).then_some(()))
-            .await
+        self.wait_for_event(|e| matches!(e, ChainOrchestratorEvent::L1Synced).then_some(())).await
     }
 
     /// Wait for an optimistic sync event.
     pub async fn optimistic_sync(self) -> eyre::Result<()> {
-        self.wait_for_event(|e| matches!(e, ChainOrchestratorEvent::OptimisticSync(_)).then_some(()))
-            .await
+        self.wait_for_event(|e| {
+            matches!(e, ChainOrchestratorEvent::OptimisticSync(_)).then_some(())
+        })
+        .await
     }
 
     /// Wait for a new L1 block event.
