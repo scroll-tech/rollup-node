@@ -1534,7 +1534,7 @@ async fn requeues_transactions_after_l1_reorg() -> eyre::Result<()> {
     Ok(())
 }
 
-/// Test that when the FCS head is reset to an earlier block via UpdateFcsHead,
+/// Test that when the FCS head is reset to an earlier block via `UpdateFcsHead`,
 /// the transactions from reverted blocks are requeued into the tx pool and can
 /// be included again.
 #[tokio::test]
