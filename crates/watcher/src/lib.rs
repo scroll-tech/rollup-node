@@ -29,8 +29,6 @@ use std::{
 };
 use tokio::sync::mpsc;
 
-/// The block range used to fetch L1 logs.
-pub const LOGS_QUERY_BLOCK_RANGE: u64 = 500;
 /// The maximum count of unfinalized blocks we can have in Ethereum.
 pub const MAX_UNFINALIZED_BLOCK_COUNT: usize = 96;
 
@@ -84,11 +82,15 @@ pub struct L1Watcher<EP> {
     metrics: WatcherMetrics,
     /// Whether the watcher is synced to the L1 head.
     is_synced: bool,
+    /// The log query block range.
+    log_query_block_range: u64,
 }
 
 /// The L1 notification type yielded by the [`L1Watcher`].
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum L1Notification {
+    /// A notification that the L1 watcher has processed up to a given block number.
+    Processed(u64),
     /// A notification for a reorg of the L1 up to a given block number.
     Reorg(u64),
     /// A new batch has been committed on the L1 rollup contract.
@@ -124,6 +126,7 @@ pub enum L1Notification {
 impl Display for L1Notification {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match self {
+            Self::Processed(n) => write!(f, "Processed({n})"),
             Self::Reorg(n) => write!(f, "Reorg({n:?})"),
             Self::BatchCommit(b) => {
                 write!(f, "BatchCommit {{ hash: {}, index: {} }}", b.hash, b.index)
@@ -155,10 +158,11 @@ where
         execution_provider: EP,
         start_block: Option<u64>,
         config: Arc<NodeConfig>,
+        log_query_block_range: u64,
     ) -> mpsc::Receiver<Arc<L1Notification>> {
         tracing::trace!(target: "scroll::watcher", ?start_block, ?config, "spawning L1 watcher");
 
-        let (tx, rx) = mpsc::channel(LOGS_QUERY_BLOCK_RANGE as usize);
+        let (tx, rx) = mpsc::channel(log_query_block_range as usize);
 
         let fetch_block_number = async |tag: BlockNumberOrTag| {
             let block = loop {
@@ -183,12 +187,13 @@ where
         let watcher = Self {
             execution_provider,
             unfinalized_blocks: BoundedVec::new(HEADER_CAPACITY),
-            current_block_number: start_block.unwrap_or(config.start_l1_block) - 1,
+            current_block_number: start_block.unwrap_or(config.start_l1_block).saturating_sub(1),
             l1_state,
             sender: tx,
             config,
             metrics: WatcherMetrics::default(),
             is_synced: false,
+            log_query_block_range,
         };
 
         // notify at spawn.
@@ -266,7 +271,7 @@ where
             self.notify_all(notifications).await?;
 
             // update the latest block the l1 watcher has indexed.
-            self.update_current_block(&latest);
+            self.update_current_block(&latest).await?;
         }
 
         Ok(())
@@ -344,7 +349,7 @@ where
                 .iter()
                 .zip(chain.iter())
                 .find(|(old, new)| old.hash != new.hash)
-                .map(|(old, _)| old.number - 1);
+                .map(|(old, _)| old.number.saturating_sub(1));
 
             // set the unfinalized chain.
             self.unfinalized_blocks = chain;
@@ -424,13 +429,14 @@ where
     /// Handles the batch commits events.
     #[tracing::instrument(skip_all)]
     async fn handle_batch_commits(&self, logs: &[Log]) -> L1WatcherResult<Vec<L1Notification>> {
-        // filter commit logs.
+        // filter commit logs and skip genesis batch (batch_index == 0).
         let mut commit_logs_with_tx = logs
             .iter()
             .map(|l| (l, l.transaction_hash))
             .filter_map(|(log, tx_hash)| {
                 let tx_hash = tx_hash?;
                 try_decode_log::<CommitBatch>(&log.inner)
+                    .filter(|decoded| !decoded.data.batch_index.is_zero())
                     .map(|decoded| (log, decoded.data, tx_hash))
             })
             .collect::<Vec<_>>();
@@ -504,11 +510,13 @@ where
         &self,
         logs: &[Log],
     ) -> L1WatcherResult<Vec<L1Notification>> {
-        // filter finalize logs.
+        // filter finalize logs and skip genesis batch (batch_index == 0).
         logs.iter()
             .map(|l| (l, l.block_number))
             .filter_map(|(log, bn)| {
-                try_decode_log::<FinalizeBatch>(&log.inner).map(|decoded| (decoded.data, bn))
+                try_decode_log::<FinalizeBatch>(&log.inner)
+                    .filter(|decoded| !decoded.data.batch_index.is_zero())
+                    .map(|decoded| (decoded.data, bn))
             })
             .map(|(decoded_log, maybe_block_number)| {
                 // fetch the finalize transaction.
@@ -564,12 +572,14 @@ where
                 break (pos, chain);
             }
 
-            tracing::trace!(target: "scroll::watcher", number = ?(current_block.number - 1), "fetching block");
+            tracing::trace!(target: "scroll::watcher", number = ?(current_block.number.saturating_sub(1)), "fetching block");
             let block = self
                 .execution_provider
-                .get_block((current_block.number - 1).into())
+                .get_block((current_block.number.saturating_sub(1)).into())
                 .await?
-                .ok_or(EthRequestError::MissingBlock(current_block.number - 1))?;
+                .ok_or_else(|| {
+                    EthRequestError::MissingBlock(current_block.number.saturating_sub(1))
+                })?;
             chain.push(block.header.clone());
             current_block = block.header;
         };
@@ -604,11 +614,12 @@ where
     }
 
     /// Updates the current block number, saturating at the head of the chain.
-    fn update_current_block(&mut self, latest: &Block) {
+    async fn update_current_block(&mut self, latest: &Block) -> L1WatcherResult<()> {
         self.current_block_number = self
             .current_block_number
-            .saturating_add(LOGS_QUERY_BLOCK_RANGE)
+            .saturating_add(self.log_query_block_range)
             .min(latest.header.number);
+        self.notify(L1Notification::Processed(self.current_block_number)).await
     }
 
     /// Returns the latest L1 block.
@@ -631,7 +642,8 @@ where
 
     /// Returns the next range of logs, for the block range in
     /// \[[`current_block`](field@L1Watcher::current_block_number);
-    /// [`current_block`](field@L1Watcher::current_block_number) + [`LOGS_QUERY_BLOCK_RANGE`]\].
+    /// [`current_block`](field@L1Watcher::current_block_number) +
+    /// [`field@L1Watcher::log_query_block_range`]\].
     async fn next_filtered_logs(&self, latest_block_number: u64) -> L1WatcherResult<Vec<Log>> {
         // set the block range for the query
         let address_book = &self.config.address_book;
@@ -648,12 +660,12 @@ where
             ]);
         let to_block = self
             .current_block_number
-            .saturating_add(LOGS_QUERY_BLOCK_RANGE)
+            .saturating_add(self.log_query_block_range)
             .min(latest_block_number);
 
         // skip a block for `from_block` since `self.current_block_number` is the last indexed
         // block.
-        filter = filter.from_block(self.current_block_number + 1).to_block(to_block);
+        filter = filter.from_block(self.current_block_number.saturating_add(1)).to_block(to_block);
 
         tracing::trace!(target: "scroll::watcher", ?filter, "fetching logs");
 
@@ -672,6 +684,8 @@ mod tests {
     use alloy_sol_types::{SolCall, SolEvent};
     use arbitrary::Arbitrary;
     use scroll_l1::abi::calls::commitBatchCall;
+
+    const LOG_QUERY_BLOCK_RANGE: u64 = 500;
 
     // Returns a L1Watcher along with the receiver end of the L1Notifications.
     fn l1_watcher(
@@ -693,7 +707,7 @@ mod tests {
             vec![latest],
         );
 
-        let (tx, rx) = mpsc::channel(LOGS_QUERY_BLOCK_RANGE as usize);
+        let (tx, rx) = mpsc::channel(LOG_QUERY_BLOCK_RANGE as usize);
         (
             L1Watcher {
                 execution_provider: provider,
@@ -704,6 +718,7 @@ mod tests {
                 config: Arc::new(NodeConfig::mainnet()),
                 metrics: WatcherMetrics::default(),
                 is_synced: false,
+                log_query_block_range: LOG_QUERY_BLOCK_RANGE,
             },
             rx,
         )

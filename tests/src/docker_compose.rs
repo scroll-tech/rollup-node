@@ -1,10 +1,52 @@
 use alloy_provider::{Provider, ProviderBuilder};
 use eyre::Result;
 use scroll_alloy_network::Scroll;
-use std::{
-    process::Command,
-    time::{Duration, SystemTime, UNIX_EPOCH},
+use std::{fs, ops::Deref, process::Command, time::Duration};
+use tokio::{
+    io::{AsyncBufReadExt, BufReader},
+    process::Command as TokioCommand,
 };
+
+/// A wrapper that combines a provider with its human-readable name for testing
+pub struct NamedProvider {
+    pub provider: Box<dyn Provider<Scroll>>,
+    pub name: &'static str,
+    pub service_name: &'static str,
+    pub rpc_url: &'static str,
+}
+
+impl NamedProvider {
+    pub fn new(
+        provider: Box<dyn Provider<Scroll>>,
+        name: &'static str,
+        service_name: &'static str,
+        rpc_url: &'static str,
+    ) -> Self {
+        Self { provider, name, service_name, rpc_url }
+    }
+}
+
+impl Deref for NamedProvider {
+    type Target = dyn Provider<Scroll>;
+
+    fn deref(&self) -> &Self::Target {
+        self.provider.as_ref()
+    }
+}
+
+/// The sequencer node RPC URL for the Docker Compose environment.
+const RN_SEQUENCER_RPC_URL: &str = "http://localhost:8545";
+
+/// The follower node RPC URL for the Docker Compose environment.
+const RN_FOLLOWER_RPC_URL: &str = "http://localhost:8546";
+
+/// The l2geth node RPC URL for the Docker Compose environment.
+const L2GETH_SEQUENCER_RPC_URL: &str = "http://localhost:8547";
+
+const L2GETH_FOLLOWER_RPC_URL: &str = "http://localhost:8548";
+
+const RN_SEQUENCER_ENODE: &str= "enode://e7f7e271f62bd2b697add14e6987419758c97e83b0478bd948f5f2d271495728e7edef5bd78ad65258ac910f28e86928ead0c42ee51f2a0168d8ca23ba939766@{IP}:30303";
+const L2GETH_SEQUENCER_ENODE: &str = "enode://8fc4f6dfd0a2ebf56560d0b0ef5e60ad7bcb01e13f929eae53a4c77086d9c1e74eb8b8c8945035d25c6287afdd871f0d41b3fd7e189697decd0f13538d1ac620@{IP}:30303";
 
 pub struct DockerComposeEnv {
     project_name: String,
@@ -12,34 +54,30 @@ pub struct DockerComposeEnv {
 }
 
 impl DockerComposeEnv {
-    /// The sequencer node RPC URL for the Docker Compose environment.
-    const SEQUENCER_RPC_URL: &str = "http://localhost:8545";
-
-    /// The follower node RPC URL for the Docker Compose environment.
-    const FOLLOWER_RPC_URL: &str = "http://localhost:8547";
-
     // ===== CONSTRUCTOR AND LIFECYCLE =====
 
     /// Create a new DockerComposeEnv and wait for all services to be ready
     pub async fn new(test_name: &str) -> Result<Self> {
-        let start = SystemTime::now();
-        let since_the_epoch = start.duration_since(UNIX_EPOCH).expect("Time went backwards");
-        let timestamp = since_the_epoch.as_secs();
-        let project_name = format!("test-{test_name}-{timestamp}");
-        let compose_file = "docker-compose.test.yml".to_string();
+        let project_name = format!("test-{test_name}");
+        let compose_file = "docker-compose.test.yml";
 
         tracing::info!("🚀 Starting test environment: {project_name}");
 
         // Pre-cleanup existing containers to avoid conflicts
-        Self::cleanup(&compose_file, &project_name);
+        Self::cleanup(compose_file, &project_name, false);
 
         // Start the environment
-        let env = Self::start_environment(&compose_file, &project_name)?;
+        let env = Self::start_environment(compose_file, &project_name)?;
+
+        // Start streaming logs in the background
+        let _ = Self::stream_container_logs(compose_file, &project_name).await;
 
         // Wait for all services to be ready
         tracing::info!("⏳ Waiting for services to be ready...");
-        env.wait_for_sequencer_ready().await?;
-        env.wait_for_follower_ready().await?;
+        Self::wait_for_l2_node_ready(RN_SEQUENCER_RPC_URL, 30).await?;
+        Self::wait_for_l2_node_ready(RN_FOLLOWER_RPC_URL, 30).await?;
+        Self::wait_for_l2_node_ready(L2GETH_SEQUENCER_RPC_URL, 30).await?;
+        Self::wait_for_l2_node_ready(L2GETH_FOLLOWER_RPC_URL, 30).await?;
 
         tracing::info!("✅ All services are ready!");
         Ok(env)
@@ -57,8 +95,8 @@ impl DockerComposeEnv {
                 project_name,
                 "up",
                 "-d",
-                "--force-recreate",
-                "--build",
+                "--force-recreate", // comment for for local testing and avoiding rebuilds
+                "--build",          // comment for for local testing and avoiding rebuilds
             ])
             .stdout(std::process::Stdio::piped())
             .stderr(std::process::Stdio::piped())
@@ -88,8 +126,13 @@ impl DockerComposeEnv {
     }
 
     /// Cleanup the environment
-    fn cleanup(compose_file: &str, project_name: &str) {
+    fn cleanup(compose_file: &str, project_name: &str, dump_logs: bool) {
         tracing::info!("🧹 Cleaning up environment: {project_name}");
+
+        if dump_logs {
+            // Dump logs for all containers before cleanup
+            Self::dump_container_logs_to_files(compose_file, project_name);
+        }
 
         let _result = Command::new("docker")
             .args([
@@ -102,24 +145,80 @@ impl DockerComposeEnv {
                 "--volumes",
                 "--remove-orphans",
                 "--timeout",
-                "30",
+                "3",
             ])
+            .output();
+
+        let _result = Command::new("docker")
+            .args(["compose", "-f", compose_file, "rm", "--force", "--volumes", "--stop"])
             .output();
 
         tracing::info!("✅ Cleanup completed");
     }
 
-    // ===== READINESS CHECKS =====
+    // ===== PROVIDER FACTORIES =====
 
-    /// Wait for sequencer to be ready
-    async fn wait_for_sequencer_ready(&self) -> Result<()> {
-        Self::wait_for_l2_node_ready(Self::SEQUENCER_RPC_URL, 30).await
+    /// Get a configured sequencer provider
+    pub async fn get_rn_sequencer_provider(&self) -> Result<NamedProvider> {
+        let provider = ProviderBuilder::<_, _, Scroll>::default()
+            .with_recommended_fillers()
+            .connect(RN_SEQUENCER_RPC_URL)
+            .await
+            .map_err(|e| eyre::eyre!("Failed to connect to RN sequencer: {}", e))?;
+        Ok(NamedProvider::new(
+            Box::new(provider),
+            "RN Sequencer",
+            "rollup-node-sequencer",
+            RN_SEQUENCER_RPC_URL,
+        ))
     }
 
-    /// Wait for follower to be ready
-    async fn wait_for_follower_ready(&self) -> Result<()> {
-        Self::wait_for_l2_node_ready(Self::FOLLOWER_RPC_URL, 30).await
+    /// Get a configured follower provider
+    pub async fn get_rn_follower_provider(&self) -> Result<NamedProvider> {
+        let provider = ProviderBuilder::<_, _, Scroll>::default()
+            .with_recommended_fillers()
+            .connect(RN_FOLLOWER_RPC_URL)
+            .await
+            .map_err(|e| eyre::eyre!("Failed to connect to RN follower: {}", e))?;
+        Ok(NamedProvider::new(
+            Box::new(provider),
+            "RN Follower",
+            "rollup-node-follower",
+            RN_FOLLOWER_RPC_URL,
+        ))
     }
+
+    /// Get a configured l2geth sequencer provider
+    pub async fn get_l2geth_sequencer_provider(&self) -> Result<NamedProvider> {
+        let provider = ProviderBuilder::<_, _, Scroll>::default()
+            .with_recommended_fillers()
+            .connect(L2GETH_SEQUENCER_RPC_URL)
+            .await
+            .map_err(|e| eyre::eyre!("Failed to connect to l2geth sequencer: {}", e))?;
+        Ok(NamedProvider::new(
+            Box::new(provider),
+            "L2Geth Sequencer",
+            "l2geth-sequencer",
+            L2GETH_SEQUENCER_RPC_URL,
+        ))
+    }
+
+    /// Get a configured l2geth follower provider
+    pub async fn get_l2geth_follower_provider(&self) -> Result<NamedProvider> {
+        let provider = ProviderBuilder::<_, _, Scroll>::default()
+            .with_recommended_fillers()
+            .connect(L2GETH_FOLLOWER_RPC_URL)
+            .await
+            .map_err(|e| eyre::eyre!("Failed to connect to l2geth follower: {}", e))?;
+        Ok(NamedProvider::new(
+            Box::new(provider),
+            "L2Geth Follower",
+            "l2geth-follower",
+            L2GETH_FOLLOWER_RPC_URL,
+        ))
+    }
+
+    // ===== UTILITIES =====
 
     /// Wait for L2 node to be ready
     async fn wait_for_l2_node_ready(provider_url: &str, max_retries: u32) -> Result<()> {
@@ -130,6 +229,8 @@ impl DockerComposeEnv {
                 .await
             {
                 Ok(provider) => match provider.get_chain_id().await {
+                    // TODO: assert chain ID and genesis hash matches expected values (hardcoded
+                    // constants)
                     Ok(chain_id) => {
                         tracing::info!("✅ L2 node ready - Chain ID: {chain_id}");
                         return Ok(());
@@ -153,27 +254,198 @@ impl DockerComposeEnv {
         );
     }
 
-    // ===== PROVIDER FACTORIES =====
+    /// Stream logs from all containers in the background to the `docker-compose` target aat trace
+    /// level.
+    async fn stream_container_logs(compose_file: &str, project_name: &str) -> eyre::Result<()> {
+        let mut child = TokioCommand::new("docker")
+            .args([
+                "compose",
+                "-f",
+                compose_file,
+                "-p",
+                project_name,
+                "logs",
+                "-f",         // follow mode
+                "--no-color", // avoid ANSI mess
+            ])
+            .stdout(std::process::Stdio::piped())
+            .stderr(std::process::Stdio::piped())
+            .spawn()?;
 
-    /// Get a configured sequencer provider
-    pub async fn get_sequencer_provider(&self) -> Result<impl Provider<Scroll>> {
-        ProviderBuilder::<_, _, Scroll>::default()
-            .with_recommended_fillers()
-            .connect(Self::SEQUENCER_RPC_URL)
-            .await
-            .map_err(|e| eyre::eyre!("Failed to connect to sequencer: {}", e))
+        if let Some(stdout) = child.stdout.take() {
+            let mut reader = BufReader::new(stdout).lines();
+            tokio::spawn(async move {
+                while let Ok(Some(line)) = reader.next_line().await {
+                    tracing::trace!(target: "docker-compose", "{}", line);
+                }
+            });
+        }
+
+        if let Some(stderr) = child.stderr.take() {
+            let mut reader = BufReader::new(stderr).lines();
+            tokio::spawn(async move {
+                while let Ok(Some(line)) = reader.next_line().await {
+                    tracing::trace!(target: "docker-compose", "{}", line);
+                }
+            });
+        }
+
+        Ok(())
     }
 
-    /// Get a configured follower provider
-    pub async fn get_follower_provider(&self) -> Result<impl Provider<Scroll>> {
-        ProviderBuilder::<_, _, Scroll>::default()
-            .with_recommended_fillers()
-            .connect(Self::FOLLOWER_RPC_URL)
-            .await
-            .map_err(|e| eyre::eyre!("Failed to connect to follower: {}", e))
+    /// Construct the full container name using Docker Compose naming pattern
+    fn get_full_container_name(&self, service_name: &str) -> String {
+        format!("{}-{}-1", self.project_name, service_name)
     }
 
-    // ===== UTILITIES =====
+    /// Get the IP address of a container within the project network
+    fn get_container_ip(&self, container_name: &str) -> Result<String> {
+        let output = Command::new("docker")
+            .args([
+                "inspect",
+                "-f",
+                "{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}",
+                container_name,
+            ])
+            .output()
+            .map_err(|e| eyre::eyre!("Failed to run docker inspect: {}", e))?;
+
+        if !output.status.success() {
+            return Err(eyre::eyre!(
+                "Failed to get container IP for {}: {}",
+                container_name,
+                String::from_utf8_lossy(&output.stderr)
+            ));
+        }
+
+        let ip = String::from_utf8_lossy(&output.stdout).trim().to_string();
+        if ip.is_empty() {
+            return Err(eyre::eyre!("No IP address found for container {}", container_name));
+        }
+
+        Ok(ip)
+    }
+
+    // ===== CONTAINER CONTROL =====
+
+    /// Stop a container
+    /// Note: When using stop/start in short succession there can be issues with the container not
+    /// being fully stopped before starting again. Consider using restart_container instead.
+    /// See: <https://docs.docker.com/engine/reference/commandline/stop/#notes>
+    pub async fn stop_container(&self, provider: &NamedProvider) -> Result<()> {
+        let service_name = provider.service_name;
+        tracing::info!("🛑 Stopping container: {}", service_name);
+
+        let output = Command::new("docker")
+            .args([
+                "compose",
+                "-f",
+                &self.compose_file,
+                "-p",
+                &self.project_name,
+                "stop",
+                "--timeout",
+                "30",
+                service_name,
+            ])
+            .output()
+            .map_err(|e| eyre::eyre!("Failed to run docker compose stop: {}", e))?;
+
+        if !output.status.success() {
+            return Err(eyre::eyre!(
+                "Failed to stop container {}: {}",
+                service_name,
+                String::from_utf8_lossy(&output.stderr)
+            ));
+        }
+
+        tracing::info!("✅ Stopped container: {}", service_name);
+        Ok(())
+    }
+
+    /// Start a container
+    pub async fn start_container(&self, provider: &NamedProvider) -> Result<()> {
+        let service_name = provider.service_name;
+        tracing::info!("▶️  Starting container: {}", service_name);
+
+        let output = Command::new("docker")
+            .args([
+                "compose",
+                "-f",
+                &self.compose_file,
+                "-p",
+                &self.project_name,
+                "start",
+                service_name,
+            ])
+            .output()
+            .map_err(|e| eyre::eyre!("Failed to run docker compose start: {}", e))?;
+
+        if !output.status.success() {
+            return Err(eyre::eyre!(
+                "Failed to start container {}: {}",
+                service_name,
+                String::from_utf8_lossy(&output.stderr)
+            ));
+        }
+
+        tracing::info!("✅ Started container: {}", service_name);
+
+        Self::wait_for_l2_node_ready(provider.rpc_url, 5).await.map_err(|e| {
+            eyre::eyre!("Container {} did not become ready after start: {}", service_name, e)
+        })?;
+
+        Ok(())
+    }
+
+    /// Restart a container
+    pub async fn restart_container(&self, provider: &NamedProvider) -> Result<()> {
+        let service_name = provider.service_name;
+        tracing::info!("🔄 Restarting container: {}", service_name);
+
+        let output = Command::new("docker")
+            .args([
+                "compose",
+                "-f",
+                &self.compose_file,
+                "-p",
+                &self.project_name,
+                "restart",
+                "--timeout",
+                "30",
+                service_name,
+            ])
+            .output()
+            .map_err(|e| eyre::eyre!("Failed to run docker compose restart: {}", e))?;
+
+        if !output.status.success() {
+            return Err(eyre::eyre!(
+                "Failed to restart container {}: {}",
+                service_name,
+                String::from_utf8_lossy(&output.stderr)
+            ));
+        }
+
+        tracing::info!("✅ Restarted container: {}", service_name);
+
+        Self::wait_for_l2_node_ready(provider.rpc_url, 30).await.map_err(|e| {
+            eyre::eyre!("Container {} did not become ready after start: {}", service_name, e)
+        })?;
+
+        Ok(())
+    }
+
+    /// Get the rollup node sequencer enode URL with resolved IP address
+    pub fn rn_sequencer_enode(&self) -> Result<String> {
+        let ip = self.get_container_ip(&self.get_full_container_name("rollup-node-sequencer"))?;
+        Ok(RN_SEQUENCER_ENODE.replace("{IP}", &ip))
+    }
+
+    /// Get the l2geth sequencer enode URL with resolved IP address
+    pub fn l2geth_sequencer_enode(&self) -> Result<String> {
+        let ip = self.get_container_ip(&self.get_full_container_name("l2geth-sequencer"))?;
+        Ok(L2GETH_SEQUENCER_ENODE.replace("{IP}", &ip))
+    }
 
     /// Show logs for all containers
     fn show_all_container_logs(compose_file: &str, project_name: &str) {
@@ -194,10 +466,100 @@ impl DockerComposeEnv {
             }
         }
     }
+
+    /// Dump logs for all containers to individual files
+    fn dump_container_logs_to_files(compose_file: &str, project_name: &str) {
+        tracing::debug!("📝 Dumping container logs to files for project: {project_name}");
+
+        // Create logs directory
+        let logs_dir = format!("target/test-logs/{project_name}");
+        if let Err(e) = fs::create_dir_all(&logs_dir) {
+            tracing::error!("Failed to create logs directory {logs_dir}: {e}");
+            return;
+        }
+
+        // Get list of all containers for this project
+        let containers_output = Command::new("docker")
+            .args([
+                "compose",
+                "-f",
+                compose_file,
+                "-p",
+                project_name,
+                "ps",
+                "--format",
+                "{{.Name}}",
+            ])
+            .output();
+
+        let container_names = match containers_output {
+            Ok(output) => {
+                if output.status.success() {
+                    String::from_utf8_lossy(&output.stdout)
+                        .lines()
+                        .map(|s| s.trim().to_string())
+                        .filter(|s| !s.is_empty())
+                        .collect::<Vec<_>>()
+                } else {
+                    tracing::error!(
+                        "Failed to get container list: {}",
+                        String::from_utf8_lossy(&output.stderr)
+                    );
+                    return;
+                }
+            }
+            Err(e) => {
+                tracing::error!("Failed to run docker compose ps: {e}");
+                return;
+            }
+        };
+
+        // Dump logs for each container
+        for container_name in container_names {
+            let log_file_path = format!("{logs_dir}/{container_name}.log");
+
+            tracing::debug!("📋 Dumping logs for container '{container_name}' to {log_file_path}");
+
+            let logs_output = Command::new("docker").args(["logs", &container_name]).output();
+
+            match logs_output {
+                Ok(logs) => {
+                    let mut content = String::new();
+
+                    // Combine stdout and stderr
+                    let stdout = String::from_utf8_lossy(&logs.stdout);
+                    let stderr = String::from_utf8_lossy(&logs.stderr);
+
+                    if !stdout.trim().is_empty() {
+                        content.push_str("=== STDOUT ===\n");
+                        content.push_str(&stdout);
+                        content.push('\n');
+                    }
+
+                    if !stderr.trim().is_empty() {
+                        content.push_str("=== STDERR ===\n");
+                        content.push_str(&stderr);
+                        content.push('\n');
+                    }
+
+                    if let Err(e) = fs::write(&log_file_path, content) {
+                        tracing::error!("Failed to write logs to {log_file_path}: {e}");
+                    } else {
+                        tracing::debug!("✅ Saved logs for '{container_name}' to {log_file_path}");
+                    }
+                }
+                Err(e) => {
+                    tracing::error!("Failed to get logs for container '{container_name}': {e}");
+                }
+            }
+        }
+
+        tracing::info!("📁 All container logs dumped to: {logs_dir}");
+    }
 }
 
 impl Drop for DockerComposeEnv {
     fn drop(&mut self) {
-        Self::cleanup(&self.compose_file, &self.project_name);
+        Self::cleanup(&self.compose_file, &self.project_name, true);
     }
 }

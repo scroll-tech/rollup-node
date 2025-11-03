@@ -11,7 +11,6 @@ workspace = true
 
 [dependencies]
 # alloy
-alloy-eips.workspace = true
 alloy-primitives.workspace = true
 
 # scroll-alloy
@@ -26,7 +25,13 @@ rollup-node-primitives.workspace = true
 async-trait.workspace = true
 auto_impl.workspace = true
 futures.workspace = true
+metrics.workspace = true
+metrics-derive.workspace = true
 sea-orm = { workspace = true, features = ["sqlx-sqlite", "runtime-tokio-native-tls", "macros"] }
+serde.workspace = true
+serde_json.workspace = true
+strum.workspace = true
+tempfile = { version = "3.20.0", optional = true }
 thiserror.workspace = true
 tokio = { workspace = true, features = ["macros", "sync"] }
 tracing.workspace = true
@@ -41,4 +46,4 @@ arbitrary.workspace = true
 rand.workspace = true
 
 [features]
-test-utils = ["dep:scroll-migration"]
+test-utils = ["dep:scroll-migration", "dep:tempfile"]

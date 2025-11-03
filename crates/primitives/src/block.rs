@@ -1,13 +1,14 @@
-use alloy_consensus::Header;
+use crate::RollupNodePrimitiveError;
+use alloy_consensus::{transaction::TxHashRef, Header};
 use alloy_eips::{BlockNumHash, Decodable2718};
 use alloy_primitives::{B256, U256};
-use alloy_rpc_types_engine::ExecutionPayload;
+use alloy_rpc_types_engine::{ExecutionPayload, ExecutionPayloadV1};
 use core::{
+    cmp::Ordering,
     future::Future,
     pin::Pin,
     task::{ready, Context, Poll},
 };
-use reth_primitives_traits::transaction::signed::SignedTransaction;
 use reth_scroll_primitives::{ScrollBlock, ScrollTransactionSigned};
 use scroll_alloy_consensus::L1_MESSAGE_TRANSACTION_TYPE;
 use std::vec::Vec;
@@ -16,12 +17,18 @@ use std::vec::Vec;
 pub const DEFAULT_BLOCK_DIFFICULTY: U256 = U256::from_limbs([1, 0, 0, 0]);
 
 /// Information about a block.
-#[derive(Debug, Default, Copy, Clone, PartialEq, Eq)]
+#[derive(Debug, Default, Copy, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct BlockInfo {
     /// The block number.
     pub number: u64,
     /// The block hash.
     pub hash: B256,
+}
+
+impl PartialOrd for BlockInfo {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        self.number.partial_cmp(&other.number)
+    }
 }
 
 impl BlockInfo {
@@ -64,6 +71,12 @@ impl From<&Header> for BlockInfo {
 impl From<Header> for BlockInfo {
     fn from(value: Header) -> Self {
         Self { number: value.number, hash: value.hash_slow() }
+    }
+}
+
+impl std::fmt::Display for BlockInfo {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "BlockInfo {{ number: {}, hash: 0x{} }}", self.number, self.hash)
     }
 }
 
@@ -166,23 +179,28 @@ impl From<&ScrollBlock> for L2BlockInfoWithL1Messages {
     }
 }
 
-impl From<&ExecutionPayload> for L2BlockInfoWithL1Messages {
-    fn from(value: &ExecutionPayload) -> Self {
-        let block_number = value.block_number();
-        let block_hash = value.block_hash();
-        let l1_messages = value
-            .as_v1()
-            .transactions
-            .iter()
-            .filter_map(|raw| {
-                (raw.as_ref().first() == Some(&L1_MESSAGE_TRANSACTION_TYPE))
-                    .then(|| {
-                        let tx = ScrollTransactionSigned::decode_2718(&mut raw.as_ref()).ok()?;
-                        Some(*tx.tx_hash())
-                    })
-                    .flatten()
-            })
-            .collect();
-        Self { block_info: BlockInfo { number: block_number, hash: block_hash }, l1_messages }
+impl TryFrom<&ExecutionPayload> for L2BlockInfoWithL1Messages {
+    type Error = RollupNodePrimitiveError;
+
+    fn try_from(value: &ExecutionPayload) -> Result<Self, Self::Error> {
+        value.as_v1().try_into()
+    }
+}
+
+impl TryFrom<&ExecutionPayloadV1> for L2BlockInfoWithL1Messages {
+    type Error = RollupNodePrimitiveError;
+
+    fn try_from(value: &ExecutionPayloadV1) -> Result<Self, Self::Error> {
+        let block_number = value.block_number;
+        let block_hash = value.block_hash;
+
+        let mut l1_messages = Vec::new();
+        for tx in &value.transactions {
+            if tx.as_ref().first() == Some(&L1_MESSAGE_TRANSACTION_TYPE) {
+                let tx = ScrollTransactionSigned::decode_2718(&mut tx.as_ref())?;
+                l1_messages.push(*tx.tx_hash())
+            }
+        }
+        Ok(Self { block_info: BlockInfo { number: block_number, hash: block_hash }, l1_messages })
     }
 }

@@ -11,7 +11,7 @@ pub struct NewBlockWithPeer {
 }
 
 /// An event that is emitted by the network manager to its subscribers.
-#[derive(Debug)]
-pub enum NetworkManagerEvent {
+#[derive(Debug, Clone)]
+pub enum ScrollNetworkManagerEvent {
     NewBlock(NewBlockWithPeer),
 }

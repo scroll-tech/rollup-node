@@ -33,6 +33,7 @@ reth-node-core.workspace = true
 arbitrary = { workspace = true, optional = true }
 derive_more = { workspace = true, features = ["from"] }
 eyre.workspace = true
+serde.workspace = true
 
 [features]
 default = ["std"]
@@ -65,4 +66,15 @@ arbitrary = [
     "alloy-rpc-types-engine/arbitrary",
     "alloy-chains/arbitrary",
     "reth-chainspec/arbitrary",
+]
+serde = [
+    "alloy-chains/serde",
+    "alloy-consensus/serde",
+    "alloy-eips/serde",
+    "alloy-primitives/serde",
+    "alloy-rpc-types-engine/serde",
+    "reth-primitives-traits/serde",
+    "reth-scroll-primitives/serde",
+    "scroll-alloy-consensus/serde",
+    "scroll-alloy-rpc-types-engine/serde",
 ]

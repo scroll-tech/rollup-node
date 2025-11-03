@@ -14,7 +14,8 @@ env:
 
 jobs:
   unit:
-    runs-on: ubuntu-latest
+    runs-on:
+      group: scroll-reth-runner-group
     timeout-minutes: 60
     env:
       RUST_BACKTRACE: 1
@@ -27,14 +28,13 @@ jobs:
       - uses: Swatinem/rust-cache@v2
         with:
           cache-on-failure: true
-      - uses: taiki-e/install-action@v2
-        with:
-          tool: nextest@0.9.98
+      - uses: taiki-e/install-action@nextest
       - name: Run unit tests
         run: cargo nextest run --all-features --workspace --locked -E '!kind(test)'
 
   integration:
-    runs-on: ubuntu-latest
+    runs-on:
+      group: scroll-reth-runner-group
     timeout-minutes: 60
     env:
       RUST_BACKTRACE: 1
@@ -47,9 +47,7 @@ jobs:
       - uses: Swatinem/rust-cache@v2
         with:
           cache-on-failure: true
-      - uses: taiki-e/install-action@v2
-        with:
-          tool: nextest@0.9.98
+      - uses: taiki-e/install-action@nextest
       - name: Run integration tests
         run: |
           cargo nextest run --all-features --workspace --locked \
@@ -57,7 +55,8 @@ jobs:
             -- --skip test_should_consolidate_to_block_15k
 
   integration-docker-compose:
-    runs-on: ubuntu-latest
+    runs-on:
+      group: scroll-reth-runner-group
     timeout-minutes: 90
     env:
       RUST_BACKTRACE: 1
@@ -68,9 +67,7 @@ jobs:
       - uses: Swatinem/rust-cache@v2
         with:
           cache-on-failure: true
-      - uses: taiki-e/install-action@v2
-        with:
-          tool: nextest@0.9.98
+      - uses: taiki-e/install-action@nextest
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
       - name: Free up disk space
@@ -95,5 +92,5 @@ jobs:
             --success-output never \
             --verbose
         env:
-          RUST_LOG: debug
+          RUST_LOG: trace
           RUST_BACKTRACE: full

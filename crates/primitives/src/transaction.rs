@@ -3,6 +3,7 @@ use scroll_alloy_consensus::TxL1Message;
 
 /// A L1 message envelope, containing extra information about the message.
 #[derive(Debug, Clone, PartialEq, Eq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct L1MessageEnvelope {
     /// The L1 transaction.
     pub transaction: TxL1Message,

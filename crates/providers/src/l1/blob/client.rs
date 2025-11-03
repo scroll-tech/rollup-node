@@ -96,7 +96,11 @@ impl BeaconClientProvider {
         base: &str,
         client: &Client,
     ) -> Result<APIResponse<ReducedConfigData>, reqwest::Error> {
-        let first = client.get(format!("{}/{}", base, Self::SPEC_METHOD)).send().await?;
+        let first = client
+            .get(format!("{}/{}", base, Self::SPEC_METHOD))
+            .send()
+            .await?
+            .error_for_status()?;
         first.json::<APIResponse<ReducedConfigData>>().await
     }
 
@@ -105,20 +109,20 @@ impl BeaconClientProvider {
         base: &str,
         client: &Client,
     ) -> Result<APIResponse<ReducedGenesisData>, reqwest::Error> {
-        let first = client.get(format!("{}/{}", base, Self::GENESIS_METHOD)).send().await?;
+        let first = client
+            .get(format!("{}/{}", base, Self::GENESIS_METHOD))
+            .send()
+            .await?
+            .error_for_status()?;
         first.json::<APIResponse<ReducedGenesisData>>().await
     }
 
     /// Returns the blobs for the provided slot.
     async fn blobs(&self, slot: u64) -> Result<Vec<BlobData>, reqwest::Error> {
-        let raw_response = self
-            .inner
-            .get(format!("{}/{}/{}", self.base, Self::SIDECARS_METHOD_PREFIX, slot))
-            .send()
-            .await?;
-        let raw_response = raw_response.json::<BeaconBlobBundle>().await?;
-
-        Ok(raw_response.data)
+        let url = format!("{}/{}/{}", self.base, Self::SIDECARS_METHOD_PREFIX, slot);
+        let response = self.inner.get(&url).send().await?.error_for_status()?;
+        let blob_bundle = response.json::<BeaconBlobBundle>().await?;
+        Ok(blob_bundle.data)
     }
 
     /// Returns the beacon slot given a block timestamp.

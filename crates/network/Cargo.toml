@@ -15,16 +15,17 @@ reth-chainspec.workspace = true
 reth-eth-wire-types.workspace = true
 reth-network.workspace = true
 reth-network-api.workspace = true
-reth-network-types = { git = "https://github.com/scroll-tech/reth.git", default-features = false }
+reth-network-types.workspace = true
 reth-network-peers.workspace = true
 reth-primitives-traits.workspace = true
-reth-storage-api = { workspace = true, default-features = false }
+reth-storage-api.workspace = true
 reth-tokio-util.workspace = true
 
 # scroll
 reth-scroll-chainspec.workspace = true
 reth-scroll-node.workspace = true
 reth-scroll-primitives.workspace = true
+rollup-node-primitives.workspace = true
 scroll-alloy-hardforks.workspace = true
 scroll-wire.workspace = true
 
@@ -49,4 +50,12 @@ serde = [
     "reth-primitives-traits/serde",
     "reth-storage-api/serde",
     "scroll-alloy-hardforks/serde",
+    "rollup-node-primitives/serde",
+]
+test-utils = [
+    "reth-chainspec/test-utils",
+    "reth-network/test-utils",
+    "reth-network-types/test-utils",
+    "reth-primitives-traits/test-utils",
+    "reth-scroll-node/test-utils",
 ]

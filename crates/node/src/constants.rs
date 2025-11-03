@@ -1,12 +1,21 @@
 //! Constants related to the [`crate::ScrollRollupNode`]
 
-use alloy_primitives::U128;
+use alloy_primitives::{address, Address, U128};
 
 /// The max retries for the L1 provider.
-pub(crate) const PROVIDER_MAX_RETRIES: u32 = 10;
+pub(crate) const L1_PROVIDER_MAX_RETRIES: u32 = 10;
 
 /// The initial backoff for the L1 provider.
-pub(crate) const PROVIDER_INITIAL_BACKOFF: u64 = 100;
+pub(crate) const L1_PROVIDER_INITIAL_BACKOFF: u64 = 100;
+
+/// The block range used to fetch L1 logs.
+pub(crate) const LOGS_QUERY_BLOCK_RANGE: u64 = 500;
+
+/// The max retries for the L2 provider.
+pub(crate) const L2_PROVIDER_MAX_RETRIES: u32 = u32::MAX;
+
+/// The initial backoff for the L2 provider.
+pub(crate) const L2_PROVIDER_INITIAL_BACKOFF: u64 = 50;
 
 /// The default provider compute units per second.
 pub(crate) const PROVIDER_COMPUTE_UNITS_PER_SECOND: u64 = 10000;
@@ -21,7 +30,7 @@ pub(crate) const DEFAULT_PAYLOAD_BUILDING_DURATION: u64 = 800;
 pub(crate) const DEFAULT_PAYLOAD_SIZE_LIMIT: u64 = 122_880;
 
 /// The gap in blocks between the P2P and EN which triggers sync.
-pub(crate) const BLOCK_GAP_TRIGGER: u64 = 100_000;
+pub(crate) const BLOCK_GAP_TRIGGER: u64 = 1_000;
 
 /// The number of block headers to keep in the in-memory chain buffer in the chain orchestrator.
 pub(crate) const CHAIN_BUFFER_SIZE: usize = 2000;
@@ -46,3 +55,12 @@ pub(crate) const SCROLL_MAINNET_V2_MESSAGE_QUEUE_START_INDEX: u64 = 953885;
 
 /// The L1 message queue index at which queue hashes should be computed on sepolia.
 pub(crate) const SCROLL_SEPOLIA_V2_MESSAGE_QUEUE_START_INDEX: u64 = 1062110;
+
+/// TODO: remove this once we deprecated l2geth.
+/// The authorized signer address for Scroll mainnet.
+pub(crate) const SCROLL_MAINNET_SIGNER: Address =
+    address!("0xD83C4892BB5aA241B63d8C4C134920111E142A20");
+
+/// The authorized signer address for Scroll sepolia.
+pub(crate) const SCROLL_SEPOLIA_SIGNER: Address =
+    address!("0x687E0E85AD67ff71aC134CF61b65905b58Ab43b2");

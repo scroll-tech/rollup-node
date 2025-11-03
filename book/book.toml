@@ -1,0 +1,5 @@
+[book]
+authors = ["Gregory Edison"]
+language = "en"
+src = "src"
+title = "Rollup node"

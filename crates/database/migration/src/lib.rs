@@ -9,6 +9,16 @@ mod m20250616_223947_add_metadata;
 mod m20250825_093350_remove_unsafe_l2_blocks;
 mod m20250829_042803_add_table_indexes;
 mod m20250901_102341_add_commit_batch_processed_column;
+mod m20250904_175949_block_signature;
+mod m20250923_135359_add_index_block_hash;
+mod m20250929_161536_add_additional_indexes;
+mod m20251001_125444_add_index_processed;
+mod m20251005_160938_add_initial_l1_block_numbers;
+mod m20251013_140946_add_initial_l1_processed_block_number;
+mod m20251021_070729_add_skipped_column;
+mod m20251021_144852_add_queue_index_index;
+mod m20251027_090416_add_table_statistics;
+
 mod migration_info;
 pub use migration_info::{
     MigrationInfo, ScrollDevMigrationInfo, ScrollMainnetMigrationInfo, ScrollSepoliaMigrationInfo,
@@ -29,6 +39,15 @@ impl<MI: MigrationInfo + Send + Sync + 'static> MigratorTrait for Migrator<MI> {
             Box::new(m20250825_093350_remove_unsafe_l2_blocks::Migration),
             Box::new(m20250829_042803_add_table_indexes::Migration),
             Box::new(m20250901_102341_add_commit_batch_processed_column::Migration),
+            Box::new(m20250904_175949_block_signature::Migration),
+            Box::new(m20250923_135359_add_index_block_hash::Migration),
+            Box::new(m20250929_161536_add_additional_indexes::Migration),
+            Box::new(m20251001_125444_add_index_processed::Migration),
+            Box::new(m20251005_160938_add_initial_l1_block_numbers::Migration),
+            Box::new(m20251013_140946_add_initial_l1_processed_block_number::Migration),
+            Box::new(m20251021_070729_add_skipped_column::Migration),
+            Box::new(m20251021_144852_add_queue_index_index::Migration),
+            Box::new(m20251027_090416_add_table_statistics::Migration),
         ]
     }
 }

@@ -6,7 +6,9 @@ use jsonrpsee::{
 };
 use reth_network_api::FullNetwork;
 use reth_scroll_node::ScrollNetworkPrimitives;
-use rollup_node_manager::RollupManagerHandle;
+use rollup_node_chain_orchestrator::{ChainOrchestratorHandle, ChainOrchestratorStatus};
+use rollup_node_primitives::L1MessageEnvelope;
+use scroll_db::L1MessageKey;
 use tokio::sync::{oneshot, Mutex, OnceCell};
 
 /// RPC extension for rollup node management operations.
@@ -20,9 +22,9 @@ where
     N: FullNetwork<Primitives = ScrollNetworkPrimitives>,
 {
     /// Cached rollup manager handle, initialized lazily via `OnceCell`
-    handle: tokio::sync::OnceCell<RollupManagerHandle<N>>,
+    handle: tokio::sync::OnceCell<ChainOrchestratorHandle<N>>,
     /// Oneshot channel receiver for obtaining the rollup manager handle during initialization
-    rx: Mutex<Option<oneshot::Receiver<RollupManagerHandle<N>>>>,
+    rx: Mutex<Option<oneshot::Receiver<ChainOrchestratorHandle<N>>>>,
 }
 
 impl<N> RollupNodeRpcExt<N>
@@ -30,7 +32,7 @@ where
     N: FullNetwork<Primitives = ScrollNetworkPrimitives>,
 {
     /// Creates a new RPC extension with a receiver for the rollup manager handle.
-    pub fn new(rx: oneshot::Receiver<RollupManagerHandle<N>>) -> Self {
+    pub fn new(rx: oneshot::Receiver<ChainOrchestratorHandle<N>>) -> Self {
         Self { rx: Mutex::new(Some(rx)), handle: OnceCell::new() }
     }
 
@@ -38,7 +40,7 @@ where
     ///
     /// This method lazily initializes the rollup manager handle by consuming the oneshot
     /// receiver. Subsequent calls will return the cached handle.
-    async fn rollup_manager_handle(&self) -> eyre::Result<&RollupManagerHandle<N>> {
+    async fn rollup_manager_handle(&self) -> eyre::Result<&ChainOrchestratorHandle<N>> {
         self.handle
             .get_or_try_init(|| async {
                 let rx = {
@@ -75,6 +77,21 @@ pub trait RollupNodeExtApi {
     /// Disables automatic sequencing in the rollup node.
     #[method(name = "disableAutomaticSequencing")]
     async fn disable_automatic_sequencing(&self) -> RpcResult<bool>;
+
+    /// Returns the current status of the rollup node.
+    #[method(name = "status")]
+    async fn status(&self) -> RpcResult<ChainOrchestratorStatus>;
+
+    /// Returns the L1 message by index.
+    #[method(name = "getL1MessageByIndex")]
+    async fn get_l1_message_by_index(&self, index: u64) -> RpcResult<Option<L1MessageEnvelope>>;
+
+    /// Returns the L1 message by key.
+    #[method(name = "getL1MessageByKey")]
+    async fn get_l1_message_by_key(
+        &self,
+        l1_message_key: L1MessageKey,
+    ) -> RpcResult<Option<L1MessageEnvelope>>;
 }
 
 #[async_trait]
@@ -113,6 +130,63 @@ where
             ErrorObjectOwned::owned(
                 error::INTERNAL_ERROR_CODE,
                 format!("Failed to disable automatic sequencing: {}", e),
+                None::<()>,
+            )
+        })
+    }
+
+    async fn status(&self) -> RpcResult<ChainOrchestratorStatus> {
+        let handle = self.rollup_manager_handle().await.map_err(|e| {
+            ErrorObjectOwned::owned(
+                error::INTERNAL_ERROR_CODE,
+                format!("Failed to get rollup manager handle: {}", e),
+                None::<()>,
+            )
+        })?;
+
+        handle.status().await.map_err(|e| {
+            ErrorObjectOwned::owned(
+                error::INTERNAL_ERROR_CODE,
+                format!("Failed to get rollup node status: {}", e),
+                None::<()>,
+            )
+        })
+    }
+
+    async fn get_l1_message_by_index(&self, index: u64) -> RpcResult<Option<L1MessageEnvelope>> {
+        let handle = self.rollup_manager_handle().await.map_err(|e| {
+            ErrorObjectOwned::owned(
+                error::INTERNAL_ERROR_CODE,
+                format!("Failed to get rollup manager handle: {}", e),
+                None::<()>,
+            )
+        })?;
+
+        handle.get_l1_message_by_key(L1MessageKey::from_queue_index(index)).await.map_err(|e| {
+            ErrorObjectOwned::owned(
+                error::INTERNAL_ERROR_CODE,
+                format!("Failed to get L1 message by index: {}", e),
+                None::<()>,
+            )
+        })
+    }
+
+    async fn get_l1_message_by_key(
+        &self,
+        l1_message_key: L1MessageKey,
+    ) -> RpcResult<Option<L1MessageEnvelope>> {
+        let handle = self.rollup_manager_handle().await.map_err(|e| {
+            ErrorObjectOwned::owned(
+                error::INTERNAL_ERROR_CODE,
+                format!("Failed to get rollup manager handle: {}", e),
+                None::<()>,
+            )
+        })?;
+
+        handle.get_l1_message_by_key(l1_message_key).await.map_err(|e| {
+            ErrorObjectOwned::owned(
+                error::INTERNAL_ERROR_CODE,
+                format!("Failed to get L1 message by key: {}", e),
                 None::<()>,
             )
         })

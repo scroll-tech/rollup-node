@@ -1,10 +1,10 @@
 //! This crate contains utilities for running end-to-end tests for the scroll reth node.
 
-use crate::{ConsensusArgs, GasPriceOracleArgs};
+use crate::{ConsensusArgs, RollupNodeGasPriceOracleArgs};
 
 use super::{
-    BeaconProviderArgs, ChainOrchestratorArgs, DatabaseArgs, EngineDriverArgs, L1ProviderArgs,
-    ScrollRollupNode, ScrollRollupNodeConfig, SequencerArgs,
+    BlobProviderArgs, ChainOrchestratorArgs, EngineDriverArgs, L1ProviderArgs,
+    RollupNodeDatabaseArgs, RpcArgs, ScrollRollupNode, ScrollRollupNodeConfig, SequencerArgs,
 };
 use alloy_primitives::Bytes;
 use reth_chainspec::EthChainSpec;
@@ -21,7 +21,6 @@ use reth_node_core::args::{DiscoveryArgs, NetworkArgs, RpcServerArgs, TxPoolArgs
 use reth_provider::providers::BlockchainProvider;
 use reth_rpc_server_types::RpcModuleSelection;
 use reth_tasks::TaskManager;
-use rollup_node_providers::BlobSource;
 use rollup_node_sequencer::L1MessageInclusionMode;
 use std::{path::PathBuf, sync::Arc};
 use tokio::sync::Mutex;
@@ -82,15 +81,18 @@ where
 
         let span = span!(Level::INFO, "node", idx);
         let _enter = span.enter();
-        let node = ScrollRollupNode::new(scroll_node_config.clone());
-        let NodeHandle { node, node_exit_future: _ } = NodeBuilder::new(node_config.clone())
-            .testing_node(exec.clone())
+        let testing_node = NodeBuilder::new(node_config.clone()).testing_node(exec.clone());
+        let testing_config = testing_node.config().clone();
+        let node = ScrollRollupNode::new(scroll_node_config.clone(), testing_config).await;
+        let NodeHandle { node, node_exit_future: _ } = testing_node
             .with_types_and_provider::<ScrollRollupNode, BlockchainProvider<_>>()
             .with_components(node.components_builder())
             .with_add_ons(node.add_ons())
             .launch_with_fn(|builder| {
                 let tree_config = TreeConfig::default()
-                    .with_always_process_payload_attributes_on_canonical_head(true);
+                    .with_always_process_payload_attributes_on_canonical_head(true)
+                    .with_unwind_canonical_header(true)
+                    .with_persistence_threshold(0);
                 let launcher = EngineNodeLauncher::new(
                     builder.task_executor().clone(),
                     builder.config().datadir(),
@@ -141,8 +143,8 @@ pub async fn generate_tx(wallet: Arc<Mutex<Wallet>>) -> Bytes {
 pub fn default_test_scroll_rollup_node_config() -> ScrollRollupNodeConfig {
     ScrollRollupNodeConfig {
         test: true,
-        network_args: crate::args::NetworkArgs::default(),
-        database_args: DatabaseArgs { path: Some(PathBuf::from("sqlite::memory:")) },
+        network_args: crate::args::RollupNodeNetworkArgs::default(),
+        database_args: RollupNodeDatabaseArgs::default(),
         l1_provider_args: L1ProviderArgs::default(),
         engine_driver_args: EngineDriverArgs { sync_at_startup: true },
         chain_orchestrator_args: ChainOrchestratorArgs {
@@ -154,13 +156,12 @@ pub fn default_test_scroll_rollup_node_config() -> ScrollRollupNodeConfig {
             allow_empty_blocks: true,
             ..Default::default()
         },
-        beacon_provider_args: BeaconProviderArgs {
-            blob_source: BlobSource::Mock,
-            ..Default::default()
-        },
+        blob_provider_args: BlobProviderArgs { mock: true, ..Default::default() },
         signer_args: Default::default(),
-        gas_price_oracle_args: GasPriceOracleArgs::default(),
+        gas_price_oracle_args: RollupNodeGasPriceOracleArgs::default(),
         consensus_args: ConsensusArgs::noop(),
+        database: None,
+        rpc_args: RpcArgs { enabled: true },
     }
 }
 
@@ -175,8 +176,10 @@ pub fn default_test_scroll_rollup_node_config() -> ScrollRollupNodeConfig {
 pub fn default_sequencer_test_scroll_rollup_node_config() -> ScrollRollupNodeConfig {
     ScrollRollupNodeConfig {
         test: true,
-        network_args: crate::args::NetworkArgs::default(),
-        database_args: DatabaseArgs { path: Some(PathBuf::from("sqlite::memory:")) },
+        network_args: crate::args::RollupNodeNetworkArgs::default(),
+        database_args: RollupNodeDatabaseArgs {
+            rn_db_path: Some(PathBuf::from("sqlite::memory:")),
+        },
         l1_provider_args: L1ProviderArgs::default(),
         engine_driver_args: EngineDriverArgs { sync_at_startup: true },
         chain_orchestrator_args: ChainOrchestratorArgs {
@@ -185,19 +188,19 @@ pub fn default_sequencer_test_scroll_rollup_node_config() -> ScrollRollupNodeCon
         },
         sequencer_args: SequencerArgs {
             sequencer_enabled: true,
-            auto_start: true,
-            block_time: 0,
+            auto_start: false,
+            block_time: 100,
             payload_building_duration: 40,
             fee_recipient: Default::default(),
             l1_message_inclusion_mode: L1MessageInclusionMode::BlockDepth(0),
             allow_empty_blocks: true,
+            max_l1_messages: None,
         },
-        beacon_provider_args: BeaconProviderArgs {
-            blob_source: BlobSource::Mock,
-            ..Default::default()
-        },
+        blob_provider_args: BlobProviderArgs { mock: true, ..Default::default() },
         signer_args: Default::default(),
-        gas_price_oracle_args: GasPriceOracleArgs::default(),
+        gas_price_oracle_args: RollupNodeGasPriceOracleArgs::default(),
         consensus_args: ConsensusArgs::noop(),
+        database: None,
+        rpc_args: RpcArgs { enabled: true },
     }
 }
