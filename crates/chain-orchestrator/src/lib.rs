@@ -356,6 +356,13 @@ impl<
                 let _ = tx.send(self.network.handle().clone());
             }
             ChainOrchestratorCommand::UpdateFcsHead((head, sender)) => {
+                // Collect transactions of reverted blocks from l2 client.
+                let reverted_transactions = self
+                    .collect_reverted_txs_in_range(
+                        head.number.saturating_add(1),
+                        self.engine.fcs().head_block_info().number,
+                    )
+                    .await?;
                 self.engine.update_fcs(Some(head), None, None).await?;
                 self.database
                     .tx_mut(move |tx| async move {
@@ -363,6 +370,9 @@ impl<
                         tx.set_l2_head_block_number(head.number).await
                     })
                     .await?;
+
+                // Add all reverted transactions to the transaction pool.
+                self.reinsert_txs_into_pool(reverted_transactions).await;
                 self.notify(ChainOrchestratorEvent::FcsHeadUpdated(head));
                 let _ = sender.send(());
             }
@@ -560,6 +570,43 @@ impl<
         Ok(Some(ChainOrchestratorEvent::NewL1Block(block_number)))
     }
 
+    /// Collects reverted L2 transactions in [from, to], excluding L1 messages.
+    async fn collect_reverted_txs_in_range(
+        &self,
+        from: u64,
+        to: u64,
+    ) -> Result<Vec<ScrollTxEnvelope>, ChainOrchestratorError> {
+        let mut reverted_transactions: Vec<ScrollTxEnvelope> = Vec::new();
+        for number in from..=to {
+            let block = self
+                .l2_client
+                .get_block_by_number(number.into())
+                .full()
+                .await?
+                .ok_or_else(|| ChainOrchestratorError::L2BlockNotFoundInL2Client(number))?;
+
+            let block = block.into_consensus().map_transactions(|tx| tx.inner.into_inner());
+            reverted_transactions.extend(
+                block.into_body().transactions.into_iter().filter(|tx| !tx.is_l1_message()),
+            );
+        }
+        Ok(reverted_transactions)
+    }
+
+    /// Reinserts given L2 transactions into the transaction pool.
+    async fn reinsert_txs_into_pool(&self, txs: Vec<ScrollTxEnvelope>) {
+        for tx in txs {
+            let encoded_tx = tx.encoded_2718();
+            if let Err(err) = self.l2_client.send_raw_transaction(&encoded_tx).await {
+                tracing::warn!(
+                    target: "scroll::chain_orchestrator",
+                    ?err,
+                    "failed to reinsert reverted transaction into pool"
+                );
+            }
+        }
+    }
+
     /// Handles a reorganization event by deleting all indexed data which is greater than the
     /// provided block number.
     async fn handle_l1_reorg(
@@ -570,45 +617,35 @@ impl<
         let UnwindResult { l1_block_number, queue_index, l2_head_block_number, l2_safe_block_info } =
             self.database.unwind(genesis_hash, block_number).await?;
 
-        let (l2_head_block_info, reverted_transactions) = if let Some(block_number) =
-            l2_head_block_number
-        {
-            // Fetch the block hash of the new L2 head block.
-            let block_hash = self
-                .l2_client
-                .get_block_by_number(block_number.into())
-                .full()
-                .await?
-                .expect("L2 head block must exist")
-                .header
-                .hash_slow();
+        let (l2_head_block_info, reverted_transactions) =
+            if let Some(block_number) = l2_head_block_number {
+                // Fetch the block hash of the new L2 head block.
+                let block_hash = self
+                    .l2_client
+                    .get_block_by_number(block_number.into())
+                    .full()
+                    .await?
+                    .expect("L2 head block must exist")
+                    .header
+                    .hash_slow();
 
-            // Cancel the inflight payload building job if the head has changed.
-            if let Some(s) = self.sequencer.as_mut() {
-                s.cancel_payload_building_job();
+                // Cancel the inflight payload building job if the head has changed.
+                if let Some(s) = self.sequencer.as_mut() {
+                    s.cancel_payload_building_job();
+                };
+
+                // Collect transactions of reverted blocks from l2 client.
+                let reverted_transactions = self
+                    .collect_reverted_txs_in_range(
+                        block_number.saturating_add(1),
+                        self.engine.fcs().head_block_info().number,
+                    )
+                    .await?;
+
+                (Some(BlockInfo { number: block_number, hash: block_hash }), reverted_transactions)
+            } else {
+                (None, Vec::new())
             };
-
-            // Collect transactions of reverted blocks from l2 client.
-            let mut reverted_transactions: Vec<ScrollTxEnvelope> = Vec::new();
-            let current_head_number = self.engine.fcs().head_block_info().number;
-            if block_number < current_head_number {
-                for number in (block_number + 1)..=current_head_number {
-                    let block = self
-                        .l2_client
-                        .get_block_by_number(number.into())
-                        .full()
-                        .await?
-                        .ok_or_else(|| ChainOrchestratorError::L2BlockNotFoundInL2Client(number))?;
-
-                    let block = block.into_consensus().map_transactions(|tx| tx.inner.into_inner());
-                    reverted_transactions.extend(block.body.transactions().cloned());
-                }
-            }
-
-            (Some(BlockInfo { number: block_number, hash: block_hash }), reverted_transactions)
-        } else {
-            (None, Vec::new())
-        };
 
         // If the L1 reorg is before the origin of the inflight payload building job, cancel it.
         if Some(l1_block_number) <
@@ -628,19 +665,7 @@ impl<
         }
 
         // Add all reverted transactions to the transaction pool.
-        for tx in reverted_transactions {
-            if tx.is_l1_message() {
-                continue;
-            }
-            let encoded_tx = tx.encoded_2718();
-            if let Err(err) = self.l2_client.send_raw_transaction(&encoded_tx).await {
-                tracing::warn!(
-                    target: "scroll::chain_orchestrator",
-                    ?err,
-                    "failed to reinsert reverted transaction into pool"
-                );
-            }
-        }
+        self.reinsert_txs_into_pool(reverted_transactions).await;
 
         let event = ChainOrchestratorEvent::L1Reorg {
             l1_block_number,
