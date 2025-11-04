@@ -10,6 +10,10 @@ fn main() {
     use rollup_node::{ScrollRollupNode, ScrollRollupNodeConfig};
     use tracing::info;
 
+    // set default log level to info if RUST_LOG is not set
+    if std::env::var("RUST_LOG").is_err() {
+        std::env::set_var("RUST_LOG", "info");
+    }
     // enable tokio-console subscriber
     console_subscriber::init();
 
