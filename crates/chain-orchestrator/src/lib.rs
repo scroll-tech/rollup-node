@@ -11,6 +11,7 @@ use reth_network_api::{BlockDownloaderProvider, FullNetwork};
 use reth_network_p2p::{sync::SyncState as RethSyncState, FullBlockClient};
 use reth_scroll_node::ScrollNetworkPrimitives;
 use reth_scroll_primitives::ScrollBlock;
+use reth_tasks::shutdown::signal as shutdown_signal;
 use reth_tasks::shutdown::Shutdown;
 use reth_tokio_util::{EventSender, EventStream};
 use rollup_node_primitives::{
@@ -2210,8 +2211,7 @@ mod tests {
         // initialize database state
         db.set_latest_l1_block_number(0).await.unwrap();
 
-        println!("done");
-        let (mut chain_orchestrator, handle) = ChainOrchestrator::new(
+        let (chain_orchestrator, _handle) = ChainOrchestrator::new(
             db.clone(),
             ChainOrchestratorConfig::new(node.inner.chain_spec().clone(), 0, 0),
             Arc::new(block_client),
@@ -2241,11 +2241,49 @@ mod tests {
             .unwrap();
 
 
-        // chain_orchestrator.run_until_shutdown(None)
-        // TODO: Implement test scenarios:
-        // 1. Insert batches with non-sequential indices to trigger gap detection
-        // 2. Feed L1 notifications that trigger gap detection
-        // 3. Use mock_l1_watcher_handle.assert_reset_to() to verify gap recovery was triggered
+        // Spawn a task that constantly polls chain orchestrator to process L1 notifications
+        let (_signal, shutdown) = shutdown_signal();
+        tokio::spawn(async {
+            let (_signal, inner) = shutdown_signal();
+            let chain_orchestrator = chain_orchestrator.run_until_shutdown(inner);
+            tokio::select! {
+            biased;
+
+            _ = shutdown => {},
+            _ = chain_orchestrator => {},
+        }
+        });
+
+        let genesis_batch = create_test_batch(1, 100);
+        l1_notification_tx.send(Arc::new(L1Notification::BatchCommit(genesis_batch))).await.unwrap();
+        tokio::time::sleep(tokio::time::Duration::from_millis(50)).await;
+
+        let batch_with_gap = create_test_batch(3, 102);
+        l1_notification_tx.send(Arc::new(L1Notification::BatchCommit(batch_with_gap))).await.unwrap();
+        tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
+
+        mock_l1_watcher_handle.assert_reset_to(100);
+
+
+        // Insert first L1 message
+        // let l1_msg_0 = create_test_l1_message(0);
+        // l1_notification_tx.send(Arc::new(L1Notification::L1Message {
+        //     message: l1_msg_0,
+        //     block_number: 105,
+        //     block_timestamp: 0,
+        // })).await.unwrap();
+        // tokio::time::sleep(tokio::time::Duration::from_millis(50)).await;
+        //
+        // let l1_msg_with_gap = create_test_l1_message(2);
+        // l1_notification_tx.send(Arc::new(L1Notification::L1Message {
+        //     message: l1_msg_with_gap,
+        //     block_number: 107,
+        //     block_timestamp: 0,
+        // })).await.unwrap();
+        // tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
+        //
+        // // Verify that reset was triggered to block 105 (last known L1 message)
+        // mock_l1_watcher_handle.assert_reset_to(105);
     }
 
     // Helper function to create a simple test batch commit
