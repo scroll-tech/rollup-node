@@ -20,7 +20,7 @@ use rollup_node_primitives::{
 use rollup_node_providers::L1MessageProvider;
 use rollup_node_sequencer::{Sequencer, SequencerEvent};
 use rollup_node_signer::{SignatureAsBytes, SignerEvent, SignerHandle};
-use rollup_node_watcher::L1Notification;
+use rollup_node_watcher::{L1Notification, L1WatcherHandle, L1WatcherHandleTrait};
 use scroll_alloy_consensus::TxL1Message;
 use scroll_alloy_hardforks::ScrollHardforks;
 use scroll_alloy_network::Scroll;
@@ -96,6 +96,7 @@ pub struct ChainOrchestrator<
     L1MP,
     L2P,
     EC,
+    H: L1WatcherHandleTrait = L1WatcherHandle,
 > {
     /// The configuration for the chain orchestrator.
     config: ChainOrchestratorConfig<ChainSpec>,
@@ -112,7 +113,7 @@ pub struct ChainOrchestrator<
     /// A receiver for [`L1Notification`]s from the [`rollup_node_watcher::L1Watcher`].
     l1_notification_rx: Receiver<Arc<L1Notification>>,
     /// Handle to send commands to the L1 watcher (e.g., for gap recovery).
-    l1_watcher_handle: Option<rollup_node_watcher::L1WatcherHandle>,
+    l1_watcher_handle: Option<H>,
     /// The network manager that manages the scroll p2p network.
     network: ScrollNetwork<N>,
     /// The consensus algorithm used by the rollup node.
@@ -137,7 +138,8 @@ impl<
     L1MP: L1MessageProvider + Unpin + Clone + Send + Sync + 'static,
     L2P: Provider<Scroll> + 'static,
     EC: ScrollEngineApi + Sync + Send + 'static,
-> ChainOrchestrator<N, ChainSpec, L1MP, L2P, EC>
+    H: L1WatcherHandleTrait,
+> ChainOrchestrator<N, ChainSpec, L1MP, L2P, EC, H>
 {
     /// Creates a new chain orchestrator.
     #[allow(clippy::too_many_arguments)]
@@ -147,7 +149,7 @@ impl<
         block_client: Arc<FullBlockClient<<N as BlockDownloaderProvider>::Client>>,
         l2_provider: L2P,
         l1_notification_rx: Receiver<Arc<L1Notification>>,
-        l1_watcher_handle: Option<rollup_node_watcher::L1WatcherHandle>,
+        l1_watcher_handle: Option<H>,
         network: ScrollNetwork<N>,
         consensus: Box<dyn Consensus + 'static>,
         engine: Engine<EC>,
@@ -2141,79 +2143,14 @@ mod tests {
     use scroll_engine::ForkchoiceState;
     use scroll_network::ScrollNetworkHandle;
     use std::collections::HashMap;
-    use std::sync::{Arc, Mutex};
+    use std::sync::Arc;
     use tokio::sync::mpsc;
-
-    /// Mock command handler for L1Watcher that tracks all reset_to_block calls.
-    /// Returns a real L1WatcherHandle and a tracker for verifying calls.
-    #[derive(Clone)]
-    struct MockL1WatcherCommandTracker {
-        inner: Arc<Mutex<Vec<(u64, usize)>>>, // (block_number, channel_capacity)
-    }
-
-    impl MockL1WatcherCommandTracker {
-        fn new() -> Self {
-            Self { inner: Arc::new(Mutex::new(Vec::new())) }
-        }
-
-        fn track_reset(&self, block: u64, capacity: usize) {
-            self.inner.lock().unwrap().push((block, capacity));
-        }
-
-        fn get_reset_calls(&self) -> Vec<(u64, usize)> {
-            self.inner.lock().unwrap().clone()
-        }
-
-        fn assert_reset_called_with(&self, block: u64) {
-            let calls = self.get_reset_calls();
-            assert!(
-                calls.iter().any(|(b, _)| *b == block),
-                "Expected reset_to_block to be called with block {}, but got calls: {:?}",
-                block,
-                calls
-            );
-        }
-
-        fn assert_not_called(&self) {
-            let calls = self.get_reset_calls();
-            assert!(calls.is_empty(), "Expected no reset_to_block calls, but got: {:?}", calls);
-        }
-    }
-
-    /// Creates a real L1WatcherHandle backed by a mock command handler.
-    /// Returns the handle and a tracker for verifying calls.
-    fn create_mock_l1_watcher_handle() -> (
-        rollup_node_watcher::L1WatcherHandle,
-        MockL1WatcherCommandTracker,
-        tokio::task::JoinHandle<()>,
-    ) {
-        use rollup_node_watcher::{L1WatcherCommand, L1WatcherHandle};
-
-        let (command_tx, mut command_rx) = mpsc::unbounded_channel();
-        let handle = L1WatcherHandle::new(command_tx);
-        let tracker = MockL1WatcherCommandTracker::new();
-        let tracker_clone = tracker.clone();
-
-        // Spawn task to handle commands
-        let join_handle = tokio::spawn(async move {
-            while let Some(command) = command_rx.recv().await {
-                match command {
-                    L1WatcherCommand::ResetToBlock { block, new_sender, response_sender } => {
-                        let capacity = new_sender.max_capacity();
-                        tracker_clone.track_reset(block, capacity);
-                        // Respond success
-                        let _ = response_sender.send(());
-                    }
-                }
-            }
-        });
-
-        (handle, tracker, join_handle)
-    }
 
     #[tokio::test]
     async fn test_gap_recovery()
     {
+        use rollup_node_watcher::MockL1WatcherHandle;
+
         // setup a test node
         let (mut nodes, _tasks, _wallet) = setup(1, false).await.unwrap();
         let node = nodes.pop().unwrap();
@@ -2260,17 +2197,20 @@ mod tests {
         // prepare L1 notification channel
         let (l1_notification_tx, l1_notification_rx) = mpsc::channel(100);
 
+        // create mock L1 watcher handle for testing gap recovery
+        let mock_l1_watcher_handle = MockL1WatcherHandle::new();
 
         // initialize database state
         db.set_latest_l1_block_number(0).await.unwrap();
 
-        let chain_orchestrator = ChainOrchestrator::new(
+        println!("done");
+        let (mut chain_orchestrator, handle) = ChainOrchestrator::new(
             db.clone(),
             ChainOrchestratorConfig::new(node.inner.chain_spec().clone(), 0, 0),
             Arc::new(block_client),
             l2_provider,
             l1_notification_rx,
-            None, // TODO: set handle
+            Some(mock_l1_watcher_handle.clone()),
             network_handle.into_scroll_network().await,
             Box::new(NoopConsensus::default()),
             engine,
@@ -2292,6 +2232,13 @@ mod tests {
         )
             .await
             .unwrap();
+
+
+        // chain_orchestrator.run_until_shutdown(None)
+        // TODO: Implement test scenarios:
+        // 1. Insert batches with non-sequential indices to trigger gap detection
+        // 2. Feed L1 notifications that trigger gap detection
+        // 3. Use mock_l1_watcher_handle.assert_reset_to() to verify gap recovery was triggered
     }
 
     // Helper function to create a simple test batch commit
@@ -2312,7 +2259,4 @@ mod tests {
     fn create_test_l1_message(queue_index: u64) -> TxL1Message {
         TxL1Message { queue_index, ..Default::default() }
     }
-
-    #[tokio::test]
-    async fn test_batch_commit_gap_triggers_recovery() {}
 }

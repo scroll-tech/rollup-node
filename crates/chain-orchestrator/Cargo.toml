@@ -69,10 +69,12 @@ alloy-transport.workspace = true
 # rollup-node
 scroll-db = { workspace = true, features = ["test-utils"] }
 rollup-node-primitives = { workspace = true, features = ["arbitrary"] }
+rollup-node-watcher = { workspace = true, features = ["test-utils"] }
 
 # scroll
 reth-scroll-chainspec.workspace = true
 reth-scroll-forks.workspace = true
+reth-scroll-node = { workspace = true, features = ["test-utils"] }
 
 # reth
 reth-eth-wire-types.workspace = true
