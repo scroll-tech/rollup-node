@@ -90,7 +90,10 @@ async fn test_should_detect_reorg() -> eyre::Result<()> {
             if matches!(notification.as_ref(), L1Notification::Processed(_)) {
                 notification = l1_watcher.recv().await.unwrap();
             }
-            assert_eq!(notification.as_ref(), &L1Notification::Finalized(finalized.header.number));
+            assert_eq!(
+                notification.as_ref(),
+                &L1Notification::Finalized((&finalized.header).into())
+            );
         }
 
         if latest_number == latest.header.number {
@@ -114,9 +117,9 @@ async fn test_should_detect_reorg() -> eyre::Result<()> {
             // reorg
             assert!(matches!(notification.as_ref(), L1Notification::Reorg(_)));
             let notification = l1_watcher.recv().await.unwrap();
-            assert_eq!(notification.as_ref(), &L1Notification::NewBlock(latest.header.number));
+            assert_eq!(notification.as_ref(), &L1Notification::NewBlock((&latest.header).into()));
         } else {
-            assert_eq!(notification.as_ref(), &L1Notification::NewBlock(latest.header.number));
+            assert_eq!(notification.as_ref(), &L1Notification::NewBlock((&latest.header).into()));
         }
 
         // update finalized and latest.
@@ -192,7 +195,10 @@ async fn test_should_fetch_gap_in_unfinalized_blocks() -> eyre::Result<()> {
             if matches!(notification.as_ref(), L1Notification::Processed(_)) {
                 notification = l1_watcher.recv().await.unwrap();
             }
-            assert_eq!(notification.as_ref(), &L1Notification::Finalized(finalized.header.number));
+            assert_eq!(
+                notification.as_ref(),
+                &L1Notification::Finalized((&finalized.header).into())
+            );
         }
 
         if latest_number == latest.header.number {
@@ -211,7 +217,7 @@ async fn test_should_fetch_gap_in_unfinalized_blocks() -> eyre::Result<()> {
             notification = l1_watcher.recv().await.unwrap();
         }
 
-        assert_eq!(notification.as_ref(), &L1Notification::NewBlock(latest.header.number));
+        assert_eq!(notification.as_ref(), &L1Notification::NewBlock((&latest.header).into()));
 
         // update finalized and latest.
         finalized_number = finalized.header.number;

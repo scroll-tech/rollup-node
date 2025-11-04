@@ -5,7 +5,7 @@
 use alloy_primitives::{Bytes, B256};
 use criterion::{criterion_group, criterion_main, Criterion};
 use futures::StreamExt;
-use rollup_node_primitives::{BatchCommitData, BatchInfo, L1MessageEnvelope};
+use rollup_node_primitives::{BatchCommitData, BatchInfo, BatchStatus, L1MessageEnvelope};
 use rollup_node_providers::{
     test_utils::MockL1Provider, FullL1Provider, L1Provider, S3BlobProvider,
 };
@@ -87,6 +87,7 @@ async fn setup_pipeline<P: L1Provider + Clone + Send + Sync + 'static>(
             calldata: Arc::new(raw_calldata.into()),
             blob_versioned_hash: Some(hash),
             finalized_block_number: None,
+            reverted_block_number: None,
         };
         db.insert_batch(batch_data).await.unwrap();
     }
@@ -126,7 +127,7 @@ fn benchmark_pipeline_derivation_in_file_blobs(c: &mut Criterion) {
                     // commit 253 batches.
                     for index in BATCHES_START_INDEX..=BATCHES_STOP_INDEX {
                         let batch_info = BatchInfo { index, hash: Default::default() };
-                        pipeline.push_batch(batch_info.into()).await;
+                        pipeline.push_batch(batch_info.into(), BatchStatus::Committed).await;
                     }
 
                     tx.send(pipeline).unwrap();
@@ -162,7 +163,7 @@ fn benchmark_pipeline_derivation_s3_blobs(c: &mut Criterion) {
                     // commit 15 batches.
                     for index in BATCHES_START_INDEX..=BATCHES_START_INDEX + 15 {
                         let batch_info = BatchInfo { index, hash: Default::default() };
-                        pipeline.push_batch(batch_info.into()).await;
+                        pipeline.push_batch(batch_info.clone(), BatchStatus::Committed).await;
                     }
 
                     tx.send(pipeline).unwrap();

@@ -17,6 +17,15 @@ pub(crate) struct DatabaseMetrics {
 #[derive(Debug, Clone, PartialEq, Eq, Hash, EnumIter)]
 pub(crate) enum DatabaseOperation {
     // Write operations
+    InsertL1BlockInfo,
+    RemoveL1BlockInfoLeq,
+    DeleteBatchFinalizationGtBlockNumber,
+    SetBatchRevertBlockNumberForBatchRange,
+    DeleteBatchRevertGtBlockNumber,
+    FinalizeConsolidatedBatches,
+    ChangeBatchProcessingToCommittedStatus,
+    RemoveL1BlockInfoGt,
+    UpdateBatchStatus,
     InsertBatch,
     FinalizeBatchesUpToIndex,
     SetLatestL1BlockNumber,
@@ -43,6 +52,10 @@ pub(crate) enum DatabaseOperation {
     InsertSignature,
     // Read operations
     GetBatchByIndex,
+    GetBatchByHash,
+    GetBatchStatusByHash,
+    GetLatestIndexedEventL1BlockNumber,
+    GetL1BlockInfo,
     GetLatestL1BlockNumber,
     GetFinalizedL1BlockNumber,
     GetProcessedL1BlockNumber,
@@ -61,6 +74,21 @@ impl DatabaseOperation {
     /// Returns the str representation of the [`DatabaseOperation`].
     pub(crate) const fn as_str(&self) -> &'static str {
         match self {
+            Self::InsertL1BlockInfo => "insert_l1_block_info",
+            Self::RemoveL1BlockInfoLeq => "remove_l1_block_info_leq",
+            Self::DeleteBatchFinalizationGtBlockNumber => {
+                "delete_batch_finalization_gt_block_number"
+            }
+            Self::SetBatchRevertBlockNumberForBatchRange => {
+                "set_batch_revert_block_number_for_batch_range"
+            }
+            Self::DeleteBatchRevertGtBlockNumber => "delete_batch_revert_gt_block_number",
+            Self::FinalizeConsolidatedBatches => "finalize_consolidated_batches",
+            Self::ChangeBatchProcessingToCommittedStatus => {
+                "change_batch_processing_to_committed_status"
+            }
+            Self::UpdateBatchStatus => "update_batch_status",
+            Self::RemoveL1BlockInfoGt => "remove_l1_block_info_gt",
             Self::InsertBatch => "insert_batch",
             Self::FinalizeBatchesUpToIndex => "finalize_batches_up_to_index",
             Self::SetLatestL1BlockNumber => "set_latest_l1_block_number",
@@ -88,6 +116,10 @@ impl DatabaseOperation {
             Self::Unwind => "unwind",
             Self::InsertSignature => "insert_signature",
             Self::GetBatchByIndex => "get_batch_by_index",
+            Self::GetBatchByHash => "get_batch_by_hash",
+            Self::GetBatchStatusByHash => "get_batch_status_by_hash",
+            Self::GetLatestIndexedEventL1BlockNumber => "get_latest_indexed_event_l1_block_number",
+            Self::GetL1BlockInfo => "get_l1_block_info",
             Self::GetLatestL1BlockNumber => "get_latest_l1_block_number",
             Self::GetFinalizedL1BlockNumber => "get_finalized_l1_block_number",
             Self::GetProcessedL1BlockNumber => "get_processed_l1_block_number",

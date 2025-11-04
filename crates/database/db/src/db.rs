@@ -148,6 +148,111 @@ macro_rules! metered {
 
 #[async_trait::async_trait]
 impl DatabaseWriteOperations for Database {
+    async fn insert_l1_block_info(&self, block_info: BlockInfo) -> Result<(), DatabaseError> {
+        metered!(
+            DatabaseOperation::InsertL1BlockInfo,
+            self,
+            tx_mut(move |tx| { async move { tx.insert_l1_block_info(block_info).await } })
+        )
+    }
+
+    async fn remove_l1_block_info_leq(&self, block_info: u64) -> Result<(), DatabaseError> {
+        metered!(
+            DatabaseOperation::RemoveL1BlockInfoLeq,
+            self,
+            tx_mut(move |tx| { async move { tx.remove_l1_block_info_leq(block_info).await } })
+        )
+    }
+
+    async fn remove_l1_block_info_gt(&self, block_info: u64) -> Result<(), DatabaseError> {
+        metered!(
+            DatabaseOperation::RemoveL1BlockInfoGt,
+            self,
+            tx_mut(move |tx| { async move { tx.remove_l1_block_info_gt(block_info).await } })
+        )
+    }
+
+    async fn delete_batch_finalization_gt_block_number(
+        &self,
+        block_number: u64,
+    ) -> Result<(), DatabaseError> {
+        metered!(
+            DatabaseOperation::DeleteBatchFinalizationGtBlockNumber,
+            self,
+            tx_mut(move |tx| {
+                async move { tx.delete_batch_finalization_gt_block_number(block_number).await }
+            })
+        )
+    }
+
+    async fn set_batch_revert_block_number_for_batch_range(
+        &self,
+        start_index: u64,
+        end_index: u64,
+        block_info: BlockInfo,
+    ) -> Result<(), DatabaseError> {
+        metered!(
+            DatabaseOperation::SetBatchRevertBlockNumberForBatchRange,
+            self,
+            tx_mut(move |tx| {
+                async move {
+                    tx.set_batch_revert_block_number_for_batch_range(
+                        start_index,
+                        end_index,
+                        block_info,
+                    )
+                    .await
+                }
+            })
+        )
+    }
+
+    async fn delete_batch_revert_gt_block_number(
+        &self,
+        block_number: u64,
+    ) -> Result<u64, DatabaseError> {
+        metered!(
+            DatabaseOperation::DeleteBatchRevertGtBlockNumber,
+            self,
+            tx_mut(
+                move |tx| async move { tx.delete_batch_revert_gt_block_number(block_number).await }
+            )
+        )
+    }
+
+    async fn finalize_consolidated_batches(
+        &self,
+        finalized_l1_block_number: u64,
+    ) -> Result<Option<BlockInfo>, DatabaseError> {
+        metered!(
+            DatabaseOperation::FinalizeConsolidatedBatches,
+            self,
+            tx_mut(move |tx| async move {
+                tx.finalize_consolidated_batches(finalized_l1_block_number).await
+            })
+        )
+    }
+
+    async fn change_batch_processing_to_committed_status(&self) -> Result<(), DatabaseError> {
+        metered!(
+            DatabaseOperation::ChangeBatchProcessingToCommittedStatus,
+            self,
+            tx_mut(move |tx| async move { tx.change_batch_processing_to_committed_status().await })
+        )
+    }
+
+    async fn update_batch_status(
+        &self,
+        batch_hash: B256,
+        status: rollup_node_primitives::BatchStatus,
+    ) -> Result<(), DatabaseError> {
+        metered!(
+            DatabaseOperation::UpdateBatchStatus,
+            self,
+            tx_mut(move |tx| async move { tx.update_batch_status(batch_hash, status).await })
+        )
+    }
+
     async fn insert_batch(&self, batch_commit: BatchCommitData) -> Result<(), DatabaseError> {
         metered!(
             DatabaseOperation::InsertBatch,
@@ -270,14 +375,11 @@ impl DatabaseWriteOperations for Database {
         )
     }
 
-    async fn prepare_on_startup(
-        &self,
-        genesis_hash: B256,
-    ) -> Result<(Option<BlockInfo>, Option<u64>), DatabaseError> {
+    async fn prepare_on_startup(&self) -> Result<(Vec<BlockInfo>, Option<u64>), DatabaseError> {
         metered!(
             DatabaseOperation::PrepareOnStartup,
             self,
-            tx_mut(move |tx| async move { tx.prepare_on_startup(genesis_hash).await })
+            tx_mut(move |tx| async move { tx.prepare_on_startup().await })
         )
     }
 
@@ -383,15 +485,11 @@ impl DatabaseWriteOperations for Database {
         )
     }
 
-    async fn unwind(
-        &self,
-        genesis_hash: B256,
-        l1_block_number: u64,
-    ) -> Result<UnwindResult, DatabaseError> {
+    async fn unwind(&self, l1_block_number: u64) -> Result<UnwindResult, DatabaseError> {
         metered!(
             DatabaseOperation::Unwind,
             self,
-            tx_mut(move |tx| async move { tx.unwind(genesis_hash, l1_block_number).await })
+            tx_mut(move |tx| async move { tx.unwind(l1_block_number).await })
         )
     }
 
@@ -418,6 +516,45 @@ impl DatabaseReadOperations for Database {
             DatabaseOperation::GetBatchByIndex,
             self,
             tx(move |tx| async move { tx.get_batch_by_index(batch_index).await })
+        )
+    }
+
+    async fn get_batch_by_hash(
+        &self,
+        batch_hash: B256,
+    ) -> Result<Option<BatchCommitData>, DatabaseError> {
+        metered!(
+            DatabaseOperation::GetBatchByHash,
+            self,
+            tx(move |tx| async move { tx.get_batch_by_hash(batch_hash).await })
+        )
+    }
+
+    #[cfg(test)]
+    async fn get_batch_status_by_hash(
+        &self,
+        batch_hash: B256,
+    ) -> Result<Option<rollup_node_primitives::BatchStatus>, DatabaseError> {
+        metered!(
+            DatabaseOperation::GetBatchStatusByHash,
+            self,
+            tx(move |tx| async move { tx.get_batch_status_by_hash(batch_hash).await })
+        )
+    }
+
+    async fn get_latest_indexed_event_l1_block_number(&self) -> Result<Option<u64>, DatabaseError> {
+        metered!(
+            DatabaseOperation::GetLatestIndexedEventL1BlockNumber,
+            self,
+            tx(|tx| async move { tx.get_latest_indexed_event_l1_block_number().await })
+        )
+    }
+
+    async fn get_l1_block_info(&self) -> Result<Vec<BlockInfo>, DatabaseError> {
+        metered!(
+            DatabaseOperation::GetL1BlockInfo,
+            self,
+            tx(|tx| async move { tx.get_l1_block_info().await })
         )
     }
 
@@ -502,9 +639,7 @@ impl DatabaseReadOperations for Database {
         )
     }
 
-    async fn get_latest_safe_l2_info(
-        &self,
-    ) -> Result<Option<(BlockInfo, BatchInfo)>, DatabaseError> {
+    async fn get_latest_safe_l2_info(&self) -> Result<(BlockInfo, BatchInfo), DatabaseError> {
         metered!(
             DatabaseOperation::GetLatestSafeL2Info,
             self,
@@ -735,7 +870,7 @@ mod test {
         let mut u = Unstructured::new(&bytes);
 
         // Generate 10 finalized batches at L1 block 100.
-        for i in 0..10 {
+        for i in 1..10 {
             let batch_commit = BatchCommitData {
                 index: i,
                 calldata: Arc::new(vec![].into()),
@@ -770,7 +905,13 @@ mod test {
             .await;
         for batch in batches {
             let batch = batch.unwrap();
-            if batch.index < 10 {
+            println!(
+                "Batch index: {}, finalized_block_number: {:?}",
+                batch.index, batch.finalized_block_number
+            );
+            if batch.index == 0 {
+                assert_eq!(batch.finalized_block_number, Some(0));
+            } else if batch.index < 10 {
                 assert_eq!(batch.finalized_block_number, Some(100));
             } else if batch.index <= 15 {
                 assert_eq!(batch.finalized_block_number, Some(200));
@@ -828,6 +969,8 @@ mod test {
 
     #[tokio::test]
     async fn test_derived_block_exists() {
+        reth_tracing::init_test_tracing();
+
         // Set up the test database.
         let db = setup_test_db().await;
 
@@ -1155,7 +1298,7 @@ mod test {
         let mut u = Unstructured::new(&bytes);
 
         // Initially should return the genesis block and hash.
-        let (latest_safe_block, batch) = db.get_latest_safe_l2_info().await.unwrap().unwrap();
+        let (latest_safe_block, batch) = db.get_latest_safe_l2_info().await.unwrap();
         assert_eq!(latest_safe_block.number, 0);
         assert_eq!(batch.index, 0);
 
@@ -1172,11 +1315,13 @@ mod test {
 
         // Should return the highest safe block (block 201)
         let latest_safe = db.get_latest_safe_l2_info().await.unwrap();
-        assert_eq!(latest_safe, Some((safe_block_2, batch_info)));
+        assert_eq!(latest_safe, (safe_block_2, batch_info));
     }
 
     #[tokio::test]
     async fn test_delete_l2_blocks_gt_block_number() {
+        reth_tracing::init_test_tracing();
+
         // Set up the test database.
         let db = setup_test_db().await;
 
@@ -1217,7 +1362,7 @@ mod test {
         let db = setup_test_db().await;
 
         // Generate unstructured bytes.
-        let mut bytes = [0u8; 1024];
+        let mut bytes = [0u8; 4096];
         rand::rng().fill(bytes.as_mut_slice());
         let mut u = Unstructured::new(&bytes);
 
@@ -1310,6 +1455,8 @@ mod test {
 
     #[tokio::test]
     async fn test_insert_block_upsert_behavior() {
+        reth_tracing::init_test_tracing();
+
         // Set up the test database.
         let db = setup_test_db().await;
 
@@ -1377,25 +1524,31 @@ mod test {
         let mut u = Unstructured::new(&bytes);
 
         // Insert batch 1 and associate it with two blocks in the database
+        let l1_block_info_1 = BlockInfo { number: 10, hash: B256::arbitrary(&mut u).unwrap() };
         let batch_data_1 =
             BatchCommitData { index: 1, block_number: 10, ..Arbitrary::arbitrary(&mut u).unwrap() };
         let block_1 = BlockInfo { number: 1, hash: B256::arbitrary(&mut u).unwrap() };
         let block_2 = BlockInfo { number: 2, hash: B256::arbitrary(&mut u).unwrap() };
+        db.insert_l1_block_info(l1_block_info_1).await.unwrap();
         db.insert_batch(batch_data_1.clone()).await.unwrap();
         db.insert_blocks(vec![block_1, block_2], batch_data_1.clone().into()).await.unwrap();
 
         // Insert batch 2 and associate it with one block in the database
+        let l1_block_info_2 = BlockInfo { number: 20, hash: B256::arbitrary(&mut u).unwrap() };
         let batch_data_2 =
             BatchCommitData { index: 2, block_number: 20, ..Arbitrary::arbitrary(&mut u).unwrap() };
         let block_3 = BlockInfo { number: 3, hash: B256::arbitrary(&mut u).unwrap() };
+        db.insert_l1_block_info(l1_block_info_2).await.unwrap();
         db.insert_batch(batch_data_2.clone()).await.unwrap();
         db.insert_blocks(vec![block_3], batch_data_2.clone().into()).await.unwrap();
 
         // Insert batch 3 produced at the same block number as batch 2 and associate it with one
         // block
+        let l1_block_info_3 = BlockInfo { number: 30, hash: B256::arbitrary(&mut u).unwrap() };
         let batch_data_3 =
-            BatchCommitData { index: 3, block_number: 20, ..Arbitrary::arbitrary(&mut u).unwrap() };
+            BatchCommitData { index: 3, block_number: 30, ..Arbitrary::arbitrary(&mut u).unwrap() };
         let block_4 = BlockInfo { number: 4, hash: B256::arbitrary(&mut u).unwrap() };
+        db.insert_l1_block_info(l1_block_info_3).await.unwrap();
         db.insert_batch(batch_data_3.clone()).await.unwrap();
         db.insert_blocks(vec![block_4], batch_data_3.clone().into()).await.unwrap();
 
@@ -1419,24 +1572,10 @@ mod test {
         assert_eq!(retried_block_4, block_4);
 
         // Call prepare_on_startup which should not error
-        let result = db.prepare_on_startup(Default::default()).await.unwrap();
+        let result = db.prepare_on_startup().await.unwrap();
 
         // verify the result
-        assert_eq!(result, (Some(block_2), Some(11)));
-
-        // Verify that batches 2 and 3 are deleted
-        let batch_1 = db.get_batch_by_index(1).await.unwrap();
-        let batch_2 = db.get_batch_by_index(2).await.unwrap();
-        let batch_3 = db.get_batch_by_index(3).await.unwrap();
-        assert!(batch_1.is_some());
-        assert!(batch_2.is_none());
-        assert!(batch_3.is_none());
-
-        // Verify that blocks 3 and 4 are deleted
-        let retried_block_3 = db.get_l2_block_info_by_number(3).await.unwrap();
-        let retried_block_4 = db.get_l2_block_info_by_number(4).await.unwrap();
-        assert!(retried_block_3.is_none());
-        assert!(retried_block_4.is_none());
+        assert_eq!(result, (vec![l1_block_info_3], Some(l1_block_info_3.number)));
     }
 
     #[tokio::test]

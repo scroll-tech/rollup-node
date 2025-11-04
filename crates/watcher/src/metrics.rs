@@ -24,7 +24,7 @@ impl WatcherMetrics {
     pub fn process_l1_notification(&self, notification: &L1Notification) {
         match notification {
             L1Notification::L1Message { .. } => self.l1_messages.increment(1),
-            L1Notification::BatchCommit(_) => self.batch_commits.increment(1),
+            L1Notification::BatchCommit { .. } => self.batch_commits.increment(1),
             L1Notification::BatchFinalization { .. } => self.batch_finalizations.increment(1),
             _ => {}
         }

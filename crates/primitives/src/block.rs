@@ -74,6 +74,12 @@ impl From<Header> for BlockInfo {
     }
 }
 
+impl From<&alloy_rpc_types_eth::Header> for BlockInfo {
+    fn from(value: &alloy_rpc_types_eth::Header) -> Self {
+        Self { number: value.number, hash: value.hash }
+    }
+}
+
 impl std::fmt::Display for BlockInfo {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "BlockInfo {{ number: {}, hash: 0x{} }}", self.number, self.hash)

@@ -258,14 +258,12 @@ impl ScrollRollupNodeConfig {
         let mut fcs =
             ForkchoiceState::from_provider(&l2_provider).await.unwrap_or_else(chain_spec_fcs);
 
-        let genesis_hash = chain_spec.genesis_hash();
         let (l1_start_block_number, mut l2_head_block_number) = db
             .tx_mut(move |tx| async move {
                 // On startup we replay the latest batch of blocks from the database as such we set
                 // the safe block hash to the latest block hash associated with the
                 // previous consolidated batch in the database.
-                let (_startup_safe_block, l1_start_block_number) =
-                    tx.prepare_on_startup(genesis_hash).await?;
+                let (_startup_safe_block, l1_start_block_number) = tx.prepare_on_startup().await?;
 
                 let l2_head_block_number = tx.get_l2_head_block_number().await?;
 

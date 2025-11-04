@@ -91,6 +91,7 @@ async fn can_bridge_l1_messages() -> eyre::Result<()> {
     // Send a notification to set the L1 to synced
     l1_watcher_tx.send(Arc::new(L1Notification::Synced)).await?;
 
+    let block_info = BlockInfo { number: 0, hash: B256::random() };
     let l1_message = TxL1Message {
         queue_index: 0,
         gas_limit: 21000,
@@ -102,7 +103,7 @@ async fn can_bridge_l1_messages() -> eyre::Result<()> {
     l1_watcher_tx
         .send(Arc::new(L1Notification::L1Message {
             message: l1_message.clone(),
-            block_number: 0,
+            block_info,
             block_timestamp: 1000,
         }))
         .await?;
@@ -871,6 +872,7 @@ async fn shutdown_consolidates_most_recent_batch_on_startup() -> eyre::Result<()
         l1_notification_tx.unwrap();
 
     // Load test batches
+    let block_0_info = BlockInfo { number: 18318207, hash: B256::random() };
     let raw_calldata_0 = read_to_bytes("./tests/testdata/batch_0_calldata.bin")?;
     let batch_0_data = BatchCommitData {
         hash: b256!("5AAEB6101A47FC16866E80D77FFE090B6A7B3CF7D988BE981646AB6AEDFA2C42"),
@@ -880,7 +882,9 @@ async fn shutdown_consolidates_most_recent_batch_on_startup() -> eyre::Result<()
         calldata: Arc::new(raw_calldata_0),
         blob_versioned_hash: None,
         finalized_block_number: None,
+        reverted_block_number: None,
     };
+    let block_1_info = BlockInfo { number: 18318215, hash: B256::random() };
     let raw_calldata_1 = read_to_bytes("./tests/testdata/batch_1_calldata.bin")?;
     let batch_1_data = BatchCommitData {
         hash: b256!("AA8181F04F8E305328A6117FA6BC13FA2093A3C4C990C5281DF95A1CB85CA18F"),
@@ -890,22 +894,28 @@ async fn shutdown_consolidates_most_recent_batch_on_startup() -> eyre::Result<()
         calldata: Arc::new(raw_calldata_1),
         blob_versioned_hash: None,
         finalized_block_number: None,
+        reverted_block_number: None,
     };
 
     println!("Sending first batch commit and finalization");
 
     // Send the first batch commit to the rollup node manager and finalize it.
-    l1_notification_tx.send(Arc::new(L1Notification::BatchCommit(batch_0_data.clone()))).await?;
+    l1_notification_tx
+        .send(Arc::new(L1Notification::BatchCommit {
+            block_info: block_0_info,
+            data: batch_0_data.clone(),
+        }))
+        .await?;
     l1_notification_tx
         .send(Arc::new(L1Notification::BatchFinalization {
             hash: batch_0_data.hash,
             index: batch_0_data.index,
-            block_number: batch_0_data.block_number,
+            block_info: block_0_info,
         }))
         .await?;
 
     // Lets finalize the first batch
-    l1_notification_tx.send(Arc::new(L1Notification::Finalized(batch_0_data.block_number))).await?;
+    l1_notification_tx.send(Arc::new(L1Notification::Finalized(block_0_info))).await?;
 
     println!("First batch finalized, iterating until first batch is consolidated");
 
@@ -922,19 +932,22 @@ async fn shutdown_consolidates_most_recent_batch_on_startup() -> eyre::Result<()
     println!("First batch consolidated, sending second batch commit and finalization");
 
     // Now we send the second batch commit and finalize it.
-    l1_notification_tx.send(Arc::new(L1Notification::BatchCommit(batch_1_data.clone()))).await?;
+    l1_notification_tx
+        .send(Arc::new(L1Notification::BatchCommit {
+            block_info: block_1_info,
+            data: batch_1_data.clone(),
+        }))
+        .await?;
     l1_notification_tx
         .send(Arc::new(L1Notification::BatchFinalization {
             hash: batch_1_data.hash,
             index: batch_1_data.index,
-            block_number: batch_1_data.block_number,
+            block_info: block_1_info,
         }))
         .await?;
 
     // Lets finalize the second batch.
-    l1_notification_tx.send(Arc::new(L1Notification::Finalized(batch_1_data.block_number))).await?;
-
-    println!("Second batch finalized, iterating until block 40 is consolidated");
+    l1_notification_tx.send(Arc::new(L1Notification::Finalized(block_1_info))).await?;
 
     // The second batch commit contains 42 blocks (5-57), lets iterate until the rnm has
     // consolidated up to block 40.
@@ -1013,17 +1026,11 @@ async fn shutdown_consolidates_most_recent_batch_on_startup() -> eyre::Result<()
     // Request an event stream from the rollup node manager.
     let mut rnm_events = handle.get_event_listener().await?;
 
+    println!("im here");
+
     // Send the second batch again to mimic the watcher behaviour.
-    l1_notification_tx.send(Arc::new(L1Notification::BatchCommit(batch_1_data.clone()))).await?;
-    l1_notification_tx
-        .send(Arc::new(L1Notification::BatchFinalization {
-            hash: batch_1_data.hash,
-            index: batch_1_data.index,
-            block_number: batch_1_data.block_number,
-        }))
-        .await?;
-    // Lets finalize the second batch.
-    l1_notification_tx.send(Arc::new(L1Notification::Finalized(batch_1_data.block_number))).await?;
+    let block_1_info = BlockInfo { number: 18318215, hash: B256::random() };
+    l1_notification_tx.send(Arc::new(L1Notification::Finalized(block_1_info))).await?;
 
     // Lets fetch the first consolidated block event - this should be the first block of the batch.
     let l2_block = loop {
@@ -1225,6 +1232,7 @@ async fn can_handle_batch_revert() -> eyre::Result<()> {
     let mut rnm_events = handle.get_event_listener().await?;
 
     // Load test batches
+    let batch_0_block_info = BlockInfo { number: 18318207, hash: B256::random() };
     let raw_calldata_0 = read_to_bytes("./tests/testdata/batch_0_calldata.bin")?;
     let batch_0_data = BatchCommitData {
         hash: b256!("5AAEB6101A47FC16866E80D77FFE090B6A7B3CF7D988BE981646AB6AEDFA2C42"),
@@ -1234,7 +1242,9 @@ async fn can_handle_batch_revert() -> eyre::Result<()> {
         calldata: Arc::new(raw_calldata_0),
         blob_versioned_hash: None,
         finalized_block_number: None,
+        reverted_block_number: None,
     };
+    let batch_1_block_info = BlockInfo { number: 18318215, hash: B256::random() };
     let raw_calldata_1 = read_to_bytes("./tests/testdata/batch_1_calldata.bin")?;
     let batch_1_data = BatchCommitData {
         hash: b256!("AA8181F04F8E305328A6117FA6BC13FA2093A3C4C990C5281DF95A1CB85CA18F"),
@@ -1244,7 +1254,9 @@ async fn can_handle_batch_revert() -> eyre::Result<()> {
         calldata: Arc::new(raw_calldata_1),
         blob_versioned_hash: None,
         finalized_block_number: None,
+        reverted_block_number: None,
     };
+    let revert_batch_block_info = BlockInfo { number: 18318220, hash: B256::random() };
     let revert_batch_data = BatchCommitData {
         hash: B256::random(),
         index: 2,
@@ -1253,10 +1265,16 @@ async fn can_handle_batch_revert() -> eyre::Result<()> {
         calldata: Arc::new(Default::default()),
         blob_versioned_hash: None,
         finalized_block_number: None,
+        reverted_block_number: None,
     };
 
     // Send the first batch.
-    l1_watcher_tx.send(Arc::new(L1Notification::BatchCommit(batch_0_data))).await?;
+    l1_watcher_tx
+        .send(Arc::new(L1Notification::BatchCommit {
+            block_info: batch_0_block_info,
+            data: batch_0_data,
+        }))
+        .await?;
 
     // Read the first 4 blocks.
     loop {
@@ -1270,7 +1288,12 @@ async fn can_handle_batch_revert() -> eyre::Result<()> {
     }
 
     // Send the second batch.
-    l1_watcher_tx.send(Arc::new(L1Notification::BatchCommit(batch_1_data))).await?;
+    l1_watcher_tx
+        .send(Arc::new(L1Notification::BatchCommit {
+            block_info: batch_1_block_info,
+            data: batch_1_data,
+        }))
+        .await?;
 
     // Read the next 42 blocks.
     loop {
@@ -1290,7 +1313,12 @@ async fn can_handle_batch_revert() -> eyre::Result<()> {
     assert!(status.l2.fcs.safe_block_info().number > 4);
 
     // Send the third batch which should trigger the revert.
-    l1_watcher_tx.send(Arc::new(L1Notification::BatchCommit(revert_batch_data))).await?;
+    l1_watcher_tx
+        .send(Arc::new(L1Notification::BatchCommit {
+            block_info: revert_batch_block_info,
+            data: revert_batch_data,
+        }))
+        .await?;
 
     // Wait for the third batch to be proceeded.
     tokio::time::sleep(Duration::from_millis(300)).await;
@@ -1343,6 +1371,7 @@ async fn can_handle_l1_message_reorg() -> eyre::Result<()> {
     wait_for_block_imported_5s(&mut node1_rnm_events, 10).await?;
 
     // Send a L1 message and wait for it to be indexed.
+    let block_10_block_info = BlockInfo { number: 10, hash: B256::random() };
     let l1_message_notification = L1Notification::L1Message {
         message: TxL1Message {
             queue_index: 0,
@@ -1352,19 +1381,19 @@ async fn can_handle_l1_message_reorg() -> eyre::Result<()> {
             sender: address!("f39Fd6e51aad88F6F4ce6aB8827279cffFb92266"),
             input: Default::default(),
         },
-        block_number: 10,
+        block_info: block_10_block_info,
         block_timestamp: 0,
     };
 
     // Send the L1 message to the sequencer node.
     node0_l1_watcher_tx.send(Arc::new(l1_message_notification.clone())).await?;
-    node0_l1_watcher_tx.send(Arc::new(L1Notification::NewBlock(10))).await?;
+    node0_l1_watcher_tx.send(Arc::new(L1Notification::NewBlock(block_10_block_info))).await?;
     wait_for_event_5s(&mut node0_rnm_events, ChainOrchestratorEvent::L1MessageCommitted(0)).await?;
     wait_for_event_5s(&mut node0_rnm_events, ChainOrchestratorEvent::NewL1Block(10)).await?;
 
     // Send L1 the L1 message to follower node.
     node1_l1_watcher_tx.send(Arc::new(l1_message_notification)).await?;
-    node1_l1_watcher_tx.send(Arc::new(L1Notification::NewBlock(10))).await?;
+    node1_l1_watcher_tx.send(Arc::new(L1Notification::NewBlock(block_10_block_info))).await?;
     wait_for_event_5s(&mut node1_rnm_events, ChainOrchestratorEvent::L1MessageCommitted(0)).await?;
     wait_for_event_5s(&mut node1_rnm_events, ChainOrchestratorEvent::NewL1Block(10)).await?;
 
@@ -1718,6 +1747,7 @@ async fn can_reject_l2_block_with_unknown_l1_message() -> eyre::Result<()> {
     wait_for_block_imported_5s(&mut node1_rnm_events, 10).await?;
 
     // Send a L1 message and wait for it to be indexed.
+    let block_10_block_info = BlockInfo { number: 10, hash: B256::random() };
     let l1_message_notification = L1Notification::L1Message {
         message: TxL1Message {
             queue_index: 0,
@@ -1727,13 +1757,13 @@ async fn can_reject_l2_block_with_unknown_l1_message() -> eyre::Result<()> {
             sender: address!("f39Fd6e51aad88F6F4ce6aB8827279cffFb92266"),
             input: Default::default(),
         },
-        block_number: 10,
+        block_info: block_10_block_info,
         block_timestamp: 0,
     };
 
     // Send the L1 message to the sequencer node but not to follower node.
     node0_l1_watcher_tx.send(Arc::new(l1_message_notification.clone())).await?;
-    node0_l1_watcher_tx.send(Arc::new(L1Notification::NewBlock(10))).await?;
+    node0_l1_watcher_tx.send(Arc::new(L1Notification::NewBlock(block_10_block_info))).await?;
     wait_for_event_5s(&mut node0_rnm_events, ChainOrchestratorEvent::L1MessageCommitted(0)).await?;
     wait_for_event_5s(&mut node0_rnm_events, ChainOrchestratorEvent::NewL1Block(10)).await?;
 
@@ -1772,7 +1802,7 @@ async fn can_reject_l2_block_with_unknown_l1_message() -> eyre::Result<()> {
 
     // Finally send L1 the L1 message to follower node.
     node1_l1_watcher_tx.send(Arc::new(l1_message_notification)).await?;
-    node1_l1_watcher_tx.send(Arc::new(L1Notification::NewBlock(10))).await?;
+    node1_l1_watcher_tx.send(Arc::new(L1Notification::NewBlock(block_10_block_info))).await?;
     wait_for_event_5s(&mut node1_rnm_events, ChainOrchestratorEvent::L1MessageCommitted(0)).await?;
     wait_for_event_5s(&mut node1_rnm_events, ChainOrchestratorEvent::NewL1Block(10)).await?;
 

@@ -45,6 +45,7 @@ async fn test_should_not_miss_logs_on_reorg() -> eyre::Result<()> {
             queue_transaction.inner = inner_log;
             queue_transaction.block_number = Some(b.header.number);
             queue_transaction.block_timestamp = Some(b.header.timestamp);
+            queue_transaction.block_hash = Some(b.header.hash);
             queue_transaction
         })
         .collect();

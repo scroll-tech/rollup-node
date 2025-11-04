@@ -7,7 +7,7 @@ use alloy_primitives::{Address, B256};
 use alloy_rpc_types_engine::PayloadAttributes;
 use core::{fmt::Debug, future::Future, pin::Pin, task::Poll};
 use futures::{stream::FuturesOrdered, Stream, StreamExt};
-use rollup_node_primitives::{BatchCommitData, BatchInfo, L1MessageEnvelope};
+use rollup_node_primitives::{BatchCommitData, BatchInfo, BatchStatus, L1MessageEnvelope};
 use rollup_node_providers::L1Provider;
 use scroll_alloy_rpc_types_engine::{BlockDataHint, ScrollPayloadAttributes};
 use scroll_codec::{decoding::payload::PayloadData, Codec};
@@ -34,7 +34,7 @@ use std::{boxed::Box, sync::Arc, time::Instant, vec::Vec};
 #[derive(Debug)]
 pub struct DerivationPipeline {
     /// The sender for the pipeline used to push new batches to be processed.
-    batch_sender: UnboundedSender<Arc<BatchInfo>>,
+    batch_sender: UnboundedSender<Arc<BatchDerivationRequest>>,
     /// The receiver for the pipeline used to receive the results of the batch processing.
     result_receiver: UnboundedReceiver<BatchDerivationResult>,
     /// The number of active batches being processed.
@@ -58,9 +58,9 @@ impl DerivationPipeline {
     }
 
     /// Pushes a new batch info to the derivation pipeline.
-    pub async fn push_batch(&mut self, batch_info: Arc<BatchInfo>) {
+    pub async fn push_batch(&mut self, batch_info: BatchInfo, target_status: BatchStatus) {
         self.batch_sender
-            .send(batch_info)
+            .send(Arc::new(BatchDerivationRequest { batch_info, target_status }))
             .expect("Failed to send batch info to derivation pipeline");
         self.len += 1;
     }
@@ -101,7 +101,7 @@ const DERIVATION_PIPELINE_WORKER_CONCURRENCY: usize = 3;
 #[derive(Debug)]
 pub struct DerivationPipelineWorker<P> {
     /// The receiver for the pipeline used to receive new batches to be derived.
-    batch_receiver: UnboundedReceiver<Arc<BatchInfo>>,
+    batch_receiver: UnboundedReceiver<Arc<BatchDerivationRequest>>,
     /// The sender for the pipeline used to send the results of the batch derivation.
     result_sender: UnboundedSender<BatchDerivationResult>,
     /// The active batch derivation futures.
@@ -122,7 +122,7 @@ impl<P> DerivationPipelineWorker<P> {
         l1_provider: P,
         database: Arc<Database>,
         l1_v2_message_queue_start_index: u64,
-        batch_receiver: UnboundedReceiver<Arc<BatchInfo>>,
+        batch_receiver: UnboundedReceiver<Arc<BatchDerivationRequest>>,
         result_sender: UnboundedSender<BatchDerivationResult>,
     ) -> Self {
         Self {
@@ -146,7 +146,8 @@ where
         l1_provider: P,
         database: Arc<Database>,
         l1_v2_message_queue_start_index: u64,
-    ) -> (UnboundedSender<Arc<BatchInfo>>, UnboundedReceiver<BatchDerivationResult>) {
+    ) -> (UnboundedSender<Arc<BatchDerivationRequest>>, UnboundedReceiver<BatchDerivationResult>)
+    {
         let (batch_sender, batch_receiver) = tokio::sync::mpsc::unbounded_channel();
         let (result_sender, result_receiver) = tokio::sync::mpsc::unbounded_channel();
 
@@ -175,8 +176,8 @@ where
 
                 maybe_batch = self.batch_receiver.recv(), if self.futures.len() < DERIVATION_PIPELINE_WORKER_CONCURRENCY => {
                     match maybe_batch {
-                        Some(batch_info) => {
-                            let fut = self.derivation_future(batch_info);
+                        Some(request) => {
+                            let fut = self.derivation_future(request);
                             self.futures.push_back(fut);
                         }
                         None => {
@@ -204,7 +205,7 @@ where
         }
     }
 
-    fn derivation_future(&self, batch_info: Arc<BatchInfo>) -> DerivationPipelineFuture {
+    fn derivation_future(&self, request: Arc<BatchDerivationRequest>) -> DerivationPipelineFuture {
         let db = self.database.clone();
         let metrics = self.metrics.clone();
         let provider = self.l1_provider.clone();
@@ -212,21 +213,24 @@ where
 
         Box::pin(async move {
             let derive_start = Instant::now();
+            let batch_info = request.batch_info;
+            let target_status = request.target_status;
 
             // get the batch commit data.
             let batch = db
                 .get_batch_by_index(batch_info.index)
                 .await
-                .map_err(|err| (batch_info.clone(), err.into()))?
+                .map_err(|err| (request.clone(), err.into()))?
                 .ok_or((
-                    batch_info.clone(),
+                    request.clone(),
                     DerivationPipelineError::UnknownBatch(batch_info.index),
                 ))?;
 
             // derive the attributes and attach the corresponding batch info.
-            let result = derive(batch, provider, db, l1_v2_message_queue_start_index)
-                .await
-                .map_err(|err| (batch_info.clone(), err))?;
+            let result =
+                derive(batch, target_status, provider, db, l1_v2_message_queue_start_index)
+                    .await
+                    .map_err(|err| (request.clone(), err))?;
 
             // update metrics.
             metrics.derived_blocks.increment(result.attributes.len() as u64);
@@ -235,6 +239,15 @@ where
             Ok(result)
         })
     }
+}
+
+/// The request to derive a batch.
+#[derive(Debug)]
+pub struct BatchDerivationRequest {
+    /// The batch info to derive.
+    pub batch_info: BatchInfo,
+    /// The target status of the batch after derivation.
+    pub target_status: BatchStatus,
 }
 
 /// The result of deriving a batch.
@@ -246,6 +259,8 @@ pub struct BatchDerivationResult {
     pub batch_info: BatchInfo,
     /// The list of skipped L1 messages indexes.
     pub skipped_l1_messages: Vec<u64>,
+    /// The target status of the batch after derivation.
+    pub target_status: BatchStatus,
 }
 
 /// The derived attributes along with the block number they correspond to.
@@ -261,7 +276,10 @@ pub struct DerivedAttributes {
 type DerivationPipelineFuture = Pin<
     Box<
         dyn Future<
-                Output = Result<BatchDerivationResult, (Arc<BatchInfo>, DerivationPipelineError)>,
+                Output = Result<
+                    BatchDerivationResult,
+                    (Arc<BatchDerivationRequest>, DerivationPipelineError),
+                >,
             > + Send,
     >,
 >;
@@ -270,6 +288,7 @@ type DerivationPipelineFuture = Pin<
 /// attributes for each L2 block in the batch.
 pub async fn derive<L1P: L1Provider + Sync + Send, DB: DatabaseReadOperations>(
     batch: BatchCommitData,
+    target_status: BatchStatus,
     l1_provider: L1P,
     db: DB,
     l1_v2_message_queue_start_index: u64,
@@ -354,6 +373,7 @@ pub async fn derive<L1P: L1Provider + Sync + Send, DB: DatabaseReadOperations>(
         attributes,
         batch_info: BatchInfo { index: batch.index, hash: batch.hash },
         skipped_l1_messages,
+        target_status,
     })
 }
 
@@ -481,6 +501,7 @@ mod tests {
             calldata: Arc::new(raw_calldata),
             blob_versioned_hash: None,
             finalized_block_number: None,
+            reverted_block_number: None,
         };
         db.insert_batch(batch_data).await?;
 
@@ -492,7 +513,12 @@ mod tests {
         let mut pipeline = DerivationPipeline::new(mock_l1_provider, db.clone(), u64::MAX).await;
 
         // as long as we don't call `push_batch`, pipeline should not return attributes.
-        pipeline.push_batch(BatchInfo { index: 12, hash: Default::default() }.into()).await;
+        pipeline
+            .push_batch(
+                BatchInfo { index: 12, hash: Default::default() }.into(),
+                BatchStatus::Consolidated,
+            )
+            .await;
 
         // wait for 5 seconds to ensure the pipeline is in a retry loop.
         tokio::select! {
@@ -547,6 +573,7 @@ mod tests {
             calldata: Arc::new(raw_calldata),
             blob_versioned_hash: None,
             finalized_block_number: None,
+            reverted_block_number: None,
         };
         db.insert_batch(batch_data).await?;
         // load messages in db.
@@ -560,7 +587,9 @@ mod tests {
         let mut pipeline = DerivationPipeline::new(mock_l1_provider, db, u64::MAX).await;
 
         // as long as we don't call `push_batch`, pipeline should not return attributes.
-        pipeline.push_batch(BatchInfo { index: 12, hash: Default::default() }.into()).await;
+        pipeline
+            .push_batch(BatchInfo { index: 12, hash: Default::default() }, BatchStatus::Committed)
+            .await;
 
         // check the correctness of the last attribute.
         let mut attribute = ScrollPayloadAttributes::default();
@@ -601,6 +630,7 @@ mod tests {
             calldata: Arc::new(raw_calldata),
             blob_versioned_hash: None,
             finalized_block_number: None,
+            reverted_block_number: None,
         };
         let l1_messages = vec![L1_MESSAGE_INDEX_33, L1_MESSAGE_INDEX_34];
         for message in l1_messages {
@@ -609,7 +639,7 @@ mod tests {
 
         let l1_provider = MockL1Provider { db: db.clone(), blobs: HashMap::new() };
 
-        let result = derive(batch_data, l1_provider, db, u64::MAX).await?;
+        let result = derive(batch_data, BatchStatus::Committed, l1_provider, db, u64::MAX).await?;
         let attribute = result
             .attributes
             .iter()
@@ -658,6 +688,7 @@ mod tests {
             calldata: Arc::new(raw_calldata),
             blob_versioned_hash: None,
             finalized_block_number: None,
+            reverted_block_number: None,
         };
 
         // prepare the l1 messages.
@@ -709,7 +740,8 @@ mod tests {
         let l1_provider = MockL1Provider { db: db.clone(), blobs: HashMap::new() };
 
         // derive attributes and extract l1 messages.
-        let attributes = derive(batch_data, l1_provider, db, u64::MAX).await?;
+        let attributes =
+            derive(batch_data, BatchStatus::Committed, l1_provider, db, u64::MAX).await?;
         let derived_l1_messages: Vec<_> = attributes
             .attributes
             .into_iter()
@@ -743,6 +775,7 @@ mod tests {
             calldata: Arc::new(raw_calldata),
             blob_versioned_hash: None,
             finalized_block_number: None,
+            reverted_block_number: None,
         };
 
         // prepare the l1 messages.
@@ -762,7 +795,8 @@ mod tests {
         let l1_provider = MockL1Provider { db: db.clone(), blobs: HashMap::new() };
 
         // derive attributes and extract l1 messages.
-        let attributes = derive(batch_data, l1_provider, db, u64::MAX).await?;
+        let attributes =
+            derive(batch_data, BatchStatus::Committed, l1_provider, db, u64::MAX).await?;
         let derived_l1_messages: Vec<_> = attributes
             .attributes
             .into_iter()
@@ -808,6 +842,7 @@ mod tests {
                             "013b3960a40175bd6436e8dfe07e6d80c125e12997fa1de004b1990e20dba1ee"
                         )),
                         finalized_block_number: None,
+                        reverted_block_number: None,
                     };
                     let l1_messages = vec![
                         L1MessageEnvelope {
@@ -875,7 +910,7 @@ mod tests {
                         )]),
                     };
 
-                    let attributes = derive(batch_data, l1_provider, db, u64::MAX).await?;
+                    let attributes = derive(batch_data, BatchStatus::Committed, l1_provider, db, u64::MAX).await?;
 
                     let attribute = attributes.attributes.last().unwrap();
                     let expected = ScrollPayloadAttributes {
