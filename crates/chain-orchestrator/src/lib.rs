@@ -2141,7 +2141,7 @@ mod tests {
     use scroll_alloy_provider::ScrollAuthApiEngineClient;
     use scroll_db::test_utils::setup_test_db;
     use scroll_engine::ForkchoiceState;
-    use scroll_network::ScrollNetworkHandle;
+    use scroll_network::{NetworkConfigBuilder, ScrollWireConfig};
     use std::collections::HashMap;
     use std::sync::Arc;
     use tokio::sync::mpsc;
@@ -2175,13 +2175,20 @@ mod tests {
         let mock_l1_provider = MockL1Provider { db: db.clone(), blobs: HashMap::new() };
         let derivation_pipeline = DerivationPipeline::new(mock_l1_provider, db.clone(), u64::MAX).await;
 
-        // create Scroll network
-        let (tx, _rx) = mpsc::unbounded_channel();
-        let network_handle = ScrollNetworkHandle::new(tx, node.inner.clone().network);
+        let (scroll_network_manager, scroll_network_handle) = scroll_network::ScrollNetworkManager::new(
+            node.inner.chain_spec().clone(),
+            NetworkConfigBuilder::<ScrollNetworkPrimitives>::with_rng_secret_key().build_with_noop_provider(node.inner.chain_spec().clone()),
+            ScrollWireConfig::new(true),
+            None,
+            Default::default(),
+            None,
+        )
+            .await;
+        tokio::spawn(scroll_network_manager);
 
         // create full block client
         let block_client = FullBlockClient::new(
-            network_handle
+            scroll_network_handle
                 .inner()
                 .fetch_client()
                 .await
@@ -2211,7 +2218,7 @@ mod tests {
             l2_provider,
             l1_notification_rx,
             Some(mock_l1_watcher_handle.clone()),
-            network_handle.into_scroll_network().await,
+            scroll_network_handle.into_scroll_network().await,
             Box::new(NoopConsensus::default()),
             engine,
             Some(Sequencer::new(Arc::new(MockL1Provider { db: db.clone(), blobs: HashMap::new() }), SequencerConfig {
