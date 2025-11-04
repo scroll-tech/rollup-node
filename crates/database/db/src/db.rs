@@ -8,8 +8,8 @@ use crate::{
 };
 use alloy_primitives::{Signature, B256};
 use rollup_node_primitives::{
-    BatchCommitData, BatchConsolidationOutcome, BatchInfo, BlockInfo, L1MessageEnvelope,
-    L2BlockInfoWithL1Messages,
+    BatchCommitData, BatchConsolidationOutcome, BatchInfo, BlockInfo, L1BlockStartupInfo,
+    L1MessageEnvelope, L2BlockInfoWithL1Messages,
 };
 use scroll_alloy_rpc_types_engine::BlockDataHint;
 use sea_orm::{
@@ -375,11 +375,11 @@ impl DatabaseWriteOperations for Database {
         )
     }
 
-    async fn prepare_on_startup(&self) -> Result<(Vec<BlockInfo>, Option<u64>), DatabaseError> {
+    async fn prepare_l1_watcher_start_info(&self) -> Result<L1BlockStartupInfo, DatabaseError> {
         metered!(
             DatabaseOperation::PrepareOnStartup,
             self,
-            tx_mut(move |tx| async move { tx.prepare_on_startup().await })
+            tx_mut(move |tx| async move { tx.prepare_l1_watcher_start_info().await })
         )
     }
 
@@ -1572,10 +1572,10 @@ mod test {
         assert_eq!(retried_block_4, block_4);
 
         // Call prepare_on_startup which should not error
-        let result = db.prepare_on_startup().await.unwrap();
+        let result = db.prepare_l1_watcher_start_info().await.unwrap();
 
         // verify the result
-        assert_eq!(result, (vec![l1_block_info_3], Some(l1_block_info_3.number)));
+        assert_eq!(result, L1BlockStartupInfo::UnsafeBlocks(vec![l1_block_info_3]));
     }
 
     #[tokio::test]

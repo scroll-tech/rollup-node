@@ -515,7 +515,7 @@ mod tests {
         // as long as we don't call `push_batch`, pipeline should not return attributes.
         pipeline
             .push_batch(
-                BatchInfo { index: 12, hash: Default::default() }.into(),
+                BatchInfo { index: 12, hash: Default::default() },
                 BatchStatus::Consolidated,
             )
             .await;

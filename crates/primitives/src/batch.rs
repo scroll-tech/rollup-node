@@ -86,11 +86,11 @@ impl BatchStatus {
 impl core::fmt::Display for BatchStatus {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         match self {
-            BatchStatus::Committed => write!(f, "committed"),
-            BatchStatus::Processing => write!(f, "processing"),
-            BatchStatus::Consolidated => write!(f, "consolidated"),
-            BatchStatus::Reverted => write!(f, "reverted"),
-            BatchStatus::Finalized => write!(f, "finalized"),
+            Self::Committed => write!(f, "committed"),
+            Self::Processing => write!(f, "processing"),
+            Self::Consolidated => write!(f, "consolidated"),
+            Self::Reverted => write!(f, "reverted"),
+            Self::Finalized => write!(f, "finalized"),
         }
     }
 }
@@ -100,11 +100,11 @@ impl core::str::FromStr for BatchStatus {
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         match s {
-            "committed" => Ok(BatchStatus::Committed),
-            "processing" => Ok(BatchStatus::Processing),
-            "consolidated" => Ok(BatchStatus::Consolidated),
-            "reverted" => Ok(BatchStatus::Reverted),
-            "finalized" => Ok(BatchStatus::Finalized),
+            "committed" => Ok(Self::Committed),
+            "processing" => Ok(Self::Processing),
+            "consolidated" => Ok(Self::Consolidated),
+            "reverted" => Ok(Self::Reverted),
+            "finalized" => Ok(Self::Finalized),
             _ => Err(()),
         }
     }

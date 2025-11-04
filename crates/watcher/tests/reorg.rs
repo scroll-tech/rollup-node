@@ -6,7 +6,7 @@ use std::sync::Arc;
 use alloy_rpc_types_eth::Header;
 use arbitrary::Arbitrary;
 use rand::Rng;
-use rollup_node_primitives::NodeConfig;
+use rollup_node_primitives::{L1BlockStartupInfo, NodeConfig};
 use rollup_node_watcher::{
     random, test_utils::provider::MockProvider, Block, L1Notification, L1Watcher,
 };
@@ -72,8 +72,13 @@ async fn test_should_detect_reorg() -> eyre::Result<()> {
     );
 
     // spawn the watcher and verify received notifications are consistent.
-    let mut l1_watcher =
-        L1Watcher::spawn(mock_provider, None, Arc::new(config), LOGS_QUERY_BLOCK_RANGE).await;
+    let mut l1_watcher = L1Watcher::spawn(
+        mock_provider,
+        L1BlockStartupInfo::None,
+        Arc::new(config),
+        LOGS_QUERY_BLOCK_RANGE,
+    )
+    .await;
 
     // skip the first two events
     l1_watcher.recv().await.unwrap();
@@ -177,8 +182,13 @@ async fn test_should_fetch_gap_in_unfinalized_blocks() -> eyre::Result<()> {
     );
 
     // spawn the watcher and verify received notifications are consistent.
-    let mut l1_watcher =
-        L1Watcher::spawn(mock_provider, None, Arc::new(config), LOGS_QUERY_BLOCK_RANGE).await;
+    let mut l1_watcher = L1Watcher::spawn(
+        mock_provider,
+        L1BlockStartupInfo::None,
+        Arc::new(config),
+        LOGS_QUERY_BLOCK_RANGE,
+    )
+    .await;
 
     // skip the first two events
     l1_watcher.recv().await.unwrap();

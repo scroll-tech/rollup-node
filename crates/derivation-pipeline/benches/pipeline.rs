@@ -127,7 +127,7 @@ fn benchmark_pipeline_derivation_in_file_blobs(c: &mut Criterion) {
                     // commit 253 batches.
                     for index in BATCHES_START_INDEX..=BATCHES_STOP_INDEX {
                         let batch_info = BatchInfo { index, hash: Default::default() };
-                        pipeline.push_batch(batch_info.into(), BatchStatus::Committed).await;
+                        pipeline.push_batch(batch_info, BatchStatus::Committed).await;
                     }
 
                     tx.send(pipeline).unwrap();
@@ -163,7 +163,7 @@ fn benchmark_pipeline_derivation_s3_blobs(c: &mut Criterion) {
                     // commit 15 batches.
                     for index in BATCHES_START_INDEX..=BATCHES_START_INDEX + 15 {
                         let batch_info = BatchInfo { index, hash: Default::default() };
-                        pipeline.push_batch(batch_info.clone(), BatchStatus::Committed).await;
+                        pipeline.push_batch(batch_info, BatchStatus::Committed).await;
                     }
 
                     tx.send(pipeline).unwrap();

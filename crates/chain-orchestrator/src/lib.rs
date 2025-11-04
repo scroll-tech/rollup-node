@@ -439,7 +439,7 @@ impl<
                     let finalized_block_info = batch_reconciliation_result
                         .target_status
                         .is_finalized()
-                        .then(|| block_info.block_info);
+                        .then_some(block_info.block_info);
                     self.engine
                         .update_fcs(None, Some(block_info.block_info), finalized_block_info)
                         .await?;
@@ -478,7 +478,7 @@ impl<
                     let finalized_block_info = batch_reconciliation_result
                         .target_status
                         .is_finalized()
-                        .then(|| block_info.block_info);
+                        .then_some(block_info.block_info);
                     self.engine
                         .update_fcs(
                             Some(block_info.block_info),
@@ -750,7 +750,7 @@ impl<
             self.engine.update_fcs(None, None, finalized_block_info).await?;
         }
 
-        for batch in triggered_batches.iter() {
+        for batch in &triggered_batches {
             self.derivation_pipeline.push_batch(*batch, BatchStatus::Finalized).await;
         }
 

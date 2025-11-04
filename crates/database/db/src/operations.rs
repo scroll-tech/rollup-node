@@ -4,7 +4,7 @@ use crate::{ReadConnectionProvider, WriteConnectionProvider};
 use alloy_primitives::{Signature, B256};
 use rollup_node_primitives::{
     BatchCommitData, BatchConsolidationOutcome, BatchInfo, BatchStatus, BlockInfo,
-    L1MessageEnvelope, L2BlockInfoWithL1Messages, Metadata,
+    L1BlockStartupInfo, L1MessageEnvelope, L2BlockInfoWithL1Messages, Metadata,
 };
 use scroll_alloy_rpc_types_engine::BlockDataHint;
 use sea_orm::{
@@ -118,16 +118,8 @@ pub trait DatabaseWriteOperations {
         l1_block_number: u64,
     ) -> Result<Vec<L1MessageEnvelope>, DatabaseError>;
 
-    /// Prepare the database on startup and return metadata used for other components in the
-    /// rollup-node.
-    ///
-    /// This method first unwinds the database to the finalized L1 block. It then fetches the batch
-    /// info for the latest safe L2 block. It takes note of the L1 block number at which
-    /// this batch was produced (currently the finalized block for the batch until we implement
-    /// issue #273). It then retrieves the latest block for the previous batch (i.e., the batch
-    /// before the latest safe block). It returns a tuple of this latest fetched block and the
-    /// L1 block number of the batch.
-    async fn prepare_on_startup(&self) -> Result<(Vec<BlockInfo>, Option<u64>), DatabaseError>;
+    /// Returns the L1 block info required to start the L1 watcher on startup.
+    async fn prepare_l1_watcher_start_info(&self) -> Result<L1BlockStartupInfo, DatabaseError>;
 
     /// Delete all L2 blocks with a block number greater than the provided block number.
     async fn delete_l2_blocks_gt_block_number(
@@ -598,7 +590,7 @@ impl<T: WriteConnectionProvider + ?Sized + Sync> DatabaseWriteOperations for T {
         Ok(removed_messages.into_iter().map(Into::into).collect())
     }
 
-    async fn prepare_on_startup(&self) -> Result<(Vec<BlockInfo>, Option<u64>), DatabaseError> {
+    async fn prepare_l1_watcher_start_info(&self) -> Result<L1BlockStartupInfo, DatabaseError> {
         tracing::trace!(target: "scroll::db", "Fetching startup safe block from database.");
 
         // set all batches with processing status back to committed
@@ -608,7 +600,7 @@ impl<T: WriteConnectionProvider + ?Sized + Sync> DatabaseWriteOperations for T {
         let l1_block_infos = self.get_l1_block_info().await?;
         let latest_l1_block_info = self.get_latest_indexed_event_l1_block_number().await?;
 
-        Ok((l1_block_infos, latest_l1_block_info))
+        Ok(L1BlockStartupInfo::new(l1_block_infos, latest_l1_block_info))
     }
 
     async fn delete_l2_blocks_gt_block_number(
@@ -1041,13 +1033,7 @@ impl<T: ReadConnectionProvider + Sync + ?Sized> DatabaseReadOperations for T {
             .into_tuple::<(Option<i64>, Option<i64>, Option<i64>)>()
             .one(self.get_connection())
             .await?
-            .map(|(block_number, finalized_block_number, reverted_block_number)| {
-                [block_number, finalized_block_number, reverted_block_number]
-                    .into_iter()
-                    .flatten()
-                    .max()
-            })
-            .flatten();
+            .and_then(|tuple| <[Option<i64>; 3]>::from(tuple).into_iter().flatten().max());
 
         let latest_l1_block_number =
             [latest_l1_message, latest_batch_event].into_iter().flatten().max();

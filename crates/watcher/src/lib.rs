@@ -18,7 +18,8 @@ use alloy_sol_types::SolEvent;
 use error::L1WatcherResult;
 use itertools::Itertools;
 use rollup_node_primitives::{
-    BatchCommitData, BatchInfo, BlockInfo, BoundedVec, ConsensusUpdate, NodeConfig,
+    BatchCommitData, BatchInfo, BlockInfo, BoundedVec, ConsensusUpdate, L1BlockStartupInfo,
+    NodeConfig,
 };
 use rollup_node_providers::SystemContractProvider;
 use scroll_alloy_consensus::TxL1Message;
@@ -192,11 +193,11 @@ where
     /// returning [`L1Notification`] in the returned channel.
     pub async fn spawn(
         execution_provider: EP,
-        start_block: Option<u64>,
+        l1_block_startup_info: L1BlockStartupInfo,
         config: Arc<NodeConfig>,
         log_query_block_range: u64,
     ) -> mpsc::Receiver<Arc<L1Notification>> {
-        tracing::trace!(target: "scroll::watcher", ?start_block, ?config, "spawning L1 watcher");
+        tracing::trace!(target: "scroll::watcher", ?l1_block_startup_info, ?config, "spawning L1 watcher");
 
         let (tx, rx) = mpsc::channel(log_query_block_range as usize);
 
@@ -219,11 +220,39 @@ where
             finalized: fetch_block_info(BlockNumberOrTag::Finalized).await,
         };
 
+        let (reorg, start_block) = match l1_block_startup_info {
+            L1BlockStartupInfo::UnsafeBlocks(blocks) => {
+                let mut reorg = true;
+                let mut start_block =
+                    blocks.first().expect("at least one unsafe block").number.saturating_sub(1);
+                for (i, block) in blocks.into_iter().rev().enumerate() {
+                    let current_block =
+                        fetch_block_info(BlockNumberOrTag::Number(block.number)).await;
+                    if current_block.hash == block.hash {
+                        tracing::info!(target: "scroll::watcher", ?block, "found reorg block from unsafe blocks");
+                        reorg = i != 0;
+                        start_block = current_block.number;
+                    }
+                }
+
+                (reorg, start_block)
+            }
+            L1BlockStartupInfo::FinalizedBlockNumber(number) => {
+                tracing::info!(target: "scroll::watcher", ?number, "starting from finalized block number");
+
+                (false, number)
+            }
+            L1BlockStartupInfo::None => {
+                tracing::info!(target: "scroll::watcher", "no L1 startup info, starting from config start block");
+                (false, config.start_l1_block)
+            }
+        };
+
         // init the watcher.
         let watcher = Self {
             execution_provider,
             unfinalized_blocks: BoundedVec::new(HEADER_CAPACITY),
-            current_block_number: start_block.unwrap_or(config.start_l1_block).saturating_sub(1),
+            current_block_number: start_block.saturating_sub(1),
             l1_state,
             sender: tx,
             config,
@@ -233,6 +262,12 @@ where
         };
 
         // notify at spawn.
+        if reorg {
+            watcher
+                .notify(L1Notification::Reorg(start_block))
+                .await
+                .expect("channel is open in this context");
+        }
         watcher
             .notify(L1Notification::Finalized(watcher.l1_state.finalized))
             .await
