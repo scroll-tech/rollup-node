@@ -91,7 +91,7 @@ const EVENT_CHANNEL_SIZE: usize = 5000;
 /// based on data consolidated from L1 and the data received over the p2p network.
 #[derive(Debug)]
 pub struct ChainOrchestrator<
-    N: FullNetwork<Primitives = ScrollNetworkPrimitives>,
+    N: FullNetwork<Primitives=ScrollNetworkPrimitives>,
     ChainSpec,
     L1MP,
     L2P,
@@ -132,12 +132,12 @@ pub struct ChainOrchestrator<
 }
 
 impl<
-        N: FullNetwork<Primitives = ScrollNetworkPrimitives> + Send + Sync + 'static,
-        ChainSpec: ScrollHardforks + EthChainSpec + Send + Sync + 'static,
-        L1MP: L1MessageProvider + Unpin + Clone + Send + Sync + 'static,
-        L2P: Provider<Scroll> + 'static,
-        EC: ScrollEngineApi + Sync + Send + 'static,
-    > ChainOrchestrator<N, ChainSpec, L1MP, L2P, EC>
+    N: FullNetwork<Primitives=ScrollNetworkPrimitives> + Send + Sync + 'static,
+    ChainSpec: ScrollHardforks + EthChainSpec + Send + Sync + 'static,
+    L1MP: L1MessageProvider + Unpin + Clone + Send + Sync + 'static,
+    L2P: Provider<Scroll> + 'static,
+    EC: ScrollEngineApi + Sync + Send + 'static,
+> ChainOrchestrator<N, ChainSpec, L1MP, L2P, EC>
 {
     /// Creates a new chain orchestrator.
     #[allow(clippy::too_many_arguments)]
@@ -816,7 +816,7 @@ impl<
             &l1_message,
             self.config.l1_v2_message_queue_start_index(),
         )
-        .await?;
+            .await?;
         let l1_message = L1MessageEnvelope::new(l1_message, l1_block_number, None, queue_hash);
 
         // Perform a consistency check to ensure the previous L1 message exists in the database.
@@ -2123,3 +2123,196 @@ async fn compute_l1_message_queue_hash(
 //         );
 //     }
 // }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use alloy_primitives::{Address, B256};
+    use alloy_provider::ProviderBuilder;
+    use alloy_rpc_client::RpcClient;
+    use reth_scroll_consensus::ScrollBeaconConsensus;
+    use reth_scroll_node::test_utils::setup;
+    use rollup_node_primitives::BatchCommitData;
+    use rollup_node_providers::test_utils::MockL1Provider;
+    use rollup_node_sequencer::{L1MessageInclusionMode, PayloadBuildingConfig, SequencerConfig};
+    use scroll_alloy_consensus::TxL1Message;
+    use scroll_alloy_provider::ScrollAuthApiEngineClient;
+    use scroll_db::test_utils::setup_test_db;
+    use scroll_engine::ForkchoiceState;
+    use scroll_network::ScrollNetworkHandle;
+    use std::collections::HashMap;
+    use std::sync::{Arc, Mutex};
+    use tokio::sync::mpsc;
+
+    /// Mock command handler for L1Watcher that tracks all reset_to_block calls.
+    /// Returns a real L1WatcherHandle and a tracker for verifying calls.
+    #[derive(Clone)]
+    struct MockL1WatcherCommandTracker {
+        inner: Arc<Mutex<Vec<(u64, usize)>>>, // (block_number, channel_capacity)
+    }
+
+    impl MockL1WatcherCommandTracker {
+        fn new() -> Self {
+            Self { inner: Arc::new(Mutex::new(Vec::new())) }
+        }
+
+        fn track_reset(&self, block: u64, capacity: usize) {
+            self.inner.lock().unwrap().push((block, capacity));
+        }
+
+        fn get_reset_calls(&self) -> Vec<(u64, usize)> {
+            self.inner.lock().unwrap().clone()
+        }
+
+        fn assert_reset_called_with(&self, block: u64) {
+            let calls = self.get_reset_calls();
+            assert!(
+                calls.iter().any(|(b, _)| *b == block),
+                "Expected reset_to_block to be called with block {}, but got calls: {:?}",
+                block,
+                calls
+            );
+        }
+
+        fn assert_not_called(&self) {
+            let calls = self.get_reset_calls();
+            assert!(calls.is_empty(), "Expected no reset_to_block calls, but got: {:?}", calls);
+        }
+    }
+
+    /// Creates a real L1WatcherHandle backed by a mock command handler.
+    /// Returns the handle and a tracker for verifying calls.
+    fn create_mock_l1_watcher_handle() -> (
+        rollup_node_watcher::L1WatcherHandle,
+        MockL1WatcherCommandTracker,
+        tokio::task::JoinHandle<()>,
+    ) {
+        use rollup_node_watcher::{L1WatcherCommand, L1WatcherHandle};
+
+        let (command_tx, mut command_rx) = mpsc::unbounded_channel();
+        let handle = L1WatcherHandle::new(command_tx);
+        let tracker = MockL1WatcherCommandTracker::new();
+        let tracker_clone = tracker.clone();
+
+        // Spawn task to handle commands
+        let join_handle = tokio::spawn(async move {
+            while let Some(command) = command_rx.recv().await {
+                match command {
+                    L1WatcherCommand::ResetToBlock { block, new_sender, response_sender } => {
+                        let capacity = new_sender.max_capacity();
+                        tracker_clone.track_reset(block, capacity);
+                        // Respond success
+                        let _ = response_sender.send(());
+                    }
+                }
+            }
+        });
+
+        (handle, tracker, join_handle)
+    }
+
+    #[tokio::test]
+    async fn test_gap_recovery()
+    {
+        // setup a test node
+        let (mut nodes, _tasks, _wallet) = setup(1, false).await.unwrap();
+        let node = nodes.pop().unwrap();
+
+        // create a fork choice state
+        let genesis_hash = node.inner.chain_spec().genesis_hash();
+        let fcs = ForkchoiceState::new(
+            BlockInfo { hash: genesis_hash, number: 0 },
+            Default::default(),
+            Default::default(),
+        );
+
+        // create the engine driver connected to the node
+        let auth_client = node.inner.engine_http_client();
+        let engine_client = ScrollAuthApiEngineClient::new(auth_client);
+        let engine = Engine::new(Arc::new(engine_client), fcs);
+
+        // create a test database
+        let db = Arc::new(setup_test_db().await);
+
+        // prepare derivation pipeline
+        let mock_l1_provider = MockL1Provider { db: db.clone(), blobs: HashMap::new() };
+        let derivation_pipeline = DerivationPipeline::new(mock_l1_provider, db.clone(), u64::MAX).await;
+
+        // create Scroll network
+        let (tx, _rx) = mpsc::unbounded_channel();
+        let network_handle = ScrollNetworkHandle::new(tx, node.inner.clone().network);
+
+        // create full block client
+        let block_client = FullBlockClient::new(
+            network_handle
+                .inner()
+                .fetch_client()
+                .await
+                .expect("failed to fetch block client"),
+            Arc::new(ScrollBeaconConsensus::new(node.inner.chain_spec().clone())),
+        );
+
+        // create l2 provider
+        let client = RpcClient::builder().http(node.rpc_url());
+        let l2_provider = ProviderBuilder::<_, _, Scroll>::default().connect_client(client);
+        let l2_provider = Arc::new(l2_provider);
+
+        // prepare L1 notification channel
+        let (l1_notification_tx, l1_notification_rx) = mpsc::channel(100);
+
+
+        // initialize database state
+        db.set_latest_l1_block_number(0).await.unwrap();
+
+        let chain_orchestrator = ChainOrchestrator::new(
+            db.clone(),
+            ChainOrchestratorConfig::new(node.inner.chain_spec().clone(), 0, 0),
+            Arc::new(block_client),
+            l2_provider,
+            l1_notification_rx,
+            None, // TODO: set handle
+            network_handle.into_scroll_network().await,
+            Box::new(NoopConsensus::default()),
+            engine,
+            Some(Sequencer::new(Arc::new(MockL1Provider { db: db.clone(), blobs: HashMap::new() }), SequencerConfig {
+                chain_spec: node.inner.chain_spec(),
+                fee_recipient: Address::random(),
+                auto_start: false,
+                payload_building_config: PayloadBuildingConfig {
+                    block_gas_limit: 15_000_000,
+                    max_l1_messages_per_block: 4,
+                    l1_message_inclusion_mode: L1MessageInclusionMode::BlockDepth(0),
+                },
+                block_time: 1,
+                payload_building_duration: 0,
+                allow_empty_blocks: false,
+            })),
+            None,
+            derivation_pipeline,
+        )
+            .await
+            .unwrap();
+    }
+
+    // Helper function to create a simple test batch commit
+    fn create_test_batch(index: u64, block_number: u64) -> BatchCommitData {
+        use alloy_primitives::Bytes;
+        BatchCommitData {
+            index,
+            hash: B256::random(),
+            block_number,
+            block_timestamp: 0,
+            calldata: Arc::new(Bytes::new()),
+            blob_versioned_hash: None,
+            finalized_block_number: None,
+        }
+    }
+
+    // Helper function to create a simple test L1 message
+    fn create_test_l1_message(queue_index: u64) -> TxL1Message {
+        TxL1Message { queue_index, ..Default::default() }
+    }
+
+    #[tokio::test]
+    async fn test_batch_commit_gap_triggers_recovery() {}
+}
