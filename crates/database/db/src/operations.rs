@@ -53,10 +53,15 @@ pub trait DatabaseWriteOperations {
     async fn set_l2_head_block_number(&self, number: u64) -> Result<(), DatabaseError>;
 
     /// Fetches unprocessed batches up to the provided finalized L1 block number and updates their
-    /// status.
+    /// status to processing.
     async fn fetch_and_update_unprocessed_finalized_batches(
         &self,
         finalized_l1_block_number: u64,
+    ) -> Result<Vec<BatchInfo>, DatabaseError>;
+
+    /// Fetches unprocessed committed batches and updates their status to processing.
+    async fn fetch_and_update_unprocessed_committed_batches(
+        &self,
     ) -> Result<Vec<BatchInfo>, DatabaseError>;
 
     /// Delete all [`BatchCommitData`]s with a block number greater than the provided block number.
@@ -495,6 +500,35 @@ impl<T: WriteConnectionProvider + ?Sized + Sync> DatabaseWriteOperations for T {
             .add(models::batch_commit::Column::FinalizedBlockNumber.is_not_null())
             .add(models::batch_commit::Column::FinalizedBlockNumber.lte(finalized_l1_block_number))
             .add(models::batch_commit::Column::Status.eq("committed"));
+
+        let batches = models::batch_commit::Entity::find()
+            .filter(conditions.clone())
+            .order_by_asc(models::batch_commit::Column::Index)
+            .select_only()
+            .column(models::batch_commit::Column::Index)
+            .column(models::batch_commit::Column::Hash)
+            .into_tuple::<(i64, Vec<u8>)>()
+            .all(self.get_connection())
+            .await
+            .map(|x| {
+                x.into_iter()
+                    .map(|(index, hash)| BatchInfo::new(index as u64, B256::from_slice(&hash)))
+                    .collect()
+            })?;
+
+        models::batch_commit::Entity::update_many()
+            .col_expr(models::batch_commit::Column::Status, Expr::value("processing"))
+            .filter(conditions)
+            .exec(self.get_connection())
+            .await?;
+
+        Ok(batches)
+    }
+
+    async fn fetch_and_update_unprocessed_committed_batches(
+        &self,
+    ) -> Result<Vec<BatchInfo>, DatabaseError> {
+        let conditions = Condition::all().add(models::batch_commit::Column::Status.eq("committed"));
 
         let batches = models::batch_commit::Entity::find()
             .filter(conditions.clone())

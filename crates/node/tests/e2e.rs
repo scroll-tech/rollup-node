@@ -1,7 +1,7 @@
 //! End-to-end tests for the rollup node.
 
 use alloy_eips::BlockNumberOrTag;
-use alloy_primitives::{address, b256, Address, Bytes, Signature, B256, U256};
+use alloy_primitives::{address, b256, hex::FromHex, Address, Bytes, Signature, B256, U256};
 use alloy_rpc_types_eth::Block;
 use alloy_signer::Signer;
 use alloy_signer_local::PrivateKeySigner;
@@ -32,7 +32,9 @@ use rollup_node::{
     ScrollRollupNode, ScrollRollupNodeConfig, SequencerArgs,
 };
 use rollup_node_chain_orchestrator::ChainOrchestratorEvent;
-use rollup_node_primitives::{sig_encode_hash, BatchCommitData, BlockInfo, ConsensusUpdate};
+use rollup_node_primitives::{
+    sig_encode_hash, BatchCommitData, BatchInfo, BlockInfo, ConsensusUpdate,
+};
 use rollup_node_sequencer::L1MessageInclusionMode;
 use rollup_node_watcher::L1Notification;
 use scroll_alloy_consensus::TxL1Message;
@@ -897,8 +899,6 @@ async fn shutdown_consolidates_most_recent_batch_on_startup() -> eyre::Result<()
         reverted_block_number: None,
     };
 
-    println!("Sending first batch commit and finalization");
-
     // Send the first batch commit to the rollup node manager and finalize it.
     l1_notification_tx
         .send(Arc::new(L1Notification::BatchCommit {
@@ -917,8 +917,6 @@ async fn shutdown_consolidates_most_recent_batch_on_startup() -> eyre::Result<()
     // Lets finalize the first batch
     l1_notification_tx.send(Arc::new(L1Notification::Finalized(block_0_info))).await?;
 
-    println!("First batch finalized, iterating until first batch is consolidated");
-
     // Lets iterate over all blocks expected to be derived from the first batch commit.
     let consolidation_outcome = loop {
         let event = rnm_events.next().await;
@@ -928,8 +926,6 @@ async fn shutdown_consolidates_most_recent_batch_on_startup() -> eyre::Result<()
         }
     };
     assert_eq!(consolidation_outcome.blocks.len(), 4, "Expected 4 blocks to be consolidated");
-
-    println!("First batch consolidated, sending second batch commit and finalization");
 
     // Now we send the second batch commit and finalize it.
     l1_notification_tx
@@ -966,8 +962,6 @@ async fn shutdown_consolidates_most_recent_batch_on_startup() -> eyre::Result<()
         }
         i += 1;
     };
-
-    println!("Block 40 consolidated, checking safe and head block hashes");
 
     // Fetch the safe and head block hashes from the EN.
     let rpc = node.rpc.inner.eth_api();
@@ -1214,8 +1208,7 @@ async fn graceful_shutdown_sets_fcs_to_latest_signed_block_in_db_on_start_up() -
 }
 
 #[tokio::test]
-#[ignore = "Enable once we implement issue #273"]
-async fn can_handle_batch_revert() -> eyre::Result<()> {
+async fn consolidates_committed_batches_after_chain_consolidation() -> eyre::Result<()> {
     reth_tracing::init_test_tracing();
     let chain_spec = (*SCROLL_MAINNET).clone();
 
@@ -1244,6 +1237,8 @@ async fn can_handle_batch_revert() -> eyre::Result<()> {
         finalized_block_number: None,
         reverted_block_number: None,
     };
+    let batch_0_info = BatchInfo { index: batch_0_data.index, hash: batch_0_data.hash };
+    let batch_0_finalization_block_info = BlockInfo { number: 18318210, hash: B256::random() };
     let batch_1_block_info = BlockInfo { number: 18318215, hash: B256::random() };
     let raw_calldata_1 = read_to_bytes("./tests/testdata/batch_1_calldata.bin")?;
     let batch_1_data = BatchCommitData {
@@ -1256,16 +1251,131 @@ async fn can_handle_batch_revert() -> eyre::Result<()> {
         finalized_block_number: None,
         reverted_block_number: None,
     };
-    let revert_batch_block_info = BlockInfo { number: 18318220, hash: B256::random() };
-    let revert_batch_data = BatchCommitData {
-        hash: B256::random(),
-        index: 2,
-        block_number: 18318220,
-        block_timestamp: 1696936500,
-        calldata: Arc::new(Default::default()),
+    let batch_1_info = BatchInfo { index: batch_1_data.index, hash: batch_1_data.hash };
+    let batch_1_finalization_block_info = BlockInfo { number: 18318220, hash: B256::random() };
+
+    // Send the first batch.
+    l1_watcher_tx
+        .send(Arc::new(L1Notification::BatchCommit {
+            block_info: batch_0_block_info,
+            data: batch_0_data,
+        }))
+        .await?;
+
+    // Send a batch finalization for the first batch.
+    l1_watcher_tx
+        .send(Arc::new(L1Notification::BatchFinalization {
+            hash: batch_0_info.hash,
+            index: batch_0_info.index,
+            block_info: batch_0_finalization_block_info,
+        }))
+        .await?;
+    // Send the L1 block finalized notification.
+    l1_watcher_tx
+        .send(Arc::new(L1Notification::Finalized(batch_0_finalization_block_info)))
+        .await?;
+
+    wait_for_event_predicate_5s(&mut rnm_events, |event| {
+        matches!(event, ChainOrchestratorEvent::BatchConsolidated(_))
+    })
+    .await?;
+
+    // Send the second batch.
+    l1_watcher_tx
+        .send(Arc::new(L1Notification::BatchCommit {
+            block_info: batch_1_block_info,
+            data: batch_1_data,
+        }))
+        .await?;
+
+    // send the Synced notification to the chain orchestrator
+    l1_watcher_tx.send(Arc::new(L1Notification::Synced)).await?;
+
+    wait_for_event_predicate_5s(&mut rnm_events, |event| {
+        matches!(event, ChainOrchestratorEvent::BatchConsolidated(_))
+    })
+    .await?;
+
+    let status = handle.status().await?;
+
+    assert_eq!(status.l2.fcs.safe_block_info().number, 57);
+    assert_eq!(status.l2.fcs.finalized_block_info().number, 4);
+
+    // Now send the batch finalization event for the second batch and finalize the L1 block.
+    l1_watcher_tx
+        .send(Arc::new(L1Notification::BatchFinalization {
+            hash: batch_1_info.hash,
+            index: batch_1_info.index,
+            block_info: batch_1_finalization_block_info,
+        }))
+        .await?;
+    l1_watcher_tx
+        .send(Arc::new(L1Notification::Finalized(batch_1_finalization_block_info)))
+        .await?;
+
+    wait_for_event_predicate_5s(&mut rnm_events, |event| {
+        matches!(event, ChainOrchestratorEvent::L1BlockFinalized(_, _))
+    })
+    .await?;
+
+    let status = handle.status().await?;
+
+    assert_eq!(status.l2.fcs.safe_block_info().number, 57);
+    assert_eq!(status.l2.fcs.finalized_block_info().number, 57);
+
+    Ok(())
+}
+
+#[tokio::test]
+async fn can_handle_batch_revert_with_reorg() -> eyre::Result<()> {
+    reth_tracing::init_test_tracing();
+    let chain_spec = (*SCROLL_MAINNET).clone();
+
+    // Launch a node
+    let (mut nodes, _tasks, _) =
+        setup_engine(default_test_scroll_rollup_node_config(), 1, chain_spec.clone(), false, false)
+            .await?;
+    let node = nodes.pop().unwrap();
+    let handle = node.inner.add_ons_handle.rollup_manager_handle.clone();
+    let l1_watcher_tx = node.inner.add_ons_handle.l1_watcher_tx.clone().unwrap();
+
+    // Request an event stream from the rollup node manager and manually poll rnm to process the
+    // event stream request from the handle.
+    let mut rnm_events = handle.get_event_listener().await?;
+
+    // send a Synced notification to the chain orchestrator
+    l1_watcher_tx.send(Arc::new(L1Notification::Synced)).await.unwrap();
+
+    // Load test batches
+    let batch_0_block_info = BlockInfo { number: 18318207, hash: B256::random() };
+    let raw_calldata_0 = read_to_bytes("./tests/testdata/batch_0_calldata.bin")?;
+    let batch_0_data = BatchCommitData {
+        hash: b256!("5AAEB6101A47FC16866E80D77FFE090B6A7B3CF7D988BE981646AB6AEDFA2C42"),
+        index: 1,
+        block_number: 18318207,
+        block_timestamp: 1696935971,
+        calldata: Arc::new(raw_calldata_0),
         blob_versioned_hash: None,
         finalized_block_number: None,
         reverted_block_number: None,
+    };
+    let batch_0_info = BatchInfo { index: batch_0_data.index, hash: batch_0_data.hash };
+    let batch_1_block_info = BlockInfo { number: 18318215, hash: B256::random() };
+    let raw_calldata_1 = read_to_bytes("./tests/testdata/batch_1_calldata.bin")?;
+    let batch_1_data = BatchCommitData {
+        hash: b256!("AA8181F04F8E305328A6117FA6BC13FA2093A3C4C990C5281DF95A1CB85CA18F"),
+        index: 2,
+        block_number: 18318215,
+        block_timestamp: 1696936000,
+        calldata: Arc::new(raw_calldata_1),
+        blob_versioned_hash: None,
+        finalized_block_number: None,
+        reverted_block_number: None,
+    };
+    let batch_1_revert_block_info = BlockInfo { number: 18318216, hash: B256::random() };
+    let batch_1_revert = L1Notification::BatchRevert {
+        batch_info: BatchInfo { index: batch_1_data.index, hash: batch_1_data.hash },
+        block_info: batch_1_revert_block_info,
     };
 
     // Send the first batch.
@@ -1312,22 +1422,54 @@ async fn can_handle_batch_revert() -> eyre::Result<()> {
     assert!(status.l2.fcs.head_block_info().number > 4);
     assert!(status.l2.fcs.safe_block_info().number > 4);
 
-    // Send the third batch which should trigger the revert.
-    l1_watcher_tx
-        .send(Arc::new(L1Notification::BatchCommit {
-            block_info: revert_batch_block_info,
-            data: revert_batch_data,
-        }))
-        .await?;
-
-    // Wait for the third batch to be proceeded.
-    tokio::time::sleep(Duration::from_millis(300)).await;
+    // Send the revert for the second batch.
+    l1_watcher_tx.send(Arc::new(batch_1_revert)).await?;
+    wait_for_event(
+        &mut rnm_events,
+        ChainOrchestratorEvent::BatchReverted {
+            batch_info: batch_0_info,
+            safe_head: BlockInfo {
+                number: 4,
+                hash: B256::from_hex(
+                    "30af93536b9f2899c2f5e77be24a4447a8e49c5683c74c4aab8c880c1508fdc5",
+                )
+                .unwrap(),
+            },
+        },
+        Duration::from_secs(5),
+    )
+    .await?;
 
     let status = handle.status().await?;
 
     // Assert the forkchoice state was reset to 4.
-    assert_eq!(status.l2.fcs.head_block_info().number, 4);
+    assert_eq!(status.l2.fcs.head_block_info().number, 57);
     assert_eq!(status.l2.fcs.safe_block_info().number, 4);
+
+    // Now lets reorg the L1 such that the batch revert should be reorged out.
+    l1_watcher_tx.send(Arc::new(L1Notification::Reorg(18318215))).await?;
+    wait_for_event(
+        &mut rnm_events,
+        ChainOrchestratorEvent::L1Reorg {
+            l1_block_number: 18318215,
+            queue_index: None,
+            l2_head_block_info: None,
+            l2_safe_block_info: Some(BlockInfo {
+                number: 57,
+                hash: B256::from_hex(
+                    "88ab32bd52bdbab5dd148bad0de208c634d357570055a62bacc46e7a78b371dd",
+                )
+                .unwrap(),
+            }),
+        },
+        Duration::from_secs(5),
+    )
+    .await?;
+
+    let status = handle.status().await?;
+
+    // Assert the forkchoice state safe block was reset to 57.
+    assert_eq!(status.l2.fcs.safe_block_info().number, 57);
 
     Ok(())
 }

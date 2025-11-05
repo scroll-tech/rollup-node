@@ -223,8 +223,7 @@ where
         let (reorg, start_block) = match l1_block_startup_info {
             L1BlockStartupInfo::UnsafeBlocks(blocks) => {
                 let mut reorg = true;
-                let mut start_block =
-                    blocks.first().expect("at least one unsafe block").number.saturating_sub(1);
+                let mut start_block = blocks.first().expect("at least one unsafe block").number;
                 for (i, block) in blocks.into_iter().rev().enumerate() {
                     let current_block =
                         fetch_block_info(BlockNumberOrTag::Number(block.number)).await;
@@ -232,6 +231,7 @@ where
                         tracing::info!(target: "scroll::watcher", ?block, "found reorg block from unsafe blocks");
                         reorg = i != 0;
                         start_block = current_block.number;
+                        break;
                     }
                 }
 

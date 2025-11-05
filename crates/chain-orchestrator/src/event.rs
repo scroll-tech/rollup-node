@@ -54,7 +54,7 @@ pub enum ChainOrchestratorEvent {
     },
     /// A batch has been reverted returning the batch info and the new safe head.
     BatchReverted {
-        /// The batch info of the reverted batch.
+        /// The latest batch info after the revert.
         batch_info: BatchInfo,
         /// The new safe head after the revert.
         safe_head: BlockInfo,

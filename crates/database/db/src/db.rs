@@ -323,6 +323,18 @@ impl DatabaseWriteOperations for Database {
         )
     }
 
+    async fn fetch_and_update_unprocessed_committed_batches(
+        &self,
+    ) -> Result<Vec<BatchInfo>, DatabaseError> {
+        metered!(
+            DatabaseOperation::FetchAndUpdateUnprocessedCommittedBatches,
+            self,
+            tx_mut(
+                move |tx| async move { tx.fetch_and_update_unprocessed_committed_batches().await }
+            )
+        )
+    }
+
     async fn delete_batches_gt_block_number(
         &self,
         block_number: u64,

@@ -390,6 +390,10 @@ impl<
                 self.network.handle().set_gossip(enabled).await;
                 let _ = tx.send(());
             }
+            #[cfg(feature = "test-utils")]
+            ChainOrchestratorCommand::DatabaseHandle(tx) => {
+                let _ = tx.send(self.database.clone());
+            }
         }
 
         Ok(())
@@ -708,7 +712,7 @@ impl<
             .await?;
 
         if self.sync_state.is_synced() {
-            self.derivation_pipeline.push_batch(batch_info, BatchStatus::Committed).await;
+            self.derivation_pipeline.push_batch(batch_info, BatchStatus::Consolidated).await;
         }
 
         Ok(event)
@@ -763,12 +767,12 @@ impl<
 
     /// Handles a batch revert event by updating the database.
     async fn handle_batch_revert(
-        &self,
+        &mut self,
         start_index: u64,
         end_index: u64,
         l1_block_info: BlockInfo,
     ) -> Result<Option<ChainOrchestratorEvent>, ChainOrchestratorError> {
-        let event = self
+        let (safe_block_info, batch_info) = self
             .database
             .tx_mut(move |tx| async move {
                 tx.insert_l1_block_info(l1_block_info).await?;
@@ -780,15 +784,14 @@ impl<
                 .await?;
 
                 // handle the case of a batch revert.
-                let (safe_head, batch_info) = tx.get_latest_safe_l2_info().await?;
-
-                let event = ChainOrchestratorEvent::BatchReverted { batch_info, safe_head };
-
-                Ok::<_, ChainOrchestratorError>(Some(event))
+                Ok::<_, ChainOrchestratorError>(tx.get_latest_safe_l2_info().await?)
             })
             .await?;
 
-        Ok(event)
+        // Update the forkchoice state to the new safe block.
+        self.engine.update_fcs(None, Some(safe_block_info), None).await?;
+
+        Ok(Some(ChainOrchestratorEvent::BatchReverted { batch_info, safe_head: safe_block_info }))
     }
 
     /// Handles an L1 message by inserting it into the database.
@@ -1144,7 +1147,7 @@ impl<
     ///
     /// This involves validating the L1 messages in the blocks against the expected L1 messages
     /// synced from L1.
-    async fn consolidate_chain(&self) -> Result<(), ChainOrchestratorError> {
+    async fn consolidate_chain(&mut self) -> Result<(), ChainOrchestratorError> {
         tracing::trace!(target: "scroll::chain_orchestrator", fcs = ?self.engine.fcs(), "Consolidating chain from safe to head");
 
         let safe_block_number = self.engine.fcs().safe_block_info().number;
@@ -1180,6 +1183,14 @@ impl<
         // send a notification to the network that the chain is synced such that it accepts
         // transactions into the transaction pool.
         self.network.handle().inner().update_sync_state(RethSyncState::Idle);
+
+        // Fetch all unprocessed committed batches and push them to the derivation pipeline as
+        // consolidated.
+        let committed_batches =
+            self.database.fetch_and_update_unprocessed_committed_batches().await?;
+        for batch_commit in committed_batches {
+            self.derivation_pipeline.push_batch(batch_commit, BatchStatus::Consolidated).await;
+        }
 
         self.notify(ChainOrchestratorEvent::ChainConsolidated {
             from: safe_block_number,

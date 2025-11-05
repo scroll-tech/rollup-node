@@ -33,6 +33,7 @@ pub(crate) enum DatabaseOperation {
     SetProcessedL1BlockNumber,
     SetL2HeadBlockNumber,
     FetchAndUpdateUnprocessedFinalizedBatches,
+    FetchAndUpdateUnprocessedCommittedBatches,
     DeleteBatchesGtBlockNumber,
     DeleteBatchesGtBatchIndex,
     InsertL1Message,
@@ -97,6 +98,9 @@ impl DatabaseOperation {
             Self::SetL2HeadBlockNumber => "set_l2_head_block_number",
             Self::FetchAndUpdateUnprocessedFinalizedBatches => {
                 "fetch_and_update_unprocessed_finalized_batches"
+            }
+            Self::FetchAndUpdateUnprocessedCommittedBatches => {
+                "fetch_and_update_unprocessed_committed_batches"
             }
             Self::DeleteBatchesGtBlockNumber => "delete_batches_gt_block_number",
             Self::DeleteBatchesGtBatchIndex => "delete_batches_gt_batch_index",
