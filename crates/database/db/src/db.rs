@@ -413,11 +413,12 @@ impl DatabaseReadOperations for Database {
     async fn get_batch_by_index(
         &self,
         batch_index: u64,
+        processed: Option<bool>,
     ) -> Result<Option<BatchCommitData>, DatabaseError> {
         metered!(
             DatabaseOperation::GetBatchByIndex,
             self,
-            tx(move |tx| async move { tx.get_batch_by_index(batch_index).await })
+            tx(move |tx| async move { tx.get_batch_by_index(batch_index, processed).await })
         )
     }
 
@@ -735,7 +736,7 @@ mod test {
         // Round trip the BatchCommitData through the database.
         db.insert_batch(batch_commit.clone()).await.unwrap();
         let batch_commit_from_db =
-            db.get_batch_by_index(batch_commit.index).await.unwrap().unwrap();
+            db.get_batch_by_index(batch_commit.index, None).await.unwrap().unwrap();
 
         assert_eq!(batch_commit, batch_commit_from_db);
     }
@@ -1249,7 +1250,7 @@ mod test {
 
         // Insert L2 blocks with different batch indices
         for i in 100..110 {
-            let batch_data = db.get_batch_by_index(i).await.unwrap().unwrap();
+            let batch_data = db.get_batch_by_index(i, None).await.unwrap().unwrap();
             let batch_info: BatchInfo = batch_data.into();
             let block_info = BlockInfo { number: 500 + i, hash: B256::arbitrary(&mut u).unwrap() };
 
@@ -1418,9 +1419,9 @@ mod test {
         db.set_finalized_l1_block_number(21).await.unwrap();
 
         // Verify the batches and blocks were inserted correctly
-        let retrieved_batch_1 = db.get_batch_by_index(1).await.unwrap().unwrap();
-        let retrieved_batch_2 = db.get_batch_by_index(2).await.unwrap().unwrap();
-        let retrieved_batch_3 = db.get_batch_by_index(3).await.unwrap().unwrap();
+        let retrieved_batch_1 = db.get_batch_by_index(1, None).await.unwrap().unwrap();
+        let retrieved_batch_2 = db.get_batch_by_index(2, None).await.unwrap().unwrap();
+        let retrieved_batch_3 = db.get_batch_by_index(3, None).await.unwrap().unwrap();
         let retried_block_1 = db.get_l2_block_info_by_number(1).await.unwrap().unwrap();
         let retried_block_2 = db.get_l2_block_info_by_number(2).await.unwrap().unwrap();
         let retried_block_3 = db.get_l2_block_info_by_number(3).await.unwrap().unwrap();
@@ -1441,9 +1442,9 @@ mod test {
         assert_eq!(result, (Some(block_2), Some(11)));
 
         // Verify that batches 2 and 3 are deleted
-        let batch_1 = db.get_batch_by_index(1).await.unwrap();
-        let batch_2 = db.get_batch_by_index(2).await.unwrap();
-        let batch_3 = db.get_batch_by_index(3).await.unwrap();
+        let batch_1 = db.get_batch_by_index(1, None).await.unwrap();
+        let batch_2 = db.get_batch_by_index(2, None).await.unwrap();
+        let batch_3 = db.get_batch_by_index(3, None).await.unwrap();
         assert!(batch_1.is_some());
         assert!(batch_2.is_none());
         assert!(batch_3.is_none());

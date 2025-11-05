@@ -722,12 +722,14 @@ impl<
 
                     // Perform a consistency check to ensure the previous commit batch exists in the
                     // database.
-                    if tx.get_batch_by_index(prev_batch_index).await?.is_none() {
+                    if tx.get_batch_by_index(prev_batch_index, None).await?.is_none() {
                         return Err(ChainOrchestratorError::BatchCommitGap(batch_clone.index));
                     }
 
                     // Check if batch already exists in DB.
-                    if let Some(existing_batch) = tx.get_batch_by_index(batch_clone.index).await? {
+                    if let Some(existing_batch) =
+                        tx.get_batch_by_index(batch_clone.index, Some(true)).await?
+                    {
                         if existing_batch.hash == batch_clone.hash {
                             // This means we have already processed this batch commit, we will skip
                             // it.

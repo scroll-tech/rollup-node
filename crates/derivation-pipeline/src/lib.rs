@@ -215,7 +215,7 @@ where
 
             // get the batch commit data.
             let batch = db
-                .get_batch_by_index(batch_info.index)
+                .get_batch_by_index(batch_info.index, None)
                 .await
                 .map_err(|err| (batch_info.clone(), err.into()))?
                 .ok_or((
