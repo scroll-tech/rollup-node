@@ -1,4 +1,7 @@
-use crate::{args::ScrollRollupNodeConfig, pprof::{PprofConfig, start_pprof_server}};
+use crate::{
+    args::ScrollRollupNodeConfig,
+    pprof::{start_pprof_server, PprofConfig},
+};
 
 use reth_chainspec::NamedChain;
 use reth_network::NetworkProtocols;
@@ -14,7 +17,7 @@ use scroll_alloy_hardforks::ScrollHardforks;
 use scroll_wire::ScrollWireEvent;
 use std::sync::Arc;
 use tokio::sync::mpsc::{Sender, UnboundedReceiver};
-use tracing::{info, error};
+use tracing::{error, info};
 
 /// Implementing the trait allows the type to return whether it is configured for dev chain.
 #[auto_impl::auto_impl(Arc)]
@@ -64,8 +67,9 @@ impl RollupManagerAddOn {
     {
         // Start pprof server if enabled
         if self.config.pprof_args.enabled {
-            let addr = self.config.pprof_args.addr.parse()
-                .map_err(|e| eyre::eyre!("Invalid pprof address '{}': {}", self.config.pprof_args.addr, e))?;
+            let addr = self.config.pprof_args.addr.parse().map_err(|e| {
+                eyre::eyre!("Invalid pprof address '{}': {}", self.config.pprof_args.addr, e)
+            })?;
 
             let pprof_config = PprofConfig::new(addr)
                 .with_default_duration(self.config.pprof_args.default_duration);

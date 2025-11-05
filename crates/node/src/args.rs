@@ -848,11 +848,7 @@ pub struct PprofArgs {
 
 impl Default for PprofArgs {
     fn default() -> Self {
-        Self {
-            enabled: false,
-            addr: "127.0.0.1:6060".to_string(),
-            default_duration: 30,
-        }
+        Self { enabled: false, addr: "127.0.0.1:6060".to_string(), default_duration: 30 }
     }
 }
 

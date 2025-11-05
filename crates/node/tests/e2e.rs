@@ -27,7 +27,7 @@ use rollup_node::{
         generate_tx, setup_engine,
     },
     BlobProviderArgs, ChainOrchestratorArgs, ConsensusAlgorithm, ConsensusArgs, EngineDriverArgs,
-    L1ProviderArgs, RollupNodeContext, RollupNodeDatabaseArgs, RollupNodeExtApiClient,
+    L1ProviderArgs, PprofArgs, RollupNodeContext, RollupNodeDatabaseArgs, RollupNodeExtApiClient,
     RollupNodeGasPriceOracleArgs, RollupNodeNetworkArgs as ScrollNetworkArgs, RpcArgs,
     ScrollRollupNode, ScrollRollupNodeConfig, SequencerArgs,
 };
@@ -80,6 +80,7 @@ async fn can_bridge_l1_messages() -> eyre::Result<()> {
         consensus_args: ConsensusArgs::noop(),
         database: None,
         rpc_args: RpcArgs::default(),
+        pprof_args: PprofArgs::default(),
     };
     let (mut nodes, _tasks, _wallet) = setup_engine(node_args, 1, chain_spec, false, false).await?;
     let node = nodes.pop().unwrap();
@@ -179,6 +180,7 @@ async fn can_sequence_and_gossip_blocks() {
         consensus_args: ConsensusArgs::noop(),
         database: None,
         rpc_args: RpcArgs::default(),
+        pprof_args: PprofArgs::default(),
     };
 
     let (nodes, _tasks, wallet) =
@@ -274,6 +276,7 @@ async fn can_penalize_peer_for_invalid_block() {
         chain_orchestrator_args: ChainOrchestratorArgs::default(),
         database: None,
         rpc_args: RpcArgs::default(),
+        pprof_args: PprofArgs::default(),
     };
 
     let (nodes, _tasks, _) =

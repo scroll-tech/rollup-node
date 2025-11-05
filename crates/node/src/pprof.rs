@@ -30,6 +30,7 @@ use hyper::{
     Method, Request, Response, StatusCode,
 };
 use hyper_util::rt::TokioIo;
+use pprof::protos::Message;
 use std::{net::SocketAddr, time::Duration};
 use tokio::net::TcpListener;
 use tracing::{error, info, warn};
@@ -56,7 +57,7 @@ impl PprofConfig {
     }
 
     /// Set the default profiling duration
-    pub fn with_default_duration(mut self, seconds: u64) -> Self {
+    pub const fn with_default_duration(mut self, seconds: u64) -> Self {
         self.default_duration = seconds;
         self
     }
@@ -148,7 +149,7 @@ async fn handle_request(
             info!("Starting CPU profile for {} seconds", duration);
             handle_cpu_profile(duration).await
         }
-        (&Method::GET, "/") | (&Method::GET, "/debug/pprof") => handle_index().await,
+        (&Method::GET, "/" | "/debug/pprof") => handle_index().await,
         _ => {
             warn!("Not found: {} {}", req.method(), req.uri().path());
             Ok(Response::builder()
@@ -195,9 +196,6 @@ async fn handle_cpu_profile(duration_secs: u64) -> Result<Response<Full<Bytes>>,
             // Encode as protobuf
             match report.pprof() {
                 Ok(profile) => {
-                    // Serialize the profile using protobuf
-                    use protobuf::Message;
-
                     // The profile object needs to be converted to bytes
                     let body = match profile.write_to_bytes() {
                         Ok(bytes) => bytes,
