@@ -374,8 +374,7 @@ impl<T: WriteConnectionProvider + ?Sized + Sync> DatabaseWriteOperations for T {
             .map(|(_, batch_info)| batch_info)
             .filter(|b| b.index > 1)
         {
-            let batch =
-                self.get_batch_by_index(batch_info.index, None).await?.expect("batch must exist");
+            let batch = self.get_batch_by_index(batch_info.index).await?.expect("batch must exist");
             self.delete_batches_gt_block_number(batch.block_number.saturating_sub(1)).await?;
         };
 
@@ -384,8 +383,7 @@ impl<T: WriteConnectionProvider + ?Sized + Sync> DatabaseWriteOperations for T {
         else {
             return Ok((None, None));
         };
-        let batch =
-            self.get_batch_by_index(batch_info.index, None).await?.expect("batch must exist");
+        let batch = self.get_batch_by_index(batch_info.index).await?.expect("batch must exist");
         Ok((Some(block_info), Some(batch.block_number.saturating_add(1))))
     }
 
@@ -651,7 +649,6 @@ pub trait DatabaseReadOperations {
     async fn get_batch_by_index(
         &self,
         batch_index: u64,
-        processed: Option<bool>,
     ) -> Result<Option<BatchCommitData>, DatabaseError>;
 
     /// Get the latest L1 block number from the database.
@@ -730,21 +727,13 @@ impl<T: ReadConnectionProvider + Sync + ?Sized> DatabaseReadOperations for T {
     async fn get_batch_by_index(
         &self,
         batch_index: u64,
-        processed: Option<bool>,
     ) -> Result<Option<BatchCommitData>, DatabaseError> {
-        let query = if let Some(p) = processed {
-            models::batch_commit::Entity::find().filter(
-                models::batch_commit::Column::Index
-                    .eq(TryInto::<i64>::try_into(batch_index).expect("index should fit in i64"))
-                    .and(models::batch_commit::Column::Processed.eq(p)),
-            )
-        } else {
-            models::batch_commit::Entity::find_by_id(
-                TryInto::<i64>::try_into(batch_index).expect("index should fit in i64"),
-            )
-        };
-
-        Ok(query.one(self.get_connection()).await.map(|x| x.map(Into::into))?)
+        Ok(models::batch_commit::Entity::find_by_id(
+            TryInto::<i64>::try_into(batch_index).expect("index should fit in i64"),
+        )
+        .one(self.get_connection())
+        .await
+        .map(|x| x.map(Into::into))?)
     }
 
     async fn get_latest_l1_block_number(&self) -> Result<u64, DatabaseError> {
