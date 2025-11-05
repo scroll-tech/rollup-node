@@ -7,7 +7,6 @@ RUN apt-get update && apt-get -y upgrade && apt-get install -y libclang-dev pkg-
 RUN cargo install cargo-chef --locked --version  0.1.71
 
 FROM chef AS planner
-
 WORKDIR /app
 RUN --mount=target=. \
     cargo chef prepare --recipe-path /recipe.json
