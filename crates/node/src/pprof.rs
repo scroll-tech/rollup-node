@@ -46,7 +46,7 @@ pub struct PprofConfig {
 
 impl Default for PprofConfig {
     fn default() -> Self {
-        Self { addr: SocketAddr::from(([127, 0, 0, 1], 6060)), default_duration: 30 }
+        Self { addr: SocketAddr::from(([0, 0, 0, 0], 6060)), default_duration: 30 }
     }
 }
 
