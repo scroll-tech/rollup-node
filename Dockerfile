@@ -14,7 +14,8 @@ RUN --mount=target=. \
 FROM chef AS builder
 WORKDIR /app
 COPY --from=planner /recipe.json recipe.json
-RUN cargo chef cook --release --recipe-path recipe.json
+RUN  --mount=type=bind,source=.cargo,target=/app/.cargo
+    cargo chef cook --release --recipe-path recipe.json
 RUN --mount=target=. \
     cargo build ${CARGO_FEATURES:+--features $CARGO_FEATURES} --release --target-dir=/app-target
 

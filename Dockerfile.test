@@ -29,6 +29,7 @@ WORKDIR /app
 COPY --from=planner /recipe.json recipe.json
 RUN --mount=type=cache,target=/usr/local/cargo/registry \
     --mount=type=cache,target=/usr/local/cargo/git \
+    --mount=type=bind,source=.cargo,target=/app/.cargo
     cargo chef cook --release --recipe-path recipe.json
 
 COPY . .
