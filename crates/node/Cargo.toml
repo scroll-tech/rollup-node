@@ -99,6 +99,13 @@ reqwest.workspace = true
 tokio.workspace = true
 tracing.workspace = true
 
+# pprof dependencies
+pprof = { version = "0.15.0", features = ["flamegraph", "protobuf-codec"] }
+protobuf = "2.28"
+hyper = { version = "1.5", features = ["full"] }
+hyper-util = { version = "0.1", features = ["tokio"] }
+http-body-util = "0.1"
+
 [dev-dependencies]
 alloy-chains.workspace = true
 alloy-eips.workspace = true

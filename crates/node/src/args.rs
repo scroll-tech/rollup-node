@@ -92,6 +92,9 @@ pub struct ScrollRollupNodeConfig {
     /// The gas price oracle args
     #[command(flatten)]
     pub gas_price_oracle_args: RollupNodeGasPriceOracleArgs,
+    /// The pprof server arguments
+    #[command(flatten)]
+    pub pprof_args: PprofArgs,
     /// The database connection (not parsed via CLI but hydrated after validation).
     #[arg(skip)]
     pub database: Option<Arc<Database>>,
@@ -819,6 +822,40 @@ pub struct RollupNodeGasPriceOracleArgs {
     pub default_suggested_priority_fee: u64,
 }
 
+/// The arguments for the pprof server.
+#[derive(Debug, Clone, clap::Args)]
+pub struct PprofArgs {
+    /// Enable the pprof HTTP server for performance profiling
+    #[arg(long = "pprof.enabled", help = "Enable the pprof HTTP server")]
+    pub enabled: bool,
+
+    /// The address to bind the pprof HTTP server to
+    #[arg(
+        long = "pprof.addr",
+        help = "Address to bind the pprof HTTP server (e.g., 127.0.0.1:6060)",
+        default_value = "127.0.0.1:6060"
+    )]
+    pub addr: String,
+
+    /// Default profiling duration in seconds
+    #[arg(
+        long = "pprof.default-duration",
+        help = "Default CPU profiling duration in seconds",
+        default_value_t = 30
+    )]
+    pub default_duration: u64,
+}
+
+impl Default for PprofArgs {
+    fn default() -> Self {
+        Self {
+            enabled: false,
+            addr: "127.0.0.1:6060".to_string(),
+            default_duration: 30,
+        }
+    }
+}
+
 /// Returns the total difficulty constant for the given chain.
 const fn td_constant(chain: Option<NamedChain>) -> U128 {
     match chain {
@@ -905,6 +942,7 @@ mod tests {
             },
             database: None,
             rpc_args: RpcArgs::default(),
+            pprof_args: PprofArgs::default(),
         };
 
         let result = config.validate();
@@ -937,6 +975,7 @@ mod tests {
             },
             database: None,
             rpc_args: RpcArgs::default(),
+            pprof_args: PprofArgs::default(),
         };
 
         let result = config.validate();
@@ -964,6 +1003,7 @@ mod tests {
             consensus_args: ConsensusArgs::noop(),
             database: None,
             rpc_args: RpcArgs::default(),
+            pprof_args: PprofArgs::default(),
         };
 
         assert!(config.validate().is_ok());
@@ -989,6 +1029,7 @@ mod tests {
             consensus_args: ConsensusArgs::noop(),
             database: None,
             rpc_args: RpcArgs::default(),
+            pprof_args: PprofArgs::default(),
         };
 
         assert!(config.validate().is_ok());
@@ -1010,6 +1051,7 @@ mod tests {
             consensus_args: ConsensusArgs::noop(),
             database: None,
             rpc_args: RpcArgs::default(),
+            pprof_args: PprofArgs::default(),
         };
 
         assert!(config.validate().is_ok());

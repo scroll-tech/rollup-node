@@ -1,6 +1,6 @@
 //! This crate contains utilities for running end-to-end tests for the scroll reth node.
 
-use crate::{ConsensusArgs, RollupNodeGasPriceOracleArgs};
+use crate::{ConsensusArgs, PprofArgs, RollupNodeGasPriceOracleArgs};
 
 use super::{
     BlobProviderArgs, ChainOrchestratorArgs, EngineDriverArgs, L1ProviderArgs,
@@ -162,6 +162,7 @@ pub fn default_test_scroll_rollup_node_config() -> ScrollRollupNodeConfig {
         consensus_args: ConsensusArgs::noop(),
         database: None,
         rpc_args: RpcArgs { enabled: true },
+        pprof_args: PprofArgs::default(),
     }
 }
 
@@ -202,5 +203,6 @@ pub fn default_sequencer_test_scroll_rollup_node_config() -> ScrollRollupNodeCon
         consensus_args: ConsensusArgs::noop(),
         database: None,
         rpc_args: RpcArgs { enabled: true },
+        pprof_args: PprofArgs::default(),
     }
 }
