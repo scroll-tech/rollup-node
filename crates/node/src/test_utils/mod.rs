@@ -21,22 +21,56 @@
 //!         .await_block()
 //!         .await?;
 //!
+//!     // Get the current block
+//!     let current_block = fixture.get_sequencer_block().await?;
+//!
 //!     Ok(())
 //! }
+//! ```
+//!
+//! # Event Assertions
+//!
+//! The framework provides powerful event assertion capabilities:
+//!
+//! ```rust,ignore
+//! // Wait for events on a single node
+//! fixture.expect_event_on(1).chain_extended().await?;
+//!
+//! // Wait for the same event on multiple nodes
+//! fixture.expect_event_on_followers().new_block_received().await?;
+//!
+//! // Wait for events on all nodes (including sequencer)
+//! fixture.expect_event_on_all_nodes().chain_extended().await?;
+//!
+//! // Custom event predicates - just check if event matches
+//! fixture.expect_event()
+//!     .where_event(|e| matches!(e, ChainOrchestratorEvent::BlockSequenced(_)))
+//!     .await?;
+//!
+//! // Extract values from events
+//! let block_numbers = fixture.expect_event_on_nodes(vec![1, 2])
+//!     .extract(|e| {
+//!         if let ChainOrchestratorEvent::NewL1Block(num) = e {
+//!             Some(*num)
+//!         } else {
+//!             None
+//!         }
+//!     })
+//!     .await?;
 //! ```
 
 // Module declarations
 pub mod block_builder;
-pub mod config;
 pub mod event_utils;
 pub mod fixture;
 pub mod l1_helpers;
+pub mod network_helpers;
 pub mod tx_helpers;
 
 // Re-export main types for convenience
-pub use config::{test_config, TestConfigBuilder};
-pub use event_utils::{EventAssertions, EventSequence, EventWaiter};
+pub use event_utils::{EventAssertions, EventWaiter, MultiNodeEventWaiter};
 pub use fixture::{NodeHandle, TestFixture, TestFixtureBuilder};
+pub use network_helpers::{NetworkHelper, NetworkHelpers, ReputationChecker, ReputationChecks};
 
 // Legacy utilities - keep existing functions for backward compatibility
 use crate::{

@@ -1,6 +1,8 @@
 //! Block building helpers for test fixtures.
 
 use super::fixture::TestFixture;
+use crate::test_utils::EventAssertions;
+
 use alloy_primitives::B256;
 use futures::StreamExt;
 use reth_primitives_traits::transaction::TxHashRef;
@@ -20,6 +22,7 @@ pub struct BlockBuilder<'a, EC> {
     expected_tx_hashes: Vec<B256>,
     expected_tx_count: Option<usize>,
     expected_base_fee: Option<u64>,
+    expected_block_number: Option<u64>,
     expect_l1_message: bool,
     expected_l1_message_count: Option<usize>,
 }
@@ -31,6 +34,7 @@ impl<'a, EC: EngineApiClient<ScrollEngineTypes> + Sync + Send + 'static> BlockBu
             fixture,
             expected_tx_hashes: Vec::new(),
             expected_tx_count: None,
+            expected_block_number: None,
             expected_base_fee: None,
             expect_l1_message: false,
             expected_l1_message_count: None,
@@ -46,6 +50,12 @@ impl<'a, EC: EngineApiClient<ScrollEngineTypes> + Sync + Send + 'static> BlockBu
     /// Expect a specific number of transactions in the block.
     pub const fn expect_tx_count(mut self, count: usize) -> Self {
         self.expected_tx_count = Some(count);
+        self
+    }
+
+    /// Expect a specific block number.
+    pub const fn expect_block_number(mut self, number: u64) -> Self {
+        self.expected_block_number = Some(number);
         self
     }
 
@@ -69,29 +79,34 @@ impl<'a, EC: EngineApiClient<ScrollEngineTypes> + Sync + Send + 'static> BlockBu
 
     /// Build the block and validate against expectations.
     pub async fn await_block(self) -> eyre::Result<ScrollBlock> {
-        let sequencer_node = &mut self.fixture.nodes[0];
+        let sequencer_node = &self.fixture.nodes[0];
 
         // Get the sequencer from the rollup manager handle
-        let handle = &mut sequencer_node.rollup_manager_handle;
+        let handle = &sequencer_node.rollup_manager_handle;
 
         // Trigger block building
         handle.build_block();
 
-        // Wait for the block to be built by listening to the event stream
-        let events = &mut sequencer_node.chain_orchestrator_rx;
-
-        loop {
-            if let Some(event) = events.next().await {
+        // If extract the block number.
+        let expect = self.fixture.expect_event();
+        let block =
+            if let Some(b) = self.expected_block_number {
+                expect.block_sequenced(b).await?
+            } else {
+                expect.extract(|e| {
                 if let rollup_node_chain_orchestrator::ChainOrchestratorEvent::BlockSequenced(
                     block,
-                ) = event
+                ) = e
                 {
-                    return self.validate_block(&block);
+                    Some(block.clone())
+                } else {
+                    None
                 }
-            } else {
-                return Err(eyre::eyre!("Event stream ended without block sequenced event"));
-            }
-        }
+            }).await?
+            };
+
+        // Finally validate the block.
+        self.validate_block(&block)
     }
 
     /// Build a block using the low-level sequencer API (for direct sequencer tests).
@@ -129,6 +144,17 @@ impl<'a, EC: EngineApiClient<ScrollEngineTypes> + Sync + Send + 'static> BlockBu
                     "Expected {} transactions, but block has {}",
                     expected_count,
                     block.body.transactions.len()
+                ));
+            }
+        }
+
+        // Check block number
+        if let Some(expected_number) = self.expected_block_number {
+            if block.header.number != expected_number {
+                return Err(eyre::eyre!(
+                    "Expected {} number, but block has {}",
+                    expected_number,
+                    block.header.number
                 ));
             }
         }

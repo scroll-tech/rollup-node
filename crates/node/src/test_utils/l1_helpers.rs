@@ -1,12 +1,12 @@
 //! L1 interaction helpers for test fixtures.
 
 use super::fixture::TestFixture;
-use alloy_primitives::{Address, Bytes, U256};
-use rollup_node_primitives::L1MessageEnvelope;
+use std::{fmt::Debug, str::FromStr, sync::Arc};
+
+use alloy_primitives::{Address, Bytes, B256, U256};
+use rollup_node_primitives::BatchCommitData;
 use rollup_node_watcher::L1Notification;
 use scroll_alloy_consensus::TxL1Message;
-use scroll_db::DatabaseWriteOperations;
-use std::{fmt::Debug, sync::Arc};
 
 /// Helper for managing L1 interactions in tests.
 #[derive(Debug)]
@@ -28,20 +28,46 @@ impl<'a, EC> L1Helper<'a, EC> {
     }
 
     /// Send a notification that L1 is synced.
-    pub async fn sync(self) -> eyre::Result<()> {
+    pub async fn sync(mut self) -> eyre::Result<()> {
         let notification = Arc::new(L1Notification::Synced);
         self.send_to_nodes(notification).await
     }
 
     /// Send a new L1 block notification.
-    pub async fn new_block(self, block_number: u64) -> eyre::Result<()> {
+    pub async fn new_block(mut self, block_number: u64) -> eyre::Result<()> {
         let notification = Arc::new(L1Notification::NewBlock(block_number));
         self.send_to_nodes(notification).await
     }
 
     /// Send an L1 reorg notification.
-    pub async fn reorg_to(self, block_number: u64) -> eyre::Result<()> {
+    pub async fn reorg_to(mut self, block_number: u64) -> eyre::Result<()> {
         let notification = Arc::new(L1Notification::Reorg(block_number));
+        self.send_to_nodes(notification).await
+    }
+
+    /// Send an L1 reorg notification.
+    pub async fn batch_commit(
+        mut self,
+        calldata_path: Option<&str>,
+        index: u64,
+    ) -> eyre::Result<()> {
+        let raw_calldata = calldata_path
+            .map(|path| {
+                Result::<_, eyre::Report>::Ok(Bytes::from_str(&std::fs::read_to_string(path)?)?)
+            })
+            .transpose()?
+            .unwrap_or_default();
+        let batch_data = BatchCommitData {
+            hash: B256::random(),
+            index,
+            block_number: 0,
+            block_timestamp: 0,
+            calldata: Arc::new(raw_calldata),
+            blob_versioned_hash: None,
+            finalized_block_number: None,
+        };
+
+        let notification = Arc::new(L1Notification::BatchCommit(batch_data));
         self.send_to_nodes(notification).await
     }
 
@@ -50,24 +76,8 @@ impl<'a, EC> L1Helper<'a, EC> {
         L1MessageBuilder::new(self)
     }
 
-    /// Set the latest L1 block number in the database.
-    pub async fn set_latest_block(self, block_number: u64) -> eyre::Result<()> {
-        if let Some(db) = &self.fixture.database {
-            db.set_latest_l1_block_number(block_number).await?;
-        }
-        Ok(())
-    }
-
-    /// Set the finalized L1 block number in the database.
-    pub async fn set_finalized_block(self, block_number: u64) -> eyre::Result<()> {
-        if let Some(db) = &self.fixture.database {
-            db.set_finalized_l1_block_number(block_number).await?;
-        }
-        Ok(())
-    }
-
     /// Send notification to target nodes.
-    async fn send_to_nodes(self, notification: Arc<L1Notification>) -> eyre::Result<()> {
+    async fn send_to_nodes(&mut self, notification: Arc<L1Notification>) -> eyre::Result<()> {
         let nodes = if let Some(index) = self.target_node_index {
             vec![&self.fixture.nodes[index]]
         } else {
@@ -167,18 +177,6 @@ impl<'a, EC> L1MessageBuilder<'a, EC> {
             input: self.input,
         };
 
-        let l1_message_envelope = L1MessageEnvelope {
-            l1_block_number: self.l1_block_number,
-            l2_block_number: None,
-            queue_hash: None,
-            transaction: tx_l1_message.clone(),
-        };
-
-        // Insert into database if available
-        if let Some(db) = &self.l1_helper.fixture.database {
-            db.insert_l1_message(l1_message_envelope.clone()).await?;
-        }
-
         // Send notification to nodes
         let notification = Arc::new(L1Notification::L1Message {
             message: tx_l1_message.clone(),
@@ -196,34 +194,6 @@ impl<'a, EC> L1MessageBuilder<'a, EC> {
             if let Some(tx) = &node.l1_watcher_tx {
                 tx.send(notification.clone()).await?;
             }
-        }
-
-        Ok(tx_l1_message)
-    }
-
-    /// Insert the message into the database without notifying nodes.
-    pub async fn insert_only(self) -> eyre::Result<TxL1Message> {
-        let sender = self.sender.unwrap_or_else(|| self.l1_helper.fixture.wallet_address());
-
-        let tx_l1_message = TxL1Message {
-            queue_index: self.queue_index,
-            gas_limit: self.gas_limit,
-            to: self.to,
-            value: self.value,
-            sender,
-            input: self.input,
-        };
-
-        let l1_message_envelope = L1MessageEnvelope {
-            l1_block_number: self.l1_block_number,
-            l2_block_number: None,
-            queue_hash: None,
-            transaction: tx_l1_message.clone(),
-        };
-
-        // Insert into database if available
-        if let Some(db) = &self.l1_helper.fixture.database {
-            db.insert_l1_message(l1_message_envelope).await?;
         }
 
         Ok(tx_l1_message)
