@@ -13,6 +13,7 @@ RUN --mount=target=. \
 
 FROM chef AS builder
 WORKDIR /app
+ENV RUSTFLAGS="--cfg tokio_unstable"
 COPY --from=planner /recipe.json recipe.json
 RUN cargo chef cook --release --recipe-path recipe.json
 RUN --mount=target=. \
@@ -26,7 +27,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates
     rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
-
+ENV RUSTFLAGS="--cfg tokio_unstable"
 COPY --from=builder /app-target/release/rollup-node /bin/
 
 EXPOSE 30303 30303/udp 9001 8545 8546

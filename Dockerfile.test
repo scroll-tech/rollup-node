@@ -8,7 +8,7 @@ RUN cargo install cargo-chef --locked
 
 FROM chef AS planner
 WORKDIR /app
-
+ENV RUSTFLAGS="--cfg tokio_unstable"
 COPY . .
 # Hacky: Replace tests with dummy stub to avoid workspace member issues of top-level Cargo.toml.
 # This is needed because within the Docker integration tests we don't need the tests crate 
@@ -27,6 +27,7 @@ RUN cargo chef prepare --recipe-path /recipe.json
 
 FROM chef AS builder
 WORKDIR /app
+ENV RUSTFLAGS="--cfg tokio_unstable"
 COPY --from=planner /recipe.json recipe.json
 RUN --mount=type=cache,target=/usr/local/cargo/registry \
     --mount=type=cache,target=/usr/local/cargo/git \
