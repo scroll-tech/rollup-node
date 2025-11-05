@@ -5,7 +5,7 @@ use alloy_primitives::{address, b256, Address, Bytes, Signature, B256, U256};
 use alloy_rpc_types_eth::Block;
 use alloy_signer::Signer;
 use alloy_signer_local::PrivateKeySigner;
-use eyre::Ok;
+use eyre::{bail, Ok};
 use futures::{task::noop_waker_ref, FutureExt, StreamExt};
 use reth_chainspec::EthChainSpec;
 use reth_e2e_test_utils::{NodeHelperType, TmpDB};
@@ -48,7 +48,7 @@ use std::{
     task::{Context, Poll},
     time::Duration,
 };
-use tokio::{sync::Mutex, time};
+use tokio::{select, sync::Mutex, time};
 use tracing::trace;
 
 #[tokio::test]
@@ -1025,20 +1025,28 @@ async fn shutdown_consolidates_most_recent_batch_on_startup() -> eyre::Result<()
     // Lets finalize the second batch.
     l1_notification_tx.send(Arc::new(L1Notification::Finalized(batch_1_data.block_number))).await?;
 
+    let mut l2_block = None;
     // Lets fetch the first consolidated block event - this should be the first block of the batch.
-    let l2_block = loop {
-        if let Some(ChainOrchestratorEvent::BlockConsolidated(consolidation_outcome)) =
-            rnm_events.next().await
-        {
-            break consolidation_outcome.block_info().clone();
+    select! {
+        _ = tokio::time::sleep(Duration::from_secs(5)) => {
+            bail!("Timed out waiting for first consolidated block after RNM restart");
         }
-    };
+
+        evt = rnm_events.next() => {
+            if let Some(ChainOrchestratorEvent::BlockConsolidated(consolidation_outcome)) = evt {
+                l2_block = Some(consolidation_outcome.block_info().clone());
+            } else {
+                println!("Received unexpected event: {:?}", evt);
+            }
+        }
+    }
 
     // One issue #273 is completed, we will again have safe blocks != finalized blocks, and this
     // should be changed to 1. Assert that the consolidated block is the first block that was not
     // previously processed of the batch.
     assert_eq!(
-        l2_block.block_info.number, 41,
+        l2_block.unwrap().block_info.number,
+        41,
         "Consolidated block number does not match expected number"
     );
 
