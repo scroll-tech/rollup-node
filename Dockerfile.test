@@ -27,9 +27,9 @@ RUN cargo chef prepare --recipe-path /recipe.json
 FROM chef AS builder
 WORKDIR /app
 COPY --from=planner /recipe.json recipe.json
+COPY .cargo /app/.cargo
 RUN --mount=type=cache,target=/usr/local/cargo/registry \
     --mount=type=cache,target=/usr/local/cargo/git \
-    --mount=type=bind,source=.cargo,target=/app/.cargo
     cargo chef cook --release --recipe-path recipe.json
 
 COPY . .
@@ -47,6 +47,6 @@ WORKDIR /app
 
 COPY --from=builder /app-target/release/rollup-node /bin/
 
-EXPOSE 30303 30303/udp 9001 8545 8546
+EXPOSE 30303 30303/udp 9001 8545 8546 6669
 
 ENTRYPOINT ["rollup-node"]
