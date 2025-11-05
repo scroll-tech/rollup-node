@@ -4,9 +4,7 @@ mod error;
 pub use error::{EthRequestError, FilterLogError, L1WatcherError};
 
 pub mod handle;
-#[cfg(any(test, feature = "test-utils"))]
-pub use handle::MockL1WatcherHandle;
-pub use handle::{L1WatcherCommand, L1WatcherHandle, L1WatcherHandleTrait};
+pub use handle::{L1WatcherCommand, L1WatcherHandle};
 
 mod metrics;
 pub use metrics::WatcherMetrics;
@@ -276,8 +274,8 @@ where
     /// Handle a command sent via the handle.
     async fn handle_command(&mut self, command: L1WatcherCommand) -> L1WatcherResult<()> {
         match command {
-            L1WatcherCommand::ResetToBlock { block, new_sender, response_sender } => {
-                self.handle_reset(block, new_sender, response_sender).await?;
+            L1WatcherCommand::ResetToBlock { block, new_sender } => {
+                self.handle_reset(block, new_sender).await?;
             }
         }
         Ok(())
@@ -288,7 +286,6 @@ where
         &mut self,
         block: u64,
         new_sender: mpsc::Sender<Arc<L1Notification>>,
-        response_tx: tokio::sync::oneshot::Sender<()>,
     ) -> L1WatcherResult<()> {
         tracing::warn!(target: "scroll::watcher", "resetting L1 watcher to block {}", block);
 
@@ -300,9 +297,6 @@ where
         // Replace the sender with the fresh channel
         // This discards the old channel and any stale notifications in it
         self.sender = new_sender;
-
-        // Signal command completion via oneshot
-        let _ = response_tx.send(());
 
         Ok(())
     }

@@ -38,7 +38,7 @@ use rollup_node_providers::{
 use rollup_node_sequencer::{
     L1MessageInclusionMode, PayloadBuildingConfig, Sequencer, SequencerConfig,
 };
-use rollup_node_watcher::{L1Notification, L1Watcher};
+use rollup_node_watcher::{L1Notification, L1Watcher, L1WatcherHandle};
 use scroll_alloy_hardforks::ScrollHardforks;
 use scroll_alloy_network::Scroll;
 use scroll_alloy_provider::{ScrollAuthApiEngineClient, ScrollEngineApi};
@@ -51,7 +51,10 @@ use scroll_engine::{Engine, ForkchoiceState};
 use scroll_migration::traits::ScrollMigrator;
 use scroll_network::ScrollNetworkManager;
 use scroll_wire::ScrollWireEvent;
-use tokio::sync::mpsc::{Sender, UnboundedReceiver};
+use tokio::sync::{
+    mpsc,
+    mpsc::{Sender, UnboundedReceiver},
+};
 
 /// A struct that represents the arguments for the rollup node.
 #[derive(Debug, Clone, clap::Args)]
@@ -345,7 +348,7 @@ impl ScrollRollupNodeConfig {
         let (l1_notification_tx, l1_notification_rx, l1_watcher_handle): (
             Option<Sender<Arc<L1Notification>>>,
             _,
-            Option<rollup_node_watcher::L1WatcherHandle>,
+            L1WatcherHandle,
         ) = if let Some(provider) = l1_provider.filter(|_| !self.test) {
             tracing::info!(target: "scroll::node::args", ?l1_start_block_number, "Starting L1 watcher");
             let (rx, handle) = L1Watcher::spawn(
@@ -355,14 +358,18 @@ impl ScrollRollupNodeConfig {
                 self.l1_provider_args.logs_query_block_range,
             )
             .await;
-            (None, Some(rx), Some(handle))
+            (None, Some(rx), handle)
         } else {
             // Create a channel for L1 notifications that we can use to inject L1 messages for
             // testing
             #[cfg(feature = "test-utils")]
             {
+                // TODO: expose _command_rx to allow test utils to control the L1 watcher
+                let (command_tx, _command_rx) = mpsc::unbounded_channel();
+                let handle = L1WatcherHandle::new(command_tx);
+
                 let (tx, rx) = tokio::sync::mpsc::channel(1000);
-                (Some(tx), Some(rx), None)
+                (Some(tx), Some(rx), handle)
             }
 
             #[cfg(not(feature = "test-utils"))]

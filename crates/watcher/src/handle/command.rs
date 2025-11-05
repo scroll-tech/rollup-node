@@ -1,6 +1,6 @@
 use crate::L1Notification;
 use std::sync::Arc;
-use tokio::sync::{mpsc, oneshot};
+use tokio::sync::mpsc;
 
 /// Commands that can be sent to the L1 Watcher.
 #[derive(Debug)]
@@ -13,7 +13,5 @@ pub enum L1WatcherCommand {
         block: u64,
         /// New sender to replace the current notification channel
         new_sender: mpsc::Sender<Arc<L1Notification>>,
-        /// Oneshot sender to signal completion of the reset operation
-        response_sender: oneshot::Sender<()>,
     },
 }
