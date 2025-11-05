@@ -11,7 +11,7 @@ use reth_network_api::{BlockDownloaderProvider, FullNetwork};
 use reth_network_p2p::{sync::SyncState as RethSyncState, FullBlockClient};
 use reth_scroll_node::ScrollNetworkPrimitives;
 use reth_scroll_primitives::ScrollBlock;
-use reth_tasks::shutdown::signal as shutdown_signal;
+
 use reth_tasks::shutdown::Shutdown;
 use reth_tokio_util::{EventSender, EventStream};
 use rollup_node_primitives::{
@@ -92,7 +92,7 @@ const EVENT_CHANNEL_SIZE: usize = 5000;
 /// based on data consolidated from L1 and the data received over the p2p network.
 #[derive(Debug)]
 pub struct ChainOrchestrator<
-    N: FullNetwork<Primitives=ScrollNetworkPrimitives>,
+    N: FullNetwork<Primitives = ScrollNetworkPrimitives>,
     ChainSpec,
     L1MP,
     L2P,
@@ -134,13 +134,13 @@ pub struct ChainOrchestrator<
 }
 
 impl<
-    N: FullNetwork<Primitives=ScrollNetworkPrimitives> + Send + Sync + 'static,
-    ChainSpec: ScrollHardforks + EthChainSpec + Send + Sync + 'static,
-    L1MP: L1MessageProvider + Unpin + Clone + Send + Sync + 'static,
-    L2P: Provider<Scroll> + 'static,
-    EC: ScrollEngineApi + Sync + Send + 'static,
-    H: L1WatcherHandleTrait,
-> ChainOrchestrator<N, ChainSpec, L1MP, L2P, EC, H>
+        N: FullNetwork<Primitives = ScrollNetworkPrimitives> + Send + Sync + 'static,
+        ChainSpec: ScrollHardforks + EthChainSpec + Send + Sync + 'static,
+        L1MP: L1MessageProvider + Unpin + Clone + Send + Sync + 'static,
+        L2P: Provider<Scroll> + 'static,
+        EC: ScrollEngineApi + Sync + Send + 'static,
+        H: L1WatcherHandleTrait,
+    > ChainOrchestrator<N, ChainSpec, L1MP, L2P, EC, H>
 {
     /// Creates a new chain orchestrator.
     #[allow(clippy::too_many_arguments)]
@@ -819,7 +819,7 @@ impl<
             &l1_message,
             self.config.l1_v2_message_queue_start_index(),
         )
-            .await?;
+        .await?;
         let l1_message = L1MessageEnvelope::new(l1_message, l1_block_number, None, queue_hash);
 
         // Perform a consistency check to ensure the previous L1 message exists in the database.
@@ -2135,21 +2135,19 @@ mod tests {
     use alloy_rpc_client::RpcClient;
     use reth_scroll_consensus::ScrollBeaconConsensus;
     use reth_scroll_node::test_utils::setup;
+    use reth_tasks::shutdown::signal as shutdown_signal;
     use rollup_node_primitives::BatchCommitData;
     use rollup_node_providers::test_utils::MockL1Provider;
     use rollup_node_sequencer::{L1MessageInclusionMode, PayloadBuildingConfig, SequencerConfig};
-    use scroll_alloy_consensus::TxL1Message;
     use scroll_alloy_provider::ScrollAuthApiEngineClient;
     use scroll_db::test_utils::setup_test_db;
     use scroll_engine::ForkchoiceState;
     use scroll_network::{NetworkConfigBuilder, ScrollWireConfig};
-    use std::collections::HashMap;
-    use std::sync::Arc;
+    use std::{collections::HashMap, sync::Arc};
     use tokio::sync::mpsc;
 
     #[tokio::test]
-    async fn test_gap_recovery()
-    {
+    async fn test_gap_recovery() {
         use rollup_node_watcher::MockL1WatcherHandle;
 
         // setup a test node
@@ -2174,16 +2172,19 @@ mod tests {
 
         // prepare derivation pipeline
         let mock_l1_provider = MockL1Provider { db: db.clone(), blobs: HashMap::new() };
-        let derivation_pipeline = DerivationPipeline::new(mock_l1_provider, db.clone(), u64::MAX).await;
+        let derivation_pipeline =
+            DerivationPipeline::new(mock_l1_provider, db.clone(), u64::MAX).await;
 
-        let (scroll_network_manager, scroll_network_handle) = scroll_network::ScrollNetworkManager::new(
-            node.inner.chain_spec().clone(),
-            NetworkConfigBuilder::<ScrollNetworkPrimitives>::with_rng_secret_key().build_with_noop_provider(node.inner.chain_spec().clone()),
-            ScrollWireConfig::new(true),
-            None,
-            Default::default(),
-            None,
-        )
+        let (scroll_network_manager, scroll_network_handle) =
+            scroll_network::ScrollNetworkManager::new(
+                node.inner.chain_spec().clone(),
+                NetworkConfigBuilder::<ScrollNetworkPrimitives>::with_rng_secret_key()
+                    .build_with_noop_provider(node.inner.chain_spec().clone()),
+                ScrollWireConfig::new(true),
+                None,
+                Default::default(),
+                None,
+            )
             .await;
         tokio::spawn(scroll_network_manager);
 
@@ -2194,7 +2195,7 @@ mod tests {
                 .fetch_client()
                 .await
                 .expect("failed to fetch block client"),
-            Arc::new(ScrollBeaconConsensus::new(node.inner.chain_spec().clone())),
+            Arc::new(ScrollBeaconConsensus::new(node.inner.chain_spec())),
         );
 
         // create l2 provider
@@ -2221,25 +2222,27 @@ mod tests {
             scroll_network_handle.into_scroll_network().await,
             Box::new(NoopConsensus::default()),
             engine,
-            Some(Sequencer::new(Arc::new(MockL1Provider { db: db.clone(), blobs: HashMap::new() }), SequencerConfig {
-                chain_spec: node.inner.chain_spec(),
-                fee_recipient: Address::random(),
-                auto_start: false,
-                payload_building_config: PayloadBuildingConfig {
-                    block_gas_limit: 15_000_000,
-                    max_l1_messages_per_block: 4,
-                    l1_message_inclusion_mode: L1MessageInclusionMode::BlockDepth(0),
+            Some(Sequencer::new(
+                Arc::new(MockL1Provider { db: db.clone(), blobs: HashMap::new() }),
+                SequencerConfig {
+                    chain_spec: node.inner.chain_spec(),
+                    fee_recipient: Address::random(),
+                    auto_start: false,
+                    payload_building_config: PayloadBuildingConfig {
+                        block_gas_limit: 15_000_000,
+                        max_l1_messages_per_block: 4,
+                        l1_message_inclusion_mode: L1MessageInclusionMode::BlockDepth(0),
+                    },
+                    block_time: 1,
+                    payload_building_duration: 0,
+                    allow_empty_blocks: false,
                 },
-                block_time: 1,
-                payload_building_duration: 0,
-                allow_empty_blocks: false,
-            })),
+            )),
             None,
             derivation_pipeline,
         )
-            .await
-            .unwrap();
-
+        .await
+        .unwrap();
 
         // Spawn a task that constantly polls chain orchestrator to process L1 notifications
         let (_signal, shutdown) = shutdown_signal();
@@ -2247,23 +2250,28 @@ mod tests {
             let (_signal, inner) = shutdown_signal();
             let chain_orchestrator = chain_orchestrator.run_until_shutdown(inner);
             tokio::select! {
-            biased;
+                biased;
 
-            _ = shutdown => {},
-            _ = chain_orchestrator => {},
-        }
+                _ = shutdown => {},
+                _ = chain_orchestrator => {},
+            }
         });
 
         let genesis_batch = create_test_batch(1, 100);
-        l1_notification_tx.send(Arc::new(L1Notification::BatchCommit(genesis_batch))).await.unwrap();
+        l1_notification_tx
+            .send(Arc::new(L1Notification::BatchCommit(genesis_batch)))
+            .await
+            .unwrap();
         tokio::time::sleep(tokio::time::Duration::from_millis(50)).await;
 
         let batch_with_gap = create_test_batch(3, 102);
-        l1_notification_tx.send(Arc::new(L1Notification::BatchCommit(batch_with_gap))).await.unwrap();
+        l1_notification_tx
+            .send(Arc::new(L1Notification::BatchCommit(batch_with_gap)))
+            .await
+            .unwrap();
         tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
 
         mock_l1_watcher_handle.assert_reset_to(100);
-
 
         // Insert first L1 message
         // let l1_msg_0 = create_test_l1_message(0);
@@ -2301,7 +2309,7 @@ mod tests {
     }
 
     // Helper function to create a simple test L1 message
-    fn create_test_l1_message(queue_index: u64) -> TxL1Message {
-        TxL1Message { queue_index, ..Default::default() }
-    }
+    // fn create_test_l1_message(queue_index: u64) -> TxL1Message {
+    //     TxL1Message { queue_index, ..Default::default() }
+    // }
 }

@@ -4,9 +4,9 @@ mod error;
 pub use error::{EthRequestError, FilterLogError, L1WatcherError};
 
 pub mod handle;
-pub use handle::{L1WatcherCommand, L1WatcherHandle, L1WatcherHandleTrait};
 #[cfg(any(test, feature = "test-utils"))]
 pub use handle::MockL1WatcherHandle;
+pub use handle::{L1WatcherCommand, L1WatcherHandle, L1WatcherHandleTrait};
 
 mod metrics;
 pub use metrics::WatcherMetrics;

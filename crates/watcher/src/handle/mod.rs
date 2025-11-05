@@ -83,12 +83,12 @@ impl L1WatcherHandleTrait for L1WatcherHandle {
 }
 
 #[cfg(any(test, feature = "test-utils"))]
-/// Mock implementation of L1WatcherHandleTrait for testing.
+/// Mock implementation of `L1WatcherHandleTrait` for testing.
 ///
 /// This mock tracks all reset calls for test assertions and always succeeds.
 #[derive(Debug, Clone)]
 pub struct MockL1WatcherHandle {
-    /// Track reset calls as (block_number, channel_capacity)
+    /// Track reset calls as (`block_number`, `channel_capacity`)
     resets: Arc<std::sync::Mutex<Vec<(u64, usize)>>>,
 }
 
@@ -96,17 +96,15 @@ pub struct MockL1WatcherHandle {
 impl MockL1WatcherHandle {
     /// Create a new mock handle.
     pub fn new() -> Self {
-        Self {
-            resets: Arc::new(std::sync::Mutex::new(Vec::new())),
-        }
+        Self { resets: Arc::new(std::sync::Mutex::new(Vec::new())) }
     }
 
-    /// Get all recorded reset calls as (block_number, channel_capacity).
+    /// Get all recorded reset calls as (`block_number`, `channel_capacity`).
     pub fn get_resets(&self) -> Vec<(u64, usize)> {
         self.resets.lock().unwrap().clone()
     }
 
-    /// Assert that reset_to_block was called with the specified block number.
+    /// Assert that `reset_to_block` was called with the specified block number.
     pub fn assert_reset_to(&self, expected_block: u64) {
         let resets = self.get_resets();
         assert!(
@@ -120,11 +118,13 @@ impl MockL1WatcherHandle {
     /// Assert that no reset calls were made.
     pub fn assert_no_resets(&self) {
         let resets = self.get_resets();
-        assert!(
-            resets.is_empty(),
-            "Expected no reset calls, but got: {:?}",
-            resets
-        );
+        assert!(resets.is_empty(), "Expected no reset calls, but got: {:?}", resets);
+    }
+}
+
+impl Default for MockL1WatcherHandle {
+    fn default() -> Self {
+        Self::new()
     }
 }
 #[cfg(any(test, feature = "test-utils"))]
@@ -136,10 +136,7 @@ impl L1WatcherHandleTrait for MockL1WatcherHandle {
         new_sender: mpsc::Sender<Arc<L1Notification>>,
     ) -> Result<(), oneshot::error::RecvError> {
         // Track the reset call
-        self.resets
-            .lock()
-            .unwrap()
-            .push((block, new_sender.max_capacity()));
+        self.resets.lock().unwrap().push((block, new_sender.max_capacity()));
 
         // Mock always succeeds
         Ok(())
