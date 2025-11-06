@@ -14,6 +14,7 @@ RUN --mount=target=. \
 FROM chef AS builder
 WORKDIR /app
 COPY --from=planner /recipe.json recipe.json
+COPY .cargo /app/.cargo
 RUN cargo chef cook --release --recipe-path recipe.json
 RUN --mount=target=. \
     cargo build ${CARGO_FEATURES:+--features $CARGO_FEATURES} --release --target-dir=/app-target
@@ -29,6 +30,6 @@ WORKDIR /app
 
 COPY --from=builder /app-target/release/rollup-node /bin/
 
-EXPOSE 30303 30303/udp 9001 8545 8546
+EXPOSE 30303 30303/udp 9001 8545 8546 6669
 
 ENTRYPOINT ["rollup-node"]
