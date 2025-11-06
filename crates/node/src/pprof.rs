@@ -9,10 +9,10 @@
 //! # Example Usage
 //! ```bash
 //! # Collect CPU profile for 30 seconds
-//! curl http://localhost:6060/debug/pprof/profile?seconds=30 -o cpu.pb
+//! curl http://localhost:6868/debug/pprof/profile?seconds=30 -o cpu.pb
 //!
 //! # Collect CPU profile for 60 seconds
-//! curl http://localhost:6060/debug/pprof/profile?seconds=60 -o cpu.pb
+//! curl http://localhost:6868/debug/pprof/profile?seconds=60 -o cpu.pb
 //!
 //! # View with pprof (requires Go pprof tool)
 //! go tool pprof -http=:8080 cpu.pb
@@ -46,7 +46,7 @@ pub struct PprofConfig {
 
 impl Default for PprofConfig {
     fn default() -> Self {
-        Self { addr: SocketAddr::from(([0, 0, 0, 0], 6060)), default_duration: 30 }
+        Self { addr: SocketAddr::from(([0, 0, 0, 0], 6868)), default_duration: 30 }
     }
 }
 
@@ -81,7 +81,7 @@ impl PprofConfig {
 ///
 /// #[tokio::main]
 /// async fn main() -> eyre::Result<()> {
-///     let config = PprofConfig::new("127.0.0.1:6060".parse()?);
+///     let config = PprofConfig::new("127.0.0.1:6868".parse()?);
 ///     let handle = start_pprof_server(config).await?;
 ///
 ///     // Server runs in background
