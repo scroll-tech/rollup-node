@@ -292,13 +292,13 @@ mod tests {
     #[test]
     fn test_default_config() {
         let config = PprofConfig::default();
-        assert_eq!(config.addr, "127.0.0.1:6060".parse::<SocketAddr>().unwrap());
+        assert_eq!(config.addr, "0.0.0.0:6868".parse::<SocketAddr>().unwrap());
         assert_eq!(config.default_duration, 30);
     }
 
     #[test]
     fn test_custom_config() {
-        let addr = "0.0.0.0:7070".parse::<SocketAddr>().unwrap();
+        let addr = "0.0.0.0:6868".parse::<SocketAddr>().unwrap();
         let config = PprofConfig::new(addr).with_default_duration(60);
         assert_eq!(config.addr, addr);
         assert_eq!(config.default_duration, 60);
