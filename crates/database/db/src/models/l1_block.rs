@@ -11,13 +11,6 @@ pub struct Model {
     block_hash: Vec<u8>,
 }
 
-// impl Model {
-//     /// Returns the `BlockInfo` representation of this L1 block.
-//     pub(crate) fn block_info(&self) -> BlockInfo {
-//         BlockInfo { number: self.block_number as u64, hash: B256::from_slice(&self.block_hash) }
-//     }
-// }
-
 /// The relation for the batch input model.
 #[derive(Copy, Clone, Debug, EnumIter, DeriveRelation)]
 pub enum Relation {}

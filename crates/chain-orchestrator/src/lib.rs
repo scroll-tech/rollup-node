@@ -650,9 +650,8 @@ impl<
                 tx.set_finalized_l1_block_number(block_info.number).await?;
 
                 // Finalize consolidated batches up to the finalized L1 block number.
-                let finalized_block_number = tx.get_finalized_l1_block_number().await?;
                 let finalized_block_info =
-                    tx.finalize_consolidated_batches(finalized_block_number).await?;
+                    tx.finalize_consolidated_batches(block_info.number).await?;
 
                 // Get all unprocessed batches that have been finalized by this L1 block
                 // finalization.

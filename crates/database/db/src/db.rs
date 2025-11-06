@@ -917,10 +917,6 @@ mod test {
             .await;
         for batch in batches {
             let batch = batch.unwrap();
-            println!(
-                "Batch index: {}, finalized_block_number: {:?}",
-                batch.index, batch.finalized_block_number
-            );
             if batch.index == 0 {
                 assert_eq!(batch.finalized_block_number, Some(0));
             } else if batch.index < 10 {
