@@ -1132,27 +1132,14 @@ async fn requeues_transactions_after_l1_reorg() -> eyre::Result<()> {
 
     // Inject a user transaction and force the sequencer to include it in the next block
     let hash = sequencer.inject_transfer().await?;
-    let block_with_tx = sequencer.build_block().await_block().await?;
-
-    let hashes: Vec<_> =
-        block_with_tx.body.transactions.into_iter().map(|tx| *tx.tx_hash()).collect();
-    assert!(
-        hashes.len() == 1 && hashes.contains(&hash),
-        "block 11 should contain the injected transaction before the reorg"
-    );
+    sequencer.build_block().expect_tx(hash).expect_tx_count(1).await_block().await?;
 
     // Trigger an L1 reorg that reverts the block containing the transaction
     sequencer.l1().reorg_to(1).await?;
     sequencer.expect_event().l1_reorg().await?;
 
     // Build the next block – the reverted transaction should have been requeued
-    let block_with_tx = sequencer.build_block().await_block().await?;
-    let hashes: Vec<_> =
-        block_with_tx.body.transactions.into_iter().map(|tx| *tx.tx_hash()).collect();
-    assert!(
-        hashes.len() == 1 && hashes.contains(&hash),
-        "re-sequenced block should contain the reverted transaction"
-    );
+    sequencer.build_block().expect_tx(hash).expect_tx_count(1).await_block().await?;
 
     Ok(())
 }
@@ -1181,13 +1168,13 @@ async fn requeues_transactions_after_update_fcs_head() -> eyre::Result<()> {
 
     // Inject a user transaction and include it in block 5.
     let hash = sequencer.inject_transfer().await?;
-    let block = sequencer.build_block().expect_block_number(5).await_block().await?;
-
-    let hashes: Vec<_> = block.body.transactions.into_iter().map(|tx| *tx.tx_hash()).collect();
-    assert!(
-        hashes.len() == 1 && hashes.contains(&hash),
-        "block 5 should contain the injected transaction before the FCU"
-    );
+    sequencer
+        .build_block()
+        .expect_block_number(5)
+        .expect_tx(hash)
+        .expect_tx_count(1)
+        .await_block()
+        .await?;
 
     // Reset FCS head back to block 4; this should collect block 5's txs and requeue them.
     let head = target_head.expect("target head exists");
@@ -1199,12 +1186,13 @@ async fn requeues_transactions_after_update_fcs_head() -> eyre::Result<()> {
         .expect("update_fcs_head should succeed");
 
     // Build the next block – the reverted transaction should have been requeued and included.
-    let block = sequencer.build_block().expect_block_number(5).await_block().await?;
-    let hashes: Vec<_> = block.body.transactions.into_iter().map(|tx| *tx.tx_hash()).collect();
-    assert!(
-        hashes.len() == 1 && hashes.contains(&hash),
-        "re-sequenced block should contain the reverted transaction after FCS reset",
-    );
+    sequencer
+        .build_block()
+        .expect_block_number(5)
+        .expect_tx(hash)
+        .expect_tx_count(1)
+        .await_block()
+        .await?;
 
     Ok(())
 }
