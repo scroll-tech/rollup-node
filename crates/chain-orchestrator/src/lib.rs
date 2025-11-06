@@ -5,7 +5,7 @@ use alloy_eips::Encodable2718;
 use alloy_primitives::{b256, bytes::Bytes, keccak256, B256};
 use alloy_provider::Provider;
 use alloy_rpc_types_engine::ExecutionPayloadV1;
-use futures::StreamExt;
+use futures::{stream, StreamExt, TryStreamExt};
 use reth_chainspec::EthChainSpec;
 use reth_network_api::{BlockDownloaderProvider, FullNetwork};
 use reth_network_p2p::{sync::SyncState as RethSyncState, FullBlockClient};
@@ -21,7 +21,7 @@ use rollup_node_providers::L1MessageProvider;
 use rollup_node_sequencer::{Sequencer, SequencerEvent};
 use rollup_node_signer::{SignatureAsBytes, SignerEvent, SignerHandle};
 use rollup_node_watcher::L1Notification;
-use scroll_alloy_consensus::TxL1Message;
+use scroll_alloy_consensus::{ScrollTxEnvelope, TxL1Message};
 use scroll_alloy_hardforks::ScrollHardforks;
 use scroll_alloy_network::Scroll;
 use scroll_alloy_provider::ScrollEngineApi;
@@ -86,6 +86,12 @@ const HEADER_FETCH_COUNT: u64 = 100;
 
 /// The size of the event channel used to broadcast events to listeners.
 const EVENT_CHANNEL_SIZE: usize = 5000;
+
+/// The batch size for batch validation.
+#[cfg(not(any(test, feature = "test-utils")))]
+const BATCH_SIZE: usize = 100;
+#[cfg(any(test, feature = "test-utils"))]
+const BATCH_SIZE: usize = 1;
 
 /// The [`ChainOrchestrator`] is responsible for orchestrating the progression of the L2 chain
 /// based on data consolidated from L1 and the data received over the p2p network.
@@ -350,6 +356,13 @@ impl<
                 let _ = tx.send(self.network.handle().clone());
             }
             ChainOrchestratorCommand::UpdateFcsHead((head, sender)) => {
+                // Collect transactions of reverted blocks from l2 client.
+                let reverted_transactions = self
+                    .collect_reverted_txs_in_range(
+                        head.number.saturating_add(1),
+                        self.engine.fcs().head_block_info().number,
+                    )
+                    .await?;
                 self.engine.update_fcs(Some(head), None, None).await?;
                 self.database
                     .tx_mut(move |tx| async move {
@@ -357,6 +370,9 @@ impl<
                         tx.set_l2_head_block_number(head.number).await
                     })
                     .await?;
+
+                // Add all reverted transactions to the transaction pool.
+                self.reinsert_txs_into_pool(reverted_transactions).await;
                 self.notify(ChainOrchestratorEvent::FcsHeadUpdated(head));
                 let _ = sender.send(());
             }
@@ -580,6 +596,43 @@ impl<
         Ok(Some(ChainOrchestratorEvent::NewL1Block(block_info.number)))
     }
 
+    /// Collects reverted L2 transactions in [from, to], excluding L1 messages.
+    async fn collect_reverted_txs_in_range(
+        &self,
+        from: u64,
+        to: u64,
+    ) -> Result<Vec<ScrollTxEnvelope>, ChainOrchestratorError> {
+        let mut reverted_transactions: Vec<ScrollTxEnvelope> = Vec::new();
+        for number in from..=to {
+            let block = self
+                .l2_client
+                .get_block_by_number(number.into())
+                .full()
+                .await?
+                .ok_or_else(|| ChainOrchestratorError::L2BlockNotFoundInL2Client(number))?;
+
+            let block = block.into_consensus().map_transactions(|tx| tx.inner.into_inner());
+            reverted_transactions.extend(
+                block.into_body().transactions.into_iter().filter(|tx| !tx.is_l1_message()),
+            );
+        }
+        Ok(reverted_transactions)
+    }
+
+    /// Reinserts given L2 transactions into the transaction pool.
+    async fn reinsert_txs_into_pool(&self, txs: Vec<ScrollTxEnvelope>) {
+        for tx in txs {
+            let encoded_tx = tx.encoded_2718();
+            if let Err(err) = self.l2_client.send_raw_transaction(&encoded_tx).await {
+                tracing::warn!(
+                    target: "scroll::chain_orchestrator",
+                    ?err,
+                    "failed to reinsert reverted transaction into pool"
+                );
+            }
+        }
+    }
+
     /// Handles a reorganization event by deleting all indexed data which is greater than the
     /// provided block number.
     async fn handle_l1_reorg(
@@ -589,26 +642,35 @@ impl<
         let UnwindResult { l1_block_number, queue_index, l2_head_block_number, l2_safe_block_info } =
             self.database.unwind(block_number).await?;
 
-        let l2_head_block_info = if let Some(block_number) = l2_head_block_number {
-            // Fetch the block hash of the new L2 head block.
-            let block_hash = self
-                .l2_client
-                .get_block_by_number(block_number.into())
-                .full()
-                .await?
-                .expect("L2 head block must exist")
-                .header
-                .hash_slow();
+        let (l2_head_block_info, reverted_transactions) =
+            if let Some(block_number) = l2_head_block_number {
+                // Fetch the block hash of the new L2 head block.
+                let block_hash = self
+                    .l2_client
+                    .get_block_by_number(block_number.into())
+                    .full()
+                    .await?
+                    .expect("L2 head block must exist")
+                    .header
+                    .hash_slow();
 
-            // Cancel the inflight payload building job if the head has changed.
-            if let Some(s) = self.sequencer.as_mut() {
-                s.cancel_payload_building_job();
+                // Cancel the inflight payload building job if the head has changed.
+                if let Some(s) = self.sequencer.as_mut() {
+                    s.cancel_payload_building_job();
+                };
+
+                // Collect transactions of reverted blocks from l2 client.
+                let reverted_transactions = self
+                    .collect_reverted_txs_in_range(
+                        block_number.saturating_add(1),
+                        self.engine.fcs().head_block_info().number,
+                    )
+                    .await?;
+
+                (Some(BlockInfo { number: block_number, hash: block_hash }), reverted_transactions)
+            } else {
+                (None, Vec::new())
             };
-
-            Some(BlockInfo { number: block_number, hash: block_hash })
-        } else {
-            None
-        };
 
         // If the L1 reorg is before the origin of the inflight payload building job, cancel it.
         if Some(l1_block_number) <
@@ -626,6 +688,9 @@ impl<
         if l2_head_block_info.is_some() || l2_safe_block_info.is_some() {
             self.engine.update_fcs(l2_head_block_info, l2_safe_block_info, None).await?;
         }
+
+        // Add all reverted transactions to the transaction pool.
+        self.reinsert_txs_into_pool(reverted_transactions).await;
 
         let event = ChainOrchestratorEvent::L1Reorg {
             l1_block_number,
@@ -1155,28 +1220,44 @@ impl<
         if head_block_number == safe_block_number {
             tracing::trace!(target: "scroll::chain_orchestrator", "No unsafe blocks to consolidate");
         } else {
-            let start_block_number = safe_block_number + 1;
-            // TODO: Make fetching parallel but ensure concurrency limits are respected.
-            let mut blocks_to_validate = vec![];
-            for block_number in start_block_number..=head_block_number {
-                let block = self
-                    .l2_client
-                    .get_block_by_number(block_number.into())
-                    .full()
-                    .await?
-                    .ok_or(ChainOrchestratorError::L2BlockNotFoundInL2Client(block_number))?
-                    .into_consensus()
-                    .map_transactions(|tx| tx.inner.into_inner());
-                blocks_to_validate.push(block);
+            let block_stream = stream::iter(safe_block_number + 1..=head_block_number)
+                .map(|block_number| {
+                    let client = self.l2_client.clone();
+
+                    async move {
+                        client
+                            .get_block_by_number(block_number.into())
+                            .full()
+                            .await?
+                            .ok_or(ChainOrchestratorError::L2BlockNotFoundInL2Client(block_number))
+                            .map(|b| {
+                                b.into_consensus().map_transactions(|tx| tx.inner.into_inner())
+                            })
+                    }
+                })
+                .buffered(BATCH_SIZE);
+
+            let mut block_chunks = block_stream.try_chunks(BATCH_SIZE);
+
+            while let Some(blocks_result) = block_chunks.next().await {
+                let blocks_to_validate =
+                    blocks_result.map_err(|_| ChainOrchestratorError::InvalidBlock)?;
+
+                if let Err(e) = self.validate_l1_messages(&blocks_to_validate).await {
+                    tracing::error!(
+                        target: "scroll::chain_orchestrator",
+                        error = ?e,
+                        "Validation failed — purging all L1→L2 message mappings"
+                    );
+                    self.database.purge_l1_message_to_l2_block_mappings(None).await?;
+                    return Err(e);
+                }
+                self.database
+                    .update_l1_messages_from_l2_blocks(
+                        blocks_to_validate.iter().map(|b| b.into()).collect(),
+                    )
+                    .await?;
             }
-
-            self.validate_l1_messages(&blocks_to_validate).await?;
-
-            self.database
-                .update_l1_messages_from_l2_blocks(
-                    blocks_to_validate.into_iter().map(|b| (&b).into()).collect(),
-                )
-                .await?;
         };
 
         // send a notification to the network that the chain is synced such that it accepts
