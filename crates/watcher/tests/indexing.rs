@@ -59,7 +59,7 @@ async fn test_should_not_index_latest_block_multiple_times() -> eyre::Result<()>
     );
 
     // spawn the watcher and verify received notifications are consistent.
-    let (mut l1_watcher, _) =
+    let mut handle =
         L1Watcher::spawn(mock_provider, None, Arc::new(config), LOGS_QUERY_BLOCK_RANGE).await;
     let mut prev_block_number = 0;
     let mut ticker = tokio::time::interval(tokio::time::Duration::from_secs(2));
@@ -67,7 +67,7 @@ async fn test_should_not_index_latest_block_multiple_times() -> eyre::Result<()>
 
     loop {
         select! {
-            notification = l1_watcher.recv() => {
+            notification = handle.l1_notification_receiver().recv() => {
                 let notification = notification.map(|notif| (*notif).clone());
                 if let Some(L1Notification::L1Message { block_number, .. }) = notification {
                     assert_ne!(prev_block_number, block_number, "indexed same block twice {block_number}");
