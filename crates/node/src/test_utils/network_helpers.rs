@@ -68,14 +68,14 @@ use tokio::time;
 
 /// Helper for network-related test operations.
 #[derive(Debug)]
-pub struct NetworkHelper<'a, EC> {
-    fixture: &'a TestFixture<EC>,
+pub struct NetworkHelper<'a> {
+    fixture: &'a TestFixture,
     node_index: usize,
 }
 
-impl<'a, EC> NetworkHelper<'a, EC> {
+impl<'a> NetworkHelper<'a> {
     /// Create a new network helper for a specific node.
-    pub fn new(fixture: &'a TestFixture<EC>, node_index: usize) -> Self {
+    pub fn new(fixture: &'a TestFixture, node_index: usize) -> Self {
         Self { fixture, node_index }
     }
 
@@ -135,37 +135,37 @@ impl<'a, EC> NetworkHelper<'a, EC> {
 }
 
 /// Extension trait for `TestFixture` to add network helper capabilities.
-pub trait NetworkHelpers<EC> {
+pub trait NetworkHelpers {
     /// Get a network helper for the sequencer node (node 0).
-    fn network(&self) -> NetworkHelper<'_, EC>;
+    fn network(&self) -> NetworkHelper<'_>;
 
     /// Get a network helper for a specific node by index.
-    fn network_on(&self, node_index: usize) -> NetworkHelper<'_, EC>;
+    fn network_on(&self, node_index: usize) -> NetworkHelper<'_>;
 }
 
-impl<EC> NetworkHelpers<EC> for TestFixture<EC> {
-    fn network(&self) -> NetworkHelper<'_, EC> {
+impl NetworkHelpers for TestFixture {
+    fn network(&self) -> NetworkHelper<'_> {
         NetworkHelper::new(self, 0)
     }
 
-    fn network_on(&self, node_index: usize) -> NetworkHelper<'_, EC> {
+    fn network_on(&self, node_index: usize) -> NetworkHelper<'_> {
         NetworkHelper::new(self, node_index)
     }
 }
 
 /// Builder for checking reputation with assertions.
 #[derive(Debug)]
-pub struct ReputationChecker<'a, EC> {
-    fixture: &'a mut TestFixture<EC>,
+pub struct ReputationChecker<'a> {
+    fixture: &'a mut TestFixture,
     observer_node: usize,
     target_peer: Option<PeerId>,
     timeout: Duration,
     poll_interval: Duration,
 }
 
-impl<'a, EC> ReputationChecker<'a, EC> {
+impl<'a> ReputationChecker<'a> {
     /// Create a new reputation checker.
-    pub fn new(fixture: &'a mut TestFixture<EC>, observer_node: usize) -> Self {
+    pub fn new(fixture: &'a mut TestFixture, observer_node: usize) -> Self {
         Self {
             fixture,
             observer_node,
@@ -325,20 +325,20 @@ impl<'a, EC> ReputationChecker<'a, EC> {
 }
 
 /// Extension trait for checking reputation.
-pub trait ReputationChecks<EC> {
+pub trait ReputationChecks {
     /// Start checking reputation from the sequencer's perspective.
-    fn check_reputation(&mut self) -> ReputationChecker<'_, EC>;
+    fn check_reputation(&mut self) -> ReputationChecker<'_>;
 
     /// Start checking reputation from a specific node's perspective.
-    fn check_reputation_on(&mut self, observer_node: usize) -> ReputationChecker<'_, EC>;
+    fn check_reputation_on(&mut self, observer_node: usize) -> ReputationChecker<'_>;
 }
 
-impl<EC> ReputationChecks<EC> for TestFixture<EC> {
-    fn check_reputation(&mut self) -> ReputationChecker<'_, EC> {
+impl ReputationChecks for TestFixture {
+    fn check_reputation(&mut self) -> ReputationChecker<'_> {
         ReputationChecker::new(self, 0)
     }
 
-    fn check_reputation_on(&mut self, observer_node: usize) -> ReputationChecker<'_, EC> {
+    fn check_reputation_on(&mut self, observer_node: usize) -> ReputationChecker<'_> {
         ReputationChecker::new(self, observer_node)
     }
 }

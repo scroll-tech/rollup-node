@@ -13,10 +13,6 @@ use alloy_eips::BlockNumberOrTag;
 use alloy_primitives::{Address, BlockHash};
 use alloy_rpc_types_eth::Block;
 use alloy_signer_local::PrivateKeySigner;
-use jsonrpsee::{
-    core::middleware::layer::RpcLogger,
-    http_client::{transport::HttpBackend, HttpClient, RpcService},
-};
 use reth_chainspec::EthChainSpec;
 use reth_e2e_test_utils::{wallet::Wallet, NodeHelperType, TmpDB};
 use reth_eth_wire_types::BasicNetworkPrimitives;
@@ -24,10 +20,7 @@ use reth_network::NetworkHandle;
 use reth_node_builder::NodeTypes;
 use reth_node_types::NodeTypesWithDBAdapter;
 use reth_provider::providers::BlockchainProvider;
-use reth_rpc_api::EngineApiClient;
-use reth_rpc_layer::AuthClientService;
 use reth_scroll_chainspec::SCROLL_DEV;
-use reth_scroll_engine_primitives::ScrollEngineTypes;
 use reth_scroll_primitives::ScrollPrimitives;
 use reth_tasks::TaskManager;
 use reth_tokio_util::EventStream;
@@ -36,7 +29,7 @@ use rollup_node_primitives::BlockInfo;
 use rollup_node_sequencer::L1MessageInclusionMode;
 use rollup_node_watcher::L1Notification;
 use scroll_alloy_consensus::ScrollPooledTransaction;
-use scroll_alloy_provider::ScrollAuthApiEngineClient;
+use scroll_alloy_provider::{ScrollAuthApiEngineClient, ScrollEngineApi};
 use scroll_alloy_rpc_types::Transaction;
 use scroll_engine::{Engine, ForkchoiceState};
 use std::{
@@ -46,14 +39,11 @@ use std::{
 };
 use tokio::sync::{mpsc, Mutex};
 
-/// The default engine client used for engine calls.
-pub type DefaultEngineClient = HttpClient<RpcLogger<RpcService<AuthClientService<HttpBackend>>>>;
-
 /// Main test fixture providing a high-level interface for testing rollup nodes.
 #[derive(Debug)]
-pub struct TestFixture<EC = DefaultEngineClient> {
+pub struct TestFixture {
     /// The list of nodes in the test setup.
-    pub nodes: Vec<NodeHandle<EC>>,
+    pub nodes: Vec<NodeHandle>,
     /// Shared wallet for generating transactions.
     pub wallet: Arc<Mutex<Wallet>>,
     /// Chain spec used by the nodes.
@@ -71,11 +61,11 @@ pub type TestBlockChainProvider =
     BlockchainProvider<NodeTypesWithDBAdapter<ScrollRollupNode, TmpDB>>;
 
 /// Handle to a single test node with its components.
-pub struct NodeHandle<EC> {
+pub struct NodeHandle {
     /// The underlying node context.
     pub node: NodeHelperType<ScrollRollupNode, TestBlockChainProvider>,
     /// Engine instance for this node.
-    pub engine: Engine<ScrollAuthApiEngineClient<EC>>,
+    pub engine: Engine<Arc<dyn ScrollEngineApi + Send + Sync + 'static>>,
     /// L1 watcher notification channel.
     pub l1_watcher_tx: Option<mpsc::Sender<Arc<L1Notification>>>,
     /// Chain orchestrator listener.
@@ -86,11 +76,11 @@ pub struct NodeHandle<EC> {
     pub index: usize,
 }
 
-impl<EC: Debug> Debug for NodeHandle<EC> {
+impl Debug for NodeHandle {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("NodeHandle")
             .field("node", &"NodeHelper")
-            .field("engine", &self.engine)
+            .field("engine", &"Box<dyn ScrollEngineApi>")
             .field("l1_watcher_tx", &self.l1_watcher_tx)
             .field("rollup_manager_handle", &self.rollup_manager_handle)
             .field("index", &self.index)
@@ -98,32 +88,19 @@ impl<EC: Debug> Debug for NodeHandle<EC> {
     }
 }
 
-impl<EC> TestFixture<EC> {
-    /// Create a new test fixture builder for a sequencer node.
-    pub fn sequencer() -> TestFixtureBuilder {
-        TestFixtureBuilder::new().with_sequencer()
-    }
-
-    /// Create a new test fixture builder for follower nodes.
-    pub fn followers(count: usize) -> TestFixtureBuilder {
-        TestFixtureBuilder::new().with_nodes(count)
-    }
-
+impl TestFixture {
     /// Create a new test fixture builder with custom configuration.
     pub fn builder() -> TestFixtureBuilder {
         TestFixtureBuilder::new()
     }
 
     /// Get the sequencer node (assumes first node is sequencer).
-    pub fn sequencer_node(&mut self) -> &mut NodeHandle<EC>
-    where
-        EC: EngineApiClient<ScrollEngineTypes> + Send + Sync + 'static,
-    {
+    pub fn sequencer_node(&mut self) -> &mut NodeHandle {
         &mut self.nodes[0]
     }
 
     /// Get a follower node by index.
-    pub fn follower_node(&mut self, index: usize) -> &mut NodeHandle<EC> {
+    pub fn follower_node(&mut self, index: usize) -> &mut NodeHandle {
         &mut self.nodes[index + 1]
     }
 
@@ -133,20 +110,17 @@ impl<EC> TestFixture<EC> {
     }
 
     /// Start building a block using the sequencer.
-    pub fn build_block(&mut self) -> BlockBuilder<'_, EC>
-    where
-        EC: EngineApiClient<ScrollEngineTypes> + Send + Sync + 'static,
-    {
+    pub fn build_block(&mut self) -> BlockBuilder<'_> {
         BlockBuilder::new(self)
     }
 
     /// Get L1 helper for managing L1 interactions.
-    pub fn l1(&mut self) -> L1Helper<'_, EC> {
+    pub fn l1(&mut self) -> L1Helper<'_> {
         L1Helper::new(self)
     }
 
     /// Get transaction helper for creating and injecting transactions.
-    pub fn tx(&mut self) -> TxHelper<'_, EC> {
+    pub fn tx(&mut self) -> TxHelper<'_> {
         TxHelper::new(self)
     }
 
@@ -259,7 +233,6 @@ pub struct TestFixtureBuilder {
     chain_spec: Option<Arc<<ScrollRollupNode as NodeTypes>::ChainSpec>>,
     is_dev: bool,
     no_local_transactions_propagation: bool,
-    with_database: bool,
 }
 
 impl Default for TestFixtureBuilder {
@@ -277,7 +250,6 @@ impl TestFixtureBuilder {
             chain_spec: None,
             is_dev: false,
             no_local_transactions_propagation: false,
-            with_database: false,
         }
     }
 
@@ -307,8 +279,8 @@ impl TestFixtureBuilder {
         }
     }
 
-    /// Enable sequencer mode with default settings.
-    pub fn with_sequencer(mut self) -> Self {
+    /// Adds a sequencer node to the test with default settings.
+    pub fn sequencer(mut self) -> Self {
         self.config.sequencer_args.sequencer_enabled = true;
         self.config.sequencer_args.auto_start = false;
         self.config.sequencer_args.block_time = 100;
@@ -317,6 +289,18 @@ impl TestFixtureBuilder {
             L1MessageInclusionMode::BlockDepth(0);
         self.config.sequencer_args.allow_empty_blocks = true;
         self.config.database_args.rn_db_path = Some(PathBuf::from("sqlite::memory:"));
+        self
+    }
+
+    /// Adds `count`s follower nodes to the test.
+    pub fn followers(mut self, count: usize) -> TestFixtureBuilder {
+        self.num_nodes = count;
+        self
+    }
+
+    /// Toggle the test field.
+    pub fn with_test(mut self, test: bool) -> Self {
+        self.config.test = test;
         self
     }
 
@@ -329,12 +313,6 @@ impl TestFixtureBuilder {
     /// Set the sequencer auto start for the node.
     pub fn with_sequencer_auto_start(mut self, auto_start: bool) -> Self {
         self.config.sequencer_args.auto_start = auto_start;
-        self
-    }
-
-    /// Set the number of nodes to create.
-    pub const fn with_nodes(mut self, count: usize) -> Self {
-        self.num_nodes = count;
         self
     }
 
@@ -356,12 +334,6 @@ impl TestFixtureBuilder {
     /// Disable local transaction propagation.
     pub const fn no_local_tx_propagation(mut self) -> Self {
         self.no_local_transactions_propagation = true;
-        self
-    }
-
-    /// Include a test database in the fixture.
-    pub const fn with_test_database(mut self) -> Self {
-        self.with_database = true;
         self
     }
 
@@ -482,7 +454,7 @@ impl TestFixtureBuilder {
     }
 
     /// Build the test fixture.
-    pub async fn build(self) -> eyre::Result<TestFixture<impl EngineApiClient<ScrollEngineTypes>>> {
+    pub async fn build(self) -> eyre::Result<TestFixture> {
         let config = self.config;
         let chain_spec = self.chain_spec.unwrap_or_else(|| SCROLL_DEV.clone());
 
@@ -501,7 +473,8 @@ impl TestFixtureBuilder {
 
             // Create engine for the node
             let auth_client = node.inner.engine_http_client();
-            let engine_client = ScrollAuthApiEngineClient::new(auth_client);
+            let engine_client = Arc::new(ScrollAuthApiEngineClient::new(auth_client))
+                as Arc<dyn ScrollEngineApi + Send + Sync + 'static>;
             let fcs = ForkchoiceState::new(
                 BlockInfo { hash: genesis_hash, number: 0 },
                 Default::default(),

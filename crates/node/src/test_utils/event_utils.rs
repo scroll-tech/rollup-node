@@ -11,15 +11,15 @@ use tokio::time::timeout;
 
 /// Builder for waiting for specific events with optional assertions.
 #[derive(Debug)]
-pub struct EventWaiter<'a, EC> {
-    fixture: &'a mut TestFixture<EC>,
+pub struct EventWaiter<'a> {
+    fixture: &'a mut TestFixture,
     node_index: usize,
     timeout_duration: Duration,
 }
 
-impl<'a, EC> EventWaiter<'a, EC> {
+impl<'a> EventWaiter<'a> {
     /// Create a new event waiter.
-    pub fn new(fixture: &'a mut TestFixture<EC>, node_index: usize) -> Self {
+    pub fn new(fixture: &'a mut TestFixture, node_index: usize) -> Self {
         Self { fixture, node_index, timeout_duration: Duration::from_secs(30) }
     }
 
@@ -60,7 +60,7 @@ impl<'a, EC> EventWaiter<'a, EC> {
     /// Wait for a chain extended event.
     pub async fn chain_extended(self, target: u64) -> eyre::Result<()> {
         self.wait_for_event(|e| {
-            matches!(e, ChainOrchestratorEvent::ChainExtended(ChainImport { chain, .. }) if chain.last().map(|b| b.header.number) == Some(target))
+            matches!(e, ChainOrchestratorEvent::ChainExtended(ChainImport { chain, .. }) if chain.last().map(|b| b.header.number) >= Some(target))
                 .then_some(())
         })
         .await
@@ -174,6 +174,7 @@ impl<'a, EC> EventWaiter<'a, EC> {
 
         let result = timeout(self.timeout_duration, async {
             while let Some(event) = events.next().await {
+                tracing::debug!(target: "event_waiter", ?event);
                 if let Some(value) = extractor(&event) {
                     return Ok(value);
                 }
@@ -188,15 +189,15 @@ impl<'a, EC> EventWaiter<'a, EC> {
 
 /// Builder for waiting for events on multiple nodes.
 #[derive(Debug)]
-pub struct MultiNodeEventWaiter<'a, EC> {
-    fixture: &'a mut TestFixture<EC>,
+pub struct MultiNodeEventWaiter<'a> {
+    fixture: &'a mut TestFixture,
     node_indices: Vec<usize>,
     timeout_duration: Duration,
 }
 
-impl<'a, EC> MultiNodeEventWaiter<'a, EC> {
+impl<'a> MultiNodeEventWaiter<'a> {
     /// Create a new multi-node event waiter.
-    pub fn new(fixture: &'a mut TestFixture<EC>, node_indices: Vec<usize>) -> Self {
+    pub fn new(fixture: &'a mut TestFixture, node_indices: Vec<usize>) -> Self {
         Self { fixture, node_indices, timeout_duration: Duration::from_secs(30) }
     }
 
@@ -397,42 +398,42 @@ impl<'a, EC> MultiNodeEventWaiter<'a, EC> {
 }
 
 /// Extension trait for `TestFixture` to add event waiting capabilities.
-pub trait EventAssertions<EC> {
+pub trait EventAssertions {
     /// Wait for an event on the sequencer node.
-    fn expect_event(&mut self) -> EventWaiter<'_, EC>;
+    fn expect_event(&mut self) -> EventWaiter<'_>;
 
     /// Wait for an event on a specific node.
-    fn expect_event_on(&mut self, node_index: usize) -> EventWaiter<'_, EC>;
+    fn expect_event_on(&mut self, node_index: usize) -> EventWaiter<'_>;
 
     /// Wait for an event on multiple nodes.
-    fn expect_event_on_nodes(&mut self, node_indices: Vec<usize>) -> MultiNodeEventWaiter<'_, EC>;
+    fn expect_event_on_nodes(&mut self, node_indices: Vec<usize>) -> MultiNodeEventWaiter<'_>;
 
     /// Wait for an event on all nodes.
-    fn expect_event_on_all_nodes(&mut self) -> MultiNodeEventWaiter<'_, EC>;
+    fn expect_event_on_all_nodes(&mut self) -> MultiNodeEventWaiter<'_>;
 
     /// Wait for an event on all follower nodes (excluding sequencer at index 0).
-    fn expect_event_on_followers(&mut self) -> MultiNodeEventWaiter<'_, EC>;
+    fn expect_event_on_followers(&mut self) -> MultiNodeEventWaiter<'_>;
 }
 
-impl<EC> EventAssertions<EC> for TestFixture<EC> {
-    fn expect_event(&mut self) -> EventWaiter<'_, EC> {
+impl EventAssertions for TestFixture {
+    fn expect_event(&mut self) -> EventWaiter<'_> {
         EventWaiter::new(self, 0)
     }
 
-    fn expect_event_on(&mut self, node_index: usize) -> EventWaiter<'_, EC> {
+    fn expect_event_on(&mut self, node_index: usize) -> EventWaiter<'_> {
         EventWaiter::new(self, node_index)
     }
 
-    fn expect_event_on_nodes(&mut self, node_indices: Vec<usize>) -> MultiNodeEventWaiter<'_, EC> {
+    fn expect_event_on_nodes(&mut self, node_indices: Vec<usize>) -> MultiNodeEventWaiter<'_> {
         MultiNodeEventWaiter::new(self, node_indices)
     }
 
-    fn expect_event_on_all_nodes(&mut self) -> MultiNodeEventWaiter<'_, EC> {
+    fn expect_event_on_all_nodes(&mut self) -> MultiNodeEventWaiter<'_> {
         let node_indices = (0..self.nodes.len()).collect();
         MultiNodeEventWaiter::new(self, node_indices)
     }
 
-    fn expect_event_on_followers(&mut self) -> MultiNodeEventWaiter<'_, EC> {
+    fn expect_event_on_followers(&mut self) -> MultiNodeEventWaiter<'_> {
         let node_indices = (1..self.nodes.len()).collect();
         MultiNodeEventWaiter::new(self, node_indices)
     }

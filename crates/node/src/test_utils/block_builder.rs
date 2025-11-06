@@ -4,21 +4,14 @@ use super::fixture::TestFixture;
 use crate::test_utils::EventAssertions;
 
 use alloy_primitives::B256;
-use futures::StreamExt;
 use reth_primitives_traits::transaction::TxHashRef;
-use reth_rpc_api::EngineApiClient;
-use reth_scroll_chainspec::ScrollChainSpec;
-use reth_scroll_engine_primitives::ScrollEngineTypes;
 use reth_scroll_primitives::ScrollBlock;
-use rollup_node_sequencer::SequencerEvent;
 use scroll_alloy_consensus::ScrollTransaction;
-use scroll_alloy_provider::ScrollAuthApiEngineClient;
-use scroll_db::Database;
 
 /// Builder for constructing and validating blocks in tests.
 #[derive(Debug)]
-pub struct BlockBuilder<'a, EC> {
-    fixture: &'a mut TestFixture<EC>,
+pub struct BlockBuilder<'a> {
+    fixture: &'a mut TestFixture,
     expected_tx_hashes: Vec<B256>,
     expected_tx_count: Option<usize>,
     expected_base_fee: Option<u64>,
@@ -27,9 +20,9 @@ pub struct BlockBuilder<'a, EC> {
     expected_l1_message_count: Option<usize>,
 }
 
-impl<'a, EC: EngineApiClient<ScrollEngineTypes> + Sync + Send + 'static> BlockBuilder<'a, EC> {
+impl<'a> BlockBuilder<'a> {
     /// Create a new block builder.
-    pub(crate) fn new(fixture: &'a mut TestFixture<EC>) -> Self {
+    pub(crate) fn new(fixture: &'a mut TestFixture) -> Self {
         Self {
             fixture,
             expected_tx_hashes: Vec::new(),
@@ -107,32 +100,6 @@ impl<'a, EC: EngineApiClient<ScrollEngineTypes> + Sync + Send + 'static> BlockBu
 
         // Finally validate the block.
         self.validate_block(&block)
-    }
-
-    /// Build a block using the low-level sequencer API (for direct sequencer tests).
-    pub async fn build_with_sequencer(
-        self,
-        sequencer: &mut rollup_node_sequencer::Sequencer<Database, ScrollChainSpec>,
-        engine: &mut scroll_engine::Engine<ScrollAuthApiEngineClient<EC>>,
-    ) -> eyre::Result<Option<ScrollBlock>> {
-        // Start payload building
-        sequencer.start_payload_building(engine).await?;
-
-        // Wait for the payload to be ready
-        let payload_id = loop {
-            if let Some(SequencerEvent::PayloadReady(id)) = sequencer.next().await {
-                break id;
-            }
-        };
-
-        // Finalize the payload building
-        let block_opt = sequencer.finalize_payload_building(payload_id, engine).await?;
-
-        if let Some(ref block) = block_opt {
-            self.validate_block(block)?;
-        }
-
-        Ok(block_opt)
     }
 
     /// Validate the block against expectations.

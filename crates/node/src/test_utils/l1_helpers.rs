@@ -4,20 +4,20 @@ use super::fixture::TestFixture;
 use std::{fmt::Debug, str::FromStr, sync::Arc};
 
 use alloy_primitives::{Address, Bytes, B256, U256};
-use rollup_node_primitives::BatchCommitData;
+use rollup_node_primitives::{BatchCommitData, ConsensusUpdate};
 use rollup_node_watcher::L1Notification;
 use scroll_alloy_consensus::TxL1Message;
 
 /// Helper for managing L1 interactions in tests.
 #[derive(Debug)]
-pub struct L1Helper<'a, EC> {
-    fixture: &'a mut TestFixture<EC>,
+pub struct L1Helper<'a> {
+    fixture: &'a mut TestFixture,
     target_node_index: Option<usize>,
 }
 
-impl<'a, EC> L1Helper<'a, EC> {
+impl<'a> L1Helper<'a> {
     /// Create a new L1 helper.
-    pub(crate) fn new(fixture: &'a mut TestFixture<EC>) -> Self {
+    pub(crate) fn new(fixture: &'a mut TestFixture) -> Self {
         Self { fixture, target_node_index: None }
     }
 
@@ -42,6 +42,13 @@ impl<'a, EC> L1Helper<'a, EC> {
     /// Send an L1 reorg notification.
     pub async fn reorg_to(mut self, block_number: u64) -> eyre::Result<()> {
         let notification = Arc::new(L1Notification::Reorg(block_number));
+        self.send_to_nodes(notification).await
+    }
+
+    /// Send an L1 consensus notification.
+    pub async fn signer_update(mut self, new_signer: Address) -> eyre::Result<()> {
+        let notification =
+            Arc::new(L1Notification::Consensus(ConsensusUpdate::AuthorizedSigner(new_signer)));
         self.send_to_nodes(notification).await
     }
 
@@ -72,7 +79,7 @@ impl<'a, EC> L1Helper<'a, EC> {
     }
 
     /// Create a new L1 message builder.
-    pub fn add_message(self) -> L1MessageBuilder<'a, EC> {
+    pub fn add_message(self) -> L1MessageBuilder<'a> {
         L1MessageBuilder::new(self)
     }
 
@@ -96,8 +103,8 @@ impl<'a, EC> L1Helper<'a, EC> {
 
 /// Builder for creating L1 messages in tests.
 #[derive(Debug)]
-pub struct L1MessageBuilder<'a, EC> {
-    l1_helper: L1Helper<'a, EC>,
+pub struct L1MessageBuilder<'a> {
+    l1_helper: L1Helper<'a>,
     l1_block_number: u64,
     queue_index: u64,
     gas_limit: u64,
@@ -107,9 +114,9 @@ pub struct L1MessageBuilder<'a, EC> {
     input: Bytes,
 }
 
-impl<'a, EC> L1MessageBuilder<'a, EC> {
+impl<'a> L1MessageBuilder<'a> {
     /// Create a new L1 message builder.
-    fn new(l1_helper: L1Helper<'a, EC>) -> Self {
+    fn new(l1_helper: L1Helper<'a>) -> Self {
         Self {
             l1_helper,
             l1_block_number: 0,

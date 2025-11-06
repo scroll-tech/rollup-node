@@ -6,14 +6,14 @@ use reth_e2e_test_utils::transaction::TransactionTestContext;
 
 /// Helper for creating and injecting transactions in tests.
 #[derive(Debug)]
-pub struct TxHelper<'a, EC> {
-    fixture: &'a mut TestFixture<EC>,
+pub struct TxHelper<'a> {
+    fixture: &'a mut TestFixture,
     target_node_index: usize,
 }
 
-impl<'a, EC> TxHelper<'a, EC> {
+impl<'a> TxHelper<'a> {
     /// Create a new transaction helper.
-    pub(crate) fn new(fixture: &'a mut TestFixture<EC>) -> Self {
+    pub(crate) fn new(fixture: &'a mut TestFixture) -> Self {
         Self { fixture, target_node_index: 0 }
     }
 
@@ -24,7 +24,7 @@ impl<'a, EC> TxHelper<'a, EC> {
     }
 
     /// Create a transfer transaction builder.
-    pub fn transfer(self) -> TransferTxBuilder<'a, EC> {
+    pub fn transfer(self) -> TransferTxBuilder<'a> {
         TransferTxBuilder::new(self)
     }
 
@@ -46,15 +46,15 @@ impl<'a, EC> TxHelper<'a, EC> {
 
 /// Builder for creating transfer transactions.
 #[derive(Debug)]
-pub struct TransferTxBuilder<'a, EC> {
-    tx_helper: TxHelper<'a, EC>,
+pub struct TransferTxBuilder<'a> {
+    tx_helper: TxHelper<'a>,
     to: Option<Address>,
     value: U256,
 }
 
-impl<'a, EC> TransferTxBuilder<'a, EC> {
+impl<'a> TransferTxBuilder<'a> {
     /// Create a new transfer transaction builder.
-    fn new(tx_helper: TxHelper<'a, EC>) -> Self {
+    fn new(tx_helper: TxHelper<'a>) -> Self {
         Self { tx_helper, to: None, value: U256::from(1) }
     }
 
