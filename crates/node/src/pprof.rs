@@ -149,7 +149,6 @@ async fn handle_request(
             info!("Starting CPU profile for {} seconds", duration);
             handle_cpu_profile(duration).await
         }
-        (&Method::GET, "/" | "/debug/pprof") => handle_index().await,
         _ => {
             warn!("Not found: {} {}", req.method(), req.uri().path());
             Ok(Response::builder()
@@ -240,49 +239,6 @@ async fn handle_cpu_profile(duration_secs: u64) -> Result<Response<Full<Bytes>>,
                 .unwrap())
         }
     }
-}
-
-/// Handle index/help page requests
-async fn handle_index() -> Result<Response<Full<Bytes>>, hyper::Error> {
-    let body = r#"<!DOCTYPE html>
-<html>
-<head>
-    <title>pprof</title>
-</head>
-<body>
-<h1>pprof - Performance Profiling</h1>
-<p>Available endpoints:</p>
-<ul>
-    <li><a href="/debug/pprof/profile?seconds=30">/debug/pprof/profile?seconds=30</a> - CPU profile (30 seconds)</li>
-    <li><a href="/debug/pprof/profile?seconds=60">/debug/pprof/profile?seconds=60</a> - CPU profile (60 seconds)</li>
-</ul>
-
-<h2>Usage Examples</h2>
-<pre>
-# Collect CPU profile
-curl http://localhost:6060/debug/pprof/profile?seconds=30 -o cpu.pb
-
-# Analyze with Go pprof
-go tool pprof -http=:8080 cpu.pb
-
-# Generate flamegraph
-pprof -flame cpu.pb > flamegraph.svg
-</pre>
-
-<h2>Documentation</h2>
-<p>
-This service uses <a href="https://github.com/tikv/pprof-rs">pprof-rs</a> for performance profiling.
-The output is compatible with Google's pprof format and can be analyzed using various tools.
-</p>
-</body>
-</html>
-"#;
-
-    Ok(Response::builder()
-        .status(StatusCode::OK)
-        .header("Content-Type", "text/html; charset=utf-8")
-        .body(Full::new(Bytes::from(body)))
-        .unwrap())
 }
 
 #[cfg(test)]
