@@ -8,7 +8,6 @@ use futures::{task::noop_waker_ref, FutureExt, StreamExt};
 use reth_chainspec::EthChainSpec;
 use reth_network::{NetworkConfigBuilder, NetworkEventListenerProvider, PeersInfo};
 use reth_network_api::block::EthWireProvider;
-use reth_primitives_traits::transaction::TxHashRef;
 use reth_rpc_api::EthApiServer;
 use reth_scroll_chainspec::{ScrollChainSpec, SCROLL_DEV, SCROLL_MAINNET, SCROLL_SEPOLIA};
 use reth_scroll_node::ScrollNetworkPrimitives;
