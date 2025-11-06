@@ -826,12 +826,7 @@ pub struct RollupNodeGasPriceOracleArgs {
 #[derive(Debug, Clone, clap::Args)]
 pub struct PprofArgs {
     /// Enable the pprof HTTP server for performance profiling
-    #[arg(
-        id = "pprof.enabled",
-        long = "pprof.enabled",
-        default_value_t = false,
-        help = "Enable the pprof HTTP server"
-    )]
+    #[arg(id = "pprof.enabled", long = "pprof.enabled", help = "Enable the pprof HTTP server")]
     pub enabled: bool,
 
     /// The address to bind the pprof HTTP server to
@@ -840,7 +835,7 @@ pub struct PprofArgs {
         long = "pprof.addr",
         value_name = "PPROF_URL",
         help = "Address to bind the pprof HTTP server (e.g., 0.0.0.0:6868)",
-        default_value = "0.0.0.0:6868"
+        default_value = constants::DEFAULT_PPROF_URL
     )]
     pub addr: String,
 
@@ -850,7 +845,7 @@ pub struct PprofArgs {
         value_name = "PPROF_DEFAULT_DURATION",
         long = "pprof.default-duration",
         help = "Default CPU profiling duration in seconds",
-        default_value_t = 30
+        default_value_t = constants::DEFAULT_PPROF_DEFAULT_DURATION
     )]
     pub default_duration: u64,
 }

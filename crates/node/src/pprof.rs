@@ -61,182 +61,177 @@ impl PprofConfig {
         self.default_duration = seconds;
         self
     }
-}
 
-/// Start the pprof HTTP server
-///
-/// This function spawns a background task that runs an HTTP server for pprof endpoints.
-/// The server will run until the returned handle is dropped or the task is cancelled.
-///
-/// # Arguments
-/// * `config` - Configuration for the pprof server
-///
-/// # Returns
-/// A `JoinHandle` that can be used to manage the server task
-///
-/// # Example
-/// ```no_run
-/// use rollup_node::pprof::{start_pprof_server, PprofConfig};
-/// use std::net::SocketAddr;
-///
-/// #[tokio::main]
-/// async fn main() -> eyre::Result<()> {
-///     let config = PprofConfig::new("127.0.0.1:6868".parse()?);
-///     let handle = start_pprof_server(config).await?;
-///
-///     // Server runs in background
-///     // ...
-///
-///     // Wait for server to complete (or cancel it)
-///     handle.await??;
-///     Ok(())
-/// }
-/// ```
-pub async fn start_pprof_server(
-    config: PprofConfig,
-) -> Result<tokio::task::JoinHandle<Result<()>>> {
-    let listener = TcpListener::bind(config.addr).await?;
-    let addr = listener.local_addr()?;
+    /// Start the pprof HTTP server
+    ///
+    /// This function spawns a background task that runs an HTTP server for pprof endpoints.
+    /// The server will run until the returned handle is dropped or the task is cancelled.
+    ///
+    /// # Returns
+    /// A `JoinHandle` that can be used to manage the server task
+    ///
+    /// # Example
+    /// ```no_run
+    /// use rollup_node::pprof::PprofConfig;
+    /// use std::net::SocketAddr;
+    ///
+    /// #[tokio::main]
+    /// async fn main() -> eyre::Result<()> {
+    ///     let config = PprofConfig::new("127.0.0.1:6868".parse()?);
+    ///     let handle = config.launch_server().await?;
+    ///
+    ///     // Server runs in background
+    ///     // ...
+    ///
+    ///     // Wait for server to complete (or cancel it)
+    ///     handle.await??;
+    ///     Ok(())
+    /// }
+    /// ```
+    pub async fn launch_server(self) -> Result<tokio::task::JoinHandle<Result<()>>> {
+        let listener = TcpListener::bind(self.addr).await?;
+        let addr = listener.local_addr()?;
 
-    info!("Starting pprof server on http://{}", addr);
-    info!("CPU profile endpoint: http://{}/debug/pprof/profile?seconds=30", addr);
+        info!("Starting pprof server on http://{}", addr);
+        info!("CPU profile endpoint: http://{}/debug/pprof/profile?seconds=30", addr);
 
-    let handle = tokio::spawn(async move {
-        loop {
-            let (stream, peer_addr) = match listener.accept().await {
-                Ok(conn) => conn,
-                Err(e) => {
-                    error!("Failed to accept connection: {}", e);
-                    continue;
-                }
-            };
+        let default_duration = self.default_duration;
+        let handle = tokio::spawn(async move {
+            loop {
+                let (stream, peer_addr) = match listener.accept().await {
+                    Ok(conn) => conn,
+                    Err(e) => {
+                        error!("Failed to accept connection: {}", e);
+                        continue;
+                    }
+                };
 
-            let io = TokioIo::new(stream);
-            let default_duration = config.default_duration;
+                let io = TokioIo::new(stream);
 
-            tokio::spawn(async move {
-                let service = service_fn(move |req| handle_request(req, default_duration));
+                tokio::spawn(async move {
+                    let service = service_fn(move |req| Self::handle_request(req, default_duration));
 
-                if let Err(err) = http1::Builder::new().serve_connection(io, service).await {
-                    error!("Error serving connection from {}: {}", peer_addr, err);
-                }
-            });
-        }
-    });
+                    if let Err(err) = http1::Builder::new().serve_connection(io, service).await {
+                        error!("Error serving connection from {}: {}", peer_addr, err);
+                    }
+                });
+            }
+        });
 
-    Ok(handle)
-}
-
-/// Handle HTTP requests to pprof endpoints
-async fn handle_request(
-    req: Request<Incoming>,
-    default_duration: u64,
-) -> Result<Response<Full<Bytes>>, hyper::Error> {
-    match (req.method(), req.uri().path()) {
-        (&Method::GET, "/debug/pprof/profile") => {
-            // Parse duration from query parameters
-            let duration = req
-                .uri()
-                .query()
-                .and_then(|q| {
-                    q.split('&')
-                        .find(|pair| pair.starts_with("seconds="))
-                        .and_then(|pair| pair.strip_prefix("seconds="))
-                        .and_then(|s| s.parse::<u64>().ok())
-                })
-                .unwrap_or(default_duration);
-
-            info!("Starting CPU profile for {} seconds", duration);
-            handle_cpu_profile(duration).await
-        }
-        _ => {
-            warn!("Not found: {} {}", req.method(), req.uri().path());
-            Ok(Response::builder()
-                .status(StatusCode::NOT_FOUND)
-                .body(Full::new(Bytes::from("Not Found")))
-                .unwrap())
-        }
-    }
-}
-
-/// Handle CPU profiling requests
-async fn handle_cpu_profile(duration_secs: u64) -> Result<Response<Full<Bytes>>, hyper::Error> {
-    // Validate duration
-    if duration_secs == 0 || duration_secs > 600 {
-        let error_msg = "Invalid duration: must be between 1 and 600 seconds";
-        warn!("{}", error_msg);
-        return Ok(Response::builder()
-            .status(StatusCode::BAD_REQUEST)
-            .body(Full::new(Bytes::from(error_msg)))
-            .unwrap());
+        Ok(handle)
     }
 
-    info!("Collecting CPU profile for {} seconds...", duration_secs);
+    /// Handle HTTP requests to pprof endpoints
+    async fn handle_request(
+        req: Request<Incoming>,
+        default_duration: u64,
+    ) -> Result<Response<Full<Bytes>>, hyper::Error> {
+        match (req.method(), req.uri().path()) {
+            (&Method::GET, "/debug/pprof/profile") => {
+                // Parse duration from query parameters
+                let duration = req
+                    .uri()
+                    .query()
+                    .and_then(|q| {
+                        q.split('&')
+                            .find(|pair| pair.starts_with("seconds="))
+                            .and_then(|pair| pair.strip_prefix("seconds="))
+                            .and_then(|s| s.parse::<u64>().ok())
+                    })
+                    .unwrap_or(default_duration);
 
-    // Start profiling
-    let guard = match pprof::ProfilerGuardBuilder::default().build() {
-        Ok(guard) => guard,
-        Err(e) => {
-            error!("Failed to start profiler: {}", e);
-            let error_msg = format!("Failed to start profiler: {}", e);
+                info!("Starting CPU profile for {} seconds", duration);
+                Self::handle_cpu_profile(duration).await
+            }
+            _ => {
+                warn!("Not found: {} {}", req.method(), req.uri().path());
+                Ok(Response::builder()
+                    .status(StatusCode::NOT_FOUND)
+                    .body(Full::new(Bytes::from("Not Found")))
+                    .unwrap())
+            }
+        }
+    }
+
+    /// Handle CPU profiling requests
+    async fn handle_cpu_profile(duration_secs: u64) -> Result<Response<Full<Bytes>>, hyper::Error> {
+        // Validate duration
+        if duration_secs == 0 || duration_secs > 600 {
+            let error_msg = "Invalid duration: must be between 1 and 600 seconds";
+            warn!("{}", error_msg);
             return Ok(Response::builder()
-                .status(StatusCode::INTERNAL_SERVER_ERROR)
+                .status(StatusCode::BAD_REQUEST)
                 .body(Full::new(Bytes::from(error_msg)))
                 .unwrap());
         }
-    };
 
-    // Profile for the specified duration
-    tokio::time::sleep(Duration::from_secs(duration_secs)).await;
+        info!("Collecting CPU profile for {} seconds...", duration_secs);
 
-    // Generate report
-    match guard.report().build() {
-        Ok(report) => {
-            // Encode as protobuf
-            match report.pprof() {
-                Ok(profile) => {
-                    // The profile object needs to be converted to bytes
-                    let body = match profile.write_to_bytes() {
-                        Ok(bytes) => bytes,
-                        Err(e) => {
-                            error!("Failed to encode profile: {}", e);
-                            let error_msg = format!("Failed to encode profile: {}", e);
-                            return Ok(Response::builder()
-                                .status(StatusCode::INTERNAL_SERVER_ERROR)
-                                .body(Full::new(Bytes::from(error_msg)))
-                                .unwrap());
-                        }
-                    };
+        // Start profiling
+        let guard = match pprof::ProfilerGuardBuilder::default().build() {
+            Ok(guard) => guard,
+            Err(e) => {
+                error!("Failed to start profiler: {}", e);
+                let error_msg = format!("Failed to start profiler: {}", e);
+                return Ok(Response::builder()
+                    .status(StatusCode::INTERNAL_SERVER_ERROR)
+                    .body(Full::new(Bytes::from(error_msg)))
+                    .unwrap());
+            }
+        };
 
-                    info!("Successfully collected CPU profile ({} bytes)", body.len());
+        // Profile for the specified duration
+        tokio::time::sleep(Duration::from_secs(duration_secs)).await;
 
-                    Ok(Response::builder()
-                        .status(StatusCode::OK)
-                        .header("Content-Type", "application/octet-stream")
-                        .header(
-                            "Content-Disposition",
-                            format!("attachment; filename=\"profile-{}.pb\"", duration_secs),
-                        )
-                        .body(Full::new(Bytes::from(body)))
-                        .unwrap())
-                }
-                Err(e) => {
-                    error!("Failed to generate pprof format: {}", e);
-                    let error_msg = format!("Failed to generate pprof format: {}", e);
-                    Ok(Response::builder()
-                        .status(StatusCode::INTERNAL_SERVER_ERROR)
-                        .body(Full::new(Bytes::from(error_msg)))
-                        .unwrap())
+        // Generate report
+        match guard.report().build() {
+            Ok(report) => {
+                // Encode as protobuf
+                match report.pprof() {
+                    Ok(profile) => {
+                        // The profile object needs to be converted to bytes
+                        let body = match profile.write_to_bytes() {
+                            Ok(bytes) => bytes,
+                            Err(e) => {
+                                error!("Failed to encode profile: {}", e);
+                                let error_msg = format!("Failed to encode profile: {}", e);
+                                return Ok(Response::builder()
+                                    .status(StatusCode::INTERNAL_SERVER_ERROR)
+                                    .body(Full::new(Bytes::from(error_msg)))
+                                    .unwrap());
+                            }
+                        };
+
+                        info!("Successfully collected CPU profile ({} bytes)", body.len());
+
+                        Ok(Response::builder()
+                            .status(StatusCode::OK)
+                            .header("Content-Type", "application/octet-stream")
+                            .header(
+                                "Content-Disposition",
+                                format!("attachment; filename=\"profile-{}.pb\"", duration_secs),
+                            )
+                            .body(Full::new(Bytes::from(body)))
+                            .unwrap())
+                    }
+                    Err(e) => {
+                        error!("Failed to generate pprof format: {}", e);
+                        let error_msg = format!("Failed to generate pprof format: {}", e);
+                        Ok(Response::builder()
+                            .status(StatusCode::INTERNAL_SERVER_ERROR)
+                            .body(Full::new(Bytes::from(error_msg)))
+                            .unwrap())
+                    }
                 }
             }
-        }
-        Err(e) => {
-            error!("Failed to generate report: {}", e);
-            let error_msg = format!("Failed to generate report: {}", e);
-            Ok(Response::builder()
-                .status(StatusCode::INTERNAL_SERVER_ERROR)
-                .body(Full::new(Bytes::from(error_msg)))
-                .unwrap())
+            Err(e) => {
+                error!("Failed to generate report: {}", e);
+                let error_msg = format!("Failed to generate report: {}", e);
+                Ok(Response::builder()
+                    .status(StatusCode::INTERNAL_SERVER_ERROR)
+                    .body(Full::new(Bytes::from(error_msg)))
+                    .unwrap())
+            }
         }
     }
 }

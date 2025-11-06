@@ -1,6 +1,6 @@
 use crate::{
     args::ScrollRollupNodeConfig,
-    pprof::{start_pprof_server, PprofConfig},
+    pprof::PprofConfig,
 };
 
 use reth_chainspec::NamedChain;
@@ -74,7 +74,7 @@ impl RollupManagerAddOn {
             let pprof_config = PprofConfig::new(addr)
                 .with_default_duration(self.config.pprof_args.default_duration);
 
-            match start_pprof_server(pprof_config).await {
+            match pprof_config.launch_server().await {
                 Ok(handle) => {
                     info!(target: "rollup_node::pprof", "pprof server started successfully");
                     // Spawn the pprof server task
