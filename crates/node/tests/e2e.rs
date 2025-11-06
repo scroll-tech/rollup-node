@@ -1573,7 +1573,7 @@ async fn signer_rotation() -> eyre::Result<()> {
         .with_consensus_system_contract(signer_1_address)
         .with_signer(signer_1)
         .with_sequencer_auto_start(true)
-        .with_eth_scroll_bridge(true)
+        .with_eth_scroll_bridge(false)
         .block_time(40)
         .build()
         .await?;
@@ -1584,7 +1584,7 @@ async fn signer_rotation() -> eyre::Result<()> {
         .with_consensus_system_contract(signer_1_address)
         .with_signer(signer_2)
         .with_sequencer_auto_start(true)
-        .with_eth_scroll_bridge(true)
+        .with_eth_scroll_bridge(false)
         .block_time(40)
         .build()
         .await?;
