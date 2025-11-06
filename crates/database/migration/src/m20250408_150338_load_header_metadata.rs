@@ -199,7 +199,7 @@ async fn get_file_size(client: &ClientWithMiddleware, url: &str) -> eyre::Result
 
 /// Check the hash of the data.
 fn verify_data_hash(expected_data_hash: B256, data: &[u8]) -> eyre::Result<()> {
-    let hash = B256::try_from(Sha256::digest(data).as_slice())?;
+    let hash = B256::from_slice(Sha256::digest(data).as_ref());
     if hash != expected_data_hash {
         bail!("corrupted data, expected data to hash to {expected_data_hash}, got {hash}.")
     }

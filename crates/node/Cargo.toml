@@ -103,6 +103,7 @@ jsonrpsee = { version = "0.26.0", features = ["server", "client", "macros"] }
 reqwest.workspace = true
 tokio.workspace = true
 tracing.workspace = true
+console-subscriber = "0.5.0"
 
 [dev-dependencies]
 alloy-chains.workspace = true
