@@ -52,12 +52,6 @@ impl<'a> BlockBuilder<'a> {
         self
     }
 
-    /// Expect a specific base fee per gas.
-    pub const fn expect_base_fee(mut self, base_fee: u64) -> Self {
-        self.expected_base_fee = Some(base_fee);
-        self
-    }
-
     /// Expect at least one L1 message in the block.
     pub const fn expect_l1_message(mut self) -> Self {
         self.expect_l1_message = true;

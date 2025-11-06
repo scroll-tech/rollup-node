@@ -156,5 +156,5 @@ test-utils = [
     "scroll-network/test-utils",
     "alloy-eips",
     "reth-storage-api",
-    "alloy-rpc-types-eth"
+    "alloy-rpc-types-eth",
 ]

@@ -75,7 +75,7 @@ pub struct NetworkHelper<'a> {
 
 impl<'a> NetworkHelper<'a> {
     /// Create a new network helper for a specific node.
-    pub fn new(fixture: &'a TestFixture, node_index: usize) -> Self {
+    pub const fn new(fixture: &'a TestFixture, node_index: usize) -> Self {
         Self { fixture, node_index }
     }
 
@@ -109,11 +109,7 @@ impl<'a> NetworkHelper<'a> {
     /// Get all connected peers.
     pub async fn peers(&self) -> eyre::Result<Vec<PeerInfo>> {
         let handle = self.network_handle().await?;
-        Ok(handle
-            .inner()
-            .get_all_peers()
-            .await
-            .map_err(|e| eyre::eyre!("Failed to get peers: {}", e))?)
+        handle.inner().get_all_peers().await.map_err(|e| eyre::eyre!("Failed to get peers: {}", e))
     }
 
     /// Announce a block from this node to the network.
@@ -175,12 +171,6 @@ impl<'a> ReputationChecker<'a> {
         }
     }
 
-    /// Set the target peer to check reputation for.
-    pub fn of_peer(mut self, peer_id: PeerId) -> Self {
-        self.target_peer = Some(peer_id);
-        self
-    }
-
     /// Set the target peer by node index.
     pub async fn of_node(mut self, node_index: usize) -> eyre::Result<Self> {
         let peer_id = self.fixture.network_on(node_index).peer_id().await?;
@@ -189,13 +179,13 @@ impl<'a> ReputationChecker<'a> {
     }
 
     /// Set a custom timeout for polling assertions (default: 5s).
-    pub fn with_timeout(mut self, timeout: Duration) -> Self {
+    pub const fn with_timeout(mut self, timeout: Duration) -> Self {
         self.timeout = timeout;
         self
     }
 
     /// Set a custom poll interval for polling assertions (default: 100ms).
-    pub fn with_poll_interval(mut self, interval: Duration) -> Self {
+    pub const fn with_poll_interval(mut self, interval: Duration) -> Self {
         self.poll_interval = interval;
         self
     }
@@ -212,26 +202,6 @@ impl<'a> ReputationChecker<'a> {
         let actual = reputation.ok_or_else(|| eyre::eyre!("Peer not found"))?;
         if actual != expected {
             return Err(eyre::eyre!("Expected reputation {}, got {}", expected, actual));
-        }
-        Ok(())
-    }
-
-    /// Assert that the reputation is less than a specific value.
-    pub async fn is_less_than(&self, threshold: i32) -> eyre::Result<()> {
-        let reputation = self.get().await?;
-        let actual = reputation.ok_or_else(|| eyre::eyre!("Peer not found"))?;
-        if actual >= threshold {
-            return Err(eyre::eyre!("Expected reputation < {}, got {}", threshold, actual));
-        }
-        Ok(())
-    }
-
-    /// Assert that the reputation is greater than a specific value.
-    pub async fn is_greater_than(&self, threshold: i32) -> eyre::Result<()> {
-        let reputation = self.get().await?;
-        let actual = reputation.ok_or_else(|| eyre::eyre!("Peer not found"))?;
-        if actual <= threshold {
-            return Err(eyre::eyre!("Expected reputation > {}, got {}", threshold, actual));
         }
         Ok(())
     }
@@ -286,35 +256,6 @@ impl<'a> ReputationChecker<'a> {
                 return Err(eyre::eyre!(
                     "Timeout waiting for reputation > {} (current: {})",
                     threshold,
-                    current
-                ));
-            }
-
-            interval.tick().await;
-        }
-    }
-
-    /// Wait until the reputation equals a specific value.
-    /// Polls repeatedly until the condition is met or timeout occurs.
-    pub async fn eventually_equals(self, expected: i32) -> eyre::Result<()> {
-        let peer_id = self.target_peer.ok_or_else(|| eyre::eyre!("No target peer set"))?;
-        let mut interval = time::interval(self.poll_interval);
-        let start = time::Instant::now();
-
-        loop {
-            let reputation =
-                self.fixture.network_on(self.observer_node).reputation_of(peer_id).await?;
-            if let Some(rep) = reputation {
-                if rep == expected {
-                    return Ok(());
-                }
-            }
-
-            if start.elapsed() > self.timeout {
-                let current = reputation.unwrap_or(0);
-                return Err(eyre::eyre!(
-                    "Timeout waiting for reputation == {} (current: {})",
-                    expected,
                     current
                 ));
             }

@@ -10,7 +10,7 @@ use crate::{
 };
 
 use alloy_eips::BlockNumberOrTag;
-use alloy_primitives::{Address, BlockHash};
+use alloy_primitives::Address;
 use alloy_rpc_types_eth::Block;
 use alloy_signer_local::PrivateKeySigner;
 use reth_chainspec::EthChainSpec;
@@ -89,12 +89,12 @@ pub struct NodeHandle {
 
 impl NodeHandle {
     /// Returns true if this is a handle to the sequencer.
-    pub fn is_sequencer(&self) -> bool {
+    pub const fn is_sequencer(&self) -> bool {
         matches!(self.typ, NodeType::Sequencer)
     }
 
     /// Returns true if this is a handle to a follower.
-    pub fn is_follower(&self) -> bool {
+    pub const fn is_follower(&self) -> bool {
         matches!(self.typ, NodeType::Follower)
     }
 }
@@ -120,9 +120,7 @@ impl TestFixture {
     /// Get the sequencer node (assumes first node is sequencer).
     pub fn sequencer(&mut self) -> &mut NodeHandle {
         let handle = &mut self.nodes[0];
-        if !handle.is_sequencer() {
-            panic!("expected sequencer, got follower")
-        }
+        assert!(handle.is_sequencer(), "expected sequencer, got follower");
         handle
     }
 
@@ -159,54 +157,6 @@ impl TestFixture {
         self.tx().transfer().inject().await
     }
 
-    /// Advance time by sleeping for the specified number of seconds.
-    pub async fn advance_time(&self, seconds: u64) {
-        tokio::time::sleep(tokio::time::Duration::from_secs(seconds)).await;
-    }
-
-    /// Connect all nodes in a mesh network.
-    pub async fn connect_all(&mut self) {
-        let node_count = self.nodes.len();
-        for i in 0..node_count {
-            for j in (i + 1)..node_count {
-                self.connect(i, j).await;
-            }
-        }
-    }
-
-    /// Connect two nodes by index.
-    pub async fn connect(&mut self, idx1: usize, idx2: usize) {
-        // Split the nodes vector to get mutable references to both nodes
-        if idx1 == idx2 {
-            return;
-        }
-
-        let (node1, node2) = if idx1 < idx2 {
-            let (left, right) = self.nodes.split_at_mut(idx2);
-            (&mut left[idx1], &mut right[0])
-        } else {
-            let (left, right) = self.nodes.split_at_mut(idx1);
-            (&mut right[0], &mut left[idx2])
-        };
-
-        node1.node.connect(&mut node2.node).await;
-    }
-
-    /// Get the genesis hash from the chain spec.
-    pub fn genesis_hash(&self) -> BlockHash {
-        self.chain_spec.genesis_hash()
-    }
-
-    /// Get the chain ID.
-    pub fn chain_id(&self) -> u64 {
-        self.chain_spec.chain().into()
-    }
-
-    /// Get the RPC URL for a specific node.
-    pub fn rpc_url(&self, node_index: usize) -> String {
-        format!("http://localhost:{}", self.nodes[node_index].node.rpc_url().port().unwrap())
-    }
-
     /// Inject a raw transaction into a specific node's pool.
     pub async fn inject_tx_on(
         &mut self,
@@ -234,24 +184,6 @@ impl TestFixture {
     /// Get the current (latest) block from the sequencer node.
     pub async fn get_sequencer_block(&self) -> eyre::Result<Block<Transaction>> {
         self.get_block(0).await
-    }
-
-    /// Get a block by number from a specific node.
-    pub async fn get_block_by_number(
-        &self,
-        node_index: usize,
-        block_number: impl Into<BlockNumberOrTag>,
-    ) -> eyre::Result<Option<Block<Transaction>>> {
-        use reth_rpc_api::EthApiServer;
-
-        self.nodes[node_index]
-            .node
-            .rpc
-            .inner
-            .eth_api()
-            .block_by_number(block_number.into(), false)
-            .await
-            .map_err(Into::into)
     }
 }
 
@@ -325,13 +257,13 @@ impl TestFixtureBuilder {
     }
 
     /// Adds `count`s follower nodes to the test.
-    pub fn followers(mut self, count: usize) -> TestFixtureBuilder {
+    pub const fn followers(mut self, count: usize) -> Self {
         self.num_nodes += count;
         self
     }
 
     /// Toggle the test field.
-    pub fn with_test(mut self, test: bool) -> Self {
+    pub const fn with_test(mut self, test: bool) -> Self {
         self.config.test = test;
         self
     }
@@ -343,7 +275,7 @@ impl TestFixtureBuilder {
     }
 
     /// Set the sequencer auto start for the node.
-    pub fn with_sequencer_auto_start(mut self, auto_start: bool) -> Self {
+    pub const fn with_sequencer_auto_start(mut self, auto_start: bool) -> Self {
         self.config.sequencer_args.auto_start = auto_start;
         self
     }
@@ -370,26 +302,26 @@ impl TestFixtureBuilder {
     }
 
     /// Set the block time for the sequencer.
-    pub fn block_time(mut self, millis: u64) -> Self {
+    pub const fn block_time(mut self, millis: u64) -> Self {
         self.config.sequencer_args.block_time = millis;
         self
     }
 
     /// Set whether to allow empty blocks.
-    pub fn allow_empty_blocks(mut self, allow: bool) -> Self {
+    pub const fn allow_empty_blocks(mut self, allow: bool) -> Self {
         self.config.sequencer_args.allow_empty_blocks = allow;
         self
     }
 
     /// Set L1 message inclusion mode with block depth.
-    pub fn with_l1_message_delay(mut self, depth: u64) -> Self {
+    pub const fn with_l1_message_delay(mut self, depth: u64) -> Self {
         self.config.sequencer_args.l1_message_inclusion_mode =
             L1MessageInclusionMode::BlockDepth(depth);
         self
     }
 
     /// Set L1 message inclusion mode to finalized with optional block depth.
-    pub fn with_finalized_l1_messages(mut self, depth: u64) -> Self {
+    pub const fn with_finalized_l1_messages(mut self, depth: u64) -> Self {
         self.config.sequencer_args.l1_message_inclusion_mode =
             L1MessageInclusionMode::FinalizedWithBlockDepth(depth);
         self
@@ -408,13 +340,13 @@ impl TestFixtureBuilder {
     }
 
     /// Use noop consensus (no validation).
-    pub fn with_noop_consensus(mut self) -> Self {
+    pub const fn with_noop_consensus(mut self) -> Self {
         self.config.consensus_args = ConsensusArgs::noop();
         self
     }
 
-    /// Use SystemContract consensus with the given authorized signer address.
-    pub fn with_consensus_system_contract(mut self, authorized_signer: Address) -> Self {
+    /// Use `SystemContract` consensus with the given authorized signer address.
+    pub const fn with_consensus_system_contract(mut self, authorized_signer: Address) -> Self {
         self.config.consensus_args.algorithm = ConsensusAlgorithm::SystemContract;
         self.config.consensus_args.authorized_signer = Some(authorized_signer);
         self
@@ -427,56 +359,44 @@ impl TestFixtureBuilder {
     }
 
     /// Set the payload building duration in milliseconds.
-    pub fn payload_building_duration(mut self, millis: u64) -> Self {
+    pub const fn payload_building_duration(mut self, millis: u64) -> Self {
         self.config.sequencer_args.payload_building_duration = millis;
         self
     }
 
     /// Set the fee recipient address.
-    pub fn fee_recipient(mut self, address: Address) -> Self {
+    pub const fn fee_recipient(mut self, address: Address) -> Self {
         self.config.sequencer_args.fee_recipient = address;
         self
     }
 
     /// Enable auto-start for the sequencer.
-    pub fn auto_start(mut self, enabled: bool) -> Self {
+    pub const fn auto_start(mut self, enabled: bool) -> Self {
         self.config.sequencer_args.auto_start = enabled;
         self
     }
 
     /// Set the maximum number of L1 messages per block.
-    pub fn max_l1_messages(mut self, max: u64) -> Self {
+    pub const fn max_l1_messages(mut self, max: u64) -> Self {
         self.config.sequencer_args.max_l1_messages = Some(max);
         self
     }
 
     /// Enable the Scroll wire protocol.
-    pub fn with_scroll_wire(mut self, enabled: bool) -> Self {
+    pub const fn with_scroll_wire(mut self, enabled: bool) -> Self {
         self.config.network_args.enable_scroll_wire = enabled;
         self
     }
 
     /// Enable the ETH-Scroll wire bridge.
-    pub fn with_eth_scroll_bridge(mut self, enabled: bool) -> Self {
+    pub const fn with_eth_scroll_bridge(mut self, enabled: bool) -> Self {
         self.config.network_args.enable_eth_scroll_wire_bridge = enabled;
         self
     }
 
     /// Set the optimistic sync trigger threshold.
-    pub fn optimistic_sync_trigger(mut self, blocks: u64) -> Self {
+    pub const fn optimistic_sync_trigger(mut self, blocks: u64) -> Self {
         self.config.chain_orchestrator_args.optimistic_sync_trigger = blocks;
-        self
-    }
-
-    /// Set the chain buffer size.
-    pub fn chain_buffer_size(mut self, size: usize) -> Self {
-        self.config.chain_orchestrator_args.chain_buffer_size = size;
-        self
-    }
-
-    /// Disable the test mode (enables real signing).
-    pub fn production_mode(mut self) -> Self {
-        self.config.test = false;
         self
     }
 

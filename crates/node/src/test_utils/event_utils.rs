@@ -33,11 +33,7 @@ impl<'a> EventWaiter<'a> {
     pub async fn block_sequenced(self, target: u64) -> eyre::Result<ScrollBlock> {
         self.wait_for_event(|e| {
             if let ChainOrchestratorEvent::BlockSequenced(block) = e {
-                if block.header.number == target {
-                    Some(block.clone())
-                } else {
-                    None
-                }
+                (block.header.number == target).then(|| block.clone())
             } else {
                 None
             }
@@ -128,7 +124,7 @@ impl<'a> EventWaiter<'a> {
         self,
         mut predicate: impl FnMut(&ChainOrchestratorEvent) -> bool,
     ) -> eyre::Result<ChainOrchestratorEvent> {
-        self.wait_for_event(move |e| if predicate(e) { Some(e.clone()) } else { None }).await
+        self.wait_for_event(move |e| predicate(e).then(|| e.clone())).await
     }
 
     /// Wait for any event and extract a value from it.
@@ -318,7 +314,7 @@ impl<'a> MultiNodeEventWaiter<'a> {
         self,
         predicate: impl Fn(&ChainOrchestratorEvent) -> bool,
     ) -> eyre::Result<Vec<ChainOrchestratorEvent>> {
-        self.wait_for_event_on_all(move |e| if predicate(e) { Some(e.clone()) } else { None }).await
+        self.wait_for_event_on_all(move |e| predicate(e).then(|| e.clone())).await
     }
 
     /// Wait for any event and extract a value from it on all specified nodes.

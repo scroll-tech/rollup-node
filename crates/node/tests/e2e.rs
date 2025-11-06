@@ -1621,6 +1621,8 @@ async fn signer_rotation() -> eyre::Result<()> {
     fixture1.l1().signer_update(signer_2_address).await?;
     fixture2.l1().signer_update(signer_2_address).await?;
 
+    tokio::time::sleep(Duration::from_secs(1)).await;
+
     fixture1
         .expect_event_on(1)
         .where_event_n(5, |event| {

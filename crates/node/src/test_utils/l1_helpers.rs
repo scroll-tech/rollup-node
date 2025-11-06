@@ -28,36 +28,32 @@ impl<'a> L1Helper<'a> {
     }
 
     /// Send a notification that L1 is synced.
-    pub async fn sync(mut self) -> eyre::Result<()> {
+    pub async fn sync(self) -> eyre::Result<()> {
         let notification = Arc::new(L1Notification::Synced);
         self.send_to_nodes(notification).await
     }
 
     /// Send a new L1 block notification.
-    pub async fn new_block(mut self, block_number: u64) -> eyre::Result<()> {
+    pub async fn new_block(self, block_number: u64) -> eyre::Result<()> {
         let notification = Arc::new(L1Notification::NewBlock(block_number));
         self.send_to_nodes(notification).await
     }
 
     /// Send an L1 reorg notification.
-    pub async fn reorg_to(mut self, block_number: u64) -> eyre::Result<()> {
+    pub async fn reorg_to(self, block_number: u64) -> eyre::Result<()> {
         let notification = Arc::new(L1Notification::Reorg(block_number));
         self.send_to_nodes(notification).await
     }
 
     /// Send an L1 consensus notification.
-    pub async fn signer_update(mut self, new_signer: Address) -> eyre::Result<()> {
+    pub async fn signer_update(self, new_signer: Address) -> eyre::Result<()> {
         let notification =
             Arc::new(L1Notification::Consensus(ConsensusUpdate::AuthorizedSigner(new_signer)));
         self.send_to_nodes(notification).await
     }
 
     /// Send an L1 reorg notification.
-    pub async fn batch_commit(
-        mut self,
-        calldata_path: Option<&str>,
-        index: u64,
-    ) -> eyre::Result<()> {
+    pub async fn batch_commit(self, calldata_path: Option<&str>, index: u64) -> eyre::Result<()> {
         let raw_calldata = calldata_path
             .map(|path| {
                 Result::<_, eyre::Report>::Ok(Bytes::from_str(&std::fs::read_to_string(path)?)?)
@@ -84,7 +80,7 @@ impl<'a> L1Helper<'a> {
     }
 
     /// Send notification to target nodes.
-    async fn send_to_nodes(&mut self, notification: Arc<L1Notification>) -> eyre::Result<()> {
+    async fn send_to_nodes(&self, notification: Arc<L1Notification>) -> eyre::Result<()> {
         let nodes = if let Some(index) = self.target_node_index {
             vec![&self.fixture.nodes[index]]
         } else {
