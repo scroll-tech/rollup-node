@@ -1,7 +1,4 @@
-use crate::{
-    args::ScrollRollupNodeConfig,
-    pprof::PprofConfig,
-};
+use crate::{args::ScrollRollupNodeConfig, pprof::PprofConfig};
 
 use reth_chainspec::NamedChain;
 use reth_network::NetworkProtocols;

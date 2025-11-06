@@ -109,7 +109,8 @@ impl PprofConfig {
                 let io = TokioIo::new(stream);
 
                 tokio::spawn(async move {
-                    let service = service_fn(move |req| Self::handle_request(req, default_duration));
+                    let service =
+                        service_fn(move |req| Self::handle_request(req, default_duration));
 
                     if let Err(err) = http1::Builder::new().serve_connection(io, service).await {
                         error!("Error serving connection from {}: {}", peer_addr, err);
