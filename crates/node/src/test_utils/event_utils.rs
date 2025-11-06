@@ -105,6 +105,12 @@ impl<'a> EventWaiter<'a> {
         .await
     }
 
+    /// Wait for an L1 reorg event.
+    pub async fn l1_reorg(self) -> eyre::Result<()> {
+        self.wait_for_event(|e| matches!(e, ChainOrchestratorEvent::L1Reorg { .. }).then_some(()))
+            .await
+    }
+
     /// Wait for a new block received event from the network.
     pub async fn new_block_received(self) -> eyre::Result<ScrollBlock> {
         self.wait_for_event(|e| {

@@ -173,9 +173,7 @@ impl<'a> L1MessageBuilder<'a> {
 
     /// Send the L1 message to the database and notify nodes.
     pub async fn send(self) -> eyre::Result<TxL1Message> {
-        let sender = self
-            .sender
-            .unwrap_or_else(|| self.l1_helper.fixture.wallet().blocking_lock().inner.address());
+        let sender = self.sender.unwrap_or_else(|| Address::random());
 
         let tx_l1_message = TxL1Message {
             queue_index: self.queue_index,

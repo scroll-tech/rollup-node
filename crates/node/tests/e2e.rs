@@ -8,6 +8,7 @@ use futures::{task::noop_waker_ref, FutureExt, StreamExt};
 use reth_chainspec::EthChainSpec;
 use reth_network::{NetworkConfigBuilder, NetworkEventListenerProvider, PeersInfo};
 use reth_network_api::block::EthWireProvider;
+use reth_primitives_traits::transaction::TxHashRef;
 use reth_rpc_api::EthApiServer;
 use reth_scroll_chainspec::{ScrollChainSpec, SCROLL_DEV, SCROLL_MAINNET, SCROLL_SEPOLIA};
 use reth_scroll_node::ScrollNetworkPrimitives;
@@ -1106,77 +1107,50 @@ async fn can_handle_l1_message_reorg() -> eyre::Result<()> {
 async fn requeues_transactions_after_l1_reorg() -> eyre::Result<()> {
     reth_tracing::init_test_tracing();
 
-    let chain_spec = (*SCROLL_DEV).clone();
-    let mut config = default_sequencer_test_scroll_rollup_node_config();
-    config.sequencer_args.auto_start = false;
-    config.sequencer_args.block_time = 0;
+    let mut sequencer =
+        TestFixture::builder().sequencer().auto_start(false).block_time(0).build().await?;
 
-    let (mut nodes, _tasks, wallet) =
-        setup_engine(config, 1, chain_spec.clone(), false, false).await?;
-    let node = nodes.pop().expect("node exists");
-
-    let rnm_handle = node.inner.add_ons_handle.rollup_manager_handle.clone();
-    let mut events = rnm_handle.get_event_listener().await?;
-    let l1_watcher_tx = node.inner.add_ons_handle.l1_watcher_tx.clone().unwrap();
-
-    l1_watcher_tx.send(Arc::new(L1Notification::Synced)).await?;
-    let _ = events.next().await;
-    let _ = events.next().await;
+    // Set the l1 as being synced.
+    sequencer.l1().sync().await?;
 
     // Let the sequencer build 10 blocks.
     for i in 1..=10 {
-        rnm_handle.build_block();
-        let b = wait_for_block_sequenced_5s(&mut events, i).await?;
+        let b = sequencer.build_block().expect_block_number(i).await_block().await?;
         tracing::info!(target: "scroll::test", block_number = ?b.header.number, block_hash = ?b.header.hash_slow(), "Sequenced block");
     }
 
     // Send a L1 message and wait for it to be indexed.
-    let l1_message_notification = L1Notification::L1Message {
-        message: TxL1Message {
-            queue_index: 0,
-            gas_limit: 21000,
-            to: Default::default(),
-            value: Default::default(),
-            sender: Default::default(),
-            input: Default::default(),
-        },
-        block_number: 2,
-        block_timestamp: 0,
-    };
+    sequencer.l1().add_message().at_block(2).send().await?;
+    sequencer.expect_event().l1_message_committed().await?;
+
+    // Send the L1 block which finalizes the L1 message.
+    sequencer.l1().new_block(2).await?;
+    sequencer.expect_event().new_l1_block().await?;
 
     // Build a L2 block with L1 message, so we can revert it later.
-    l1_watcher_tx.send(Arc::new(l1_message_notification.clone())).await?;
-    l1_watcher_tx.send(Arc::new(L1Notification::NewBlock(2))).await?;
-    wait_for_event_5s(&mut events, ChainOrchestratorEvent::L1MessageCommitted(0)).await?;
-    wait_for_event_5s(&mut events, ChainOrchestratorEvent::NewL1Block(2)).await?;
-    rnm_handle.build_block();
-    wait_for_block_sequenced_5s(&mut events, 11).await?;
+    sequencer.build_block().await_block().await?;
 
     // Inject a user transaction and force the sequencer to include it in the next block
-    let wallet = Arc::new(Mutex::new(wallet));
-    let tx = generate_tx(wallet.clone()).await;
-    let injected_tx_bytes: Vec<u8> = tx.clone().into();
-    node.rpc.inject_tx(tx).await?;
+    let hash = sequencer.inject_transfer().await?;
+    let block_with_tx = sequencer.build_block().await_block().await?;
 
-    rnm_handle.build_block();
-    let block_with_tx = wait_for_block_sequenced_5s(&mut events, 12).await?;
+    let hashes: Vec<_> =
+        block_with_tx.body.transactions.into_iter().map(|tx| *tx.tx_hash()).collect();
     assert!(
-        block_contains_raw_tx(&block_with_tx, &injected_tx_bytes),
+        hashes.len() == 1 && hashes.contains(&hash),
         "block 11 should contain the injected transaction before the reorg"
     );
 
     // Trigger an L1 reorg that reverts the block containing the transaction
-    l1_watcher_tx.send(Arc::new(L1Notification::Reorg(1))).await?;
-    wait_for_event_predicate_5s(&mut events, |event| {
-        matches!(event, ChainOrchestratorEvent::L1Reorg { l1_block_number: 1, .. })
-    })
-    .await?;
+    sequencer.l1().reorg_to(1).await?;
+    sequencer.expect_event().l1_reorg().await?;
 
     // Build the next block – the reverted transaction should have been requeued
-    rnm_handle.build_block();
-    let reseq_block = wait_for_block_sequenced_5s(&mut events, 11).await?;
+    let block_with_tx = sequencer.build_block().await_block().await?;
+    let hashes: Vec<_> =
+        block_with_tx.body.transactions.into_iter().map(|tx| *tx.tx_hash()).collect();
     assert!(
-        block_contains_raw_tx(&reseq_block, &injected_tx_bytes),
+        hashes.len() == 1 && hashes.contains(&hash),
         "re-sequenced block should contain the reverted transaction"
     );
 
@@ -1190,56 +1164,45 @@ async fn requeues_transactions_after_l1_reorg() -> eyre::Result<()> {
 async fn requeues_transactions_after_update_fcs_head() -> eyre::Result<()> {
     reth_tracing::init_test_tracing();
 
-    let chain_spec = (*SCROLL_DEV).clone();
-    let mut config = default_sequencer_test_scroll_rollup_node_config();
-    config.sequencer_args.auto_start = false;
-    config.sequencer_args.block_time = 0;
+    let mut sequencer =
+        TestFixture::builder().sequencer().auto_start(false).block_time(0).build().await?;
 
-    let (mut nodes, _tasks, wallet) =
-        setup_engine(config, 1, chain_spec.clone(), false, false).await?;
-    let node = nodes.pop().expect("node exists");
-
-    let handle = node.inner.add_ons_handle.rollup_manager_handle.clone();
-    let mut events = handle.get_event_listener().await?;
-
-    // Set L1 synced to allow sequencing.
-    let l1_watcher_tx = node.inner.add_ons_handle.l1_watcher_tx.clone().unwrap();
-    l1_watcher_tx.send(Arc::new(L1Notification::Synced)).await?;
-    let _ = events.next().await;
-    let _ = events.next().await;
+    // Set the l1 as being synced.
+    sequencer.l1().sync().await?;
 
     // Build a few blocks and remember block #4 as the future reset target.
     let mut target_head: Option<BlockInfo> = None;
     for i in 1..=4 {
-        handle.build_block();
-        let b = wait_for_block_sequenced_5s(&mut events, i).await?;
+        let b = sequencer.build_block().expect_block_number(i as u64).await_block().await?;
         if i == 4 {
             target_head = Some(BlockInfo { number: b.header.number, hash: b.header.hash_slow() });
         }
     }
 
     // Inject a user transaction and include it in block 5.
-    let wallet = Arc::new(Mutex::new(wallet));
-    let tx = generate_tx(wallet.clone()).await;
-    let injected_tx_bytes: Vec<u8> = tx.clone().into();
-    node.rpc.inject_tx(tx).await?;
+    let hash = sequencer.inject_transfer().await?;
+    let block = sequencer.build_block().expect_block_number(5).await_block().await?;
 
-    handle.build_block();
-    let block_with_tx = wait_for_block_sequenced_5s(&mut events, 5).await?;
+    let hashes: Vec<_> = block.body.transactions.into_iter().map(|tx| *tx.tx_hash()).collect();
     assert!(
-        block_contains_raw_tx(&block_with_tx, &injected_tx_bytes),
-        "block 5 should contain the injected transaction before the FCS reset",
+        hashes.len() == 1 && hashes.contains(&hash),
+        "block 5 should contain the injected transaction before the FCU"
     );
 
     // Reset FCS head back to block 4; this should collect block 5's txs and requeue them.
     let head = target_head.expect("target head exists");
-    handle.update_fcs_head(head).await.expect("update_fcs_head should succeed");
+    sequencer
+        .sequencer()
+        .rollup_manager_handle
+        .update_fcs_head(head)
+        .await
+        .expect("update_fcs_head should succeed");
 
     // Build the next block – the reverted transaction should have been requeued and included.
-    handle.build_block();
-    let reseq_block = wait_for_block_sequenced_5s(&mut events, 5).await?;
+    let block = sequencer.build_block().expect_block_number(5).await_block().await?;
+    let hashes: Vec<_> = block.body.transactions.into_iter().map(|tx| *tx.tx_hash()).collect();
     assert!(
-        block_contains_raw_tx(&reseq_block, &injected_tx_bytes),
+        hashes.len() == 1 && hashes.contains(&hash),
         "re-sequenced block should contain the reverted transaction after FCS reset",
     );
 

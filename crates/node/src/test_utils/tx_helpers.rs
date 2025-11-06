@@ -27,21 +27,6 @@ impl<'a> TxHelper<'a> {
     pub fn transfer(self) -> TransferTxBuilder<'a> {
         TransferTxBuilder::new(self)
     }
-
-    /// Quickly inject a simple transfer transaction.
-    pub async fn quick_transfer(self) -> eyre::Result<B256> {
-        self.transfer().inject().await
-    }
-
-    /// Inject N transfer transactions and return their hashes.
-    pub async fn inject_many(self, count: usize) -> eyre::Result<Vec<B256>> {
-        let mut hashes = Vec::with_capacity(count);
-        for _ in 0..count {
-            let hash = self.fixture.tx().for_node(self.target_node_index).quick_transfer().await?;
-            hashes.push(hash);
-        }
-        Ok(hashes)
-    }
 }
 
 /// Builder for creating transfer transactions.
