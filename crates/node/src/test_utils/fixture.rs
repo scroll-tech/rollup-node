@@ -60,6 +60,15 @@ pub type ScrollNetworkHandle =
 pub type TestBlockChainProvider =
     BlockchainProvider<NodeTypesWithDBAdapter<ScrollRollupNode, TmpDB>>;
 
+/// The node type (sequencer or follower).
+#[derive(Debug)]
+pub enum NodeType {
+    /// A sequencer node.
+    Sequencer,
+    /// A follower node.
+    Follower,
+}
+
 /// Handle to a single test node with its components.
 pub struct NodeHandle {
     /// The underlying node context.
@@ -74,6 +83,20 @@ pub struct NodeHandle {
     pub rollup_manager_handle: ChainOrchestratorHandle<ScrollNetworkHandle>,
     /// Node index in the test setup.
     pub index: usize,
+    /// The type of the node.
+    pub typ: NodeType,
+}
+
+impl NodeHandle {
+    /// Returns true if this is a handle to the sequencer.
+    pub fn is_sequencer(&self) -> bool {
+        matches!(self.typ, NodeType::Sequencer)
+    }
+
+    /// Returns true if this is a handle to a follower.
+    pub fn is_follower(&self) -> bool {
+        matches!(self.typ, NodeType::Follower)
+    }
 }
 
 impl Debug for NodeHandle {
@@ -95,18 +118,25 @@ impl TestFixture {
     }
 
     /// Get the sequencer node (assumes first node is sequencer).
-    pub fn sequencer_node(&mut self) -> &mut NodeHandle {
-        &mut self.nodes[0]
+    pub fn sequencer(&mut self) -> &mut NodeHandle {
+        let handle = &mut self.nodes[0];
+        if !handle.is_sequencer() {
+            panic!("expected sequencer, got follower")
+        }
+        handle
     }
 
     /// Get a follower node by index.
-    pub fn follower_node(&mut self, index: usize) -> &mut NodeHandle {
-        &mut self.nodes[index + 1]
+    pub fn follower(&mut self, index: usize) -> &mut NodeHandle {
+        if index == 0 && self.nodes[0].is_sequencer() {
+            return &mut self.nodes[index + 1];
+        }
+        &mut self.nodes[index]
     }
 
-    /// Get the wallet address.
-    pub fn wallet_address(&self) -> Address {
-        self.wallet.blocking_lock().inner.address()
+    /// Get the wallet.
+    pub fn wallet(&self) -> Arc<Mutex<Wallet>> {
+        self.wallet.clone()
     }
 
     /// Start building a block using the sequencer.
@@ -246,7 +276,7 @@ impl TestFixtureBuilder {
     pub fn new() -> Self {
         Self {
             config: Self::default_config(),
-            num_nodes: 1,
+            num_nodes: 0,
             chain_spec: None,
             is_dev: false,
             no_local_transactions_propagation: false,
@@ -289,12 +319,14 @@ impl TestFixtureBuilder {
             L1MessageInclusionMode::BlockDepth(0);
         self.config.sequencer_args.allow_empty_blocks = true;
         self.config.database_args.rn_db_path = Some(PathBuf::from("sqlite::memory:"));
+
+        self.num_nodes += 1;
         self
     }
 
     /// Adds `count`s follower nodes to the test.
     pub fn followers(mut self, count: usize) -> TestFixtureBuilder {
-        self.num_nodes = count;
+        self.num_nodes += count;
         self
     }
 
@@ -459,7 +491,7 @@ impl TestFixtureBuilder {
         let chain_spec = self.chain_spec.unwrap_or_else(|| SCROLL_DEV.clone());
 
         let (nodes, _tasks, wallet) = setup_engine(
-            config,
+            config.clone(),
             self.num_nodes,
             chain_spec.clone(),
             self.is_dev,
@@ -495,6 +527,11 @@ impl TestFixtureBuilder {
                 l1_watcher_tx,
                 rollup_manager_handle,
                 index,
+                typ: if config.sequencer_args.sequencer_enabled && index == 0 {
+                    NodeType::Sequencer
+                } else {
+                    NodeType::Follower
+                },
             });
         }
 

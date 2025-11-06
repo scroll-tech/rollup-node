@@ -232,9 +232,9 @@ impl<'a> MultiNodeEventWaiter<'a> {
     }
 
     /// Wait for chain extended event on all specified nodes.
-    pub async fn chain_extended(self) -> eyre::Result<()> {
+    pub async fn chain_extended(self, target: u64) -> eyre::Result<()> {
         self.wait_for_event_on_all(|e| {
-            matches!(e, ChainOrchestratorEvent::ChainExtended(_)).then_some(())
+            matches!(e, ChainOrchestratorEvent::ChainExtended(ChainImport{chain,..}) if chain.last().map(|b| b.header.number) >= Some(target)).then_some(())
         })
         .await?;
         Ok(())

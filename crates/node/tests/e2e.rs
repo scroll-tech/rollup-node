@@ -971,7 +971,7 @@ async fn can_handle_batch_revert() -> eyre::Result<()> {
         .where_event_n(42, |e| matches!(e, ChainOrchestratorEvent::BlockConsolidated(_)))
         .await?;
 
-    let status = fixture.follower_node(0).rollup_manager_handle.status().await?;
+    let status = fixture.follower(0).rollup_manager_handle.status().await?;
 
     // Assert the forkchoice state is above 4
     assert!(status.l2.fcs.head_block_info().number > 4);
@@ -983,7 +983,7 @@ async fn can_handle_batch_revert() -> eyre::Result<()> {
     // Wait for the third batch to be proceeded.
     tokio::time::sleep(Duration::from_millis(300)).await;
 
-    let status = fixture.follower_node(0).rollup_manager_handle.status().await?;
+    let status = fixture.follower(0).rollup_manager_handle.status().await?;
 
     // Assert the forkchoice state was reset to 4.
     assert_eq!(status.l2.fcs.head_block_info().number, 4);
@@ -1261,7 +1261,7 @@ async fn can_rpc_enable_disable_sequencing() -> eyre::Result<()> {
     assert_ne!(fixture.get_sequencer_block().await?.header.number, 0, "Should produce blocks");
 
     // Disable automatic sequencing via RPC
-    let client = fixture.sequencer_node().node.rpc_client().expect("Should have rpc client");
+    let client = fixture.sequencer().node.rpc_client().expect("Should have rpc client");
     let result = RollupNodeExtApiClient::disable_automatic_sequencing(&client).await?;
     assert!(result, "Disable automatic sequencing should return true");
 
@@ -1432,7 +1432,7 @@ async fn can_gossip_over_eth_wire() -> eyre::Result<()> {
     fixture.expect_event().l1_synced().await?;
 
     let mut eth_wire_blocks =
-        fixture.follower_node(0).node.inner.network.eth_wire_block_listener().await?;
+        fixture.follower(0).node.inner.network.eth_wire_block_listener().await?;
 
     if let Some(block) = eth_wire_blocks.next().await {
         println!("Received block from eth-wire network: {block:?}");
@@ -1485,7 +1485,7 @@ async fn signer_rotation() -> eyre::Result<()> {
     fixture2.l1().for_node(0).sync().await?;
 
     // connect the two sequencers
-    fixture1.sequencer_node().node.connect(&mut fixture2.sequencer_node().node).await;
+    fixture1.sequencer().node.connect(&mut fixture2.sequencer().node).await;
 
     // wait for 5 blocks to be produced.
     for i in 1..=5 {
