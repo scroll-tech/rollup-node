@@ -175,9 +175,9 @@ where
 
                 maybe_batch = self.batch_receiver.recv(), if self.futures.len() < DERIVATION_PIPELINE_WORKER_CONCURRENCY => {
                     match maybe_batch {
-                        Some(batch_info) => {
-                            let fut = self.derivation_future(batch_info);
-                            self.futures.push_back(fut);
+                        Some(_batch_info) => {
+                            // let fut = self.derivation_future(batch_info);
+                            // self.futures.push_back(fut);
                         }
                         None => {
                             tracing::info!(target: "scroll::derivation_pipeline", "Batch channel closed, shutting down derivation pipeline worker");
