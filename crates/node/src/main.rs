@@ -14,8 +14,11 @@ fn main() {
     if std::env::var("RUST_LOG").is_err() {
         std::env::set_var("RUST_LOG", "info");
     }
+
     // enable tokio-console subscriber
-    console_subscriber::init();
+    if let Ok(true) = std::env::var("ENABLE_CONSOLE_SUBSCRIBER").map(|v| v == "1") {
+        console_subscriber::init();
+    }
 
     reth_cli_util::sigsegv_handler::install();
 
