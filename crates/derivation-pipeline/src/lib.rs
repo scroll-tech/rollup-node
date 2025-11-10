@@ -10,7 +10,7 @@ use futures::{stream::FuturesOrdered, Stream, StreamExt};
 use rollup_node_primitives::{BatchCommitData, BatchInfo, L1MessageEnvelope};
 use rollup_node_providers::L1Provider;
 use scroll_alloy_rpc_types_engine::{BlockDataHint, ScrollPayloadAttributes};
-use scroll_codec::{decoding::payload::PayloadData, Codec};
+use scroll_codec::{decoding::payload::PayloadData, Codec, CodecError, DecodingError};
 use scroll_db::{Database, DatabaseReadOperations, L1MessageKey};
 use tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender};
 
@@ -280,8 +280,15 @@ pub async fn derive<L1P: L1Provider + Sync + Send, DB: DatabaseReadOperations>(
     } else {
         None
     };
-    let data = CodecDataSource { calldata: batch.calldata.as_ref(), blob: blob.as_deref() };
-    let decoded = Codec::decode(&data)?;
+
+    let data = CodecDataSource { calldata: batch.calldata.clone(), blob };
+
+    let decoded =
+        tokio::task::spawn_blocking(move || Codec::decode(data)).await.map_err(|err| {
+            DerivationPipelineError::Codec(CodecError::Decoding(DecodingError::Other(Box::new(
+                err,
+            ))))
+        })??;
 
     // set the cursor for the l1 provider.
     let payload_data = &decoded.data;
