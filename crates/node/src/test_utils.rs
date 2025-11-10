@@ -146,7 +146,10 @@ pub fn default_test_scroll_rollup_node_config() -> ScrollRollupNodeConfig {
         network_args: crate::args::RollupNodeNetworkArgs::default(),
         database_args: RollupNodeDatabaseArgs::default(),
         l1_provider_args: L1ProviderArgs::default(),
-        engine_driver_args: EngineDriverArgs { sync_at_startup: true },
+        engine_driver_args: EngineDriverArgs {
+            sync_at_startup: true,
+            initial_forkchoice_target: None,
+        },
         chain_orchestrator_args: ChainOrchestratorArgs {
             optimistic_sync_trigger: 100,
             chain_buffer_size: 100,
@@ -181,7 +184,10 @@ pub fn default_sequencer_test_scroll_rollup_node_config() -> ScrollRollupNodeCon
             rn_db_path: Some(PathBuf::from("sqlite::memory:")),
         },
         l1_provider_args: L1ProviderArgs::default(),
-        engine_driver_args: EngineDriverArgs { sync_at_startup: true },
+        engine_driver_args: EngineDriverArgs {
+            sync_at_startup: true,
+            initial_forkchoice_target: None,
+        },
         chain_orchestrator_args: ChainOrchestratorArgs {
             optimistic_sync_trigger: 100,
             chain_buffer_size: 100,

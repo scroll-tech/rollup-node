@@ -1,3 +1,4 @@
+use rollup_node_primitives::BlockInfo;
 use std::sync::Arc;
 
 /// Configuration for the chain orchestrator.
@@ -10,6 +11,8 @@ pub struct ChainOrchestratorConfig<ChainSpec> {
     optimistic_sync_threshold: u64,
     /// The L1 message queue index at which the V2 L1 message queue was enabled.
     l1_v2_message_queue_start_index: u64,
+    /// The forkchoice target.
+    forkchoice_state_target: Option<BlockInfo>,
 }
 
 impl<ChainSpec> ChainOrchestratorConfig<ChainSpec> {
@@ -18,8 +21,14 @@ impl<ChainSpec> ChainOrchestratorConfig<ChainSpec> {
         chain_spec: Arc<ChainSpec>,
         optimistic_sync_threshold: u64,
         l1_v2_message_queue_start_index: u64,
+        forkchoice_state_target: Option<BlockInfo>,
     ) -> Self {
-        Self { chain_spec, optimistic_sync_threshold, l1_v2_message_queue_start_index }
+        Self {
+            chain_spec,
+            optimistic_sync_threshold,
+            l1_v2_message_queue_start_index,
+            forkchoice_state_target,
+        }
     }
 
     /// Returns a reference to the chain specification.
@@ -35,5 +44,10 @@ impl<ChainSpec> ChainOrchestratorConfig<ChainSpec> {
     /// Returns the L1 message queue index at which the V2 L1 message queue was enabled.
     pub const fn l1_v2_message_queue_start_index(&self) -> u64 {
         self.l1_v2_message_queue_start_index
+    }
+
+    /// Returns the forkchoice state target.
+    pub const fn forkchoice_state_target(&self) -> Option<&BlockInfo> {
+        self.forkchoice_state_target.as_ref()
     }
 }

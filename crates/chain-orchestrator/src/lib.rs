@@ -184,6 +184,10 @@ impl<
 
     /// Drives the [`ChainOrchestrator`] future until a [`Shutdown`] signal is received.
     pub async fn run_until_shutdown(mut self, mut shutdown: Shutdown) {
+        if let Some(fcs) = self.config.forkchoice_state_target() {
+            let _ = self.engine.optimistic_sync(*fcs).await.inspect_err(|err| tracing::error!(target: "scroll::chain_orchestrator", ?err, "Failed to issue initial fcs"));
+        }
+
         loop {
             tokio::select! {
                 biased;

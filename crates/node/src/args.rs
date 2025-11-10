@@ -434,6 +434,7 @@ impl ScrollRollupNodeConfig {
             chain_spec,
             self.chain_orchestrator_args.optimistic_sync_trigger,
             l1_v2_message_queue_start_index,
+            self.engine_driver_args.initial_forkchoice_target,
         );
 
         // Instantiate the derivation pipeline
@@ -540,11 +541,14 @@ pub struct EngineDriverArgs {
     /// Whether the engine driver should try to sync at start up.
     #[arg(long = "engine.sync-at-startup", num_args=0..=1, default_value_t = true)]
     pub sync_at_startup: bool,
+    /// Issues an initial forkchoice update on startup.
+    #[arg(long = "engine.initial-forkchoice-target")]
+    pub initial_forkchoice_target: Option<BlockInfo>,
 }
 
 impl Default for EngineDriverArgs {
     fn default() -> Self {
-        Self { sync_at_startup: true }
+        Self { sync_at_startup: true, initial_forkchoice_target: None }
     }
 }
 

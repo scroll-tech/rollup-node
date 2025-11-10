@@ -7,6 +7,7 @@ use core::{
     cmp::Ordering,
     future::Future,
     pin::Pin,
+    str::FromStr,
     task::{ready, Context, Poll},
 };
 use reth_scroll_primitives::{ScrollBlock, ScrollTransactionSigned};
@@ -28,6 +29,21 @@ pub struct BlockInfo {
 impl PartialOrd for BlockInfo {
     fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
         self.number.partial_cmp(&other.number)
+    }
+}
+
+impl FromStr for BlockInfo {
+    type Err = String;
+
+    // Accept "NUMBER:HASH" (e.g. "12345:0xabc123...")
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        let (num, hash) =
+            s.split_once(':').ok_or_else(|| "expected format NUMBER:HASH".to_string())?;
+
+        let number = num.parse::<u64>().map_err(|e| format!("invalid block number: {e}"))?;
+        let hash = hash.parse::<B256>().map_err(|e| format!("invalid block hash: {e}"))?;
+
+        Ok(Self { number, hash })
     }
 }
 
