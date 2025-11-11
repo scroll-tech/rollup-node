@@ -6,6 +6,7 @@ mod builder;
 pub mod constants;
 mod context;
 mod node;
+pub mod pprof;
 #[cfg(feature = "test-utils")]
 pub mod test_utils;
 

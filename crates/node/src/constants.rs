@@ -64,3 +64,9 @@ pub(crate) const SCROLL_MAINNET_SIGNER: Address =
 /// The authorized signer address for Scroll sepolia.
 pub(crate) const SCROLL_SEPOLIA_SIGNER: Address =
     address!("0x687E0E85AD67ff71aC134CF61b65905b58Ab43b2");
+
+/// The url for pprof
+pub(crate) const DEFAULT_PPROF_URL: &str = "0.0.0.0:6868";
+
+/// The default duration for pprof
+pub(crate) const DEFAULT_PPROF_DEFAULT_DURATION: u64 = 30;
