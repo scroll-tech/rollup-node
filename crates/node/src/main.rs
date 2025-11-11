@@ -16,7 +16,7 @@ fn main() {
     }
 
     // enable tokio-console subscriber
-    if std::env::var("ENABLE_CONSOLE_SUBSCRIBER").map(|v| v == "1") == Ok(true) {
+    if std::env::var("ENABLE_CONSOLE_SUBSCRIBER").is_ok_and(|v| v == "1") {
         console_subscriber::init();
     }
 
