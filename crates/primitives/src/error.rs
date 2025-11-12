@@ -1,3 +1,5 @@
+use std::string::String;
+
 /// Errors related to Scroll primitives.
 #[derive(Debug)]
 pub enum RollupNodePrimitiveError {
