@@ -3,6 +3,7 @@
 
 # include source files
 !/bin
+!/.cargo
 !/crates
 !/testing
 !book.toml

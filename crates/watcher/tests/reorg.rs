@@ -6,7 +6,7 @@ use std::sync::Arc;
 use alloy_rpc_types_eth::Header;
 use arbitrary::Arbitrary;
 use rand::Rng;
-use rollup_node_primitives::NodeConfig;
+use rollup_node_primitives::{L1BlockStartupInfo, NodeConfig};
 use rollup_node_watcher::{
     random, test_utils::provider::MockProvider, Block, L1Notification, L1Watcher,
 };
@@ -72,8 +72,13 @@ async fn test_should_detect_reorg() -> eyre::Result<()> {
     );
 
     // spawn the watcher and verify received notifications are consistent.
-    let mut handle =
-        L1Watcher::spawn(mock_provider, None, Arc::new(config), LOGS_QUERY_BLOCK_RANGE).await;
+    let mut handle = L1Watcher::spawn(
+        mock_provider,
+        L1BlockStartupInfo::None,
+        Arc::new(config),
+        LOGS_QUERY_BLOCK_RANGE,
+    )
+    .await;
 
     // skip the first two events
     handle.l1_notification_receiver().recv().await.unwrap();
@@ -90,7 +95,10 @@ async fn test_should_detect_reorg() -> eyre::Result<()> {
             if matches!(notification.as_ref(), L1Notification::Processed(_)) {
                 notification = handle.l1_notification_receiver().recv().await.unwrap();
             }
-            assert_eq!(notification.as_ref(), &L1Notification::Finalized(finalized.header.number));
+            assert_eq!(
+                notification.as_ref(),
+                &L1Notification::Finalized((&finalized.header).into())
+            );
         }
 
         if latest_number == latest.header.number {
@@ -114,9 +122,9 @@ async fn test_should_detect_reorg() -> eyre::Result<()> {
             // reorg
             assert!(matches!(notification.as_ref(), L1Notification::Reorg(_)));
             let notification = handle.l1_notification_receiver().recv().await.unwrap();
-            assert_eq!(notification.as_ref(), &L1Notification::NewBlock(latest.header.number));
+            assert_eq!(notification.as_ref(), &L1Notification::NewBlock((&latest.header).into()));
         } else {
-            assert_eq!(notification.as_ref(), &L1Notification::NewBlock(latest.header.number));
+            assert_eq!(notification.as_ref(), &L1Notification::NewBlock((&latest.header).into()));
         }
 
         // update finalized and latest.
@@ -174,8 +182,13 @@ async fn test_should_fetch_gap_in_unfinalized_blocks() -> eyre::Result<()> {
     );
 
     // spawn the watcher and verify received notifications are consistent.
-    let mut handle =
-        L1Watcher::spawn(mock_provider, None, Arc::new(config), LOGS_QUERY_BLOCK_RANGE).await;
+    let mut handle = L1Watcher::spawn(
+        mock_provider,
+        L1BlockStartupInfo::None,
+        Arc::new(config),
+        LOGS_QUERY_BLOCK_RANGE,
+    )
+    .await;
 
     // skip the first two events
     handle.l1_notification_receiver().recv().await.unwrap();
@@ -192,7 +205,10 @@ async fn test_should_fetch_gap_in_unfinalized_blocks() -> eyre::Result<()> {
             if matches!(notification.as_ref(), L1Notification::Processed(_)) {
                 notification = handle.l1_notification_receiver().recv().await.unwrap();
             }
-            assert_eq!(notification.as_ref(), &L1Notification::Finalized(finalized.header.number));
+            assert_eq!(
+                notification.as_ref(),
+                &L1Notification::Finalized((&finalized.header).into())
+            );
         }
 
         if latest_number == latest.header.number {
@@ -211,7 +227,7 @@ async fn test_should_fetch_gap_in_unfinalized_blocks() -> eyre::Result<()> {
             notification = handle.l1_notification_receiver().recv().await.unwrap();
         }
 
-        assert_eq!(notification.as_ref(), &L1Notification::NewBlock(latest.header.number));
+        assert_eq!(notification.as_ref(), &L1Notification::NewBlock((&latest.header).into()));
 
         // update finalized and latest.
         finalized_number = finalized.header.number;

@@ -4,7 +4,7 @@
 use alloy_rpc_types_eth::Log;
 use alloy_sol_types::SolEvent;
 use arbitrary::Arbitrary;
-use rollup_node_primitives::NodeConfig;
+use rollup_node_primitives::{L1BlockStartupInfo, NodeConfig};
 use rollup_node_watcher::{
     random,
     test_utils::{chain, provider::MockProvider},
@@ -59,9 +59,14 @@ async fn test_should_not_index_latest_block_multiple_times() -> eyre::Result<()>
     );
 
     // spawn the watcher and verify received notifications are consistent.
-    let mut handle =
-        L1Watcher::spawn(mock_provider, None, Arc::new(config), LOGS_QUERY_BLOCK_RANGE).await;
-    let mut prev_block_number = 0;
+    let mut handle = L1Watcher::spawn(
+        mock_provider,
+        L1BlockStartupInfo::None,
+        Arc::new(config),
+        LOGS_QUERY_BLOCK_RANGE,
+    )
+    .await;
+    let mut prev_block_info = Default::default();
     let mut ticker = tokio::time::interval(tokio::time::Duration::from_secs(2));
     let _ = ticker.tick().await;
 
@@ -69,9 +74,9 @@ async fn test_should_not_index_latest_block_multiple_times() -> eyre::Result<()>
         select! {
             notification = handle.l1_notification_receiver().recv() => {
                 let notification = notification.map(|notif| (*notif).clone());
-                if let Some(L1Notification::L1Message { block_number, .. }) = notification {
-                    assert_ne!(prev_block_number, block_number, "indexed same block twice {block_number}");
-                    prev_block_number = block_number
+                if let Some(L1Notification::L1Message { block_info, .. }) = notification {
+                    assert_ne!(prev_block_info, block_info, "indexed same block twice {block_info}");
+                    prev_block_info = block_info
                 }
             }
             _ = ticker.tick() => break

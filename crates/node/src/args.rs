@@ -258,18 +258,16 @@ impl ScrollRollupNodeConfig {
         let mut fcs =
             ForkchoiceState::from_provider(&l2_provider).await.unwrap_or_else(chain_spec_fcs);
 
-        let genesis_hash = chain_spec.genesis_hash();
-        let (l1_start_block_number, mut l2_head_block_number) = db
+        let (l1_block_startup_info, mut l2_head_block_number) = db
             .tx_mut(move |tx| async move {
                 // On startup we replay the latest batch of blocks from the database as such we set
                 // the safe block hash to the latest block hash associated with the
                 // previous consolidated batch in the database.
-                let (_startup_safe_block, l1_start_block_number) =
-                    tx.prepare_on_startup(genesis_hash).await?;
+                let l1_block_startup_info = tx.prepare_l1_watcher_start_info().await?;
 
                 let l2_head_block_number = tx.get_l2_head_block_number().await?;
 
-                Ok::<_, DatabaseError>((l1_start_block_number, l2_head_block_number))
+                Ok::<_, DatabaseError>((l1_block_startup_info, l2_head_block_number))
             })
             .await?;
 
@@ -346,10 +344,10 @@ impl ScrollRollupNodeConfig {
             Option<Sender<Arc<L1Notification>>>,
             Option<L1WatcherHandle>,
         ) = if let Some(provider) = l1_provider.filter(|_| !self.test) {
-            tracing::info!(target: "scroll::node::args", ?l1_start_block_number, "Starting L1 watcher");
+            tracing::info!(target: "scroll::node::args", ?l1_block_startup_info, "Starting L1 watcher");
             let handle = L1Watcher::spawn(
                 provider,
-                l1_start_block_number,
+                l1_block_startup_info,
                 node_config,
                 self.l1_provider_args.logs_query_block_range,
             )

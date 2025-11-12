@@ -45,11 +45,68 @@ pub struct BatchCommitData {
     pub blob_versioned_hash: Option<B256>,
     /// The block number at which the batch finalized event was emitted.
     pub finalized_block_number: Option<u64>,
+    /// The block number at which the batch was reverted, if any.
+    pub reverted_block_number: Option<u64>,
 }
 
 impl From<BatchCommitData> for BatchInfo {
     fn from(value: BatchCommitData) -> Self {
         Self { index: value.index, hash: value.hash }
+    }
+}
+
+impl From<&BatchCommitData> for BatchInfo {
+    fn from(value: &BatchCommitData) -> Self {
+        Self { index: value.index, hash: value.hash }
+    }
+}
+
+/// The status of a batch.
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
+pub enum BatchStatus {
+    /// The batch has been committed but not yet processed.
+    Committed,
+    /// The batch is currently being processed.
+    Processing,
+    /// The batch has been successfully consolidated with the L2 chain.
+    Consolidated,
+    /// The batch has been reverted.
+    Reverted,
+    /// The batch has been finalized.
+    Finalized,
+}
+
+impl BatchStatus {
+    /// Returns true if the batch status is finalized.
+    pub const fn is_finalized(&self) -> bool {
+        matches!(self, Self::Finalized)
+    }
+}
+
+impl core::fmt::Display for BatchStatus {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        match self {
+            Self::Committed => write!(f, "committed"),
+            Self::Processing => write!(f, "processing"),
+            Self::Consolidated => write!(f, "consolidated"),
+            Self::Reverted => write!(f, "reverted"),
+            Self::Finalized => write!(f, "finalized"),
+        }
+    }
+}
+
+impl core::str::FromStr for BatchStatus {
+    type Err = ();
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s {
+            "committed" => Ok(Self::Committed),
+            "processing" => Ok(Self::Processing),
+            "consolidated" => Ok(Self::Consolidated),
+            "reverted" => Ok(Self::Reverted),
+            "finalized" => Ok(Self::Finalized),
+            _ => Err(()),
+        }
     }
 }
 
@@ -62,12 +119,14 @@ pub struct BatchConsolidationOutcome {
     pub blocks: Vec<L2BlockInfoWithL1Messages>,
     /// The list of skipped L1 messages index.
     pub skipped_l1_messages: Vec<u64>,
+    /// The target status of the batch after consolidation.
+    pub target_status: BatchStatus,
 }
 
 impl BatchConsolidationOutcome {
     /// Creates a new empty batch consolidation outcome for the given batch info.
-    pub const fn new(batch_info: BatchInfo) -> Self {
-        Self { batch_info, blocks: Vec::new(), skipped_l1_messages: Vec::new() }
+    pub const fn new(batch_info: BatchInfo, target_status: BatchStatus) -> Self {
+        Self { batch_info, blocks: Vec::new(), skipped_l1_messages: Vec::new(), target_status }
     }
 
     /// Pushes a block consolidation outcome to the batch.
@@ -143,6 +202,7 @@ mod arbitrary_impl {
                 calldata: Arc::new(bytes),
                 blob_versioned_hash: blob_hash,
                 finalized_block_number: None,
+                reverted_block_number: None,
             })
         }
     }

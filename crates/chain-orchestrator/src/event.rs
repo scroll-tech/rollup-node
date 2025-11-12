@@ -42,11 +42,23 @@ pub enum ChainOrchestratorEvent {
         batch_info: BatchInfo,
         /// The L1 block number in which the batch was committed.
         l1_block_number: u64,
-        /// The safe L2 block info.
-        safe_head: Option<BlockInfo>,
     },
     /// A batch has been finalized returning a list of finalized batches.
-    BatchFinalized(u64, Vec<BatchInfo>),
+    BatchFinalized {
+        /// The L1 block info at which the batch finalization event was received.
+        l1_block_info: BlockInfo,
+        /// The list of batches that have been triggered for the derivation pipeline.
+        triggered_batches: Vec<BatchInfo>,
+        /// The finalized block info after finalizing the consolidated batches.
+        finalized_block_info: Option<BlockInfo>,
+    },
+    /// A batch has been reverted returning the batch info and the new safe head.
+    BatchReverted {
+        /// The latest batch info after the revert.
+        batch_info: BatchInfo,
+        /// The new safe head after the revert.
+        safe_head: BlockInfo,
+    },
     /// A new L1 block has been received returning the L1 block number.
     NewL1Block(u64),
     /// An L1 block has been finalized returning the L1 block number and the list of finalized

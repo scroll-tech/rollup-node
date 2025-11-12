@@ -12,8 +12,8 @@ impl MigrationTrait for Migration {
         manager
             .create_index(
                 Index::create()
-                    .name("idx_batch_commit_processed")
-                    .col(BatchCommit::Processed)
+                    .name("idx_batch_commit_status")
+                    .col(BatchCommit::Status)
                     .table(BatchCommit::Table)
                     .to_owned(),
             )
@@ -26,10 +26,7 @@ impl MigrationTrait for Migration {
         // Drop index `processed` for the `batch_commit` table.
         manager
             .drop_index(
-                Index::drop()
-                    .name("idx_batch_commit_processed")
-                    .table(BatchCommit::Table)
-                    .to_owned(),
+                Index::drop().name("idx_batch_commit_status").table(BatchCommit::Table).to_owned(),
             )
             .await?;
 

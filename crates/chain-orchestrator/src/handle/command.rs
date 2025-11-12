@@ -30,6 +30,9 @@ pub enum ChainOrchestratorCommand<N: FullNetwork<Primitives = ScrollNetworkPrimi
     /// Enable gossiping of blocks to peers.
     #[cfg(feature = "test-utils")]
     SetGossip((bool, oneshot::Sender<()>)),
+    /// Returns a database handle for direct database access.
+    #[cfg(feature = "test-utils")]
+    DatabaseHandle(oneshot::Sender<std::sync::Arc<scroll_db::Database>>),
 }
 
 /// The database queries that can be sent to the rollup manager.
