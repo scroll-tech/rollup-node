@@ -38,7 +38,7 @@ use rollup_node_providers::{
 use rollup_node_sequencer::{
     L1MessageInclusionMode, PayloadBuildingConfig, Sequencer, SequencerConfig,
 };
-use rollup_node_watcher::{L1Notification, L1Watcher, L1WatcherHandle};
+use rollup_node_watcher::{L1Notification, L1Watcher, L1WatcherCommand, L1WatcherHandle};
 use scroll_alloy_hardforks::ScrollHardforks;
 use scroll_alloy_network::Scroll;
 use scroll_alloy_provider::{ScrollAuthApiEngineClient, ScrollEngineApi};
@@ -167,6 +167,7 @@ impl ScrollRollupNodeConfig {
         >,
         ChainOrchestratorHandle<N>,
         Option<Sender<Arc<L1Notification>>>,
+        Option<UnboundedReceiver<L1WatcherCommand>>,
     )>
     where
         N: FullNetwork<Primitives = ScrollNetworkPrimitives> + NetworkProtocols,
@@ -340,9 +341,11 @@ impl ScrollRollupNodeConfig {
         };
         let consensus = self.consensus_args.consensus(authorized_signer)?;
 
-        let (l1_notification_tx, l1_watcher_handle): (
+        #[allow(clippy::type_complexity)]
+        let (l1_notification_tx, l1_watcher_handle, l1_watcher_command_rx): (
             Option<Sender<Arc<L1Notification>>>,
             Option<L1WatcherHandle>,
+            Option<UnboundedReceiver<L1WatcherCommand>>,
         ) = if let Some(provider) = l1_provider.filter(|_| !self.test) {
             tracing::info!(target: "scroll::node::args", ?l1_block_startup_info, "Starting L1 watcher");
             let handle = L1Watcher::spawn(
@@ -352,7 +355,7 @@ impl ScrollRollupNodeConfig {
                 self.l1_provider_args.logs_query_block_range,
             )
             .await;
-            (None, Some(handle))
+            (None, Some(handle), None)
         } else {
             // Create a channel for L1 notifications that we can use to inject L1 messages for
             // testing
@@ -360,16 +363,15 @@ impl ScrollRollupNodeConfig {
             {
                 let (tx, rx) = tokio::sync::mpsc::channel(1000);
 
-                // TODO: expose command_rx to allow for tests to assert commands sent to the watcher
-                let (command_tx, _command_rx) = tokio::sync::mpsc::unbounded_channel();
+                let (command_tx, command_rx) = tokio::sync::mpsc::unbounded_channel();
                 let handle = L1WatcherHandle::new(command_tx, rx);
 
-                (Some(tx), Some(handle))
+                (Some(tx), Some(handle), Some(command_rx))
             }
 
             #[cfg(not(feature = "test-utils"))]
             {
-                (None, None)
+                (None, None, None)
             }
         };
 
@@ -460,7 +462,7 @@ impl ScrollRollupNodeConfig {
         )
         .await?;
 
-        Ok((chain_orchestrator, handle, l1_notification_tx))
+        Ok((chain_orchestrator, handle, l1_notification_tx, l1_watcher_command_rx))
     }
 }
 

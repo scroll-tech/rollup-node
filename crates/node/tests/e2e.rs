@@ -839,7 +839,7 @@ async fn shutdown_consolidates_most_recent_batch_on_startup() -> eyre::Result<()
     config.hydrate(node.inner.config.clone()).await?;
 
     let (_, events) = ScrollWireProtocolHandler::new(ScrollWireConfig::new(true));
-    let (chain_orchestrator, handle, l1_notification_tx) = config
+    let (chain_orchestrator, handle, l1_notification_tx, _) = config
         .clone()
         .build(
             RollupNodeContext::new(
@@ -989,7 +989,7 @@ async fn shutdown_consolidates_most_recent_batch_on_startup() -> eyre::Result<()
 
     // Start the RNM again.
     let (_, events) = ScrollWireProtocolHandler::new(ScrollWireConfig::new(true));
-    let (chain_orchestrator, handle, l1_notification_tx) = config
+    let (chain_orchestrator, handle, l1_notification_tx, _) = config
         .clone()
         .build(
             RollupNodeContext::new(
@@ -1119,7 +1119,7 @@ async fn graceful_shutdown_sets_fcs_to_latest_signed_block_in_db_on_start_up() -
     config.hydrate(node.inner.config.clone()).await?;
 
     let (_, events) = ScrollWireProtocolHandler::new(ScrollWireConfig::new(true));
-    let (rnm, handle, l1_watcher_tx) = config
+    let (rnm, handle, l1_watcher_tx, _) = config
         .clone()
         .build(
             RollupNodeContext::new(
@@ -1192,7 +1192,7 @@ async fn graceful_shutdown_sets_fcs_to_latest_signed_block_in_db_on_start_up() -
 
     // Start the RNM again.
     let (_, events) = ScrollWireProtocolHandler::new(ScrollWireConfig::new(true));
-    let (rnm, handle, _) = config
+    let (rnm, handle, _, _) = config
         .clone()
         .build(
             RollupNodeContext::new(
