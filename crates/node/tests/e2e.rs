@@ -1,7 +1,7 @@
 //! End-to-end tests for the rollup node.
 
 use alloy_eips::{eip2718::Encodable2718, BlockNumberOrTag};
-use alloy_primitives::{address, b256, hex::FromHex, Address, Bytes, Signature, B256, U256};
+use alloy_primitives::{address, b256, bytes, hex::FromHex, Address, Bytes, Signature, B256, U256};
 use alloy_rpc_types_eth::Block;
 use alloy_signer::Signer;
 use alloy_signer_local::PrivateKeySigner;
@@ -36,10 +36,11 @@ use rollup_node_primitives::{
     sig_encode_hash, BatchCommitData, BatchInfo, BlockInfo, ConsensusUpdate,
 };
 use rollup_node_sequencer::L1MessageInclusionMode;
-use rollup_node_watcher::L1Notification;
+use rollup_node_watcher::{L1Notification, L1WatcherCommand};
 use scroll_alloy_consensus::TxL1Message;
 use scroll_alloy_rpc_types::Transaction as ScrollAlloyTransaction;
 use scroll_db::{test_utils::setup_test_db, L1MessageKey};
+use scroll_migration::ConditionHolderContents::Chain;
 use scroll_network::NewBlockWithPeer;
 use scroll_wire::{ScrollWireConfig, ScrollWireProtocolHandler};
 use std::{
@@ -2298,6 +2299,126 @@ async fn signer_rotation() -> eyre::Result<()> {
 
     Ok(())
 }
+
+
+/// Test that the chain orchestrator detects gaps in batch commits and triggers
+/// a reset command to the L1 watcher for self-healing.
+#[tokio::test]
+async fn test_batch_commit_gap_triggers_reset() -> eyre::Result<()> {
+    reth_tracing::init_test_tracing();
+
+    let (mut nodes, _tasks, _wallet) = setup_engine(default_test_scroll_rollup_node_config(), 1, (*SCROLL_DEV).clone(), false, false).await?;
+    let node = nodes.pop().unwrap();
+
+    // Get handles for sending L1 notifications and receiving commands
+    let l1_watcher_tx = node.inner.add_ons_handle.l1_watcher_tx.clone().unwrap();
+    let l1_watcher_command_rx = node.inner.add_ons_handle.l1_watcher_command_rx.clone();
+    let chain_orchestrator = node.inner.add_ons_handle.rollup_manager_handle.clone();
+
+    // Get event listener to monitor chain orchestrator events
+    let mut events = chain_orchestrator.get_event_listener().await?;
+
+    // Step 1: Send synced notification to initialize the chain orchestrator
+    l1_watcher_tx.send(Arc::new(L1Notification::Synced)).await?;
+
+    // Step 2: Send batch commit 1 to populate the database
+    let block_info_1 = BlockInfo { number: 1, hash: B256::random() };
+    let batch_commit_1 = BatchCommitData {
+        hash: B256::random(),
+        index: 1,
+        block_number: 100,
+        block_timestamp: 1000,
+        calldata: Arc::new(bytes!("0a")),
+        blob_versioned_hash: None,
+        finalized_block_number: None,
+        reverted_block_number: None,
+    };
+
+    l1_watcher_tx
+        .send(Arc::new(L1Notification::BatchCommit {
+            block_info: block_info_1,
+            data: batch_commit_1.clone(),
+        }))
+        .await?;
+
+
+    wait_for_event(&mut events, ChainOrchestratorEvent::BatchCommitIndexed{ batch_info: BatchInfo{ index: batch_commit_1.index, hash: batch_commit_1.hash}, l1_block_number: block_info_1.number}, Duration::from_secs(1200)).await?;
+
+    // TODO: wait for batch gap and duplicate events + check if L1 watcher received correct reset command
+
+    return Ok(());
+    // Step 3: Send batch commit 11 - should succeed
+    let block_info_11 = BlockInfo { number: 101, hash: B256::random() };
+    let batch_commit_11 = BatchCommitData {
+        hash: B256::random(),
+        index: 11,
+        block_number: 101,
+        block_timestamp: 1001,
+        calldata: Arc::new(bytes!("0b")),
+        blob_versioned_hash: None,
+        finalized_block_number: None,
+        reverted_block_number: None,
+    };
+
+    l1_watcher_tx
+        .send(Arc::new(L1Notification::BatchCommit {
+            block_info: block_info_11,
+            data: batch_commit_11.clone(),
+        }))
+        .await?;
+
+    // Wait for batch 11 to be processed
+    tokio::time::sleep(Duration::from_millis(100)).await;
+    loop {
+        match tokio::time::timeout(Duration::from_millis(50), events.next()).await {
+            Result::Ok(Some(_)) => continue,
+            _ => break,
+        }
+    }
+
+    // Step 4: Send batch commit with gap (index 13, skipping index 12) - should trigger reset
+    let block_info_13 = BlockInfo { number: 103, hash: B256::random() };
+    let batch_commit_13 = BatchCommitData {
+        hash: B256::random(),
+        index: 13, // Gap! Missing index 12
+        block_number: 103,
+        block_timestamp: 1003,
+        calldata: Arc::new(bytes!("0d")),
+        blob_versioned_hash: None,
+        finalized_block_number: None,
+        reverted_block_number: None,
+    };
+
+    l1_watcher_tx
+        .send(Arc::new(L1Notification::BatchCommit {
+            block_info: block_info_13,
+            data: batch_commit_13,
+        }))
+        .await?;
+
+    // Step 4: Assert that a reset command was sent to the L1 watcher
+    // This is the key assertion - verifying the self-healing behavior
+    let mut command_rx = l1_watcher_command_rx.lock().await;
+    let command = tokio::time::timeout(std::time::Duration::from_secs(5), command_rx.recv())
+        .await
+        .expect("should receive command within timeout")
+        .expect("should receive Some(command)");
+
+    // Verify it's a ResetToBlock command with the correct block number
+    match command {
+        L1WatcherCommand::ResetToBlock { block, .. } => {
+            // The reset should go back to the L1 block of the last known good batch
+            // In this case, batch 11 was at L1 block 101
+            assert_eq!(
+                block, 101,
+                "Reset block should be the L1 block of the last known batch"
+            );
+        }
+    }
+
+    Ok(())
+}
+
 
 /// Read the file provided at `path` as a [`Bytes`].
 pub fn read_to_bytes<P: AsRef<std::path::Path>>(path: P) -> eyre::Result<Bytes> {

@@ -43,6 +43,13 @@ pub enum ChainOrchestratorEvent {
         /// The L1 block number in which the batch was committed.
         l1_block_number: u64,
     },
+    /// A gap has been detected in the committed batches.
+    BatchCommitGap {
+        missing_index: u64,
+        l1_block_number_reset: u64,
+    },
+    /// A duplicate batch commit has been detected.
+    BatchCommitDuplicate(u64),
     /// A batch has been finalized returning a list of finalized batches.
     BatchFinalized {
         /// The L1 block info at which the batch finalization event was received.
@@ -57,6 +64,7 @@ pub enum ChainOrchestratorEvent {
         /// The new safe head after the revert.
         safe_head: BlockInfo,
     },
+    // TODO: revert events
     /// A new L1 block has been received returning the L1 block number.
     NewL1Block(u64),
     /// An L1 block has been finalized returning the L1 block number and the list of finalized
@@ -64,6 +72,13 @@ pub enum ChainOrchestratorEvent {
     L1BlockFinalized(u64, Vec<BatchInfo>),
     /// A `L1Message` event has been committed returning the message queue index.
     L1MessageCommitted(u64),
+    /// A gap has been detected in the L1 message queue.
+    L1MessageQueueGap{
+        missing_index: u64,
+        l1_block_number_reset: u64,
+    },
+    /// A duplicate L1 message has been detected.
+    L1MessageDuplicate(u64),
     /// A reorg has occurred on L1, returning the L1 block number of the new L1 head,
     /// the L1 message queue index of the new L1 head, and optionally the L2 head and safe block
     /// info if the reorg resulted in a new L2 head or safe block.
