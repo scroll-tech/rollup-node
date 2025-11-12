@@ -52,4 +52,7 @@ pub enum FilterLogError {
     /// The log is missing a transaction hash.
     #[error("unknown transaction hash for log")]
     MissingTransactionHash,
+    /// Invalid extracted notification length.
+    #[error("expected {0} notifications, got {1}")]
+    InvalidNotificationCount(usize, usize),
 }

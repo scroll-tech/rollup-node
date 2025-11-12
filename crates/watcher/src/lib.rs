@@ -267,6 +267,13 @@ where
                 notifications.push(system_contract_update);
             }
 
+            if logs.len() != notifications.len() {
+                return Err(L1WatcherError::Logs(FilterLogError::InvalidNotificationCount(
+                    logs.len(),
+                    notifications.len(),
+                )))
+            }
+
             // send all notifications on the channel.
             self.notify_all(notifications).await?;
 
