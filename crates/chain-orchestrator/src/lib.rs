@@ -551,8 +551,11 @@ impl<
                 metered!(Task::L1Finalization, self, handle_l1_finalized(*block_info))
             }
             L1Notification::BatchCommit { block_info, data } => {
-                metered!(Task::BatchCommit, self, handle_batch_commit(*block_info, data.clone()))
-                match metered!(Task::BatchCommit, self, handle_batch_commit(batch.clone())) {
+                match metered!(
+                    Task::BatchCommit,
+                    self,
+                    handle_batch_commit(*block_info, data.clone())
+                ) {
                     Err(ChainOrchestratorError::BatchCommitGap(batch_index)) => {
                         // Query database for the L1 block of the last known batch
                         let reset_block =
@@ -598,11 +601,10 @@ impl<
                 )
             }
             L1Notification::L1Message { message, block_info, block_timestamp: _ } => {
-                metered!(Task::L1Message, self, handle_l1_message(message.clone(), *block_info))
                 match metered!(
                     Task::L1Message,
                     self,
-                    handle_l1_message(message.clone(), *block_number)
+                    handle_l1_message(message.clone(), *block_info)
                 ) {
                     Err(ChainOrchestratorError::L1MessageQueueGap(queue_index)) => {
                         // Query database for the L1 block of the last known L1 message
@@ -825,12 +827,12 @@ impl<
                     }
 
                     // Check if batch already exists in DB.
-                    if let Some(existing_batch) = tx.get_batch_by_index(batch_clone.index).await? {
-                        if existing_batch.hash == batch_clone.hash {
+                    if let Some(existing_batch) = tx.get_batch_by_index(batch.index).await? {
+                        if existing_batch.hash == batch.hash {
                             // This means we have already processed this batch commit, we will skip
                             // it.
                             return Err(ChainOrchestratorError::DuplicateBatchCommit(
-                                BatchInfo::new(batch_clone.index, batch_clone.hash),
+                                BatchInfo::new(batch.index, batch.hash),
                             ));
                         }
                         // TODO: once batch reverts are implemented, we need to handle this

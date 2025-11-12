@@ -1207,7 +1207,9 @@ mod tests {
 
         // When: Fill the channel to capacity LOG_QUERY_BLOCK_RANGE
         for i in 0..LOG_QUERY_BLOCK_RANGE {
-            watcher.notify(L1Notification::NewBlock(i)).await?;
+            watcher
+                .notify(L1Notification::NewBlock(BlockInfo { number: i, hash: random!(B256) }))
+                .await?;
         }
 
         assert_eq!(watcher.current_block_number, 0, "Watcher should be set to block");
@@ -1216,7 +1218,9 @@ mod tests {
         // This blocks until we send the command to reset.
         let watcher_handle_task = tokio::spawn(async move {
             // This would normally block, but the reset command should interrupt it
-            let result = watcher.notify(L1Notification::NewBlock(1000)).await;
+            let result = watcher
+                .notify(L1Notification::NewBlock(BlockInfo { number: 1000, hash: random!(B256) }))
+                .await;
             // After reset is handled, the notify returns without sending
             (watcher, result)
         });
