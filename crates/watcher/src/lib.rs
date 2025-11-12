@@ -61,8 +61,8 @@ pub type Header = <Ethereum as Network>::HeaderResponse;
 /// The state of the L1.
 #[derive(Debug, Default, Clone)]
 pub struct L1State {
-    head: BlockInfo,
-    finalized: BlockInfo,
+    head: u64,
+    finalized: u64,
 }
 
 /// The L1 watcher indexes L1 blocks, applying a first level of filtering via log filters.
@@ -147,7 +147,7 @@ pub enum L1Notification {
     /// A new block has been added to the L1.
     NewBlock(BlockInfo),
     /// A block has been finalized on the L1.
-    Finalized(BlockInfo),
+    Finalized(u64),
     /// A notification that the L1 watcher is synced to the L1 head.
     Synced,
 }
@@ -222,10 +222,9 @@ where
         };
 
         // fetch l1 state.
-        let l1_state = L1State {
-            head: fetch_block_info(BlockNumberOrTag::Latest).await,
-            finalized: fetch_block_info(BlockNumberOrTag::Finalized).await,
-        };
+        let head = fetch_block_info(BlockNumberOrTag::Latest).await;
+        let finalized = fetch_block_info(BlockNumberOrTag::Finalized).await;
+        let l1_state = L1State { head: head.number, finalized: finalized.number };
 
         let (reorg, start_block) = match l1_block_startup_info {
             L1BlockStartupInfo::UnsafeBlocks(blocks) => {
@@ -277,11 +276,11 @@ where
                 .expect("channel is open in this context");
         }
         watcher
-            .notify(L1Notification::Finalized(watcher.l1_state.finalized))
+            .notify(L1Notification::Finalized(finalized.number))
             .await
             .expect("channel is open in this context");
         watcher
-            .notify(L1Notification::NewBlock(watcher.l1_state.head))
+            .notify(L1Notification::NewBlock(head))
             .await
             .expect("channel is open in this context");
 
@@ -329,7 +328,7 @@ where
             }
 
             // Check if we just synced to the head
-            if !self.is_synced && self.current_block_number == self.l1_state.head.number {
+            if !self.is_synced && self.current_block_number == self.l1_state.head {
                 // if we have synced to the head of the L1, notify the channel and set the
                 // `is_synced`` flag.
                 if let Err(L1WatcherError::SendError(_)) = self.notify(L1Notification::Synced).await
@@ -419,11 +418,11 @@ where
     )]
     async fn handle_finalized_block(&mut self, finalized: &Header) -> L1WatcherResult<()> {
         // update the state and notify on channel.
-        if self.l1_state.finalized.number < finalized.number {
+        if self.l1_state.finalized < finalized.number {
             tracing::trace!(target: "scroll::watcher", number = finalized.number, hash = ?finalized.hash, "new finalized block");
 
-            self.l1_state.finalized.number = finalized.number;
-            self.notify(L1Notification::Finalized(finalized.into())).await?;
+            self.l1_state.finalized = finalized.number;
+            self.notify(L1Notification::Finalized(finalized.number)).await?;
         }
 
         // shortcircuit.
@@ -491,9 +490,7 @@ where
 
                 // update metrics.
                 self.metrics.reorgs.increment(1);
-                self.metrics
-                    .reorg_depths
-                    .record(self.l1_state.head.number.saturating_sub(number) as f64);
+                self.metrics.reorg_depths.record(self.l1_state.head.saturating_sub(number) as f64);
 
                 // reset the current block number to the reorged block number if
                 // we have indexed passed the reorg.
@@ -508,7 +505,7 @@ where
 
         // Update the state and notify on the channel.
         tracing::trace!(target: "scroll::watcher", number = ?latest.number, hash = ?latest.hash, "new block");
-        self.l1_state.head = latest.into();
+        self.l1_state.head = latest.number;
         self.notify(L1Notification::NewBlock(latest.into())).await?;
 
         Ok(())
@@ -680,7 +677,7 @@ where
         latest_block: &Block,
     ) -> L1WatcherResult<Option<L1Notification>> {
         // refresh the signer every new block.
-        if latest_block.header.number != self.l1_state.head.number {
+        if latest_block.header.number != self.l1_state.head {
             let signer = self
                 .execution_provider
                 .authorized_signer(self.config.address_book.system_contract_address)

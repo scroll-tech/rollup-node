@@ -26,7 +26,7 @@ mod chain;
 pub use chain::ChainImport;
 
 mod error;
-pub use error::RollupNodePrimitiveError;
+pub use error::{RollupNodePrimitiveError, RollupNodePrimitiveParsingError};
 
 mod metadata;
 pub use metadata::Metadata;

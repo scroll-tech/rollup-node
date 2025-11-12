@@ -49,8 +49,6 @@ pub enum ChainOrchestratorEvent {
         l1_block_info: BlockInfo,
         /// The list of batches that have been triggered for the derivation pipeline.
         triggered_batches: Vec<BatchInfo>,
-        /// The finalized block info after finalizing the consolidated batches.
-        finalized_block_info: Option<BlockInfo>,
     },
     /// A batch has been reverted returning the batch info and the new safe head.
     BatchReverted {

@@ -1,7 +1,9 @@
+use crate::RollupNodePrimitiveParsingError;
+
 use super::L2BlockInfoWithL1Messages;
 
 use alloy_primitives::{Bytes, B256};
-use std::{sync::Arc, vec::Vec};
+use std::{string::ToString, sync::Arc, vec::Vec};
 
 /// The batch information.
 #[derive(Debug, Copy, Clone, Default, PartialEq, Eq)]
@@ -81,6 +83,17 @@ impl BatchStatus {
     pub const fn is_finalized(&self) -> bool {
         matches!(self, Self::Finalized)
     }
+
+    /// Returns the string representation of the batch status.
+    pub const fn as_str(&self) -> &'static str {
+        match self {
+            Self::Committed => "committed",
+            Self::Processing => "processing",
+            Self::Consolidated => "consolidated",
+            Self::Reverted => "reverted",
+            Self::Finalized => "finalized",
+        }
+    }
 }
 
 impl core::fmt::Display for BatchStatus {
@@ -96,7 +109,7 @@ impl core::fmt::Display for BatchStatus {
 }
 
 impl core::str::FromStr for BatchStatus {
-    type Err = ();
+    type Err = RollupNodePrimitiveParsingError;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         match s {
@@ -105,7 +118,7 @@ impl core::str::FromStr for BatchStatus {
             "consolidated" => Ok(Self::Consolidated),
             "reverted" => Ok(Self::Reverted),
             "finalized" => Ok(Self::Finalized),
-            _ => Err(()),
+            _ => Err(RollupNodePrimitiveParsingError::InvalidBatchStatusString(s.to_string())),
         }
     }
 }

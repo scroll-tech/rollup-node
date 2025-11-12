@@ -325,7 +325,10 @@ impl<T: WriteConnectionProvider + ?Sized + Sync> DatabaseWriteOperations for T {
         models::batch_commit::Entity::update_many()
             .filter(models::batch_commit::Column::Hash.is_in(batch_hashes.iter().cloned()))
             .col_expr(models::batch_commit::Column::RevertedBlockNumber, Expr::value(None::<i64>))
-            .col_expr(models::batch_commit::Column::Status, Expr::value("consolidated"))
+            .col_expr(
+                models::batch_commit::Column::Status,
+                Expr::value(BatchStatus::Consolidated.as_str()),
+            )
             .exec(self.get_connection())
             .await?;
 
@@ -342,8 +345,11 @@ impl<T: WriteConnectionProvider + ?Sized + Sync> DatabaseWriteOperations for T {
         tracing::trace!(target: "scroll::db", "Changing batch status from processing to committed in database.");
 
         models::batch_commit::Entity::update_many()
-            .filter(models::batch_commit::Column::Status.eq("processing"))
-            .col_expr(models::batch_commit::Column::Status, Expr::value("committed"))
+            .filter(models::batch_commit::Column::Status.eq(BatchStatus::Processing.as_str()))
+            .col_expr(
+                models::batch_commit::Column::Status,
+                Expr::value(BatchStatus::Committed.as_str()),
+            )
             .exec(self.get_connection())
             .await?;
 
@@ -359,7 +365,7 @@ impl<T: WriteConnectionProvider + ?Sized + Sync> DatabaseWriteOperations for T {
 
         models::batch_commit::Entity::update_many()
             .filter(models::batch_commit::Column::Hash.eq(batch_hash.to_vec()))
-            .col_expr(models::batch_commit::Column::Status, Expr::value(status.to_string()))
+            .col_expr(models::batch_commit::Column::Status, Expr::value(status.as_str()))
             .exec(self.get_connection())
             .await?;
 
@@ -465,7 +471,7 @@ impl<T: WriteConnectionProvider + ?Sized + Sync> DatabaseWriteOperations for T {
         let filter = Condition::all()
             .add(models::batch_commit::Column::FinalizedBlockNumber.is_not_null())
             .add(models::batch_commit::Column::FinalizedBlockNumber.lte(finalized_l1_block_number))
-            .add(models::batch_commit::Column::Status.eq("consolidated"));
+            .add(models::batch_commit::Column::Status.eq(BatchStatus::Consolidated.as_str()));
         let batch = models::batch_commit::Entity::find()
             .filter(filter.clone())
             .order_by_desc(models::batch_commit::Column::Index)
@@ -482,7 +488,10 @@ impl<T: WriteConnectionProvider + ?Sized + Sync> DatabaseWriteOperations for T {
                 .expect("Finalized batch must have at least one L2 block.");
             models::batch_commit::Entity::update_many()
                 .filter(filter)
-                .col_expr(models::batch_commit::Column::Status, Expr::value("finalized"))
+                .col_expr(
+                    models::batch_commit::Column::Status,
+                    Expr::value(BatchStatus::Finalized.as_str()),
+                )
                 .exec(self.get_connection())
                 .await?;
 
@@ -499,7 +508,7 @@ impl<T: WriteConnectionProvider + ?Sized + Sync> DatabaseWriteOperations for T {
         let conditions = Condition::all()
             .add(models::batch_commit::Column::FinalizedBlockNumber.is_not_null())
             .add(models::batch_commit::Column::FinalizedBlockNumber.lte(finalized_l1_block_number))
-            .add(models::batch_commit::Column::Status.eq("committed"));
+            .add(models::batch_commit::Column::Status.eq(BatchStatus::Committed.as_str()));
 
         let batches = models::batch_commit::Entity::find()
             .filter(conditions.clone())
@@ -517,7 +526,10 @@ impl<T: WriteConnectionProvider + ?Sized + Sync> DatabaseWriteOperations for T {
             })?;
 
         models::batch_commit::Entity::update_many()
-            .col_expr(models::batch_commit::Column::Status, Expr::value("processing"))
+            .col_expr(
+                models::batch_commit::Column::Status,
+                Expr::value(BatchStatus::Processing.as_str()),
+            )
             .filter(conditions)
             .exec(self.get_connection())
             .await?;
@@ -528,7 +540,8 @@ impl<T: WriteConnectionProvider + ?Sized + Sync> DatabaseWriteOperations for T {
     async fn fetch_and_update_unprocessed_committed_batches(
         &self,
     ) -> Result<Vec<BatchInfo>, DatabaseError> {
-        let conditions = Condition::all().add(models::batch_commit::Column::Status.eq("committed"));
+        let conditions = Condition::all()
+            .add(models::batch_commit::Column::Status.eq(BatchStatus::Committed.as_str()));
 
         let batches = models::batch_commit::Entity::find()
             .filter(conditions.clone())
@@ -546,7 +559,10 @@ impl<T: WriteConnectionProvider + ?Sized + Sync> DatabaseWriteOperations for T {
             })?;
 
         models::batch_commit::Entity::update_many()
-            .col_expr(models::batch_commit::Column::Status, Expr::value("processing"))
+            .col_expr(
+                models::batch_commit::Column::Status,
+                Expr::value(BatchStatus::Processing.as_str()),
+            )
             .filter(conditions)
             .exec(self.get_connection())
             .await?;

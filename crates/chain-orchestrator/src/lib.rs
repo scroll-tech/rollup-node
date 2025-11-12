@@ -547,8 +547,8 @@ impl<
                 Ok(None)
             }
             L1Notification::NewBlock(block_info) => self.handle_l1_new_block(*block_info).await,
-            L1Notification::Finalized(block_info) => {
-                metered!(Task::L1Finalization, self, handle_l1_finalized(*block_info))
+            L1Notification::Finalized(block_number) => {
+                metered!(Task::L1Finalization, self, handle_l1_finalized(*block_number))
             }
             L1Notification::BatchCommit { block_info, data } => {
                 match metered!(
@@ -773,22 +773,21 @@ impl<
     /// the new finalized L2 chain block and the list of finalized batches.
     async fn handle_l1_finalized(
         &mut self,
-        block_info: BlockInfo,
+        block_number: u64,
     ) -> Result<Option<ChainOrchestratorEvent>, ChainOrchestratorError> {
         let (finalized_block_info, triggered_batches) = self
             .database
             .tx_mut(move |tx| async move {
                 // Set the latest finalized L1 block in the database.
-                tx.set_finalized_l1_block_number(block_info.number).await?;
+                tx.set_finalized_l1_block_number(block_number).await?;
 
                 // Finalize consolidated batches up to the finalized L1 block number.
-                let finalized_block_info =
-                    tx.finalize_consolidated_batches(block_info.number).await?;
+                let finalized_block_info = tx.finalize_consolidated_batches(block_number).await?;
 
                 // Get all unprocessed batches that have been finalized by this L1 block
                 // finalization.
                 let triggered_batches =
-                    tx.fetch_and_update_unprocessed_finalized_batches(block_info.number).await?;
+                    tx.fetch_and_update_unprocessed_finalized_batches(block_number).await?;
 
                 Ok::<_, ChainOrchestratorError>((finalized_block_info, triggered_batches))
             })
@@ -803,7 +802,7 @@ impl<
             self.derivation_pipeline.push_batch(*batch, BatchStatus::Finalized).await;
         }
 
-        Ok(Some(ChainOrchestratorEvent::L1BlockFinalized(block_info.number, triggered_batches)))
+        Ok(Some(ChainOrchestratorEvent::L1BlockFinalized(block_number, triggered_batches)))
     }
 
     /// Handles a batch input by inserting it into the database.
@@ -842,7 +841,7 @@ impl<
                     }
 
                     let event = ChainOrchestratorEvent::BatchCommitIndexed {
-                        batch_info: BatchInfo::new(batch.index, batch.hash),
+                        batch_info: (&batch).into(),
                         l1_block_number: batch.block_number,
                     };
 
@@ -870,7 +869,7 @@ impl<
         batch_index: u64,
         l1_block_info: BlockInfo,
     ) -> Result<Option<ChainOrchestratorEvent>, ChainOrchestratorError> {
-        let (triggered_batches, finalized_block_info) = self
+        let triggered_batches = self
             .database
             .tx_mut(move |tx| async move {
                 // Insert the L1 block info.
@@ -879,8 +878,6 @@ impl<
                 // finalize all batches up to `batch_index`.
                 tx.finalize_batches_up_to_index(batch_index, l1_block_info.number).await?;
                 let finalized_block_number = tx.get_finalized_l1_block_number().await?;
-                let finalized_block_info =
-                    tx.finalize_consolidated_batches(finalized_block_number).await?;
 
                 // Get all unprocessed batches that have been finalized by this L1 block
                 // finalization.
@@ -891,24 +888,15 @@ impl<
                     vec![]
                 };
 
-                Ok::<_, ChainOrchestratorError>((triggered_batches, finalized_block_info))
+                Ok::<_, ChainOrchestratorError>(triggered_batches)
             })
             .await?;
-
-        if finalized_block_info.is_some() {
-            tracing::info!(target: "scroll::chain_orchestrator", ?finalized_block_info, "Updating FCS with new finalized block info from batch finalization");
-            self.engine.update_fcs(None, None, finalized_block_info).await?;
-        }
 
         for batch in &triggered_batches {
             self.derivation_pipeline.push_batch(*batch, BatchStatus::Finalized).await;
         }
 
-        Ok(Some(ChainOrchestratorEvent::BatchFinalized {
-            l1_block_info,
-            triggered_batches,
-            finalized_block_info,
-        }))
+        Ok(Some(ChainOrchestratorEvent::BatchFinalized { l1_block_info, triggered_batches }))
     }
 
     /// Handles a batch revert event by updating the database.

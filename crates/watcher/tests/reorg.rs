@@ -95,10 +95,7 @@ async fn test_should_detect_reorg() -> eyre::Result<()> {
             if matches!(notification.as_ref(), L1Notification::Processed(_)) {
                 notification = handle.l1_notification_receiver().recv().await.unwrap();
             }
-            assert_eq!(
-                notification.as_ref(),
-                &L1Notification::Finalized((&finalized.header).into())
-            );
+            assert_eq!(notification.as_ref(), &L1Notification::Finalized(finalized.header.number));
         }
 
         if latest_number == latest.header.number {
@@ -205,10 +202,7 @@ async fn test_should_fetch_gap_in_unfinalized_blocks() -> eyre::Result<()> {
             if matches!(notification.as_ref(), L1Notification::Processed(_)) {
                 notification = handle.l1_notification_receiver().recv().await.unwrap();
             }
-            assert_eq!(
-                notification.as_ref(),
-                &L1Notification::Finalized((&finalized.header).into())
-            );
+            assert_eq!(notification.as_ref(), &L1Notification::Finalized(finalized.header.number));
         }
 
         if latest_number == latest.header.number {
