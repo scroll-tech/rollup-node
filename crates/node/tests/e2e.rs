@@ -915,7 +915,7 @@ async fn shutdown_consolidates_most_recent_batch_on_startup() -> eyre::Result<()
         .await?;
 
     // Lets finalize the first batch
-    l1_notification_tx.send(Arc::new(L1Notification::Finalized(block_0_info))).await?;
+    l1_notification_tx.send(Arc::new(L1Notification::Finalized(block_0_info.number))).await?;
 
     // Lets iterate over all blocks expected to be derived from the first batch commit.
     let consolidation_outcome = loop {
@@ -943,7 +943,7 @@ async fn shutdown_consolidates_most_recent_batch_on_startup() -> eyre::Result<()
         .await?;
 
     // Lets finalize the second batch.
-    l1_notification_tx.send(Arc::new(L1Notification::Finalized(block_1_info))).await?;
+    l1_notification_tx.send(Arc::new(L1Notification::Finalized(block_1_info.number))).await?;
 
     // The second batch commit contains 42 blocks (5-57), lets iterate until the rnm has
     // consolidated up to block 40.
@@ -1024,7 +1024,7 @@ async fn shutdown_consolidates_most_recent_batch_on_startup() -> eyre::Result<()
 
     // Send the second batch again to mimic the watcher behaviour.
     let block_1_info = BlockInfo { number: 18318215, hash: B256::random() };
-    l1_notification_tx.send(Arc::new(L1Notification::Finalized(block_1_info))).await?;
+    l1_notification_tx.send(Arc::new(L1Notification::Finalized(block_1_info.number))).await?;
 
     // Lets fetch the first consolidated block event - this should be the first block of the batch.
     let l2_block = loop {
@@ -1272,7 +1272,7 @@ async fn consolidates_committed_batches_after_chain_consolidation() -> eyre::Res
         .await?;
     // Send the L1 block finalized notification.
     l1_watcher_tx
-        .send(Arc::new(L1Notification::Finalized(batch_0_finalization_block_info)))
+        .send(Arc::new(L1Notification::Finalized(batch_0_finalization_block_info.number)))
         .await?;
 
     wait_for_event_predicate_5s(&mut rnm_events, |event| {
@@ -1310,7 +1310,7 @@ async fn consolidates_committed_batches_after_chain_consolidation() -> eyre::Res
         }))
         .await?;
     l1_watcher_tx
-        .send(Arc::new(L1Notification::Finalized(batch_1_finalization_block_info)))
+        .send(Arc::new(L1Notification::Finalized(batch_1_finalization_block_info.number)))
         .await?;
 
     wait_for_event_predicate_5s(&mut rnm_events, |event| {
