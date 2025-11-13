@@ -23,7 +23,9 @@ use rollup_node_primitives::{
 };
 use rollup_node_providers::SystemContractProvider;
 use scroll_alloy_consensus::TxL1Message;
-use scroll_l1::abi::logs::{try_decode_log, CommitBatch, FinalizeBatch, QueueTransaction};
+use scroll_l1::abi::logs::{
+    try_decode_log, CommitBatch, FinalizeBatch, QueueTransaction, RevertBatch_0, RevertBatch_1,
+};
 use std::{
     cmp::Ordering,
     fmt::{Debug, Display, Formatter},
@@ -329,6 +331,8 @@ where
 
             // handle all events.
             notifications.extend(self.handle_l1_messages(&logs).await?);
+            notifications.extend(self.handle_batch_reverts(&logs).await?);
+            notifications.extend(self.handle_batch_revert_ranges(&logs).await?);
             notifications.extend(self.handle_batch_commits(&logs).await?);
             notifications.extend(self.handle_batch_finalization(&logs).await?);
             if let Some(system_contract_update) =
@@ -578,6 +582,63 @@ where
             }
         }
         Ok(notifications)
+    }
+
+    /// Handles the batch revert events.
+    #[tracing::instrument(skip_all)]
+    async fn handle_batch_reverts(&self, logs: &[Log]) -> L1WatcherResult<Vec<L1Notification>> {
+        // filter revert logs.
+        logs.iter()
+            .map(|l| (l, l.block_number, l.block_hash))
+            .filter_map(|(log, bn, bh)| {
+                try_decode_log::<RevertBatch_0>(&log.inner).map(|decoded| (decoded.data, bn, bh))
+            })
+            .map(|(decoded_log, maybe_block_number, maybe_block_hash)| {
+                // process the revert log.
+                let block_number = maybe_block_number.ok_or(FilterLogError::MissingBlockNumber)?;
+                let block_hash = maybe_block_hash.ok_or(FilterLogError::MissingBlockHash)?;
+                let batch_index =
+                    decoded_log.batchIndex.uint_try_to().expect("u256 to u64 conversion error");
+                let batch_hash = decoded_log.batchHash;
+                Ok(L1Notification::BatchRevert {
+                    batch_info: BatchInfo { index: batch_index, hash: batch_hash },
+                    block_info: BlockInfo { number: block_number, hash: block_hash },
+                })
+            })
+            .collect()
+    }
+
+    /// Handle the batch revert range events.
+    #[tracing::instrument(skip_all)]
+    async fn handle_batch_revert_ranges(
+        &self,
+        logs: &[Log],
+    ) -> L1WatcherResult<Vec<L1Notification>> {
+        // filter revert range logs.
+        logs.iter()
+            .map(|l| (l, l.block_number, l.block_hash))
+            .filter_map(|(log, bn, bh)| {
+                try_decode_log::<RevertBatch_1>(&log.inner).map(|decoded| (decoded.data, bn, bh))
+            })
+            .map(|(decoded_log, maybe_block_number, maybe_block_hash)| {
+                // process the revert range log.
+                let block_number = maybe_block_number.ok_or(FilterLogError::MissingBlockNumber)?;
+                let block_hash = maybe_block_hash.ok_or(FilterLogError::MissingBlockHash)?;
+                let start_index = decoded_log
+                    .startBatchIndex
+                    .uint_try_to()
+                    .expect("u256 to u64 conversion error");
+                let end_index = decoded_log
+                    .finishBatchIndex
+                    .uint_try_to()
+                    .expect("u256 to u64 conversion error");
+                Ok(L1Notification::BatchRevertRange {
+                    start: start_index,
+                    end: end_index,
+                    block_info: BlockInfo { number: block_number, hash: block_hash },
+                })
+            })
+            .collect()
     }
 
     /// Handles the finalize batch events.
@@ -1044,6 +1105,62 @@ mod tests {
 
         // Then
         assert!(matches!(notification, L1Notification::BatchCommit { .. }));
+
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn test_should_handle_batch_reverts() -> eyre::Result<()> {
+        // Given
+        let (finalized, latest, chain) = chain(10);
+        let (watcher, _) = l1_watcher(chain, vec![], vec![], finalized.clone(), latest.clone());
+
+        // build test logs.
+        let mut logs = (0..10).map(|_| random!(Log)).collect::<Vec<_>>();
+        let mut revert_batch = random!(Log);
+        let mut inner_log = random!(alloy_primitives::Log);
+        inner_log.data =
+            RevertBatch_0 { batchHash: random!(B256), batchIndex: U256::from(random!(u64)) }
+                .encode_log_data();
+        revert_batch.inner = inner_log;
+        revert_batch.block_number = Some(random!(u64));
+        revert_batch.block_hash = Some(random!(B256));
+        logs.push(revert_batch);
+
+        // When
+        let notification = watcher.handle_batch_reverts(&logs).await?.pop().unwrap();
+
+        // Then
+        assert!(matches!(notification, L1Notification::BatchRevert { .. }));
+
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn test_should_handle_batch_revert_range() -> eyre::Result<()> {
+        // Given
+        let (finalized, latest, chain) = chain(10);
+        let (watcher, _) = l1_watcher(chain, vec![], vec![], finalized.clone(), latest.clone());
+
+        // build test logs.
+        let mut logs = (0..10).map(|_| random!(Log)).collect::<Vec<_>>();
+        let mut revert_batch_range = random!(Log);
+        let mut inner_log = random!(alloy_primitives::Log);
+        inner_log.data = RevertBatch_1 {
+            startBatchIndex: U256::from(random!(u64)),
+            finishBatchIndex: U256::from(random!(u64)),
+        }
+        .encode_log_data();
+        revert_batch_range.inner = inner_log;
+        revert_batch_range.block_number = Some(random!(u64));
+        revert_batch_range.block_hash = Some(random!(B256));
+        logs.push(revert_batch_range);
+
+        // When
+        let notification = watcher.handle_batch_revert_ranges(&logs).await?.pop().unwrap();
+
+        // Then
+        assert!(matches!(notification, L1Notification::BatchRevertRange { .. }));
 
         Ok(())
     }

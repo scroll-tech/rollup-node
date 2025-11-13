@@ -279,7 +279,7 @@ impl<T: WriteConnectionProvider + ?Sized + Sync> DatabaseWriteOperations for T {
             .add(models::batch_commit::Column::Index.lte(end_index as i64))
             .add(models::batch_commit::Column::RevertedBlockNumber.is_null());
 
-        // Fetch the batch hashes to update the
+        // Fetch the batch hashes
         let batch_hashes = models::batch_commit::Entity::find()
             .select_only()
             .column(models::batch_commit::Column::Hash)
