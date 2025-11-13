@@ -523,7 +523,7 @@ impl DatabaseReadOperations for Database {
     async fn get_batch_by_index(
         &self,
         batch_index: u64,
-    ) -> Result<Option<BatchCommitData>, DatabaseError> {
+    ) -> Result<Vec<BatchCommitData>, DatabaseError> {
         metered!(
             DatabaseOperation::GetBatchByIndex,
             self,
@@ -881,8 +881,7 @@ mod test {
 
         // Round trip the BatchCommitData through the database.
         db.insert_batch(batch_commit.clone()).await.unwrap();
-        let batch_commit_from_db =
-            db.get_batch_by_index(batch_commit.index).await.unwrap().unwrap();
+        let batch_commit_from_db = db.get_batch_by_hash(batch_commit.hash).await.unwrap().unwrap();
 
         assert_eq!(batch_commit, batch_commit_from_db);
     }
@@ -1402,7 +1401,7 @@ mod test {
 
         // Insert L2 blocks with different batch indices
         for i in 100..110 {
-            let batch_data = db.get_batch_by_index(i).await.unwrap().unwrap();
+            let batch_data = db.get_batch_by_index(i).await.unwrap().first().unwrap().clone();
             let batch_info: BatchInfo = batch_data.into();
             let block_info = BlockInfo { number: 500 + i, hash: B256::arbitrary(&mut u).unwrap() };
 
@@ -1579,9 +1578,9 @@ mod test {
         db.set_finalized_l1_block_number(21).await.unwrap();
 
         // Verify the batches and blocks were inserted correctly
-        let retrieved_batch_1 = db.get_batch_by_index(1).await.unwrap().unwrap();
-        let retrieved_batch_2 = db.get_batch_by_index(2).await.unwrap().unwrap();
-        let retrieved_batch_3 = db.get_batch_by_index(3).await.unwrap().unwrap();
+        let retrieved_batch_1 = db.get_batch_by_index(1).await.unwrap().first().unwrap().clone();
+        let retrieved_batch_2 = db.get_batch_by_index(2).await.unwrap().first().unwrap().clone();
+        let retrieved_batch_3 = db.get_batch_by_index(3).await.unwrap().first().unwrap().clone();
         let retried_block_1 = db.get_l2_block_info_by_number(1).await.unwrap().unwrap();
         let retried_block_2 = db.get_l2_block_info_by_number(2).await.unwrap().unwrap();
         let retried_block_3 = db.get_l2_block_info_by_number(3).await.unwrap().unwrap();

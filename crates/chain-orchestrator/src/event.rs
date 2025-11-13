@@ -66,7 +66,15 @@ pub enum ChainOrchestratorEvent {
         /// The new safe head after the revert.
         safe_head: BlockInfo,
     },
-    // TODO: revert events
+    /// A gap has been detected in the reverted batches.
+    BatchRevertGap {
+        /// The missing batch index.
+        missing_index: u64,
+        /// The latest known L1 block number to reset to before the gap.
+        l1_block_number_reset: u64,
+    },
+    /// A duplicate batch revert has been detected.
+    BatchRevertDuplicate(u64),
     /// A new L1 block has been received returning the L1 block number.
     NewL1Block(u64),
     /// An L1 block has been finalized returning the L1 block number and the list of finalized

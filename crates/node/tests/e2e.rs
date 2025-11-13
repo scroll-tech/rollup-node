@@ -2412,7 +2412,7 @@ async fn test_l1_message_gap() -> eyre::Result<()> {
         false,
         false,
     )
-        .await?;
+    .await?;
     let node = nodes.pop().unwrap();
 
     // Get handles for sending L1 notifications and receiving commands
@@ -2426,30 +2426,34 @@ async fn test_l1_message_gap() -> eyre::Result<()> {
     // Node is unsynced initially -> does not derive batches (which is what we want)
 
     // Send L1 message 1 to populate the database
-    let l1_message_0 = TxL1Message {
-        queue_index: 0,
-        ..Default::default()
-    };
+    let l1_message_0 = TxL1Message { queue_index: 0, ..Default::default() };
     let l1_message_0_block_info = BlockInfo { number: 1, hash: B256::random() };
     l1_watcher_tx
         .send(Arc::new(L1Notification::L1Message {
             message: l1_message_0.clone(),
-            block_info: l1_message_0_block_info.clone() ,
+            block_info: l1_message_0_block_info,
             block_timestamp: 0,
         }))
         .await?;
-    wait_for_event_5s(&mut events, ChainOrchestratorEvent::L1MessageCommitted(l1_message_0.queue_index)).await?;
-
+    wait_for_event_5s(
+        &mut events,
+        ChainOrchestratorEvent::L1MessageCommitted(l1_message_0.queue_index),
+    )
+    .await?;
 
     // Send duplicate L1 message 0 - should be skipped and duplicate detected
     l1_watcher_tx
         .send(Arc::new(L1Notification::L1Message {
             message: l1_message_0.clone(),
-            block_info: l1_message_0_block_info.clone() ,
+            block_info: l1_message_0_block_info,
             block_timestamp: 0,
         }))
         .await?;
-    wait_for_event_5s(&mut events, ChainOrchestratorEvent::L1MessageDuplicate(l1_message_0.queue_index)).await?;
+    wait_for_event_5s(
+        &mut events,
+        ChainOrchestratorEvent::L1MessageDuplicate(l1_message_0.queue_index),
+    )
+    .await?;
 
     // Send L1 message 2 - should trigger reset due to gap (missing L1 message 1)
     let l1_message_3 = TxL1Message {
@@ -2460,9 +2464,10 @@ async fn test_l1_message_gap() -> eyre::Result<()> {
     l1_watcher_tx
         .send(Arc::new(L1Notification::L1Message {
             message: l1_message_3.clone(),
-            block_info: l1_message_3_block_info.clone() ,
+            block_info: l1_message_3_block_info,
             block_timestamp: 0,
-        })).await?;
+        }))
+        .await?;
     wait_for_event_5s(
         &mut events,
         ChainOrchestratorEvent::L1MessageGap {
@@ -2487,6 +2492,144 @@ async fn test_l1_message_gap() -> eyre::Result<()> {
             );
         }
     }
+
+    Ok(())
+}
+
+#[tokio::test]
+async fn test_batch_revert_gap() -> eyre::Result<()> {
+    reth_tracing::init_test_tracing();
+
+    let (mut nodes, _tasks, _wallet) = setup_engine(
+        default_test_scroll_rollup_node_config(),
+        1,
+        (*SCROLL_DEV).clone(),
+        false,
+        false,
+    )
+    .await?;
+    let node = nodes.pop().unwrap();
+
+    // Get handles for sending L1 notifications and receiving commands
+    let l1_watcher_tx = node.inner.add_ons_handle.l1_watcher_tx.clone().unwrap();
+    let _l1_watcher_command_rx = node.inner.add_ons_handle.l1_watcher_command_rx.clone();
+    let chain_orchestrator = node.inner.add_ons_handle.rollup_manager_handle.clone();
+
+    // Get event listener to monitor chain orchestrator events
+    let mut events = chain_orchestrator.get_event_listener().await?;
+
+    // Node is unsynced initially -> does not derive batches (which is what we want)
+
+    // Send batch commit 1 to populate the database
+    let batch_commit_1 =
+        BatchCommitData { hash: B256::random(), index: 1, block_number: 1, ..Default::default() };
+
+    l1_watcher_tx
+        .send(Arc::new(L1Notification::BatchCommit {
+            block_info: BlockInfo { number: batch_commit_1.block_number, hash: B256::random() },
+            data: batch_commit_1.clone(),
+        }))
+        .await?;
+    wait_for_event_5s(
+        &mut events,
+        ChainOrchestratorEvent::BatchCommitIndexed {
+            batch_info: BatchInfo { index: batch_commit_1.index, hash: batch_commit_1.hash },
+            l1_block_number: batch_commit_1.block_number,
+        },
+    )
+    .await?;
+
+    // Send batch commit 2 to populate the database
+    let batch_commit_2 =
+        BatchCommitData { hash: B256::random(), index: 2, block_number: 2, ..Default::default() };
+    l1_watcher_tx
+        .send(Arc::new(L1Notification::BatchCommit {
+            block_info: BlockInfo { number: batch_commit_2.block_number, hash: B256::random() },
+            data: batch_commit_2.clone(),
+        }))
+        .await?;
+    wait_for_event_5s(
+        &mut events,
+        ChainOrchestratorEvent::BatchCommitIndexed {
+            batch_info: BatchInfo { index: batch_commit_2.index, hash: batch_commit_2.hash },
+            l1_block_number: batch_commit_2.block_number,
+        },
+    )
+    .await?;
+
+    // Send batch commit 2_new - simulating a missed revert event
+    let batch_commit_2_new =
+        BatchCommitData { hash: B256::random(), index: 2, block_number: 10, ..Default::default() };
+    l1_watcher_tx
+        .send(Arc::new(L1Notification::BatchCommit {
+            block_info: BlockInfo { number: batch_commit_2_new.block_number, hash: B256::random() },
+            data: batch_commit_2_new.clone(),
+        }))
+        .await?;
+    wait_for_event_5s(
+        &mut events,
+        ChainOrchestratorEvent::BatchRevertGap {
+            missing_index: batch_commit_2_new.index,
+            l1_block_number_reset: batch_commit_2.block_number,
+        },
+    )
+    .await?;
+
+    // TODO: assert that a reset command is sent to the L1 watcher
+    // let mut command_rx = l1_watcher_command_rx.lock().await;
+    // let command = tokio::time::timeout(Duration::from_secs(5), command_rx.recv())
+    //     .await
+    //     .expect("should receive command within timeout")
+    //     .expect("should receive Some(command)");
+    //
+    // // Verify it's a ResetToBlock command with the correct block number
+    // match command {
+    //     L1WatcherCommand::ResetToBlock { block, .. } => {
+    //         assert_eq!(
+    //             block, batch_commit_2.block_number,
+    //             "Reset block should be the L1 block of the last known batch"
+    //         );
+    //     }
+    // }
+
+    // Send actual revert for batch commit 2
+    l1_watcher_tx
+        .send(Arc::new(L1Notification::BatchRevertRange {
+            start: 2,
+            end: 2,
+            block_info: BlockInfo { number: 6, hash: B256::random() },
+        }))
+        .await?;
+    // can't assert event due to no safe block head being set
+
+    // Send duplicate batch revert for batch commit 2 - should be skipped and duplicate detected
+    l1_watcher_tx
+        .send(Arc::new(L1Notification::BatchRevertRange {
+            start: 2,
+            end: 2,
+            block_info: BlockInfo { number: 6, hash: B256::random() },
+        }))
+        .await?;
+    wait_for_event_5s(&mut events, ChainOrchestratorEvent::BatchRevertDuplicate(2)).await?;
+
+    // Send batch commit 2_new again to continue normal processing
+    l1_watcher_tx
+        .send(Arc::new(L1Notification::BatchCommit {
+            block_info: BlockInfo { number: batch_commit_2_new.block_number, hash: B256::random() },
+            data: batch_commit_2_new.clone(),
+        }))
+        .await?;
+    wait_for_event_5s(
+        &mut events,
+        ChainOrchestratorEvent::BatchCommitIndexed {
+            batch_info: BatchInfo {
+                index: batch_commit_2_new.index,
+                hash: batch_commit_2_new.hash,
+            },
+            l1_block_number: batch_commit_2_new.block_number,
+        },
+    )
+    .await?;
 
     Ok(())
 }

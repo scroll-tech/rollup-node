@@ -915,7 +915,7 @@ pub trait DatabaseReadOperations {
     async fn get_batch_by_index(
         &self,
         batch_index: u64,
-    ) -> Result<Option<BatchCommitData>, DatabaseError>;
+    ) -> Result<Vec<BatchCommitData>, DatabaseError>;
 
     /// Get a [`BatchCommitData`] from the database by its batch hash.
     async fn get_batch_by_hash(
@@ -1010,16 +1010,15 @@ impl<T: ReadConnectionProvider + Sync + ?Sized> DatabaseReadOperations for T {
     async fn get_batch_by_index(
         &self,
         batch_index: u64,
-    ) -> Result<Option<BatchCommitData>, DatabaseError> {
+    ) -> Result<Vec<BatchCommitData>, DatabaseError> {
         Ok(models::batch_commit::Entity::find()
             .filter(
                 models::batch_commit::Column::Index
-                    .eq(TryInto::<i64>::try_into(batch_index).expect("index should fit in i64"))
-                    .and(models::batch_commit::Column::RevertedBlockNumber.is_null()),
+                    .eq(TryInto::<i64>::try_into(batch_index).expect("index should fit in i64")),
             )
-            .one(self.get_connection())
+            .all(self.get_connection())
             .await
-            .map(|x| x.map(Into::into))?)
+            .map(|x| x.into_iter().map(Into::into).collect())?)
     }
 
     async fn get_batch_by_hash(
@@ -1151,6 +1150,7 @@ impl<T: ReadConnectionProvider + Sync + ?Sized> DatabaseReadOperations for T {
 
     async fn get_last_batch_commit_l1_block(&self) -> Result<Option<u64>, DatabaseError> {
         Ok(models::batch_commit::Entity::find()
+            .filter(models::batch_commit::Column::RevertedBlockNumber.is_null())
             .order_by_desc(models::batch_commit::Column::BlockNumber)
             .select_only()
             .column(models::batch_commit::Column::BlockNumber)

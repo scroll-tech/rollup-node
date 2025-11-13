@@ -26,7 +26,10 @@ use scroll_alloy_consensus::{ScrollTxEnvelope, TxL1Message};
 use scroll_alloy_hardforks::ScrollHardforks;
 use scroll_alloy_network::Scroll;
 use scroll_alloy_provider::ScrollEngineApi;
-use scroll_db::{Database, DatabaseError, DatabaseReadOperations, DatabaseWriteOperations, L1MessageKey, TXMut, UnwindResult};
+use scroll_db::{
+    Database, DatabaseError, DatabaseReadOperations, DatabaseWriteOperations, L1MessageKey, TXMut,
+    UnwindResult,
+};
 use scroll_derivation_pipeline::{BatchDerivationResult, DerivationPipeline};
 use scroll_engine::Engine;
 use scroll_network::{
@@ -61,7 +64,8 @@ pub use sync::{SyncMode, SyncState};
 
 mod status;
 use crate::ChainOrchestratorEvent::{
-    BatchCommitDuplicate, BatchCommitGap, L1MessageDuplicate, L1MessageGap,
+    BatchCommitDuplicate, BatchCommitGap, BatchRevertDuplicate, BatchRevertGap, L1MessageDuplicate,
+    L1MessageGap,
 };
 pub use status::ChainOrchestratorStatus;
 
@@ -755,7 +759,14 @@ impl<
 
                     // Perform a consistency check to ensure the previous commit batch exists in the
                     // database.
-                    if tx.get_batch_by_index(prev_batch_index).await?.is_none() {
+                    if tx
+                        .get_batch_by_index(prev_batch_index)
+                        .await?
+                        .iter()
+                        .filter(|x| x.reverted_block_number.is_none())
+                        .count() ==
+                        0
+                    {
                         // Query database for the L1 block of the last known batch
                         let reset_block = tx.get_last_batch_commit_l1_block().await?.unwrap_or(0);
 
@@ -766,16 +777,20 @@ impl<
                     }
 
                     // Check if batch already exists in DB.
-                    if let Some(existing_batch) = tx.get_batch_by_index(batch.index).await? {
+                    for existing_batch in tx.get_batch_by_index(batch.index).await? {
                         if existing_batch.hash == batch.hash {
                             // This means we have already processed this batch commit, we will skip
                             // it.
                             return Ok(Some(BatchCommitDuplicate(existing_batch.index)));
+                        } else if existing_batch.reverted_block_number.is_none() {
+                            // This means we have received a different batch commit at the same
+                            // index which has not been reverted yet. ->
+                            // we missed a revert a event
+                            return Ok(Some(BatchRevertGap {
+                                missing_index: batch.index,
+                                l1_block_number_reset: existing_batch.block_number,
+                            }));
                         }
-                        // TODO: once batch reverts are implemented, we need to handle this
-                        // case.
-                        // If we have a batch at the same index in the DB this means we have
-                        // missed a batch revert event.
                     }
 
                     let event = ChainOrchestratorEvent::BatchCommitIndexed {
@@ -803,6 +818,16 @@ impl<
                     l1_block_number_reset
                 );
                 self.l1_watcher_handle.trigger_gap_recovery(l1_block_number_reset).await;
+            }
+            Some(BatchRevertGap { missing_index, l1_block_number_reset }) => {
+                tracing::warn!(
+                    target: "scroll::chain_orchestrator",
+                    "Batch revert gap detected at index {}, last known batch at L1 block {}",
+                    missing_index,
+                    l1_block_number_reset
+                );
+                // TODO: getting channel closed here
+                // self.l1_watcher_handle.trigger_gap_recovery(l1_block_number_reset).await;
             }
             Some(BatchCommitDuplicate(index)) => {
                 tracing::info!(
@@ -867,6 +892,33 @@ impl<
         end_index: u64,
         l1_block_info: BlockInfo,
     ) -> Result<Option<ChainOrchestratorEvent>, ChainOrchestratorError> {
+        let event = self
+            .database
+            .tx(move |tx| async move {
+                // Check if we received this revert already.
+                // If any of the batches with same index is reverted with the same L1 block then the
+                // event is duplicate
+                for existing_batch in tx.get_batch_by_index(end_index).await? {
+                    if existing_batch.reverted_block_number == Some(l1_block_info.number) {
+                        return Ok::<_, ChainOrchestratorError>(Some(BatchRevertDuplicate(
+                            existing_batch.index,
+                        )));
+                    }
+                }
+
+                Ok(None)
+            })
+            .await?;
+
+        if let Some(BatchRevertDuplicate(index)) = event {
+            tracing::info!(
+                target: "scroll::chain_orchestrator",
+                "Duplicate batch revert detected at {:?}, skipping",
+                index
+            );
+            return Ok(event);
+        }
+
         let (safe_block_info, batch_info) = self
             .database
             .tx_mut(move |tx| async move {
@@ -895,8 +947,7 @@ impl<
         l1_message: TxL1Message,
         l1_block_info: BlockInfo,
     ) -> Result<Option<ChainOrchestratorEvent>, ChainOrchestratorError> {
-        let l1_v2_message_queue_start_index =
-            self.config.l1_v2_message_queue_start_index();
+        let l1_v2_message_queue_start_index = self.config.l1_v2_message_queue_start_index();
 
         let event = self.database
             .tx_mut(move |tx| {
