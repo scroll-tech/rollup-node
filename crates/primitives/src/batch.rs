@@ -63,6 +63,21 @@ impl From<&BatchCommitData> for BatchInfo {
     }
 }
 
+impl Default for BatchCommitData {
+    fn default() -> Self {
+        Self {
+            hash: B256::ZERO,
+            index: 0,
+            block_number: 0,
+            block_timestamp: 0,
+            calldata: Arc::new(Bytes::new()),
+            blob_versioned_hash: None,
+            finalized_block_number: None,
+            reverted_block_number: None,
+        }
+    }
+}
+
 /// The status of a batch.
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub enum BatchStatus {

@@ -45,7 +45,9 @@ pub enum ChainOrchestratorEvent {
     },
     /// A gap has been detected in the committed batches.
     BatchCommitGap {
+        /// The missing batch index.
         missing_index: u64,
+        /// The latest known L1 block number to reset to before the gap.
         l1_block_number_reset: u64,
     },
     /// A duplicate batch commit has been detected.
@@ -73,8 +75,10 @@ pub enum ChainOrchestratorEvent {
     /// A `L1Message` event has been committed returning the message queue index.
     L1MessageCommitted(u64),
     /// A gap has been detected in the L1 message queue.
-    L1MessageQueueGap{
+    L1MessageGap {
+        /// The missing L1 message queue index.
         missing_index: u64,
+        /// The latest known L1 block number to reset to before the gap.
         l1_block_number_reset: u64,
     },
     /// A duplicate L1 message has been detected.
