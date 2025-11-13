@@ -9,6 +9,8 @@ modes.
 
 - [Docker](https://docs.docker.com/get-docker/) and [Docker Compose](https://docs.docker.com/compose/install/) installed
 - Clone this repository
+- **L1 RPC endpoint** with API key (from Alchemy, Infura, QuickNode, etc.)
+- **Beacon node endpoint** for blob data access
 
 ---
 
@@ -19,13 +21,22 @@ modes.
    cd docker-compose
    ```
 
-2. **Start the node and monitoring stack:**
+2. **Configure your RPC endpoints in the `.env` file:**
+   ```sh
+   # Edit .env and set your RPC URLs:
+   ENV=sepolia  # or mainnet
+   L1_URL=https://eth-sepolia.g.alchemy.com/v2/YOUR_API_KEY
+   BEACON_URL=https://eth-sepolia.g.alchemy.com/v2/YOUR_API_KEY
+   ```
+   Replace `YOUR_API_KEY` with your actual API key from your RPC provider.
+
+3. **Start the node and monitoring stack:**
    ```sh
    docker compose up -d
    ```
-   This will launch the rollup node, Prometheus, and Grafana with default settings.
+   This will launch the rollup node, Prometheus, and Grafana.
 
-3. **Access the services:**
+4. **Access the services:**
     - Rollup Node JSON-RPC: [http://localhost:8545](http://localhost:8545)
     - Rollup Node WebSocket: [ws://localhost:8546](ws://localhost:8546)
     - Prometheus: [http://localhost:19090](http://localhost:19090)
@@ -39,12 +50,15 @@ Shadow-fork mode allows you to run the node against a forked L1 chain for testin
 
 ### 1. Edit the `.env` file
 
-The file `docker-compose/.env` contains environment variables for enabling shadow-fork mode:
+The file `docker-compose/.env` contains environment variables for configuration:
 
 ```
 SHADOW_FORK=true
 FORK_BLOCK_NUMBER=8700000   # Change to your desired fork block
 ENV=sepolia                # Or 'mainnet' for mainnet fork
+
+# Note: L1_URL and BEACON_URL are not required in shadow-fork mode
+# The local L1 devnet will be used automatically
 ```
 
 ### 2. Launch with the shadow-fork profile
@@ -83,8 +97,41 @@ rm -rf volumes
 
 ---
 
+## Configuration Options
+
+### Environment Variables
+
+Key variables in the `.env` file:
+
+- `ENV`: Network to connect to (`dev`, `sepolia`, or `mainnet`)
+- `SHADOW_FORK`: Enable shadow-fork mode (`true` or `false`)
+- `FORK_BLOCK_NUMBER`: Block number to fork from (shadow-fork mode only)
+- `L1_URL`: **Required** - Your L1 RPC endpoint URL (e.g., Alchemy, Infura, QuickNode)
+- `BEACON_URL`: **Required** - Your beacon node URL for blob data
+
+### Configuring RPC Endpoints
+
+You **must** provide your own RPC endpoints to run the node:
+
+```env
+ENV=sepolia
+L1_URL=https://eth-sepolia.g.alchemy.com/v2/YOUR_API_KEY
+BEACON_URL=https://eth-sepolia.g.alchemy.com/v2/YOUR_API_KEY
+```
+
+**Recommended RPC Providers:**
+- [Alchemy](https://www.alchemy.com/) - Free tier available
+- [Infura](https://infura.io/) - Free tier available
+- [QuickNode](https://www.quicknode.com/) - High-performance nodes
+
+The configuration priority is:
+1. User-provided URLs (via `L1_URL`/`BEACON_URL`)
+2. Shadow-fork URLs (if `SHADOW_FORK=true`) - uses local L1 devnet
+3. Error - Node will not start without valid configuration
+
 ## More
 
 - See `docker-compose/docker-compose.yml` for all available services and configuration options.
+- For detailed documentation, refer to the project book in `book/src/docker-operations.md`.
 - For advanced usage, refer to the official [Docker Compose documentation](https://docs.docker.com/compose/).
 
