@@ -1,7 +1,9 @@
 use super::ChainOrchestratorError;
 use alloy_provider::Provider;
 use futures::{stream::FuturesOrdered, TryStreamExt};
-use rollup_node_primitives::{BatchConsolidationOutcome, BatchInfo, L2BlockInfoWithL1Messages};
+use rollup_node_primitives::{
+    BatchConsolidationOutcome, BatchInfo, BatchStatus, L2BlockInfoWithL1Messages,
+};
 use scroll_alloy_network::Scroll;
 use scroll_derivation_pipeline::{BatchDerivationResult, DerivedAttributes};
 use scroll_engine::{block_matches_attributes, ForkchoiceState};
@@ -53,7 +55,11 @@ pub(crate) async fn reconcile_batch<L2P: Provider<Scroll>>(
     }
 
     let actions: Vec<BlockConsolidationAction> = futures.try_collect().await?;
-    Ok(BatchReconciliationResult { batch_info: batch.batch_info, actions })
+    Ok(BatchReconciliationResult {
+        batch_info: batch.batch_info,
+        actions,
+        target_status: batch.target_status,
+    })
 }
 
 /// The result of reconciling a batch with the L2 chain.
@@ -63,6 +69,8 @@ pub(crate) struct BatchReconciliationResult {
     pub batch_info: BatchInfo,
     /// The actions that must be performed on the L2 chain to consolidate the batch.
     pub actions: Vec<BlockConsolidationAction>,
+    /// The target status of the batch after consolidation.
+    pub target_status: BatchStatus,
 }
 
 impl BatchReconciliationResult {
@@ -93,7 +101,8 @@ impl BatchReconciliationResult {
         self,
         reorg_results: Vec<L2BlockInfoWithL1Messages>,
     ) -> Result<BatchConsolidationOutcome, ChainOrchestratorError> {
-        let mut consolidate_chain = BatchConsolidationOutcome::new(self.batch_info);
+        let mut consolidate_chain =
+            BatchConsolidationOutcome::new(self.batch_info, self.target_status);
 
         // First append all non-reorg results to the consolidated chain.
         self.actions.into_iter().filter(|action| !action.is_reorg()).for_each(|action| {

@@ -15,13 +15,15 @@ impl MigrationTrait for Migration {
                 Table::create()
                     .table(BatchCommit::Table)
                     .if_not_exists()
-                    .col(pk_auto(BatchCommit::Index))
-                    .col(binary_len(BatchCommit::Hash, HASH_LENGTH).unique_key())
+                    .col(big_unsigned(BatchCommit::Index))
+                    .col(binary_len(BatchCommit::Hash, HASH_LENGTH).primary_key())
                     .col(big_unsigned(BatchCommit::BlockNumber))
                     .col(big_unsigned(BatchCommit::BlockTimestamp))
                     .col(binary(BatchCommit::Calldata))
                     .col(binary_len_null(BatchCommit::BlobHash, HASH_LENGTH))
                     .col(big_unsigned_null(BatchCommit::FinalizedBlockNumber))
+                    .col(big_unsigned_null(BatchCommit::RevertedBlockNumber))
+                    .col(string(BatchCommit::Status).not_null())
                     .to_owned(),
             )
             .await?;
@@ -31,8 +33,8 @@ impl MigrationTrait for Migration {
             .execute(Statement::from_sql_and_values(
                 manager.get_database_backend(),
                 r#"
-        INSERT INTO batch_commit ("index", hash, block_number, block_timestamp, calldata, blob_hash, finalized_block_number)
-        VALUES (?, ?, ?, ?, ?, ?, ?)
+        INSERT INTO batch_commit ("index", hash, block_number, block_timestamp, calldata, blob_hash, finalized_block_number, reverted_block_number, status)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
         "#,
                 vec![
                     0u64.into(),
@@ -42,6 +44,8 @@ impl MigrationTrait for Migration {
                     vec![].into(),
                     None::<Vec<u8>>.into(),
                     0u64.into(),
+                    None::<u64>.into(),
+                    "finalized".into()
                 ],
             ))
             .await?;
@@ -64,5 +68,6 @@ pub(crate) enum BatchCommit {
     Calldata,
     BlobHash,
     FinalizedBlockNumber,
-    Processed,
+    RevertedBlockNumber,
+    Status,
 }

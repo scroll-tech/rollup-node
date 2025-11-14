@@ -6,11 +6,12 @@ use sea_orm::{entity::prelude::*, ActiveValue};
 #[derive(Clone, Debug, PartialEq, Eq, DeriveEntityModel)]
 #[sea_orm(table_name = "l2_block")]
 pub struct Model {
-    #[sea_orm(primary_key)]
     block_number: i64,
+    #[sea_orm(primary_key)]
     block_hash: Vec<u8>,
     batch_index: i64,
     batch_hash: Vec<u8>,
+    reverted: bool,
 }
 
 impl Model {
@@ -57,6 +58,7 @@ impl From<(BlockInfo, BatchInfo)> for ActiveModel {
                 batch_info.index.try_into().expect("index should fit in i64"),
             ),
             batch_hash: ActiveValue::Set(batch_info.hash.to_vec()),
+            reverted: ActiveValue::Set(false),
         }
     }
 }

@@ -1,6 +1,6 @@
 //! Contains tests related to RN and EN sync.
 
-use alloy_primitives::{b256, Address, U256};
+use alloy_primitives::{b256, Address, B256, U256};
 use alloy_provider::{Provider, ProviderBuilder};
 use futures::StreamExt;
 use reqwest::Url;
@@ -292,6 +292,7 @@ async fn test_should_consolidate_after_optimistic_sync() -> eyre::Result<()> {
     // Create a sequence of L1 messages to be added to the sequencer node.
     const L1_MESSAGES_COUNT: usize = 200;
     let mut l1_messages = Vec::with_capacity(L1_MESSAGES_COUNT);
+    let mut l1_block_info = Vec::with_capacity(L1_MESSAGES_COUNT);
     for i in 0..L1_MESSAGES_COUNT as u64 {
         let l1_message = TxL1Message {
             queue_index: i,
@@ -302,14 +303,16 @@ async fn test_should_consolidate_after_optimistic_sync() -> eyre::Result<()> {
             input: Default::default(),
         };
         l1_messages.push(l1_message);
+        let block_info = BlockInfo { number: i, hash: B256::random() };
+        l1_block_info.push(block_info)
     }
 
     // Add the L1 messages to the sequencer node.
-    for (i, l1_message) in l1_messages.iter().enumerate() {
+    for (i, (l1_message, block_info)) in l1_messages.iter().zip(l1_block_info.iter()).enumerate() {
         sequencer_l1_watcher_tx
             .send(Arc::new(L1Notification::L1Message {
                 message: l1_message.clone(),
-                block_number: i as u64,
+                block_info: *block_info,
                 block_timestamp: i as u64 * 10,
             }))
             .await
@@ -325,7 +328,10 @@ async fn test_should_consolidate_after_optimistic_sync() -> eyre::Result<()> {
             1,
         )
         .await;
-        sequencer_l1_watcher_tx.send(Arc::new(L1Notification::NewBlock(i as u64))).await.unwrap();
+        sequencer_l1_watcher_tx
+            .send(Arc::new(L1Notification::NewBlock(*block_info)))
+            .await
+            .unwrap();
         wait_n_events(
             &mut sequencer_events,
             |e| matches!(e, ChainOrchestratorEvent::NewL1Block(_)),
@@ -361,11 +367,11 @@ async fn test_should_consolidate_after_optimistic_sync() -> eyre::Result<()> {
     tokio::time::sleep(tokio::time::Duration::from_secs(1)).await;
 
     // Send all L1 messages to the unsynced node.
-    for (i, l1_message) in l1_messages.iter().enumerate() {
+    for (i, (l1_message, block_info)) in l1_messages.iter().zip(l1_block_info).enumerate() {
         follower_l1_watcher_tx
             .send(Arc::new(L1Notification::L1Message {
                 message: l1_message.clone(),
-                block_number: i as u64,
+                block_info,
                 block_timestamp: i as u64 * 10,
             }))
             .await
@@ -404,6 +410,8 @@ async fn test_should_consolidate_after_optimistic_sync() -> eyre::Result<()> {
     .await;
 
     // Now push a L1 message to the sequencer node and build a new block.
+    let block_info_200 = BlockInfo { number: 200, hash: B256::random() };
+    let block_info_201 = BlockInfo { number: 201, hash: B256::random() };
     sequencer_l1_watcher_tx
         .send(Arc::new(L1Notification::L1Message {
             message: TxL1Message {
@@ -414,7 +422,7 @@ async fn test_should_consolidate_after_optimistic_sync() -> eyre::Result<()> {
                 value: U256::from(1),
                 input: Default::default(),
             },
-            block_number: 200,
+            block_info: block_info_200,
             block_timestamp: 2010,
         }))
         .await
@@ -425,7 +433,7 @@ async fn test_should_consolidate_after_optimistic_sync() -> eyre::Result<()> {
         1,
     )
     .await;
-    sequencer_l1_watcher_tx.send(Arc::new(L1Notification::NewBlock(201))).await.unwrap();
+    sequencer_l1_watcher_tx.send(Arc::new(L1Notification::NewBlock(block_info_201))).await.unwrap();
     wait_n_events(&mut sequencer_events, |e| matches!(e, ChainOrchestratorEvent::NewL1Block(_)), 1)
         .await;
     sequencer_handle.build_block();
@@ -507,6 +515,7 @@ async fn test_consolidation() -> eyre::Result<()> {
     sequencer.network.next_session_established().await;
 
     // Create a L1 message and send it to both nodes.
+    let block_info_0 = BlockInfo { number: 0, hash: B256::random() };
     let l1_message = TxL1Message {
         queue_index: 0,
         gas_limit: 21000,
@@ -518,7 +527,7 @@ async fn test_consolidation() -> eyre::Result<()> {
     sequencer_l1_watcher_tx
         .send(Arc::new(L1Notification::L1Message {
             message: l1_message.clone(),
-            block_number: 0,
+            block_info: block_info_0,
             block_timestamp: 0,
         }))
         .await
@@ -529,12 +538,15 @@ async fn test_consolidation() -> eyre::Result<()> {
         1,
     )
     .await;
-    sequencer_l1_watcher_tx.send(Arc::new(L1Notification::NewBlock(2))).await.unwrap();
+    sequencer_l1_watcher_tx
+        .send(Arc::new(L1Notification::NewBlock(BlockInfo { number: 2, hash: B256::random() })))
+        .await
+        .unwrap();
 
     follower_l1_watcher_tx
         .send(Arc::new(L1Notification::L1Message {
             message: l1_message,
-            block_number: 0,
+            block_info: block_info_0,
             block_timestamp: 0,
         }))
         .await
@@ -562,6 +574,7 @@ async fn test_consolidation() -> eyre::Result<()> {
     sequencer_handle.build_block();
 
     // Now push a L1 message to the sequencer node and build a new block.
+    let block_info_1 = BlockInfo { number: 1, hash: B256::random() };
     sequencer_l1_watcher_tx
         .send(Arc::new(L1Notification::L1Message {
             message: TxL1Message {
@@ -572,7 +585,7 @@ async fn test_consolidation() -> eyre::Result<()> {
                 value: U256::from(1),
                 input: Default::default(),
             },
-            block_number: 1,
+            block_info: block_info_1,
             block_timestamp: 10,
         }))
         .await
@@ -584,7 +597,10 @@ async fn test_consolidation() -> eyre::Result<()> {
     )
     .await;
 
-    sequencer_l1_watcher_tx.send(Arc::new(L1Notification::NewBlock(5))).await.unwrap();
+    sequencer_l1_watcher_tx
+        .send(Arc::new(L1Notification::NewBlock(BlockInfo { number: 5, hash: B256::random() })))
+        .await
+        .unwrap();
     wait_n_events(&mut sequencer_events, |e| matches!(e, ChainOrchestratorEvent::NewL1Block(_)), 1)
         .await;
     sequencer_handle.build_block();
@@ -845,6 +861,7 @@ async fn test_chain_orchestrator_l1_reorg() -> eyre::Result<()> {
     // Initially the sequencer should build 100 blocks with 1 message in each and the follower
     // should follow them
     for i in 0..100 {
+        let block_info = BlockInfo { number: i, hash: B256::random() };
         let l1_message = Arc::new(L1Notification::L1Message {
             message: TxL1Message {
                 queue_index: i,
@@ -854,10 +871,10 @@ async fn test_chain_orchestrator_l1_reorg() -> eyre::Result<()> {
                 value: U256::from(1),
                 input: Default::default(),
             },
-            block_number: i,
+            block_info,
             block_timestamp: i * 10,
         });
-        let new_block = Arc::new(L1Notification::NewBlock(i));
+        let new_block = Arc::new(L1Notification::NewBlock(block_info));
         sequencer_l1_watcher_tx.send(l1_message.clone()).await.unwrap();
         sequencer_l1_watcher_tx.send(new_block.clone()).await.unwrap();
         wait_n_events(
@@ -914,6 +931,7 @@ async fn test_chain_orchestrator_l1_reorg() -> eyre::Result<()> {
     // Have the sequencer build 20 new blocks, containing new L1 messages.
     let mut l1_notifications = vec![];
     for i in 0..20 {
+        let block_info = BlockInfo { number: (51 + i), hash: B256::random() };
         let l1_message = Arc::new(L1Notification::L1Message {
             message: TxL1Message {
                 queue_index: 51 + i,
@@ -923,10 +941,10 @@ async fn test_chain_orchestrator_l1_reorg() -> eyre::Result<()> {
                 value: U256::from(1),
                 input: Default::default(),
             },
-            block_number: 51 + i,
+            block_info,
             block_timestamp: (51 + i) * 10,
         });
-        let new_block = Arc::new(L1Notification::NewBlock(51 + i));
+        let new_block = Arc::new(L1Notification::NewBlock(block_info));
         l1_notifications.extend([l1_message.clone(), new_block.clone()]);
         sequencer_l1_watcher_tx.send(l1_message.clone()).await.unwrap();
         sequencer_l1_watcher_tx.send(new_block.clone()).await.unwrap();

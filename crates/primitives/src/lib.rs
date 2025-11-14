@@ -9,12 +9,15 @@ pub use attributes::ScrollPayloadAttributesWithBatchInfo;
 
 mod block;
 pub use block::{
-    BlockInfo, L2BlockInfoWithL1Messages, WithBatchInfo, WithBlockNumber, WithCommittedBatchInfo,
-    WithFinalizedBatchInfo, WithFinalizedBlockNumber, DEFAULT_BLOCK_DIFFICULTY,
+    BlockInfo, L1BlockStartupInfo, L2BlockInfoWithL1Messages, WithBatchInfo, WithBlockNumber,
+    WithCommittedBatchInfo, WithFinalizedBatchInfo, WithFinalizedBlockNumber,
+    DEFAULT_BLOCK_DIFFICULTY,
 };
 
 mod batch;
-pub use batch::{BatchCommitData, BatchConsolidationOutcome, BatchInfo, BlockConsolidationOutcome};
+pub use batch::{
+    BatchCommitData, BatchConsolidationOutcome, BatchInfo, BatchStatus, BlockConsolidationOutcome,
+};
 
 mod bounded_vec;
 pub use bounded_vec::BoundedVec;
@@ -23,7 +26,7 @@ mod chain;
 pub use chain::ChainImport;
 
 mod error;
-pub use error::RollupNodePrimitiveError;
+pub use error::{RollupNodePrimitiveError, RollupNodePrimitiveParsingError};
 
 mod metadata;
 pub use metadata::Metadata;

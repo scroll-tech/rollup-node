@@ -1,6 +1,9 @@
 /// This module contains the batch commit database model.
 pub mod batch_commit;
 
+/// This module contains the L1 block database model.
+pub mod l1_block;
+
 /// This module contains the derived block model.
 pub mod l2_block;
 

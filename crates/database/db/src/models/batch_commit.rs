@@ -7,15 +7,16 @@ use sea_orm::{entity::prelude::*, ActiveValue};
 #[derive(Clone, Debug, PartialEq, Eq, DeriveEntityModel)]
 #[sea_orm(table_name = "batch_commit")]
 pub struct Model {
-    #[sea_orm(primary_key)]
     pub(crate) index: i64,
+    #[sea_orm(primary_key)]
     pub(crate) hash: Vec<u8>,
     block_number: i64,
     block_timestamp: i64,
     calldata: Vec<u8>,
     blob_hash: Option<Vec<u8>>,
     pub(crate) finalized_block_number: Option<i64>,
-    processed: bool,
+    reverted_block_number: Option<i64>,
+    status: String,
 }
 
 /// The relation for the batch input model.
@@ -51,7 +52,8 @@ impl From<BatchCommitData> for ActiveModel {
             calldata: ActiveValue::Set(batch_commit.calldata.0.to_vec()),
             blob_hash: ActiveValue::Set(batch_commit.blob_versioned_hash.map(|b| b.to_vec())),
             finalized_block_number: ActiveValue::Unchanged(None),
-            processed: ActiveValue::Unchanged(false),
+            reverted_block_number: ActiveValue::Unchanged(None),
+            status: ActiveValue::Set("committed".into()),
         }
     }
 }
@@ -68,6 +70,7 @@ impl From<Model> for BatchCommitData {
                 .blob_hash
                 .map(|b| b.as_slice().try_into().expect("data persisted in database is valid")),
             finalized_block_number: value.finalized_block_number.map(|b| b as u64),
+            reverted_block_number: value.reverted_block_number.map(|b| b as u64),
         }
     }
 }

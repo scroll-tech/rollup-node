@@ -110,4 +110,14 @@ impl<N: FullNetwork<Primitives = ScrollNetworkPrimitives>> ChainOrchestratorHand
         self.send_command(ChainOrchestratorCommand::SetGossip((enabled, tx)));
         rx.await
     }
+
+    /// Sends a command to the rollup manager to get a database handle for direct database access.
+    #[cfg(feature = "test-utils")]
+    pub async fn get_database_handle(
+        &self,
+    ) -> Result<std::sync::Arc<scroll_db::Database>, oneshot::error::RecvError> {
+        let (tx, rx) = oneshot::channel();
+        self.send_command(ChainOrchestratorCommand::DatabaseHandle(tx));
+        rx.await
+    }
 }

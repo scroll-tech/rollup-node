@@ -46,6 +46,9 @@ pub enum FilterLogError {
     /// The log is missing a block number.
     #[error("missing block number for log")]
     MissingBlockNumber,
+    /// The log is missing a block hash.
+    #[error("missing block hash for log")]
+    MissingBlockHash,
     /// The log is missing a block timestamp.
     #[error("missing block timestamp for log")]
     MissingBlockTimestamp,
