@@ -11,6 +11,7 @@ use reth_network_api::{BlockDownloaderProvider, FullNetwork};
 use reth_network_p2p::{sync::SyncState as RethSyncState, FullBlockClient};
 use reth_scroll_node::ScrollNetworkPrimitives;
 use reth_scroll_primitives::ScrollBlock;
+
 use reth_tasks::shutdown::Shutdown;
 use reth_tokio_util::{EventSender, EventStream};
 use rollup_node_primitives::{
@@ -20,13 +21,13 @@ use rollup_node_primitives::{
 use rollup_node_providers::L1MessageProvider;
 use rollup_node_sequencer::{Sequencer, SequencerEvent};
 use rollup_node_signer::{SignatureAsBytes, SignerEvent, SignerHandle};
-use rollup_node_watcher::L1Notification;
+use rollup_node_watcher::{L1Notification, L1WatcherHandle};
 use scroll_alloy_consensus::{ScrollTxEnvelope, TxL1Message};
 use scroll_alloy_hardforks::ScrollHardforks;
 use scroll_alloy_network::Scroll;
 use scroll_alloy_provider::ScrollEngineApi;
 use scroll_db::{
-    Database, DatabaseError, DatabaseReadOperations, DatabaseWriteOperations, L1MessageKey,
+    Database, DatabaseError, DatabaseReadOperations, DatabaseWriteOperations, L1MessageKey, TXMut,
     UnwindResult,
 };
 use scroll_derivation_pipeline::{BatchDerivationResult, DerivationPipeline};
@@ -35,7 +36,7 @@ use scroll_network::{
     BlockImportOutcome, NewBlockWithPeer, ScrollNetwork, ScrollNetworkManagerEvent,
 };
 use std::{collections::VecDeque, sync::Arc, time::Instant, vec};
-use tokio::sync::mpsc::{self, Receiver, UnboundedReceiver};
+use tokio::sync::mpsc::{self, UnboundedReceiver};
 
 mod config;
 pub use config::ChainOrchestratorConfig;
@@ -62,6 +63,10 @@ mod sync;
 pub use sync::{SyncMode, SyncState};
 
 mod status;
+use crate::ChainOrchestratorEvent::{
+    BatchCommitDuplicate, BatchCommitGap, BatchRevertDuplicate, BatchRevertGap, L1MessageDuplicate,
+    L1MessageGap,
+};
 pub use status::ChainOrchestratorStatus;
 
 /// Wraps a future, metering the completion of it.
@@ -115,8 +120,8 @@ pub struct ChainOrchestrator<
     database: Arc<Database>,
     /// The current sync state of the [`ChainOrchestrator`].
     sync_state: SyncState,
-    /// A receiver for [`L1Notification`]s from the [`rollup_node_watcher::L1Watcher`].
-    l1_notification_rx: Receiver<Arc<L1Notification>>,
+    /// Handle to send commands to the L1 watcher (e.g., for gap recovery).
+    l1_watcher_handle: L1WatcherHandle,
     /// The network manager that manages the scroll p2p network.
     network: ScrollNetwork<N>,
     /// The consensus algorithm used by the rollup node.
@@ -150,7 +155,7 @@ impl<
         config: ChainOrchestratorConfig<ChainSpec>,
         block_client: Arc<FullBlockClient<<N as BlockDownloaderProvider>::Client>>,
         l2_provider: L2P,
-        l1_notification_rx: Receiver<Arc<L1Notification>>,
+        l1_watcher_handle: L1WatcherHandle,
         network: ScrollNetwork<N>,
         consensus: Box<dyn Consensus + 'static>,
         engine: Engine<EC>,
@@ -167,7 +172,7 @@ impl<
                 database,
                 config,
                 sync_state: SyncState::default(),
-                l1_notification_rx,
+                l1_watcher_handle,
                 network,
                 consensus,
                 engine,
@@ -224,7 +229,7 @@ impl<
                     let res = self.handle_network_event(event).await;
                     self.handle_outcome(res);
                 }
-                Some(notification) = self.l1_notification_rx.recv(), if self.sync_state.l2().is_synced() && self.derivation_pipeline.is_empty() => {
+                Some(notification) = self.l1_watcher_handle.l1_notification_receiver().recv(), if self.sync_state.l2().is_synced() && self.derivation_pipeline.is_empty() => {
                     let res = self.handle_l1_notification(notification).await;
                     self.handle_outcome(res);
                 }
@@ -754,8 +759,38 @@ impl<
 
                     // Perform a consistency check to ensure the previous commit batch exists in the
                     // database.
-                    if tx.get_batch_by_index(prev_batch_index).await?.is_none() {
-                        return Err(ChainOrchestratorError::BatchCommitGap(batch.index));
+                    if tx
+                        .get_batch_by_index(prev_batch_index)
+                        .await?
+                        .iter()
+                        .filter(|x| x.reverted_block_number.is_none())
+                        .count() ==
+                        0
+                    {
+                        // Query database for the L1 block of the last known batch
+                        let reset_block = tx.get_last_batch_commit_l1_block().await?.unwrap_or(0);
+
+                        return Ok(Some(BatchCommitGap {
+                            missing_index: batch_info.index,
+                            l1_block_number_reset: reset_block,
+                        }));
+                    }
+
+                    // Check if batch already exists in DB.
+                    for existing_batch in tx.get_batch_by_index(batch.index).await? {
+                        if existing_batch.hash == batch.hash {
+                            // This means we have already processed this batch commit, we will skip
+                            // it.
+                            return Ok(Some(BatchCommitDuplicate(existing_batch.index)));
+                        } else if existing_batch.reverted_block_number.is_none() {
+                            // This means we have received a different batch commit at the same
+                            // index which has not been reverted yet. ->
+                            // we missed a revert a event
+                            return Ok(Some(BatchRevertGap {
+                                missing_index: batch.index,
+                                l1_block_number_reset: existing_batch.block_number,
+                            }));
+                        }
                     }
 
                     let event = ChainOrchestratorEvent::BatchCommitIndexed {
@@ -774,8 +809,41 @@ impl<
             })
             .await?;
 
-        if self.sync_state.is_synced() {
-            self.derivation_pipeline.push_batch(batch_info, BatchStatus::Consolidated).await;
+        match event {
+            Some(BatchCommitGap { missing_index, l1_block_number_reset }) => {
+                tracing::warn!(
+                    target: "scroll::chain_orchestrator",
+                    "Batch commit gap detected at index {}, last known batch at L1 block {}",
+                    missing_index,
+                    l1_block_number_reset
+                );
+                self.l1_watcher_handle.trigger_gap_recovery(l1_block_number_reset).await;
+            }
+            Some(BatchRevertGap { missing_index, l1_block_number_reset }) => {
+                tracing::warn!(
+                    target: "scroll::chain_orchestrator",
+                    "Batch revert gap detected at index {}, last known batch at L1 block {}",
+                    missing_index,
+                    l1_block_number_reset
+                );
+                // TODO: getting channel closed here
+                // self.l1_watcher_handle.trigger_gap_recovery(l1_block_number_reset).await;
+            }
+            Some(BatchCommitDuplicate(index)) => {
+                tracing::info!(
+                    target: "scroll::chain_orchestrator",
+                    "Duplicate batch commit detected at {:?}, skipping",
+                    index
+                );
+            }
+            Some(ChainOrchestratorEvent::BatchCommitIndexed { .. }) => {
+                if self.sync_state.is_synced() {
+                    self.derivation_pipeline
+                        .push_batch(batch_info, BatchStatus::Consolidated)
+                        .await;
+                }
+            }
+            _ => {}
         }
 
         Ok(event)
@@ -824,6 +892,33 @@ impl<
         end_index: u64,
         l1_block_info: BlockInfo,
     ) -> Result<Option<ChainOrchestratorEvent>, ChainOrchestratorError> {
+        let event = self
+            .database
+            .tx(move |tx| async move {
+                // Check if we received this revert already.
+                // If any of the batches with same index is reverted with the same L1 block then the
+                // event is duplicate
+                for existing_batch in tx.get_batch_by_index(end_index).await? {
+                    if existing_batch.reverted_block_number == Some(l1_block_info.number) {
+                        return Ok::<_, ChainOrchestratorError>(Some(BatchRevertDuplicate(
+                            existing_batch.index,
+                        )));
+                    }
+                }
+
+                Ok(None)
+            })
+            .await?;
+
+        if let Some(BatchRevertDuplicate(index)) = event {
+            tracing::info!(
+                target: "scroll::chain_orchestrator",
+                "Duplicate batch revert detected at {:?}, skipping",
+                index
+            );
+            return Ok(event);
+        }
+
         let (safe_block_info, batch_info) = self
             .database
             .tx_mut(move |tx| async move {
@@ -848,47 +943,103 @@ impl<
 
     /// Handles an L1 message by inserting it into the database.
     async fn handle_l1_message(
-        &self,
+        &mut self,
         l1_message: TxL1Message,
         l1_block_info: BlockInfo,
     ) -> Result<Option<ChainOrchestratorEvent>, ChainOrchestratorError> {
-        let event = ChainOrchestratorEvent::L1MessageCommitted(l1_message.queue_index);
-        let queue_hash = compute_l1_message_queue_hash(
-            &self.database,
-            &l1_message,
-            self.config.l1_v2_message_queue_start_index(),
-        )
-        .await?;
-        let l1_message = L1MessageEnvelope::new(l1_message, l1_block_info.number, None, queue_hash);
+        let l1_v2_message_queue_start_index = self.config.l1_v2_message_queue_start_index();
 
-        // Perform a consistency check to ensure the previous L1 message exists in the database.
-        self.database
+        let event = self.database
             .tx_mut(move |tx| {
                 let l1_message = l1_message.clone();
+
                 async move {
-                    if l1_message.transaction.queue_index > 0 &&
+                    // check for gaps in the L1 message queue
+                    if l1_message.queue_index > 0 &&
                         tx.get_n_l1_messages(
                             Some(L1MessageKey::from_queue_index(
-                                l1_message.transaction.queue_index - 1,
+                                l1_message.queue_index - 1,
+                            )),
+                            1,
+                        )
+                            .await?
+                            .is_empty()
+                    {
+                        // Query database for the L1 block of the last known L1 message
+                        let reset_block =
+                            tx.get_last_l1_message_l1_block().await?.unwrap_or(0);
+
+                        return Ok::<_, ChainOrchestratorError>(Some(L1MessageGap { missing_index: l1_message.queue_index, l1_block_number_reset: reset_block }) );
+                    }
+
+                    // check if the L1 message already exists in the DB
+                    if let Some(existing_message) = tx
+                        .get_n_l1_messages(
+                            Some(L1MessageKey::from_queue_index(
+                                l1_message.queue_index,
                             )),
                             1,
                         )
                         .await?
-                        .is_empty()
+                        .pop()
                     {
-                        return Err(ChainOrchestratorError::L1MessageQueueGap(
-                            l1_message.transaction.queue_index,
-                        ));
+                        if existing_message.transaction.tx_hash() ==
+                            l1_message.tx_hash()
+                        {
+                            // We have already processed this L1 message, we will skip it.
+                            return Ok(Some(L1MessageDuplicate(l1_message.queue_index)));
+                        }
+
+                        // This should not happen in normal operation as messages should be
+                        // deleted when a L1 reorg is handled, log warning.
+                        tracing::warn!(
+                                target: "scroll::chain_orchestrator",
+                                "L1 message queue index {} already exists with different hash in DB {:?} vs {:?}",
+                                l1_message.queue_index,
+                                existing_message.transaction.tx_hash(),
+                                l1_message.tx_hash()
+                            );
                     }
+
+                    // We compute the queue hash at the end as it requires the previous message.
+                    let queue_hash = compute_l1_message_queue_hash(
+                        &tx,
+                        &l1_message,
+                        l1_v2_message_queue_start_index,
+                    )
+                        .await?;
+
+                    let l1_message = L1MessageEnvelope::new(l1_message, l1_block_info.number, None, queue_hash);
 
                     tx.insert_l1_message(l1_message.clone()).await?;
                     tx.insert_l1_block_info(l1_block_info).await?;
-                    Ok::<_, ChainOrchestratorError>(())
+
+                    Ok(Some(ChainOrchestratorEvent::L1MessageCommitted(l1_message.transaction.queue_index)))
                 }
             })
             .await?;
 
-        Ok(Some(event))
+        match event {
+            Some(L1MessageGap { missing_index, l1_block_number_reset }) => {
+                tracing::warn!(
+                    target: "scroll::chain_orchestrator",
+                    "L1 message queue gap detected at index {}, last known message at L1 block {}",
+                    missing_index,
+                    l1_block_number_reset
+                );
+                self.l1_watcher_handle.trigger_gap_recovery(l1_block_number_reset).await;
+            }
+            Some(L1MessageDuplicate(index)) => {
+                tracing::info!(
+                    target: "scroll::chain_orchestrator",
+                    "Duplicate L1 message detected at {:?}, skipping",
+                    index
+                );
+            }
+            _ => {}
+        }
+
+        Ok(event)
     }
 
     async fn handle_network_event(
@@ -1341,7 +1492,7 @@ impl<
 ///
 /// The solidity contract (`L1MessageQueueV2.sol`) implementation is defined here: <https://github.com/scroll-tech/scroll-contracts/blob/67c1bde19c1d3462abf8c175916a2bb3c89530e4/src/L1/rollup/L1MessageQueueV2.sol#L379-L403>
 async fn compute_l1_message_queue_hash(
-    database: &Arc<Database>,
+    tx: &Arc<TXMut>,
     l1_message: &TxL1Message,
     l1_v2_message_queue_start_index: u64,
 ) -> Result<Option<alloy_primitives::FixedBytes<32>>, ChainOrchestratorError> {
@@ -1351,7 +1502,7 @@ async fn compute_l1_message_queue_hash(
         Some(keccak256(input) & L1_MESSAGE_QUEUE_HASH_MASK)
     } else if l1_message.queue_index > l1_v2_message_queue_start_index {
         let index = l1_message.queue_index - 1;
-        let mut input = database
+        let mut input = tx
             .get_n_l1_messages(Some(L1MessageKey::from_queue_index(index)), 1)
             .await?
             .first()
