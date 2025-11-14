@@ -795,6 +795,8 @@ where
                 QueueTransaction::SIGNATURE_HASH,
                 CommitBatch::SIGNATURE_HASH,
                 FinalizeBatch::SIGNATURE_HASH,
+                RevertBatch_0::SIGNATURE_HASH,
+                RevertBatch_1::SIGNATURE_HASH,
             ]);
         let to_block = self
             .current_block_number
