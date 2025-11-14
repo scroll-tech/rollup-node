@@ -12,8 +12,6 @@ pub enum CodecError {
 /// An error occurring during the decoding.
 #[derive(Debug, thiserror::Error)]
 pub enum DecodingError {
-    #[error("missing codec version in input")]
-    MissingCodecVersion,
     #[error("unsupported codec version {0}")]
     UnsupportedCodecVersion(u8),
     #[error("malformed codec version: {0}")]
