@@ -240,14 +240,14 @@ async fn test_should_consolidate_after_optimistic_sync() -> eyre::Result<()> {
         sequencer.l1().new_block(i as u64).await?;
         sequencer.expect_event().new_l1_block().await?;
 
-        sequencer.build_block().expect_block_number((i + 1) as u64).await_block().await?;
+        sequencer.build_block().expect_block_number((i + 1) as u64).build_and_await_block().await?;
     }
 
     // Connect the nodes together.
     sequencer.sequencer().node.connect(&mut follower.follower(0).node).await;
 
     // trigger a new block on the sequencer node.
-    sequencer.build_block().await_block().await?;
+    sequencer.build_block().build_and_await_block().await?;
 
     // Assert that the unsynced node triggers optimistic sync.
     follower.expect_event().optimistic_sync().await?;
@@ -282,7 +282,7 @@ async fn test_should_consolidate_after_optimistic_sync() -> eyre::Result<()> {
     tokio::time::sleep(tokio::time::Duration::from_secs(1)).await;
 
     // build a new block on the sequencer node to trigger consolidation on the unsynced node.
-    sequencer.build_block().await_block().await?;
+    sequencer.build_block().build_and_await_block().await?;
 
     // Assert that the unsynced node consolidates the chain.
     follower.expect_event().chain_extended((L1_MESSAGES_COUNT + 2) as u64).await?;
@@ -302,7 +302,7 @@ async fn test_should_consolidate_after_optimistic_sync() -> eyre::Result<()> {
     sequencer.l1().new_block(201).await?;
     sequencer.expect_event().new_l1_block().await?;
 
-    sequencer.build_block().await_block().await?;
+    sequencer.build_block().build_and_await_block().await?;
     follower.expect_event().new_block_received().await?;
 
     // Assert that the follower node does not accept the new block as it does not have the L1
@@ -354,7 +354,7 @@ async fn test_consolidation() -> eyre::Result<()> {
     follower.expect_event().chain_consolidated().await?;
 
     // Build a new block on the sequencer node.
-    sequencer.build_block().await_block().await?;
+    sequencer.build_block().build_and_await_block().await?;
 
     // Now push a L1 message to the sequencer node and build a new block.
     sequencer
@@ -371,7 +371,7 @@ async fn test_consolidation() -> eyre::Result<()> {
 
     sequencer.l1().new_block(5).await?;
     sequencer.expect_event().new_l1_block().await?;
-    sequencer.build_block().await_block().await?;
+    sequencer.build_block().build_and_await_block().await?;
 
     // Assert that the follower node rejects the new block as it hasn't received the L1 message.
     follower
@@ -447,7 +447,7 @@ async fn test_chain_orchestrator_fork_choice(
     initial_blocks: usize,
     reorg_block_number: Option<usize>,
     additional_blocks: usize,
-    expected_final_event_predicate: impl FnMut(&ChainOrchestratorEvent) -> bool,
+    expected_final_event_predicate: impl Fn(&ChainOrchestratorEvent) -> bool,
 ) -> eyre::Result<()> {
     reth_tracing::init_test_tracing();
 
@@ -476,7 +476,7 @@ async fn test_chain_orchestrator_fork_choice(
     let mut reorg_block_info: Option<BlockInfo> = None;
     for i in 0..initial_blocks {
         let num = (i + 1) as u64;
-        let block = sequencer.build_block().await_block().await?;
+        let block = sequencer.build_block().build_and_await_block().await?;
 
         if Some(i) == reorg_block_number {
             reorg_block_info = Some((&block).into());
@@ -497,13 +497,13 @@ async fn test_chain_orchestrator_fork_choice(
 
     // Have the sequencer build 20 new blocks, containing new L1 messages.
     for _ in 0..additional_blocks {
-        sequencer.build_block().await_block().await?;
+        sequencer.build_block().build_and_await_block().await?;
     }
 
     // now build a final block
     let sequencer_handle = &sequencer.sequencer().rollup_manager_handle;
     sequencer_handle.set_gossip(true).await?;
-    sequencer.build_block().await_block().await?;
+    sequencer.build_block().build_and_await_block().await?;
 
     // Wait for the follower node to accept the new chain
     follower.expect_event().where_event(expected_final_event_predicate).await?;

@@ -81,8 +81,6 @@ pub struct NodeHandle {
     pub chain_orchestrator_rx: EventStream<ChainOrchestratorEvent>,
     /// Chain orchestrator handle.
     pub rollup_manager_handle: ChainOrchestratorHandle<ScrollNetworkHandle>,
-    /// Node index in the test setup.
-    pub index: usize,
     /// The type of the node.
     pub typ: NodeType,
 }
@@ -106,7 +104,6 @@ impl Debug for NodeHandle {
             .field("engine", &"Box<dyn ScrollEngineApi>")
             .field("l1_watcher_tx", &self.l1_watcher_tx)
             .field("rollup_manager_handle", &self.rollup_manager_handle)
-            .field("index", &self.index)
             .finish()
     }
 }
@@ -446,7 +443,6 @@ impl TestFixtureBuilder {
                 chain_orchestrator_rx,
                 l1_watcher_tx,
                 rollup_manager_handle,
-                index,
                 typ: if config.sequencer_args.sequencer_enabled && index == 0 {
                     NodeType::Sequencer
                 } else {

@@ -131,7 +131,7 @@ impl<'a> NetworkHelper<'a> {
 }
 
 /// Extension trait for `TestFixture` to add network helper capabilities.
-pub trait NetworkHelpers {
+pub trait NetworkHelperProvider {
     /// Get a network helper for the sequencer node (node 0).
     fn network(&self) -> NetworkHelper<'_>;
 
@@ -139,7 +139,7 @@ pub trait NetworkHelpers {
     fn network_on(&self, node_index: usize) -> NetworkHelper<'_>;
 }
 
-impl NetworkHelpers for TestFixture {
+impl NetworkHelperProvider for TestFixture {
     fn network(&self) -> NetworkHelper<'_> {
         NetworkHelper::new(self, 0)
     }

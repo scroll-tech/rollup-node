@@ -68,9 +68,11 @@ pub mod network_helpers;
 pub mod tx_helpers;
 
 // Re-export main types for convenience
-pub use event_utils::{EventAssertions, EventWaiter, MultiNodeEventWaiter};
+pub use event_utils::{EventAssertions, EventWaiter};
 pub use fixture::{NodeHandle, TestFixture, TestFixtureBuilder};
-pub use network_helpers::{NetworkHelper, NetworkHelpers, ReputationChecker, ReputationChecks};
+pub use network_helpers::{
+    NetworkHelper, NetworkHelperProvider, ReputationChecker, ReputationChecks,
+};
 
 // Legacy utilities - keep existing functions for backward compatibility
 use crate::{

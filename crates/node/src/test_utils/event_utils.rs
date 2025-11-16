@@ -9,195 +9,18 @@ use rollup_node_chain_orchestrator::ChainOrchestratorEvent;
 use rollup_node_primitives::ChainImport;
 use tokio::time::timeout;
 
-/// Builder for waiting for specific events with optional assertions.
-#[derive(Debug)]
-pub struct EventWaiter<'a> {
-    fixture: &'a mut TestFixture,
-    node_index: usize,
-    timeout_duration: Duration,
-}
-
-impl<'a> EventWaiter<'a> {
-    /// Create a new event waiter.
-    pub fn new(fixture: &'a mut TestFixture, node_index: usize) -> Self {
-        Self { fixture, node_index, timeout_duration: Duration::from_secs(30) }
-    }
-
-    /// Set a custom timeout for waiting.
-    pub const fn timeout(mut self, duration: Duration) -> Self {
-        self.timeout_duration = duration;
-        self
-    }
-
-    /// Wait for a block sequenced event.
-    pub async fn block_sequenced(self, target: u64) -> eyre::Result<ScrollBlock> {
-        self.wait_for_event(|e| {
-            if let ChainOrchestratorEvent::BlockSequenced(block) = e {
-                (block.header.number == target).then(|| block.clone())
-            } else {
-                None
-            }
-        })
-        .await
-    }
-
-    /// Wait for a chain consolidated event.
-    pub async fn chain_consolidated(self) -> eyre::Result<(u64, u64)> {
-        self.wait_for_event(|e| {
-            if let ChainOrchestratorEvent::ChainConsolidated { from, to } = e {
-                Some((*from, *to))
-            } else {
-                None
-            }
-        })
-        .await
-    }
-
-    /// Wait for a chain extended event.
-    pub async fn chain_extended(self, target: u64) -> eyre::Result<()> {
-        self.wait_for_event(|e| {
-            matches!(e, ChainOrchestratorEvent::ChainExtended(ChainImport { chain, .. }) if chain.last().map(|b| b.header.number) >= Some(target))
-                .then_some(())
-        })
-        .await
-    }
-
-    /// Wait for a chain reorged event.
-    pub async fn chain_reorged(self) -> eyre::Result<()> {
-        self.wait_for_event(|e| matches!(e, ChainOrchestratorEvent::ChainReorged(_)).then_some(()))
-            .await
-    }
-
-    /// Wait for an L1 synced event.
-    pub async fn l1_synced(self) -> eyre::Result<()> {
-        self.wait_for_event(|e| matches!(e, ChainOrchestratorEvent::L1Synced).then_some(())).await
-    }
-
-    /// Wait for an optimistic sync event.
-    pub async fn optimistic_sync(self) -> eyre::Result<()> {
-        self.wait_for_event(|e| {
-            matches!(e, ChainOrchestratorEvent::OptimisticSync(_)).then_some(())
-        })
-        .await
-    }
-
-    /// Wait for a new L1 block event.
-    pub async fn new_l1_block(self) -> eyre::Result<u64> {
-        self.wait_for_event(|e| {
-            if let ChainOrchestratorEvent::NewL1Block(block_number) = e {
-                Some(*block_number)
-            } else {
-                None
-            }
-        })
-        .await
-    }
-
-    /// Wait for an L1 message committed event.
-    pub async fn l1_message_committed(self) -> eyre::Result<()> {
-        self.wait_for_event(|e| {
-            matches!(e, ChainOrchestratorEvent::L1MessageCommitted(_)).then_some(())
-        })
-        .await
-    }
-
-    /// Wait for an L1 reorg event.
-    pub async fn l1_reorg(self) -> eyre::Result<()> {
-        self.wait_for_event(|e| matches!(e, ChainOrchestratorEvent::L1Reorg { .. }).then_some(()))
-            .await
-    }
-
-    /// Wait for a new block received event from the network.
-    pub async fn new_block_received(self) -> eyre::Result<ScrollBlock> {
-        self.wait_for_event(|e| {
-            if let ChainOrchestratorEvent::NewBlockReceived(block_with_peer) = e {
-                Some(block_with_peer.block.clone())
-            } else {
-                None
-            }
-        })
-        .await
-    }
-
-    /// Wait for any event where the predicate returns true.
-    pub async fn where_event(
-        self,
-        mut predicate: impl FnMut(&ChainOrchestratorEvent) -> bool,
-    ) -> eyre::Result<ChainOrchestratorEvent> {
-        self.wait_for_event(move |e| predicate(e).then(|| e.clone())).await
-    }
-
-    /// Wait for any event and extract a value from it.
-    pub async fn extract<T>(
-        self,
-        mut extractor: impl FnMut(&ChainOrchestratorEvent) -> Option<T>,
-    ) -> eyre::Result<T> {
-        self.wait_for_event(move |e| extractor(e)).await
-    }
-
-    /// Wait for N events matching a predicate.
-    pub async fn where_event_n(
-        self,
-        count: usize,
-        mut predicate: impl FnMut(&ChainOrchestratorEvent) -> bool,
-    ) -> eyre::Result<Vec<ChainOrchestratorEvent>> {
-        let events = &mut self.fixture.nodes[self.node_index].chain_orchestrator_rx;
-        let mut matched_events = Vec::new();
-
-        let result = timeout(self.timeout_duration, async {
-            while let Some(event) = events.next().await {
-                if predicate(&event) {
-                    matched_events.push(event.clone());
-                    if matched_events.len() >= count {
-                        return Ok(matched_events.clone());
-                    }
-                }
-            }
-            Err(eyre::eyre!("Event stream ended before matching {} events", count))
-        })
-        .await;
-
-        match result {
-            Ok(r) => r,
-            Err(_) => Err(eyre::eyre!(
-                "Timeout waiting for {} events (matched {} so far)",
-                count,
-                matched_events.len()
-            )),
-        }
-    }
-
-    /// Internal helper to wait for a specific event.
-    async fn wait_for_event<T>(
-        self,
-        mut extractor: impl FnMut(&ChainOrchestratorEvent) -> Option<T>,
-    ) -> eyre::Result<T> {
-        let events = &mut self.fixture.nodes[self.node_index].chain_orchestrator_rx;
-
-        let result = timeout(self.timeout_duration, async {
-            while let Some(event) = events.next().await {
-                tracing::debug!(target: "event_waiter", ?event);
-                if let Some(value) = extractor(&event) {
-                    return Ok(value);
-                }
-            }
-            Err(eyre::eyre!("Event stream ended without matching event"))
-        })
-        .await;
-
-        result.unwrap_or_else(|_| Err(eyre::eyre!("Timeout waiting for event")))
-    }
-}
+/// The default event wait time.
+pub const DEFAULT_EVENT_WAIT_TIMEOUT: Duration = Duration::from_secs(30);
 
 /// Builder for waiting for events on multiple nodes.
 #[derive(Debug)]
-pub struct MultiNodeEventWaiter<'a> {
+pub struct EventWaiter<'a> {
     fixture: &'a mut TestFixture,
     node_indices: Vec<usize>,
     timeout_duration: Duration,
 }
 
-impl<'a> MultiNodeEventWaiter<'a> {
+impl<'a> EventWaiter<'a> {
     /// Create a new multi-node event waiter.
     pub fn new(fixture: &'a mut TestFixture, node_indices: Vec<usize>) -> Self {
         Self { fixture, node_indices, timeout_duration: Duration::from_secs(30) }
@@ -210,15 +33,16 @@ impl<'a> MultiNodeEventWaiter<'a> {
     }
 
     /// Wait for block sequenced event on all specified nodes.
-    pub async fn block_sequenced(self) -> eyre::Result<Vec<ScrollBlock>> {
+    pub async fn block_sequenced(self, target: u64) -> eyre::Result<ScrollBlock> {
         self.wait_for_event_on_all(|e| {
             if let ChainOrchestratorEvent::BlockSequenced(block) = e {
-                Some(block.clone())
+                (block.header.number == target).then(|| block.clone())
             } else {
                 None
             }
         })
         .await
+        .map(|v| v.first().expect("should have block sequenced").clone())
     }
 
     /// Wait for chain consolidated event on all specified nodes.
@@ -298,7 +122,7 @@ impl<'a> MultiNodeEventWaiter<'a> {
     }
 
     /// Wait for new block received event on all specified nodes.
-    pub async fn new_block_received(self) -> eyre::Result<Vec<ScrollBlock>> {
+    pub async fn new_block_received(self) -> eyre::Result<ScrollBlock> {
         self.wait_for_event_on_all(|e| {
             if let ChainOrchestratorEvent::NewBlockReceived(block_with_peer) = e {
                 Some(block_with_peer.block.clone())
@@ -307,6 +131,7 @@ impl<'a> MultiNodeEventWaiter<'a> {
             }
         })
         .await
+        .map(|v| v.first().expect("should have block received").clone())
     }
 
     /// Wait for any event where the predicate returns true on all specified nodes.
@@ -315,6 +140,45 @@ impl<'a> MultiNodeEventWaiter<'a> {
         predicate: impl Fn(&ChainOrchestratorEvent) -> bool,
     ) -> eyre::Result<Vec<ChainOrchestratorEvent>> {
         self.wait_for_event_on_all(move |e| predicate(e).then(|| e.clone())).await
+    }
+
+    /// Wait for N events matching a predicate.
+    pub async fn where_n_events(
+        self,
+        count: usize,
+        mut predicate: impl FnMut(&ChainOrchestratorEvent) -> bool,
+    ) -> eyre::Result<Vec<ChainOrchestratorEvent>> {
+        let mut matched_events = Vec::new();
+        for node in self.node_indices {
+            let events = &mut self.fixture.nodes[node].chain_orchestrator_rx;
+            let mut node_matched_events = Vec::new();
+
+            let result = timeout(self.timeout_duration, async {
+                while let Some(event) = events.next().await {
+                    if predicate(&event) {
+                        node_matched_events.push(event.clone());
+                        if node_matched_events.len() >= count {
+                            return Ok(matched_events.clone());
+                        }
+                    }
+                }
+                Err(eyre::eyre!("Event stream ended before matching {} events", count))
+            })
+            .await;
+
+            match result {
+                Ok(_) => matched_events = node_matched_events,
+                Err(_) => {
+                    return Err(eyre::eyre!(
+                        "Timeout waiting for {} events (matched {} so far)",
+                        count,
+                        matched_events.len()
+                    ))
+                }
+            }
+        }
+
+        Ok(matched_events)
     }
 
     /// Wait for any event and extract a value from it on all specified nodes.
@@ -408,35 +272,35 @@ pub trait EventAssertions {
     fn expect_event_on(&mut self, node_index: usize) -> EventWaiter<'_>;
 
     /// Wait for an event on multiple nodes.
-    fn expect_event_on_nodes(&mut self, node_indices: Vec<usize>) -> MultiNodeEventWaiter<'_>;
+    fn expect_event_on_nodes(&mut self, node_indices: Vec<usize>) -> EventWaiter<'_>;
 
     /// Wait for an event on all nodes.
-    fn expect_event_on_all_nodes(&mut self) -> MultiNodeEventWaiter<'_>;
+    fn expect_event_on_all_nodes(&mut self) -> EventWaiter<'_>;
 
     /// Wait for an event on all follower nodes (excluding sequencer at index 0).
-    fn expect_event_on_followers(&mut self) -> MultiNodeEventWaiter<'_>;
+    fn expect_event_on_followers(&mut self) -> EventWaiter<'_>;
 }
 
 impl EventAssertions for TestFixture {
     fn expect_event(&mut self) -> EventWaiter<'_> {
-        EventWaiter::new(self, 0)
+        EventWaiter::new(self, vec![0])
     }
 
     fn expect_event_on(&mut self, node_index: usize) -> EventWaiter<'_> {
-        EventWaiter::new(self, node_index)
+        EventWaiter::new(self, vec![node_index])
     }
 
-    fn expect_event_on_nodes(&mut self, node_indices: Vec<usize>) -> MultiNodeEventWaiter<'_> {
-        MultiNodeEventWaiter::new(self, node_indices)
+    fn expect_event_on_nodes(&mut self, node_indices: Vec<usize>) -> EventWaiter<'_> {
+        EventWaiter::new(self, node_indices)
     }
 
-    fn expect_event_on_all_nodes(&mut self) -> MultiNodeEventWaiter<'_> {
+    fn expect_event_on_all_nodes(&mut self) -> EventWaiter<'_> {
         let node_indices = (0..self.nodes.len()).collect();
-        MultiNodeEventWaiter::new(self, node_indices)
+        EventWaiter::new(self, node_indices)
     }
 
-    fn expect_event_on_followers(&mut self) -> MultiNodeEventWaiter<'_> {
+    fn expect_event_on_followers(&mut self) -> EventWaiter<'_> {
         let node_indices = (1..self.nodes.len()).collect();
-        MultiNodeEventWaiter::new(self, node_indices)
+        EventWaiter::new(self, node_indices)
     }
 }

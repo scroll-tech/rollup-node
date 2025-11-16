@@ -16,8 +16,35 @@ pub struct BlockBuilder<'a> {
     expected_tx_count: Option<usize>,
     expected_base_fee: Option<u64>,
     expected_block_number: Option<u64>,
-    expect_l1_message: bool,
-    expected_l1_message_count: Option<usize>,
+    expected_l1_message: Option<L1MessagesAssertion>,
+}
+
+/// The assertion on the L1 messages.
+#[derive(Debug)]
+pub enum L1MessagesAssertion {
+    /// Expect at least a single L1 message.
+    ExpectL1Message,
+    /// Expect an exact number of L1 messages.
+    ExpectL1MessageCount(usize),
+}
+
+impl L1MessagesAssertion {
+    /// Assert the L1 messages count is correct.
+    pub fn assert(&self, got: usize) -> eyre::Result<()> {
+        match self {
+            Self::ExpectL1Message => {
+                if got == 0 {
+                    return Err(eyre::eyre!("Expected at least one L1 message, but block has none"));
+                }
+            }
+            Self::ExpectL1MessageCount(count) => {
+                if got != *count {
+                    return Err(eyre::eyre!("Expected at {count} L1 messages, but block has {got}"));
+                }
+            }
+        }
+        Ok(())
+    }
 }
 
 impl<'a> BlockBuilder<'a> {
@@ -29,8 +56,7 @@ impl<'a> BlockBuilder<'a> {
             expected_tx_count: None,
             expected_block_number: None,
             expected_base_fee: None,
-            expect_l1_message: false,
-            expected_l1_message_count: None,
+            expected_l1_message: None,
         }
     }
 
@@ -54,18 +80,18 @@ impl<'a> BlockBuilder<'a> {
 
     /// Expect at least one L1 message in the block.
     pub const fn expect_l1_message(mut self) -> Self {
-        self.expect_l1_message = true;
+        self.expected_l1_message = Some(L1MessagesAssertion::ExpectL1Message);
         self
     }
 
     /// Expect a specific number of L1 messages in the block.
     pub const fn expect_l1_message_count(mut self, count: usize) -> Self {
-        self.expected_l1_message_count = Some(count);
+        self.expected_l1_message = Some(L1MessagesAssertion::ExpectL1MessageCount(count));
         self
     }
 
     /// Build the block and validate against expectations.
-    pub async fn await_block(self) -> eyre::Result<ScrollBlock> {
+    pub async fn build_and_await_block(self) -> eyre::Result<ScrollBlock> {
         let sequencer_node = &self.fixture.nodes[0];
 
         // Get the sequencer from the rollup manager handle
@@ -89,7 +115,7 @@ impl<'a> BlockBuilder<'a> {
                 } else {
                     None
                 }
-            }).await?
+            }).await?.first().expect("should have block sequenced").clone()
             };
 
         // Finally validate the block.
@@ -146,24 +172,10 @@ impl<'a> BlockBuilder<'a> {
         }
 
         // Check L1 messages
-        if self.expect_l1_message {
+        if let Some(assertion) = self.expected_l1_message {
             let l1_message_count =
                 block.body.transactions.iter().filter(|tx| tx.queue_index().is_some()).count();
-            if l1_message_count == 0 {
-                return Err(eyre::eyre!("Expected at least one L1 message, but block has none"));
-            }
-        }
-
-        if let Some(expected_count) = self.expected_l1_message_count {
-            let l1_message_count =
-                block.body.transactions.iter().filter(|tx| tx.queue_index().is_some()).count();
-            if l1_message_count != expected_count {
-                return Err(eyre::eyre!(
-                    "Expected {} L1 messages, but block has {}",
-                    expected_count,
-                    l1_message_count
-                ));
-            }
+            assertion.assert(l1_message_count)?;
         }
 
         Ok(block.clone())

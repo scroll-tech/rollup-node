@@ -19,7 +19,8 @@ use rollup_node::{
     constants::SCROLL_GAS_LIMIT,
     test_utils::{
         default_sequencer_test_scroll_rollup_node_config, default_test_scroll_rollup_node_config,
-        generate_tx, setup_engine, EventAssertions, NetworkHelpers, ReputationChecks, TestFixture,
+        generate_tx, setup_engine, EventAssertions, NetworkHelperProvider, ReputationChecks,
+        TestFixture,
     },
     RollupNodeContext, RollupNodeExtApiClient,
 };
@@ -72,7 +73,7 @@ async fn can_bridge_l1_messages() -> eyre::Result<()> {
     fixture.expect_event().l1_message_committed().await?;
 
     // Build a block and expect it to contain the L1 message
-    fixture.build_block().expect_l1_message_count(1).await_block().await?;
+    fixture.build_block().expect_l1_message_count(1).build_and_await_block().await?;
 
     Ok(())
 }
@@ -100,7 +101,7 @@ async fn can_sequence_and_gossip_blocks() -> eyre::Result<()> {
     let tx_hash = fixture.inject_transfer().await?;
 
     // Build a block and wait for it to be sequenced
-    fixture.build_block().expect_tx(tx_hash).expect_tx_count(1).await_block().await?;
+    fixture.build_block().expect_tx(tx_hash).expect_tx_count(1).build_and_await_block().await?;
 
     // Assert that the follower node receives the block from the network
     let received_block = fixture.expect_event_on(1).new_block_received().await?;
@@ -202,7 +203,7 @@ async fn can_penalize_peer_for_invalid_signature() -> eyre::Result<()> {
     // === Phase 1: Test valid block with correct signature ===
 
     // Have the legitimate sequencer build and sign a block
-    let block0 = fixture.build_block().expect_tx_count(0).await_block().await?;
+    let block0 = fixture.build_block().expect_tx_count(0).build_and_await_block().await?;
 
     // Wait for node1 to receive and validate the block with correct signature
     let received_block = fixture.expect_event_on(1).new_block_received().await?;
@@ -415,7 +416,7 @@ async fn can_sequence_and_gossip_transactions() -> eyre::Result<()> {
     fixture.expect_event_on(0).l1_synced().await?;
 
     // Have the sequencer build an empty block
-    fixture.build_block().expect_tx_count(0).await_block().await?;
+    fixture.build_block().expect_tx_count(0).build_and_await_block().await?;
 
     // Assert that the follower node has received the block
     fixture.expect_event_on(1).chain_extended(1).await?;
@@ -428,7 +429,7 @@ async fn can_sequence_and_gossip_transactions() -> eyre::Result<()> {
     tokio::time::sleep(Duration::from_secs(10)).await;
 
     // Build block on sequencer - should include the transaction gossiped from follower
-    fixture.build_block().expect_tx_count(1).expect_block_number(2).await_block().await?;
+    fixture.build_block().expect_tx_count(1).expect_block_number(2).build_and_await_block().await?;
 
     // Assert that the follower node has received the block with the transaction
     let received_block = fixture.expect_event_on(1).new_block_received().await?;
@@ -959,7 +960,7 @@ async fn can_handle_batch_revert() -> eyre::Result<()> {
     // Read the first 4 blocks.
     fixture
         .expect_event()
-        .where_event_n(4, |e| matches!(e, ChainOrchestratorEvent::BlockConsolidated(_)))
+        .where_n_events(4, |e| matches!(e, ChainOrchestratorEvent::BlockConsolidated(_)))
         .await?;
 
     // Send the second batch.
@@ -968,7 +969,7 @@ async fn can_handle_batch_revert() -> eyre::Result<()> {
     // Read the next 42 blocks.
     fixture
         .expect_event()
-        .where_event_n(42, |e| matches!(e, ChainOrchestratorEvent::BlockConsolidated(_)))
+        .where_n_events(42, |e| matches!(e, ChainOrchestratorEvent::BlockConsolidated(_)))
         .await?;
 
     let status = fixture.follower(0).rollup_manager_handle.status().await?;
@@ -1008,7 +1009,7 @@ async fn can_handle_l1_message_reorg() -> eyre::Result<()> {
     // Let the sequencer build 10 blocks before performing the reorg process.
     let mut reorg_block = None;
     for i in 1..=10 {
-        let b = fixture.build_block().expect_block_number(i).await_block().await?;
+        let b = fixture.build_block().expect_block_number(i).build_and_await_block().await?;
         tracing::info!(target: "scroll::test", block_number = ?b.header.number, block_hash = ?b.header.hash_slow(), "Sequenced block");
         reorg_block = Some(b);
     }
@@ -1016,7 +1017,7 @@ async fn can_handle_l1_message_reorg() -> eyre::Result<()> {
     // Assert that the follower node has received all 10 blocks from the sequencer node.
     fixture
         .expect_event_on(1)
-        .where_event_n(10, |e| matches!(e, ChainOrchestratorEvent::ChainExtended(_)))
+        .where_n_events(10, |e| matches!(e, ChainOrchestratorEvent::ChainExtended(_)))
         .await?;
 
     // Send the L1 message to the nodes.
@@ -1038,17 +1039,17 @@ async fn can_handle_l1_message_reorg() -> eyre::Result<()> {
         .build_block()
         .expect_block_number(11)
         .expect_l1_message_count(1)
-        .await_block()
+        .build_and_await_block()
         .await?;
 
     for i in 12..=15 {
-        fixture.build_block().expect_block_number(i).await_block().await?;
+        fixture.build_block().expect_block_number(i).build_and_await_block().await?;
     }
 
     // Assert that the follower node has received the latest block from the sequencer node.
     fixture
         .expect_event_on(1)
-        .where_event_n(5, |e| matches!(e, ChainOrchestratorEvent::ChainExtended(_)))
+        .where_n_events(5, |e| matches!(e, ChainOrchestratorEvent::ChainExtended(_)))
         .await?;
 
     // Assert both nodes are at block 15.
@@ -1084,7 +1085,7 @@ async fn can_handle_l1_message_reorg() -> eyre::Result<()> {
 
     // Since the L1 reorg reverted the L1 message included in block 11, the sequencer
     // should produce a new block at height 11.
-    fixture.build_block().expect_block_number(11).await_block().await?;
+    fixture.build_block().expect_block_number(11).build_and_await_block().await?;
 
     // Assert that the follower node has received the new block from the sequencer node.
     fixture.expect_event_on(1).chain_extended(11).await?;
@@ -1114,7 +1115,7 @@ async fn requeues_transactions_after_l1_reorg() -> eyre::Result<()> {
 
     // Let the sequencer build 10 blocks.
     for i in 1..=10 {
-        let b = sequencer.build_block().expect_block_number(i).await_block().await?;
+        let b = sequencer.build_block().expect_block_number(i).build_and_await_block().await?;
         tracing::info!(target: "scroll::test", block_number = ?b.header.number, block_hash = ?b.header.hash_slow(), "Sequenced block");
     }
 
@@ -1127,18 +1128,18 @@ async fn requeues_transactions_after_l1_reorg() -> eyre::Result<()> {
     sequencer.expect_event().new_l1_block().await?;
 
     // Build a L2 block with L1 message, so we can revert it later.
-    sequencer.build_block().await_block().await?;
+    sequencer.build_block().build_and_await_block().await?;
 
     // Inject a user transaction and force the sequencer to include it in the next block
     let hash = sequencer.inject_transfer().await?;
-    sequencer.build_block().expect_tx(hash).expect_tx_count(1).await_block().await?;
+    sequencer.build_block().expect_tx(hash).expect_tx_count(1).build_and_await_block().await?;
 
     // Trigger an L1 reorg that reverts the block containing the transaction
     sequencer.l1().reorg_to(1).await?;
     sequencer.expect_event().l1_reorg().await?;
 
     // Build the next block – the reverted transaction should have been requeued
-    sequencer.build_block().expect_tx(hash).expect_tx_count(1).await_block().await?;
+    sequencer.build_block().expect_tx(hash).expect_tx_count(1).build_and_await_block().await?;
 
     Ok(())
 }
@@ -1159,7 +1160,8 @@ async fn requeues_transactions_after_update_fcs_head() -> eyre::Result<()> {
     // Build a few blocks and remember block #4 as the future reset target.
     let mut target_head: Option<BlockInfo> = None;
     for i in 1..=4 {
-        let b = sequencer.build_block().expect_block_number(i as u64).await_block().await?;
+        let b =
+            sequencer.build_block().expect_block_number(i as u64).build_and_await_block().await?;
         if i == 4 {
             target_head = Some(BlockInfo { number: b.header.number, hash: b.header.hash_slow() });
         }
@@ -1172,7 +1174,7 @@ async fn requeues_transactions_after_update_fcs_head() -> eyre::Result<()> {
         .expect_block_number(5)
         .expect_tx(hash)
         .expect_tx_count(1)
-        .await_block()
+        .build_and_await_block()
         .await?;
 
     // Reset FCS head back to block 4; this should collect block 5's txs and requeue them.
@@ -1190,7 +1192,7 @@ async fn requeues_transactions_after_update_fcs_head() -> eyre::Result<()> {
         .expect_block_number(5)
         .expect_tx(hash)
         .expect_tx_count(1)
-        .await_block()
+        .build_and_await_block()
         .await?;
 
     Ok(())
@@ -1310,14 +1312,14 @@ async fn test_custom_genesis_block_production_and_propagation() -> eyre::Result<
 
     // Let the sequencer build 10 blocks.
     for _ in 1..=10 {
-        let b = fixture.build_block().await_block().await?;
+        let b = fixture.build_block().build_and_await_block().await?;
         tracing::info!(target: "scroll::test", block_number = ?b.header.number, block_hash = ?b.header.hash_slow(), "Sequenced block");
     }
 
     // Assert that the follower node has received all 10 blocks from the sequencer node.
     fixture
         .expect_event_on(1)
-        .where_event_n(10, |e| matches!(e, ChainOrchestratorEvent::ChainExtended(_)))
+        .where_n_events(10, |e| matches!(e, ChainOrchestratorEvent::ChainExtended(_)))
         .await?;
 
     // Assert both nodes have the same latest block hash.
@@ -1376,7 +1378,11 @@ async fn can_rpc_enable_disable_sequencing() -> eyre::Result<()> {
     assert_eq!(block_num_after_wait, fixture.get_block(1).await?.header.number);
 
     // Verify manual block building still works
-    fixture.build_block().expect_block_number(block_num_after_wait + 1).await_block().await?;
+    fixture
+        .build_block()
+        .expect_block_number(block_num_after_wait + 1)
+        .build_and_await_block()
+        .await?;
 
     // Wait for the follower to import the block
     fixture.expect_event_on(1).chain_extended(block_num_after_wait + 1).await?;
@@ -1429,7 +1435,7 @@ async fn can_reject_l2_block_with_unknown_l1_message() -> eyre::Result<()> {
 
     // Let the sequencer build 10 blocks before performing the reorg process.
     for i in 1..=10 {
-        let b = fixture.build_block().expect_block_number(i).await_block().await?;
+        let b = fixture.build_block().expect_block_number(i).build_and_await_block().await?;
         tracing::info!(target: "scroll::test", block_number = ?b.header.number, block_hash = ?b.header.hash_slow(), "Sequenced block")
     }
 
@@ -1453,10 +1459,15 @@ async fn can_reject_l2_block_with_unknown_l1_message() -> eyre::Result<()> {
     fixture.expect_event().new_l1_block().await?;
 
     // Build block that contains the L1 message.
-    fixture.build_block().expect_block_number(11).expect_l1_message().await_block().await?;
+    fixture
+        .build_block()
+        .expect_block_number(11)
+        .expect_l1_message()
+        .build_and_await_block()
+        .await?;
 
     for i in 12..=15 {
-        fixture.build_block().expect_block_number(i).await_block().await?;
+        fixture.build_block().expect_block_number(i).build_and_await_block().await?;
     }
 
     fixture
@@ -1492,7 +1503,7 @@ async fn can_reject_l2_block_with_unknown_l1_message() -> eyre::Result<()> {
     fixture.expect_event_on(1).new_l1_block().await?;
 
     // Produce another block and send to follower node.
-    fixture.build_block().expect_block_number(16).await_block().await?;
+    fixture.build_block().expect_block_number(16).build_and_await_block().await?;
 
     // Assert that the follower node has received the latest block from the sequencer node and
     // processed the missing chain before.
@@ -1612,7 +1623,7 @@ async fn signer_rotation() -> eyre::Result<()> {
 
     fixture1
         .expect_event_on(1)
-        .where_event_n(5, |event| {
+        .where_n_events(5, |event| {
             if let ChainOrchestratorEvent::NewBlockReceived(block) = event {
                 let signature = block.signature;
                 let hash = sig_encode_hash(&block.block);
