@@ -20,6 +20,14 @@ sol! {
     #[cfg_attr(feature = "test-utils", derive(arbitrary::Arbitrary))]
     #[derive(Debug)]
     event FinalizeBatch(uint256 indexed batch_index, bytes32 indexed batch_hash, bytes32 state_root, bytes32 withdraw_root);
+
+    #[cfg_attr(feature = "test-utils", derive(arbitrary::Arbitrary))]
+    #[derive(Debug)]
+    event RevertBatch(uint256 indexed batchIndex, bytes32 indexed batchHash);
+
+    #[cfg_attr(feature = "test-utils", derive(arbitrary::Arbitrary))]
+    #[derive(Debug)]
+    event RevertBatch(uint256 indexed startBatchIndex, uint256 indexed finishBatchIndex);
 }
 
 /// Tries to decode the provided log into the type T.

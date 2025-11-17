@@ -1,6 +1,6 @@
 //! Contains tests related to RN and EN sync.
 
-use alloy_primitives::{b256, Address, U256};
+use alloy_primitives::{b256, Address, B256, U256};
 use futures::StreamExt;
 use reqwest::Url;
 use reth_provider::{BlockIdReader, BlockReader};
@@ -574,6 +574,7 @@ async fn test_chain_orchestrator_l1_reorg() -> eyre::Result<()> {
     // Initially the sequencer should build 100 blocks with 1 message in each and the follower
     // should follow them
     for i in 0..100 {
+        let block_info = BlockInfo { number: i, hash: B256::random() };
         let l1_message = Arc::new(L1Notification::L1Message {
             message: TxL1Message {
                 queue_index: i,
@@ -583,10 +584,10 @@ async fn test_chain_orchestrator_l1_reorg() -> eyre::Result<()> {
                 value: U256::from(1),
                 input: Default::default(),
             },
-            block_number: i,
+            block_info,
             block_timestamp: i * 10,
         });
-        let new_block = Arc::new(L1Notification::NewBlock(i));
+        let new_block = Arc::new(L1Notification::NewBlock(block_info));
         sequencer_l1_watcher_tx.send(l1_message.clone()).await.unwrap();
         sequencer_l1_watcher_tx.send(new_block.clone()).await.unwrap();
         wait_n_events(
@@ -643,6 +644,7 @@ async fn test_chain_orchestrator_l1_reorg() -> eyre::Result<()> {
     // Have the sequencer build 20 new blocks, containing new L1 messages.
     let mut l1_notifications = vec![];
     for i in 0..20 {
+        let block_info = BlockInfo { number: (51 + i), hash: B256::random() };
         let l1_message = Arc::new(L1Notification::L1Message {
             message: TxL1Message {
                 queue_index: 51 + i,
@@ -652,10 +654,10 @@ async fn test_chain_orchestrator_l1_reorg() -> eyre::Result<()> {
                 value: U256::from(1),
                 input: Default::default(),
             },
-            block_number: 51 + i,
+            block_info,
             block_timestamp: (51 + i) * 10,
         });
-        let new_block = Arc::new(L1Notification::NewBlock(51 + i));
+        let new_block = Arc::new(L1Notification::NewBlock(block_info));
         l1_notifications.extend([l1_message.clone(), new_block.clone()]);
         sequencer_l1_watcher_tx.send(l1_message.clone()).await.unwrap();
         sequencer_l1_watcher_tx.send(new_block.clone()).await.unwrap();

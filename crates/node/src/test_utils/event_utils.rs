@@ -121,6 +121,46 @@ impl<'a> EventWaiter<'a> {
         Ok(())
     }
 
+    /// Wait for batch consolidated event on all specified nodes.
+    pub async fn batch_consolidated(self) -> eyre::Result<()> {
+        self.wait_for_event_on_all(|e| {
+            matches!(e, ChainOrchestratorEvent::BatchConsolidated(_)).then_some(())
+        })
+        .await?;
+        Ok(())
+    }
+
+    /// Wait for block consolidated event on all specified nodes.
+    pub async fn block_consolidated(self, target_block: u64) -> eyre::Result<()> {
+        self.wait_for_event_on_all(|e| {
+            if let ChainOrchestratorEvent::BlockConsolidated(outcome) = e {
+                (outcome.block_info().block_info.number == target_block).then_some(())
+            } else {
+                None
+            }
+        })
+        .await?;
+        Ok(())
+    }
+
+    /// Wait for batch reverted event on all specified nodes.
+    pub async fn batch_reverted(self) -> eyre::Result<()> {
+        self.wait_for_event_on_all(|e| {
+            matches!(e, ChainOrchestratorEvent::BatchReverted { .. }).then_some(())
+        })
+        .await?;
+        Ok(())
+    }
+
+    /// Wait for L1 block finalized event on all specified nodes.
+    pub async fn l1_block_finalized(self) -> eyre::Result<()> {
+        self.wait_for_event_on_all(|e| {
+            matches!(e, ChainOrchestratorEvent::L1BlockFinalized(_, _)).then_some(())
+        })
+        .await?;
+        Ok(())
+    }
+
     /// Wait for new block received event on all specified nodes.
     pub async fn new_block_received(self) -> eyre::Result<ScrollBlock> {
         self.wait_for_event_on_all(|e| {

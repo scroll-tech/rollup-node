@@ -1,7 +1,7 @@
 //! End-to-end tests for the rollup node.
 
 use alloy_eips::BlockNumberOrTag;
-use alloy_primitives::{address, b256, Address, Bytes, Signature, U256};
+use alloy_primitives::{address, b256, Address, Bytes, Signature, B256, U256};
 use alloy_signer::Signer;
 use alloy_signer_local::PrivateKeySigner;
 use futures::{task::noop_waker_ref, FutureExt, StreamExt};
@@ -609,6 +609,7 @@ async fn shutdown_consolidates_most_recent_batch_on_startup() -> eyre::Result<()
         l1_notification_tx.unwrap();
 
     // Load test batches
+    let block_0_info = BlockInfo { number: 18318207, hash: B256::random() };
     let raw_calldata_0 = read_to_bytes("./tests/testdata/batch_0_calldata.bin")?;
     let batch_0_data = BatchCommitData {
         hash: b256!("5AAEB6101A47FC16866E80D77FFE090B6A7B3CF7D988BE981646AB6AEDFA2C42"),
@@ -618,7 +619,9 @@ async fn shutdown_consolidates_most_recent_batch_on_startup() -> eyre::Result<()
         calldata: Arc::new(raw_calldata_0),
         blob_versioned_hash: None,
         finalized_block_number: None,
+        reverted_block_number: None,
     };
+    let block_1_info = BlockInfo { number: 18318215, hash: B256::random() };
     let raw_calldata_1 = read_to_bytes("./tests/testdata/batch_1_calldata.bin")?;
     let batch_1_data = BatchCommitData {
         hash: b256!("AA8181F04F8E305328A6117FA6BC13FA2093A3C4C990C5281DF95A1CB85CA18F"),
@@ -628,24 +631,26 @@ async fn shutdown_consolidates_most_recent_batch_on_startup() -> eyre::Result<()
         calldata: Arc::new(raw_calldata_1),
         blob_versioned_hash: None,
         finalized_block_number: None,
+        reverted_block_number: None,
     };
 
-    println!("Sending first batch commit and finalization");
-
     // Send the first batch commit to the rollup node manager and finalize it.
-    l1_notification_tx.send(Arc::new(L1Notification::BatchCommit(batch_0_data.clone()))).await?;
+    l1_notification_tx
+        .send(Arc::new(L1Notification::BatchCommit {
+            block_info: block_0_info,
+            data: batch_0_data.clone(),
+        }))
+        .await?;
     l1_notification_tx
         .send(Arc::new(L1Notification::BatchFinalization {
             hash: batch_0_data.hash,
             index: batch_0_data.index,
-            block_number: batch_0_data.block_number,
+            block_info: block_0_info,
         }))
         .await?;
 
     // Lets finalize the first batch
-    l1_notification_tx.send(Arc::new(L1Notification::Finalized(batch_0_data.block_number))).await?;
-
-    println!("First batch finalized, iterating until first batch is consolidated");
+    l1_notification_tx.send(Arc::new(L1Notification::Finalized(block_0_info.number))).await?;
 
     // Lets iterate over all blocks expected to be derived from the first batch commit.
     let consolidation_outcome = loop {
@@ -657,22 +662,23 @@ async fn shutdown_consolidates_most_recent_batch_on_startup() -> eyre::Result<()
     };
     assert_eq!(consolidation_outcome.blocks.len(), 4, "Expected 4 blocks to be consolidated");
 
-    println!("First batch consolidated, sending second batch commit and finalization");
-
     // Now we send the second batch commit and finalize it.
-    l1_notification_tx.send(Arc::new(L1Notification::BatchCommit(batch_1_data.clone()))).await?;
+    l1_notification_tx
+        .send(Arc::new(L1Notification::BatchCommit {
+            block_info: block_1_info,
+            data: batch_1_data.clone(),
+        }))
+        .await?;
     l1_notification_tx
         .send(Arc::new(L1Notification::BatchFinalization {
             hash: batch_1_data.hash,
             index: batch_1_data.index,
-            block_number: batch_1_data.block_number,
+            block_info: block_1_info,
         }))
         .await?;
 
     // Lets finalize the second batch.
-    l1_notification_tx.send(Arc::new(L1Notification::Finalized(batch_1_data.block_number))).await?;
-
-    println!("Second batch finalized, iterating until block 40 is consolidated");
+    l1_notification_tx.send(Arc::new(L1Notification::Finalized(block_1_info.number))).await?;
 
     // The second batch commit contains 42 blocks (5-57), lets iterate until the rnm has
     // consolidated up to block 40.
@@ -691,8 +697,6 @@ async fn shutdown_consolidates_most_recent_batch_on_startup() -> eyre::Result<()
         }
         i += 1;
     };
-
-    println!("Block 40 consolidated, checking safe and head block hashes");
 
     // Fetch the safe and head block hashes from the EN.
     let rpc = node.rpc.inner.eth_api();
@@ -751,17 +755,11 @@ async fn shutdown_consolidates_most_recent_batch_on_startup() -> eyre::Result<()
     // Request an event stream from the rollup node manager.
     let mut rnm_events = handle.get_event_listener().await?;
 
+    println!("im here");
+
     // Send the second batch again to mimic the watcher behaviour.
-    l1_notification_tx.send(Arc::new(L1Notification::BatchCommit(batch_1_data.clone()))).await?;
-    l1_notification_tx
-        .send(Arc::new(L1Notification::BatchFinalization {
-            hash: batch_1_data.hash,
-            index: batch_1_data.index,
-            block_number: batch_1_data.block_number,
-        }))
-        .await?;
-    // Lets finalize the second batch.
-    l1_notification_tx.send(Arc::new(L1Notification::Finalized(batch_1_data.block_number))).await?;
+    let block_1_info = BlockInfo { number: 18318215, hash: B256::random() };
+    l1_notification_tx.send(Arc::new(L1Notification::Finalized(block_1_info.number))).await?;
 
     // Lets fetch the first consolidated block event - this should be the first block of the batch.
     let l2_block = loop {
@@ -945,50 +943,192 @@ async fn graceful_shutdown_sets_fcs_to_latest_signed_block_in_db_on_start_up() -
 }
 
 #[tokio::test]
-#[ignore = "Enable once we implement issue #273"]
-async fn can_handle_batch_revert() -> eyre::Result<()> {
+async fn consolidates_committed_batches_after_chain_consolidation() -> eyre::Result<()> {
     reth_tracing::init_test_tracing();
-    let chain_spec = (*SCROLL_MAINNET).clone();
 
-    // Create a follower node
-    let mut fixture =
-        TestFixture::builder().followers(1).with_chain_spec(chain_spec).build().await?;
-
-    // Send the first batch.
-    fixture.l1().for_node(0).batch_commit(Some("./tests/testdata/batch_0_calldata.bin"), 1).await?;
-
-    // Read the first 4 blocks.
-    fixture
-        .expect_event()
-        .where_n_events(4, |e| matches!(e, ChainOrchestratorEvent::BlockConsolidated(_)))
+    // Create a follower test fixture using SCROLL_MAINNET chain spec
+    let mut fixture = TestFixture::builder()
+        .followers(1)
+        .with_chain_spec(SCROLL_MAINNET.clone())
+        .with_memory_db()
+        .build()
         .await?;
 
-    // Send the second batch.
-    fixture.l1().for_node(0).batch_commit(Some("./tests/testdata/batch_1_calldata.bin"), 2).await?;
+    // Load test batches
+    let batch_0_block_info = BlockInfo { number: 18318207, hash: B256::random() };
+    let raw_calldata_0 = read_to_bytes("./tests/testdata/batch_0_calldata.bin")?;
+    let batch_0_hash = b256!("5AAEB6101A47FC16866E80D77FFE090B6A7B3CF7D988BE981646AB6AEDFA2C42");
 
-    // Read the next 42 blocks.
-    fixture
-        .expect_event()
-        .where_n_events(42, |e| matches!(e, ChainOrchestratorEvent::BlockConsolidated(_)))
+    let batch_0_finalization_block_info = BlockInfo { number: 18318210, hash: B256::random() };
+    let batch_1_block_info = BlockInfo { number: 18318215, hash: B256::random() };
+    let raw_calldata_1 = read_to_bytes("./tests/testdata/batch_1_calldata.bin")?;
+    let batch_1_hash = b256!("AA8181F04F8E305328A6117FA6BC13FA2093A3C4C990C5281DF95A1CB85CA18F");
+
+    let batch_1_finalization_block_info = BlockInfo { number: 18318220, hash: B256::random() };
+
+    // Send the first batch
+    let (_, batch_0_index) = fixture
+        .l1()
+        .commit_batch()
+        .at_block(batch_0_block_info)
+        .hash(batch_0_hash)
+        .index(1)
+        .calldata(raw_calldata_0)
+        .send()
         .await?;
 
-    let status = fixture.follower(0).rollup_manager_handle.status().await?;
+    // Send a batch finalization for the first batch
+    fixture
+        .l1()
+        .finalize_batch()
+        .hash(batch_0_hash)
+        .index(batch_0_index)
+        .at_block(batch_0_finalization_block_info)
+        .send()
+        .await?;
 
-    // Assert the forkchoice state is above 4
+    // Send the L1 block finalized notification
+    fixture.l1().finalize_l1_block(batch_0_finalization_block_info.number).await?;
+
+    // Wait for batch consolidated event
+    fixture.expect_event().batch_consolidated().await?;
+
+    // Send the second batch
+    let (_, batch_1_index) = fixture
+        .l1()
+        .commit_batch()
+        .at_block(batch_1_block_info)
+        .hash(batch_1_hash)
+        .index(2)
+        .calldata(raw_calldata_1)
+        .send()
+        .await?;
+
+    // Send the Synced notification to the chain orchestrator
+    fixture.l1().sync().await?;
+
+    // Wait for the second batch to be consolidated
+    fixture.expect_event().batch_consolidated().await?;
+
+    let status = fixture.get_sequencer_status().await?;
+
+    assert_eq!(status.l2.fcs.safe_block_info().number, 57);
+    assert_eq!(status.l2.fcs.finalized_block_info().number, 4);
+
+    // Now send the batch finalization event for the second batch and finalize the L1 block
+    fixture
+        .l1()
+        .finalize_batch()
+        .hash(batch_1_hash)
+        .index(batch_1_index)
+        .at_block(batch_1_finalization_block_info)
+        .send()
+        .await?;
+
+    fixture.l1().finalize_l1_block(batch_1_finalization_block_info.number).await?;
+
+    // Wait for L1 block finalized event
+    fixture.expect_event().l1_block_finalized().await?;
+
+    let status = fixture.get_sequencer_status().await?;
+
+    assert_eq!(status.l2.fcs.safe_block_info().number, 57);
+    assert_eq!(status.l2.fcs.finalized_block_info().number, 57);
+
+    Ok(())
+}
+
+#[tokio::test]
+async fn can_handle_batch_revert_with_reorg() -> eyre::Result<()> {
+    reth_tracing::init_test_tracing();
+
+    // Create a follower test fixture using SCROLL_MAINNET chain spec
+    let mut fixture = TestFixture::builder()
+        .followers(1)
+        .with_chain_spec(SCROLL_MAINNET.clone())
+        .with_memory_db()
+        .build()
+        .await?;
+
+    // Send a Synced notification to the chain orchestrator
+    fixture.l1().sync().await?;
+
+    // Load test batches
+    let batch_0_block_info = BlockInfo { number: 18318207, hash: B256::random() };
+    let raw_calldata_0 = read_to_bytes("./tests/testdata/batch_0_calldata.bin")?;
+    let batch_0_hash = b256!("5AAEB6101A47FC16866E80D77FFE090B6A7B3CF7D988BE981646AB6AEDFA2C42");
+
+    let batch_1_block_info = BlockInfo { number: 18318215, hash: B256::random() };
+    let raw_calldata_1 = read_to_bytes("./tests/testdata/batch_1_calldata.bin")?;
+    let batch_1_hash = b256!("AA8181F04F8E305328A6117FA6BC13FA2093A3C4C990C5281DF95A1CB85CA18F");
+
+    let batch_1_revert_block_info = BlockInfo { number: 18318216, hash: B256::random() };
+
+    // Send the first batch
+    fixture
+        .l1()
+        .commit_batch()
+        .at_block(batch_0_block_info)
+        .hash(batch_0_hash)
+        .index(1)
+        .block_number(18318207)
+        .block_timestamp(1696935971)
+        .calldata(raw_calldata_0)
+        .send()
+        .await?;
+
+    // Wait for block 4 to be consolidated
+    fixture.expect_event().block_consolidated(4).await?;
+
+    // Send the second batch
+    let (_, batch_1_index) = fixture
+        .l1()
+        .commit_batch()
+        .at_block(batch_1_block_info)
+        .hash(batch_1_hash)
+        .index(2)
+        .block_number(18318215)
+        .block_timestamp(1696936000)
+        .calldata(raw_calldata_1)
+        .send()
+        .await?;
+
+    // Wait for block 57 to be consolidated (after processing batch 1)
+    fixture.expect_event().block_consolidated(57).await?;
+
+    let status = fixture.get_sequencer_status().await?;
     assert!(status.l2.fcs.head_block_info().number > 4);
     assert!(status.l2.fcs.safe_block_info().number > 4);
 
-    // Send the third batch which should trigger the revert.
-    fixture.l1().for_node(0).batch_commit(None, 2).await?;
+    // Send the revert for the second batch
+    fixture
+        .l1()
+        .revert_batch()
+        .hash(batch_1_hash)
+        .index(batch_1_index)
+        .at_block(batch_1_revert_block_info)
+        .send()
+        .await?;
 
-    // Wait for the third batch to be proceeded.
-    tokio::time::sleep(Duration::from_millis(300)).await;
+    // Wait for batch reverted event
+    fixture.expect_event().batch_reverted().await?;
 
-    let status = fixture.follower(0).rollup_manager_handle.status().await?;
+    let status = fixture.get_sequencer_status().await?;
 
-    // Assert the forkchoice state was reset to 4.
-    assert_eq!(status.l2.fcs.head_block_info().number, 4);
+    // Assert the forkchoice state was reset to 4
+    assert_eq!(status.l2.fcs.head_block_info().number, 57);
     assert_eq!(status.l2.fcs.safe_block_info().number, 4);
+
+    // Now let's reorg the L1 such that the batch revert should be reorged out
+    fixture.l1().reorg_to(18318215).await?;
+
+    // Wait for L1 reorg event
+    fixture.expect_event().l1_reorg().await?;
+
+    let status = fixture.get_sequencer_status().await?;
+
+    // Assert the forkchoice state safe block was reset to 57
+    assert_eq!(status.l2.fcs.safe_block_info().number, 57);
 
     Ok(())
 }

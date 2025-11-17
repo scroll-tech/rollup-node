@@ -199,6 +199,23 @@ impl TestFixture {
     /// Check if anvil is enabled and running.
     pub const fn has_anvil(&self) -> bool {
         self.anvil.is_some()
+    /// Get the status (including forkchoice state) from a specific node.
+    pub async fn get_status(
+        &self,
+        node_index: usize,
+    ) -> eyre::Result<rollup_node_chain_orchestrator::ChainOrchestratorStatus> {
+        self.nodes[node_index]
+            .rollup_manager_handle
+            .status()
+            .await
+            .map_err(|e| eyre::eyre!("Failed to get status: {}", e))
+    }
+
+    /// Get the status (including forkchoice state) from the sequencer node.
+    pub async fn get_sequencer_status(
+        &self,
+    ) -> eyre::Result<rollup_node_chain_orchestrator::ChainOrchestratorStatus> {
+        self.get_status(0).await
     }
 }
 
