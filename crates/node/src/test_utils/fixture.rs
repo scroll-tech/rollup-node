@@ -48,6 +48,8 @@ pub struct TestFixture {
     pub wallet: Arc<Mutex<Wallet>>,
     /// Chain spec used by the nodes.
     pub chain_spec: Arc<<ScrollRollupNode as NodeTypes>::ChainSpec>,
+    /// Optional Anvil instance for L1 simulation.
+    anvil: Option<alloy_node_bindings::AnvilInstance>,
     /// The task manager. Held in order to avoid dropping the node.
     _tasks: TaskManager,
 }
@@ -201,6 +203,21 @@ impl TestFixture {
     ) -> eyre::Result<rollup_node_chain_orchestrator::ChainOrchestratorStatus> {
         self.get_status(0).await
     }
+
+    /// Get the Anvil instance if one was started.
+    pub const fn anvil(&self) -> Option<&alloy_node_bindings::AnvilInstance> {
+        self.anvil.as_ref()
+    }
+
+    /// Get the Anvil HTTP endpoint if Anvil was started.
+    pub fn anvil_endpoint(&self) -> Option<String> {
+        self.anvil.as_ref().map(|a| a.endpoint())
+    }
+
+    /// Check if Anvil is running.
+    pub const fn has_anvil(&self) -> bool {
+        self.anvil.is_some()
+    }
 }
 
 /// Builder for creating test fixtures with a fluent API.
@@ -211,6 +228,10 @@ pub struct TestFixtureBuilder {
     chain_spec: Option<Arc<<ScrollRollupNode as NodeTypes>::ChainSpec>>,
     is_dev: bool,
     no_local_transactions_propagation: bool,
+    enable_anvil: bool,
+    anvil_state_path: Option<PathBuf>,
+    anvil_chain_id: Option<u64>,
+    anvil_block_time: Option<u64>,
 }
 
 impl Default for TestFixtureBuilder {
@@ -228,6 +249,10 @@ impl TestFixtureBuilder {
             chain_spec: None,
             is_dev: false,
             no_local_transactions_propagation: false,
+            enable_anvil: false,
+            anvil_state_path: None,
+            anvil_chain_id: None,
+            anvil_block_time: None,
         }
     }
 
@@ -421,10 +446,53 @@ impl TestFixtureBuilder {
         &mut self.config
     }
 
+    /// Enable Anvil with default settings.
+    pub const fn with_anvil(mut self) -> Self {
+        self.enable_anvil = true;
+        self
+    }
+
+    /// Enable Anvil with the default state file (`tests/anvil_state.json`).
+    pub fn with_anvil_default_state(mut self) -> Self {
+        self.enable_anvil = true;
+        self.anvil_state_path = Some(PathBuf::from("tests/anvil_state.json"));
+        self
+    }
+
+    /// Enable Anvil with a custom state file.
+    pub fn with_anvil_state(mut self, path: impl Into<PathBuf>) -> Self {
+        self.enable_anvil = true;
+        self.anvil_state_path = Some(path.into());
+        self
+    }
+
+    /// Set the chain ID for Anvil.
+    pub const fn with_anvil_chain_id(mut self, chain_id: u64) -> Self {
+        self.anvil_chain_id = Some(chain_id);
+        self
+    }
+
+    /// Set the block time for Anvil (in seconds).
+    pub const fn with_anvil_block_time(mut self, block_time: u64) -> Self {
+        self.anvil_block_time = Some(block_time);
+        self
+    }
+
     /// Build the test fixture.
     pub async fn build(self) -> eyre::Result<TestFixture> {
         let config = self.config;
         let chain_spec = self.chain_spec.unwrap_or_else(|| SCROLL_DEV.clone());
+
+        // Start Anvil if requested
+        let anvil = if self.enable_anvil {
+            Some(Self::spawn_anvil(
+                self.anvil_state_path.as_deref(),
+                self.anvil_chain_id,
+                self.anvil_block_time,
+            )?)
+        } else {
+            None
+        };
 
         let (nodes, _tasks, wallet) = setup_engine(
             config.clone(),
@@ -475,6 +543,38 @@ impl TestFixtureBuilder {
             wallet: Arc::new(Mutex::new(wallet)),
             chain_spec,
             _tasks,
+            anvil,
         })
+    }
+
+    /// Spawn an Anvil instance with the given configuration.
+    fn spawn_anvil(
+        state_path: Option<&std::path::Path>,
+        chain_id: Option<u64>,
+        block_time: Option<u64>,
+    ) -> eyre::Result<alloy_node_bindings::AnvilInstance> {
+        let mut anvil = alloy_node_bindings::Anvil::new();
+
+        // Configure chain ID
+        if let Some(id) = chain_id {
+            anvil = anvil.chain_id(id);
+        }
+
+        // Configure block time
+        if let Some(time) = block_time {
+            anvil = anvil.block_time(time);
+        }
+
+        // Load state if provided using args
+        if let Some(path) = state_path {
+            if path.exists() {
+                anvil = anvil.arg("--load-state").arg(path);
+            } else {
+                return Err(eyre::eyre!("Anvil state file not found: {}", path.display()));
+            }
+        }
+
+        // Spawn Anvil
+        Ok(anvil.spawn())
     }
 }
