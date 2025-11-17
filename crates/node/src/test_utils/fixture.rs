@@ -10,6 +10,7 @@ use crate::{
 };
 
 use alloy_eips::BlockNumberOrTag;
+use alloy_node_bindings::AnvilInstance;
 use alloy_primitives::Address;
 use alloy_rpc_types_eth::Block;
 use alloy_signer_local::PrivateKeySigner;
@@ -48,6 +49,8 @@ pub struct TestFixture {
     pub wallet: Arc<Mutex<Wallet>>,
     /// Chain spec used by the nodes.
     pub chain_spec: Arc<<ScrollRollupNode as NodeTypes>::ChainSpec>,
+    /// Anvil L1 node instance.
+    pub anvil: Option<AnvilInstance>,
     /// The task manager. Held in order to avoid dropping the node.
     _tasks: TaskManager,
 }
@@ -182,6 +185,21 @@ impl TestFixture {
     pub async fn get_sequencer_block(&self) -> eyre::Result<Block<Transaction>> {
         self.get_block(0).await
     }
+
+    /// Get the anvil L1 node endpoint URL if anvil is running.
+    pub fn anvil_endpoint(&self) -> Option<String> {
+        self.anvil.as_ref().map(|handle| handle.endpoint().to_string())
+    }
+
+    /// Get the anvil L1 node handle if anvil is running.
+    pub fn anvil_handle(&self) -> Option<&AnvilInstance> {
+        self.anvil.as_ref()
+    }
+
+    /// Check if anvil is enabled and running.
+    pub const fn has_anvil(&self) -> bool {
+        self.anvil.is_some()
+    }
 }
 
 /// Builder for creating test fixtures with a fluent API.
@@ -192,6 +210,10 @@ pub struct TestFixtureBuilder {
     chain_spec: Option<Arc<<ScrollRollupNode as NodeTypes>::ChainSpec>>,
     is_dev: bool,
     no_local_transactions_propagation: bool,
+    enable_anvil: bool,
+    anvil_state_path: Option<PathBuf>,
+    anvil_chain_id: Option<u64>,
+    anvil_block_time: Option<u64>,
 }
 
 impl Default for TestFixtureBuilder {
@@ -209,6 +231,10 @@ impl TestFixtureBuilder {
             chain_spec: None,
             is_dev: false,
             no_local_transactions_propagation: false,
+            enable_anvil: false,
+            anvil_state_path: None,
+            anvil_chain_id: None,
+            anvil_block_time: None,
         }
     }
 
@@ -402,10 +428,66 @@ impl TestFixtureBuilder {
         &mut self.config
     }
 
+    /// Enable anvil L1 node with default configuration.
+    pub const fn with_anvil(mut self) -> Self {
+        self.enable_anvil = true;
+        self
+    }
+
+    /// Enable anvil L1 node with the default test state from tests/anvil_state.json.
+    /// This is the same state used in docker-compose e2e tests.
+    pub fn with_anvil_default_state(mut self) -> Self {
+        // Resolve the path to tests/anvil_state.json relative to the workspace root
+        let workspace_root = std::env::var("CARGO_MANIFEST_DIR")
+            .map(PathBuf::from)
+            .unwrap_or_else(|_| PathBuf::from("."));
+
+        // Go up to workspace root (from crates/node to workspace root)
+        let state_path = workspace_root
+            .parent()
+            .and_then(|p| p.parent())
+            .map(|p| p.join("tests").join("anvil_state.json"))
+            .unwrap_or_else(|| PathBuf::from("tests/anvil_state.json"));
+
+        self.enable_anvil = true;
+        self.anvil_state_path = Some(state_path);
+        self
+    }
+
+    /// Set the anvil state file path (JSON state to load on startup).
+    pub fn with_anvil_state(mut self, path: PathBuf) -> Self {
+        self.enable_anvil = true;
+        self.anvil_state_path = Some(path);
+        self
+    }
+
+    /// Set the anvil chain ID.
+    pub const fn with_anvil_chain_id(mut self, chain_id: u64) -> Self {
+        self.anvil_chain_id = Some(chain_id);
+        self
+    }
+
+    /// Set the anvil block time in seconds.
+    pub const fn with_anvil_block_time(mut self, block_time: u64) -> Self {
+        self.anvil_block_time = Some(block_time);
+        self
+    }
+
     /// Build the test fixture.
     pub async fn build(self) -> eyre::Result<TestFixture> {
         let config = self.config;
         let chain_spec = self.chain_spec.unwrap_or_else(|| SCROLL_DEV.clone());
+
+        // Spawn anvil L1 node if enabled
+        let anvil = if self.enable_anvil {
+            Some(Self::spawn_anvil(
+                self.anvil_state_path,
+                self.anvil_chain_id,
+                self.anvil_block_time,
+            )?)
+        } else {
+            None
+        };
 
         let (nodes, _tasks, wallet) = setup_engine(
             config.clone(),
@@ -455,7 +537,46 @@ impl TestFixtureBuilder {
             nodes: node_handles,
             wallet: Arc::new(Mutex::new(wallet)),
             chain_spec,
+            anvil,
             _tasks,
         })
+    }
+
+    /// Spawn an anvil L1 node with the given configuration.
+    fn spawn_anvil(
+        state_path: Option<PathBuf>,
+        chain_id: Option<u64>,
+        block_time: Option<u64>,
+    ) -> eyre::Result<AnvilInstance> {
+        use alloy_node_bindings::Anvil;
+
+        let mut anvil = Anvil::new();
+
+        // Set chain ID (default to 22222222 used in tests)
+        let chain_id = chain_id.unwrap_or(22222222);
+        anvil = anvil.chain_id(chain_id);
+
+        // Set block time (default to 1 second used in tests)
+        let block_time = block_time.unwrap_or(1);
+        anvil = anvil.block_time(block_time);
+
+        // Load state if provided
+        if let Some(state_path) = state_path {
+            if !state_path.exists() {
+                return Err(eyre::eyre!("Anvil state file not found: {:?}", state_path));
+            }
+            anvil = anvil.load_state(state_path);
+        }
+
+        // Set other configuration options to match test setup
+        anvil = anvil.arg("--slots-in-an-epoch").arg("4").arg("--code-size-limit").arg("100000000");
+
+        // Spawn the anvil node
+        let instance = anvil.spawn();
+
+        // Log the endpoint for debugging
+        tracing::info!("Anvil L1 node started at: {}", instance.endpoint());
+
+        Ok(instance)
     }
 }

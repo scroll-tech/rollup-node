@@ -225,8 +225,9 @@ impl ScrollRollupNodeConfig {
 
         // Run the database migrations
         if let Some(named) = chain_spec.chain().named() {
+            let db_inner = Arc::clone(&db);
             named
-                .migrate(db.inner().get_connection(), self.test)
+                .migrate(db_inner.get_connection(), self.test)
                 .await
                 .expect("failed to perform migration");
         } else {
@@ -235,8 +236,9 @@ impl ScrollRollupNodeConfig {
             // match the custom chain.
             // This is a workaround due to the fact that sea orm migrations are static.
             // See https://github.com/scroll-tech/rollup-node/issues/297 for more details.
+            let db_inner = Arc::clone(&db);
             scroll_migration::Migrator::<scroll_migration::ScrollDevMigrationInfo>::up(
-                db.inner().get_connection(),
+                db_inner.get_connection(),
                 None,
             )
             .await
