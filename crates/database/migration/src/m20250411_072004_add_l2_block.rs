@@ -19,18 +19,11 @@ impl<MI: MigrationInfo + Send + Sync> MigrationTrait for Migration<MI> {
                 Table::create()
                     .table(L2Block::Table)
                     .if_not_exists()
-                    .col(pk_auto(L2Block::BlockNumber))
-                    .col(binary_len(L2Block::BlockHash, 32))
-                    .col(big_unsigned(L2Block::BatchIndex))
-                    .col(binary_len(L2Block::BatchHash, 32))
-                    .foreign_key(
-                        ForeignKey::create()
-                            .name("fk_batch_index")
-                            .from(L2Block::Table, L2Block::BatchIndex)
-                            .to(BatchCommit::Table, BatchCommit::Index)
-                            .on_delete(ForeignKeyAction::Cascade)
-                            .on_update(ForeignKeyAction::Cascade),
-                    )
+                    .col(big_unsigned(L2Block::BlockNumber).not_null())
+                    .col(binary_len(L2Block::BlockHash, 32).not_null().primary_key())
+                    .col(big_unsigned(L2Block::BatchIndex).not_null())
+                    .col(binary_len(L2Block::BatchHash, 32).not_null())
+                    .col(boolean(L2Block::Reverted).not_null().default(false))
                     .foreign_key(
                         ForeignKey::create()
                             .name("fk_batch_hash")
@@ -73,4 +66,5 @@ pub(crate) enum L2Block {
     BatchHash,
     BlockNumber,
     BlockHash,
+    Reverted,
 }

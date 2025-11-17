@@ -25,6 +25,31 @@ pub struct BlockInfo {
     pub hash: B256,
 }
 
+/// The startup configuration for the L1 watcher.
+#[derive(Debug, PartialEq, Eq)]
+pub enum L1BlockStartupInfo {
+    /// The L1 block infos of the unsafe blocks stored in the database.
+    UnsafeBlocks(Vec<BlockInfo>),
+    /// The finalized block number to start from.
+    FinalizedBlockNumber(u64),
+    /// No startup information available.
+    None,
+}
+
+impl L1BlockStartupInfo {
+    /// Creates a new [`L1BlockStartupInfo`] from the given unsafe blocks and finalized block
+    /// number.
+    pub fn new(unsafe_blocks: Vec<BlockInfo>, finalized_block_number: Option<u64>) -> Self {
+        if !unsafe_blocks.is_empty() {
+            Self::UnsafeBlocks(unsafe_blocks)
+        } else if let Some(number) = finalized_block_number {
+            Self::FinalizedBlockNumber(number)
+        } else {
+            Self::None
+        }
+    }
+}
+
 impl PartialOrd for BlockInfo {
     fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
         self.number.partial_cmp(&other.number)
@@ -71,6 +96,12 @@ impl From<&Header> for BlockInfo {
 impl From<Header> for BlockInfo {
     fn from(value: Header) -> Self {
         Self { number: value.number, hash: value.hash_slow() }
+    }
+}
+
+impl From<&alloy_rpc_types_eth::Header> for BlockInfo {
+    fn from(value: &alloy_rpc_types_eth::Header) -> Self {
+        Self { number: value.number, hash: value.hash }
     }
 }
 
