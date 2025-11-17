@@ -41,6 +41,9 @@ tracing.workspace = true
 scroll-migration.workspace = true
 rollup-node-primitives = { workspace = true, features = ["arbitrary"] }
 
+# reth
+reth-tracing.workspace = true
+
 # misc
 arbitrary.workspace = true
 rand.workspace = true

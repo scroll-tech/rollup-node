@@ -14,7 +14,7 @@ use reth_scroll_primitives::ScrollBlock;
 use reth_tasks::shutdown::Shutdown;
 use reth_tokio_util::{EventSender, EventStream};
 use rollup_node_primitives::{
-    BatchCommitData, BatchInfo, BlockConsolidationOutcome, BlockInfo, ChainImport,
+    BatchCommitData, BatchInfo, BatchStatus, BlockConsolidationOutcome, BlockInfo, ChainImport,
     L1MessageEnvelope, L2BlockInfoWithL1Messages,
 };
 use rollup_node_providers::L1MessageProvider;
@@ -406,6 +406,10 @@ impl<
                 self.network.handle().set_gossip(enabled).await;
                 let _ = tx.send(());
             }
+            #[cfg(feature = "test-utils")]
+            ChainOrchestratorCommand::DatabaseHandle(tx) => {
+                let _ = tx.send(self.database.clone());
+            }
         }
 
         Ok(())
@@ -452,8 +456,12 @@ impl<
                 }
                 BlockConsolidationAction::UpdateSafeHead(block_info) => {
                     tracing::info!(target: "scroll::chain_orchestrator", ?block_info, "Updating safe head to consolidated block");
+                    let finalized_block_info = batch_reconciliation_result
+                        .target_status
+                        .is_finalized()
+                        .then_some(block_info.block_info);
                     self.engine
-                        .update_fcs(None, Some(block_info.block_info), Some(block_info.block_info))
+                        .update_fcs(None, Some(block_info.block_info), finalized_block_info)
                         .await?;
                     BlockConsolidationOutcome::UpdateFcs(block_info)
                 }
@@ -487,11 +495,15 @@ impl<
                     }
 
                     // Update the forkchoice state to the new head.
+                    let finalized_block_info = batch_reconciliation_result
+                        .target_status
+                        .is_finalized()
+                        .then_some(block_info.block_info);
                     self.engine
                         .update_fcs(
                             Some(block_info.block_info),
                             Some(block_info.block_info),
-                            Some(block_info.block_info),
+                            finalized_block_info,
                         )
                         .await?;
 
@@ -533,15 +545,29 @@ impl<
                 self.consensus.update_config(update);
                 Ok(None)
             }
-            L1Notification::NewBlock(block_number) => self.handle_l1_new_block(*block_number).await,
+            L1Notification::NewBlock(block_info) => self.handle_l1_new_block(*block_info).await,
             L1Notification::Finalized(block_number) => {
                 metered!(Task::L1Finalization, self, handle_l1_finalized(*block_number))
             }
-            L1Notification::BatchCommit(batch) => {
-                metered!(Task::BatchCommit, self, handle_batch_commit(batch.clone()))
+            L1Notification::BatchCommit { block_info, data } => {
+                metered!(Task::BatchCommit, self, handle_batch_commit(*block_info, data.clone()))
             }
-            L1Notification::L1Message { message, block_number, block_timestamp: _ } => {
-                metered!(Task::L1Message, self, handle_l1_message(message.clone(), *block_number))
+            L1Notification::BatchRevert { batch_info, block_info } => {
+                metered!(
+                    Task::BatchRevert,
+                    self,
+                    handle_batch_revert(batch_info.index, batch_info.index, *block_info)
+                )
+            }
+            L1Notification::BatchRevertRange { start, end, block_info } => {
+                metered!(
+                    Task::BatchRevertRange,
+                    self,
+                    handle_batch_revert(*start, *end, *block_info)
+                )
+            }
+            L1Notification::L1Message { message, block_info, block_timestamp: _ } => {
+                metered!(Task::L1Message, self, handle_l1_message(message.clone(), *block_info))
             }
             L1Notification::Synced => {
                 tracing::info!(target: "scroll::chain_orchestrator", "L1 is now synced");
@@ -552,11 +578,11 @@ impl<
                 self.notify(ChainOrchestratorEvent::L1Synced);
                 Ok(None)
             }
-            L1Notification::BatchFinalization { hash: _hash, index, block_number } => {
+            L1Notification::BatchFinalization { hash: _hash, index, block_info } => {
                 metered!(
                     Task::BatchFinalization,
                     self,
-                    handle_batch_finalization(*index, *block_number)
+                    handle_batch_finalization(*index, *block_info)
                 )
             }
         }
@@ -564,10 +590,10 @@ impl<
 
     async fn handle_l1_new_block(
         &self,
-        block_number: u64,
+        block_info: BlockInfo,
     ) -> Result<Option<ChainOrchestratorEvent>, ChainOrchestratorError> {
-        self.database.set_latest_l1_block_number(block_number).await?;
-        Ok(Some(ChainOrchestratorEvent::NewL1Block(block_number)))
+        self.database.set_latest_l1_block_number(block_info.number).await?;
+        Ok(Some(ChainOrchestratorEvent::NewL1Block(block_info.number)))
     }
 
     /// Collects reverted L2 transactions in [from, to], excluding L1 messages.
@@ -613,9 +639,8 @@ impl<
         &mut self,
         block_number: u64,
     ) -> Result<Option<ChainOrchestratorEvent>, ChainOrchestratorError> {
-        let genesis_hash = self.config.chain_spec().genesis_hash();
         let UnwindResult { l1_block_number, queue_index, l2_head_block_number, l2_safe_block_info } =
-            self.database.unwind(genesis_hash, block_number).await?;
+            self.database.unwind(block_number).await?;
 
         let (l2_head_block_info, reverted_transactions) =
             if let Some(block_number) = l2_head_block_number {
@@ -683,66 +708,75 @@ impl<
         &mut self,
         block_number: u64,
     ) -> Result<Option<ChainOrchestratorEvent>, ChainOrchestratorError> {
-        let finalized_batches = self
+        let (finalized_block_info, triggered_batches) = self
             .database
             .tx_mut(move |tx| async move {
                 // Set the latest finalized L1 block in the database.
                 tx.set_finalized_l1_block_number(block_number).await?;
 
+                // Finalize consolidated batches up to the finalized L1 block number.
+                let finalized_block_info = tx.finalize_consolidated_batches(block_number).await?;
+
                 // Get all unprocessed batches that have been finalized by this L1 block
                 // finalization.
-                tx.fetch_and_update_unprocessed_finalized_batches(block_number).await
+                let triggered_batches =
+                    tx.fetch_and_update_unprocessed_finalized_batches(block_number).await?;
+
+                Ok::<_, ChainOrchestratorError>((finalized_block_info, triggered_batches))
             })
             .await?;
 
-        for batch in &finalized_batches {
-            self.derivation_pipeline.push_batch(Arc::new(*batch)).await;
+        if finalized_block_info.is_some() {
+            tracing::info!(target: "scroll::chain_orchestrator", ?finalized_block_info, "Updating FCS with new finalized block info from L1 finalization");
+            self.engine.update_fcs(None, None, finalized_block_info).await?;
         }
 
-        Ok(Some(ChainOrchestratorEvent::L1BlockFinalized(block_number, finalized_batches)))
+        for batch in &triggered_batches {
+            self.derivation_pipeline.push_batch(*batch, BatchStatus::Finalized).await;
+        }
+
+        Ok(Some(ChainOrchestratorEvent::L1BlockFinalized(block_number, triggered_batches)))
     }
 
     /// Handles a batch input by inserting it into the database.
     async fn handle_batch_commit(
-        &self,
+        &mut self,
+        block_info: BlockInfo,
         batch: BatchCommitData,
     ) -> Result<Option<ChainOrchestratorEvent>, ChainOrchestratorError> {
+        let batch_info: BatchInfo = (&batch).into();
         let event = self
             .database
             .tx_mut(move |tx| {
-                let batch_clone = batch.clone();
+                let batch = batch.clone();
                 async move {
-                    let prev_batch_index = batch_clone.index - 1;
+                    let prev_batch_index = batch.index - 1;
 
                     // Perform a consistency check to ensure the previous commit batch exists in the
                     // database.
                     if tx.get_batch_by_index(prev_batch_index).await?.is_none() {
-                        return Err(ChainOrchestratorError::BatchCommitGap(batch_clone.index));
+                        return Err(ChainOrchestratorError::BatchCommitGap(batch.index));
                     }
 
-                    // remove any batches with an index greater than the previous batch.
-                    let affected = tx.delete_batches_gt_batch_index(prev_batch_index).await?;
-
-                    // handle the case of a batch revert.
-                    let new_safe_head = if affected > 0 {
-                        tx.delete_l2_blocks_gt_batch_index(prev_batch_index).await?;
-                        tx.get_highest_block_for_batch_index(prev_batch_index).await?
-                    } else {
-                        None
-                    };
-
                     let event = ChainOrchestratorEvent::BatchCommitIndexed {
-                        batch_info: BatchInfo::new(batch_clone.index, batch_clone.hash),
-                        l1_block_number: batch_clone.block_number,
-                        safe_head: new_safe_head,
+                        batch_info: (&batch).into(),
+                        l1_block_number: batch.block_number,
                     };
 
                     // insert the batch and commit the transaction.
-                    tx.insert_batch(batch_clone).await?;
+                    tx.insert_batch(batch).await?;
+
+                    // insert the L1 block info.
+                    tx.insert_l1_block_info(block_info).await?;
+
                     Ok::<_, ChainOrchestratorError>(Some(event))
                 }
             })
             .await?;
+
+        if self.sync_state.is_synced() {
+            self.derivation_pipeline.push_batch(batch_info, BatchStatus::Consolidated).await;
+        }
 
         Ok(event)
     }
@@ -751,46 +785,72 @@ impl<
     async fn handle_batch_finalization(
         &mut self,
         batch_index: u64,
-        block_number: u64,
+        l1_block_info: BlockInfo,
     ) -> Result<Option<ChainOrchestratorEvent>, ChainOrchestratorError> {
-        let event = self
+        let triggered_batches = self
             .database
             .tx_mut(move |tx| async move {
+                // Insert the L1 block info.
+                tx.insert_l1_block_info(l1_block_info).await?;
+
                 // finalize all batches up to `batch_index`.
-                tx.finalize_batches_up_to_index(batch_index, block_number).await?;
+                tx.finalize_batches_up_to_index(batch_index, l1_block_info.number).await?;
+                let finalized_block_number = tx.get_finalized_l1_block_number().await?;
 
                 // Get all unprocessed batches that have been finalized by this L1 block
                 // finalization.
-                let finalized_block_number = tx.get_finalized_l1_block_number().await?;
-                if finalized_block_number >= block_number {
-                    let finalized_batches = tx
-                        .fetch_and_update_unprocessed_finalized_batches(finalized_block_number)
-                        .await?;
+                let triggered_batches = if finalized_block_number >= l1_block_info.number {
+                    tx.fetch_and_update_unprocessed_finalized_batches(finalized_block_number)
+                        .await?
+                } else {
+                    vec![]
+                };
 
-                    return Ok(Some(ChainOrchestratorEvent::BatchFinalized(
-                        block_number,
-                        finalized_batches,
-                    )));
-                }
-
-                Ok::<_, ChainOrchestratorError>(None)
+                Ok::<_, ChainOrchestratorError>(triggered_batches)
             })
-            .await;
+            .await?;
 
-        if let Ok(Some(ChainOrchestratorEvent::BatchFinalized(_, batches))) = &event {
-            for batch in batches {
-                self.derivation_pipeline.push_batch(Arc::new(*batch)).await;
-            }
+        for batch in &triggered_batches {
+            self.derivation_pipeline.push_batch(*batch, BatchStatus::Finalized).await;
         }
 
-        event
+        Ok(Some(ChainOrchestratorEvent::BatchFinalized { l1_block_info, triggered_batches }))
+    }
+
+    /// Handles a batch revert event by updating the database.
+    async fn handle_batch_revert(
+        &mut self,
+        start_index: u64,
+        end_index: u64,
+        l1_block_info: BlockInfo,
+    ) -> Result<Option<ChainOrchestratorEvent>, ChainOrchestratorError> {
+        let (safe_block_info, batch_info) = self
+            .database
+            .tx_mut(move |tx| async move {
+                tx.insert_l1_block_info(l1_block_info).await?;
+                tx.set_batch_revert_block_number_for_batch_range(
+                    start_index,
+                    end_index,
+                    l1_block_info,
+                )
+                .await?;
+
+                // handle the case of a batch revert.
+                Ok::<_, ChainOrchestratorError>(tx.get_latest_safe_l2_info().await?)
+            })
+            .await?;
+
+        // Update the forkchoice state to the new safe block.
+        self.engine.update_fcs(None, Some(safe_block_info), None).await?;
+
+        Ok(Some(ChainOrchestratorEvent::BatchReverted { batch_info, safe_head: safe_block_info }))
     }
 
     /// Handles an L1 message by inserting it into the database.
     async fn handle_l1_message(
         &self,
         l1_message: TxL1Message,
-        l1_block_number: u64,
+        l1_block_info: BlockInfo,
     ) -> Result<Option<ChainOrchestratorEvent>, ChainOrchestratorError> {
         let event = ChainOrchestratorEvent::L1MessageCommitted(l1_message.queue_index);
         let queue_hash = compute_l1_message_queue_hash(
@@ -799,7 +859,7 @@ impl<
             self.config.l1_v2_message_queue_start_index(),
         )
         .await?;
-        let l1_message = L1MessageEnvelope::new(l1_message, l1_block_number, None, queue_hash);
+        let l1_message = L1MessageEnvelope::new(l1_message, l1_block_info.number, None, queue_hash);
 
         // Perform a consistency check to ensure the previous L1 message exists in the database.
         self.database
@@ -822,6 +882,7 @@ impl<
                     }
 
                     tx.insert_l1_message(l1_message.clone()).await?;
+                    tx.insert_l1_block_info(l1_block_info).await?;
                     Ok::<_, ChainOrchestratorError>(())
                 }
             })
@@ -1138,7 +1199,7 @@ impl<
     ///
     /// This involves validating the L1 messages in the blocks against the expected L1 messages
     /// synced from L1.
-    async fn consolidate_chain(&self) -> Result<(), ChainOrchestratorError> {
+    async fn consolidate_chain(&mut self) -> Result<(), ChainOrchestratorError> {
         tracing::trace!(target: "scroll::chain_orchestrator", fcs = ?self.engine.fcs(), "Consolidating chain from safe to head");
 
         let safe_block_number = self.engine.fcs().safe_block_info().number;
@@ -1190,6 +1251,14 @@ impl<
         // send a notification to the network that the chain is synced such that it accepts
         // transactions into the transaction pool.
         self.network.handle().inner().update_sync_state(RethSyncState::Idle);
+
+        // Fetch all unprocessed committed batches and push them to the derivation pipeline as
+        // consolidated.
+        let committed_batches =
+            self.database.fetch_and_update_unprocessed_committed_batches().await?;
+        for batch_commit in committed_batches {
+            self.derivation_pipeline.push_batch(batch_commit, BatchStatus::Consolidated).await;
+        }
 
         self.notify(ChainOrchestratorEvent::ChainConsolidated {
             from: safe_block_number,
