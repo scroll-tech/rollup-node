@@ -294,6 +294,10 @@ impl<T: WriteConnectionProvider + ?Sized + Sync> DatabaseWriteOperations for T {
                 models::batch_commit::Column::RevertedBlockNumber,
                 Expr::value(Some(block_info.number as i64)),
             )
+            .col_expr(
+                models::batch_commit::Column::Status,
+                Expr::value(BatchStatus::Reverted.as_str()),
+            )
             .exec(self.get_connection())
             .await?;
 
