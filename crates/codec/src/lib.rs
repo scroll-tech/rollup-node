@@ -59,7 +59,7 @@ impl Codec {
                 let blob = input.blob().ok_or(DecodingError::MissingBlob)?;
                 decode_v4(calldata, blob.as_ref())?
             }
-            7..=8 => {
+            7..=9 => {
                 let blob = input.blob().ok_or(DecodingError::MissingBlob)?;
                 decode_v7(blob.as_ref())?
             }
