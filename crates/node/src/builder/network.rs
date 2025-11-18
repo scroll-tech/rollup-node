@@ -95,7 +95,7 @@ where
         let config = ctx.network_config()?;
         let config = NetworkConfig {
             network_mode: NetworkMode::Work,
-            header_transform: Box::new(transform),
+            header_transform: Arc::new(transform),
             extra_protocols: self.scroll_sub_protocols,
             ..config
         };
@@ -159,17 +159,18 @@ impl<ChainSpec: EthChainSpec + ScrollHardforks + Debug + Send + Sync + 'static>
     }
 }
 
+#[async_trait::async_trait]
 impl<H: BlockHeader, ChainSpec: EthChainSpec + ScrollHardforks + Debug + Send + Sync>
     HeaderTransform<H> for ScrollHeaderTransform<ChainSpec>
 {
-    fn map(&self, mut header: H) -> H {
+    async fn map(&self, mut header: H) -> H {
         if !self.chain_spec.is_euclid_v2_active_at_timestamp(header.timestamp()) {
             return header;
         }
 
         // TODO: remove this once we deprecated l2geth
         // Validate and process signature
-        if let Err(err) = self.validate_and_store_signature(&mut header, self.signer) {
+        if let Err(err) = self.validate_and_store_signature(&mut header, self.signer).await {
             debug!(
                 target: "scroll::network::response_header_transform",
                 "Header signature persistence failed, block number: {:?}, header hash: {:?}, error: {}",
@@ -183,7 +184,7 @@ impl<H: BlockHeader, ChainSpec: EthChainSpec + ScrollHardforks + Debug + Send + 
 }
 
 impl<ChainSpec: ScrollHardforks + Debug + Send + Sync> ScrollHeaderTransform<ChainSpec> {
-    fn validate_and_store_signature<H: BlockHeader>(
+    async fn validate_and_store_signature<H: BlockHeader>(
         &self,
         header: &mut H,
         authorized_signer: Option<Address>,
@@ -195,7 +196,7 @@ impl<ChainSpec: ScrollHardforks + Debug + Send + Sync> ScrollHeaderTransform<Cha
         recover_and_verify_signer(&signature, header, authorized_signer)?;
 
         // Store signature in database
-        persist_signature(self.db.clone(), header.hash_slow(), signature);
+        persist_signature(self.db.clone(), header.hash_slow(), signature).await;
 
         Ok(())
     }
@@ -308,17 +309,15 @@ fn parse_65b_signature(bytes: &[u8]) -> Result<Signature, HeaderTransformError> 
 }
 
 /// Run the async DB insert from sync code safely.
-fn persist_signature(db: Arc<Database>, hash: B256, signature: Signature) {
-    tokio::spawn(async move {
-        trace!(
-            "Persisting block signature to database, block hash: {:?}, sig: {:?}",
-            hash,
-            signature.to_string()
-        );
-        if let Err(e) = db.insert_signature(hash, signature).await {
-            warn!(target: "scroll::network::header_transform", "Failed to store signature in database: {:?}", e);
-        }
-    });
+async fn persist_signature(db: Arc<Database>, hash: B256, signature: Signature) {
+    trace!(
+        "Persisting block signature to database, block hash: {:?}, sig: {:?}",
+        hash,
+        signature.to_string()
+    );
+    if let Err(e) = db.insert_signature(hash, signature).await {
+        warn!(target: "scroll::network::header_transform", "Failed to store signature in database: {:?}", e);
+    }
 }
 
 /// Convert a generic `BlockHeader` to `alloy_consensus::Header`
