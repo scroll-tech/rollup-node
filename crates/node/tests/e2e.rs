@@ -1,18 +1,13 @@
 //! End-to-end tests for the rollup node.
 
-use alloy_eips::{eip2718::Encodable2718, BlockNumberOrTag};
-use alloy_primitives::{address, b256, hex::FromHex, Address, Bytes, Signature, B256, U256};
-use alloy_rpc_types_eth::Block;
+use alloy_eips::BlockNumberOrTag;
+use alloy_primitives::{address, b256, Address, Bytes, Signature, B256, U256};
 use alloy_signer::Signer;
 use alloy_signer_local::PrivateKeySigner;
-use eyre::Ok;
 use futures::{task::noop_waker_ref, FutureExt, StreamExt};
 use reth_chainspec::EthChainSpec;
-use reth_e2e_test_utils::{NodeHelperType, TmpDB};
-use reth_network::{NetworkConfigBuilder, NetworkEventListenerProvider, Peers, PeersInfo};
+use reth_network::{NetworkConfigBuilder, NetworkEventListenerProvider, PeersInfo};
 use reth_network_api::block::EthWireProvider;
-use reth_node_api::NodeTypesWithDBAdapter;
-use reth_provider::providers::BlockchainProvider;
 use reth_rpc_api::EthApiServer;
 use reth_scroll_chainspec::{ScrollChainSpec, SCROLL_DEV, SCROLL_MAINNET, SCROLL_SEPOLIA};
 use reth_scroll_node::ScrollNetworkPrimitives;
@@ -24,21 +19,14 @@ use rollup_node::{
     constants::SCROLL_GAS_LIMIT,
     test_utils::{
         default_sequencer_test_scroll_rollup_node_config, default_test_scroll_rollup_node_config,
-        generate_tx, setup_engine,
+        generate_tx, setup_engine, EventAssertions, NetworkHelperProvider, ReputationChecks,
+        TestFixture,
     },
-    BlobProviderArgs, ChainOrchestratorArgs, ConsensusAlgorithm, ConsensusArgs, EngineDriverArgs,
-    L1ProviderArgs, RollupNodeContext, RollupNodeDatabaseArgs, RollupNodeExtApiClient,
-    RollupNodeGasPriceOracleArgs, RollupNodeNetworkArgs as ScrollNetworkArgs, RpcArgs,
-    ScrollRollupNode, ScrollRollupNodeConfig, SequencerArgs,
+    RollupNodeContext, RollupNodeExtApiClient,
 };
 use rollup_node_chain_orchestrator::ChainOrchestratorEvent;
-use rollup_node_primitives::{
-    sig_encode_hash, BatchCommitData, BatchInfo, BlockInfo, ConsensusUpdate,
-};
-use rollup_node_sequencer::L1MessageInclusionMode;
+use rollup_node_primitives::{sig_encode_hash, BatchCommitData, BlockInfo};
 use rollup_node_watcher::L1Notification;
-use scroll_alloy_consensus::TxL1Message;
-use scroll_alloy_rpc_types::Transaction as ScrollAlloyTransaction;
 use scroll_db::{test_utils::setup_test_db, L1MessageKey};
 use scroll_network::NewBlockWithPeer;
 use scroll_wire::{ScrollWireConfig, ScrollWireProtocolHandler};
@@ -57,265 +45,117 @@ use tracing::trace;
 async fn can_bridge_l1_messages() -> eyre::Result<()> {
     reth_tracing::init_test_tracing();
 
-    // Create the chain spec for scroll mainnet with Feynman activated and a test genesis.
-    let chain_spec = (*SCROLL_DEV).clone();
-    let node_args = ScrollRollupNodeConfig {
-        test: true,
-        network_args: ScrollNetworkArgs::default(),
-        database_args: RollupNodeDatabaseArgs {
-            rn_db_path: Some(PathBuf::from("sqlite::memory:")),
-        },
-        l1_provider_args: L1ProviderArgs::default(),
-        engine_driver_args: EngineDriverArgs::default(),
-        chain_orchestrator_args: ChainOrchestratorArgs::default(),
-        sequencer_args: SequencerArgs {
-            sequencer_enabled: true,
-            auto_start: false,
-            block_time: 0,
-            l1_message_inclusion_mode: L1MessageInclusionMode::BlockDepth(0),
-            allow_empty_blocks: true,
-            ..SequencerArgs::default()
-        },
-        blob_provider_args: BlobProviderArgs { mock: true, ..Default::default() },
-        signer_args: Default::default(),
-        gas_price_oracle_args: RollupNodeGasPriceOracleArgs::default(),
-        consensus_args: ConsensusArgs::noop(),
-        database: None,
-        rpc_args: RpcArgs::default(),
-    };
-    let (mut nodes, _tasks, _wallet) = setup_engine(node_args, 1, chain_spec, false, false).await?;
-    let node = nodes.pop().unwrap();
-
-    let chain_orchestrator = node.inner.add_ons_handle.rollup_manager_handle.clone();
-    let mut events = chain_orchestrator.get_event_listener().await?;
-    let l1_watcher_tx = node.inner.add_ons_handle.l1_watcher_tx.clone().unwrap();
-
-    // Send a notification to set the L1 to synced
-    l1_watcher_tx.send(Arc::new(L1Notification::Synced)).await?;
-
-    let block_info = BlockInfo { number: 0, hash: B256::random() };
-    let l1_message = TxL1Message {
-        queue_index: 0,
-        gas_limit: 21000,
-        sender: Address::random(),
-        to: Address::random(),
-        value: U256::from(1),
-        input: Default::default(),
-    };
-    l1_watcher_tx
-        .send(Arc::new(L1Notification::L1Message {
-            message: l1_message.clone(),
-            block_info,
-            block_timestamp: 1000,
-        }))
+    // Create a sequencer test fixture
+    let mut fixture = TestFixture::builder()
+        .sequencer()
+        .with_l1_message_delay(0)
+        .allow_empty_blocks(true)
+        .build()
         .await?;
 
-    wait_n_events(
-        &mut events,
-        |e| {
-            if let ChainOrchestratorEvent::L1MessageCommitted(index) = e {
-                assert_eq!(index, 0);
-                true
-            } else {
-                false
-            }
-        },
-        1,
-    )
-    .await;
+    // Send a notification to set the L1 to synced
+    fixture.l1().sync().await?;
 
-    chain_orchestrator.build_block();
+    // Create and send an L1 message
+    fixture
+        .l1()
+        .add_message()
+        .queue_index(0)
+        .gas_limit(21000)
+        .sender(Address::random())
+        .to(Address::random())
+        .value(1u32)
+        .at_block(0)
+        .send()
+        .await?;
 
-    wait_n_events(
-        &mut events,
-        |e| {
-            if let ChainOrchestratorEvent::BlockSequenced(block) = e {
-                assert_eq!(block.body.transactions.len(), 1);
-                assert_eq!(
-                    block.body.transactions[0].as_l1_message().unwrap().inner(),
-                    &l1_message
-                );
-                true
-            } else {
-                false
-            }
-        },
-        1,
-    )
-    .await;
+    // Wait for the L1 message to be committed
+    fixture.expect_event().l1_message_committed().await?;
+
+    // Build a block and expect it to contain the L1 message
+    fixture.build_block().expect_l1_message_count(1).build_and_await_block().await?;
 
     Ok(())
 }
 
 #[tokio::test]
-async fn can_sequence_and_gossip_blocks() {
+async fn can_sequence_and_gossip_blocks() -> eyre::Result<()> {
     reth_tracing::init_test_tracing();
 
-    // create 2 nodes
-    let chain_spec = (*SCROLL_DEV).clone();
-    let rollup_manager_args = ScrollRollupNodeConfig {
-        test: true,
-        network_args: ScrollNetworkArgs {
-            enable_eth_scroll_wire_bridge: true,
-            enable_scroll_wire: true,
-            sequencer_url: None,
-            signer_address: None,
-        },
-        database_args: RollupNodeDatabaseArgs {
-            rn_db_path: Some(PathBuf::from("sqlite::memory:")),
-        },
-        l1_provider_args: L1ProviderArgs::default(),
-        engine_driver_args: EngineDriverArgs::default(),
-        chain_orchestrator_args: ChainOrchestratorArgs::default(),
-        sequencer_args: SequencerArgs {
-            sequencer_enabled: true,
-            auto_start: false,
-            block_time: 0,
-            l1_message_inclusion_mode: L1MessageInclusionMode::BlockDepth(0),
-            payload_building_duration: 1000,
-            allow_empty_blocks: true,
-            ..SequencerArgs::default()
-        },
-        blob_provider_args: BlobProviderArgs { mock: true, ..Default::default() },
-        signer_args: Default::default(),
-        gas_price_oracle_args: RollupNodeGasPriceOracleArgs::default(),
-        consensus_args: ConsensusArgs::noop(),
-        database: None,
-        rpc_args: RpcArgs::default(),
-    };
+    // create 2 nodes with the new TestFixture API
+    let mut fixture = TestFixture::builder()
+        .sequencer()
+        .followers(1)
+        .block_time(0)
+        .allow_empty_blocks(true)
+        .with_eth_scroll_bridge(true)
+        .with_scroll_wire(true)
+        .payload_building_duration(1000)
+        .build()
+        .await?;
 
-    let (nodes, _tasks, wallet) =
-        setup_engine(rollup_manager_args, 2, chain_spec, false, false).await.unwrap();
-    let wallet = Arc::new(Mutex::new(wallet));
+    // Send L1 synced notification to the sequencer
+    fixture.l1().for_node(0).sync().await?;
 
-    // generate rollup node manager event streams for each node
-    let sequencer_rnm_handle = nodes[0].inner.add_ons_handle.rollup_manager_handle.clone();
-    let mut sequencer_events = sequencer_rnm_handle.get_event_listener().await.unwrap();
-    let sequencer_l1_watcher_tx = nodes[0].inner.add_ons_handle.l1_watcher_tx.clone().unwrap();
-    let mut follower_events =
-        nodes[1].inner.add_ons_handle.rollup_manager_handle.get_event_listener().await.unwrap();
+    // Inject a transaction into the sequencer node
+    let tx_hash = fixture.inject_transfer().await?;
 
-    // Send a notification to set the L1 to synced
-    sequencer_l1_watcher_tx.send(Arc::new(L1Notification::Synced)).await.unwrap();
+    // Build a block and wait for it to be sequenced
+    fixture.build_block().expect_tx(tx_hash).expect_tx_count(1).build_and_await_block().await?;
 
-    // inject a transaction into the pool of the first node
-    let tx = generate_tx(wallet).await;
-    nodes[0].rpc.inject_tx(tx).await.unwrap();
-    sequencer_rnm_handle.build_block();
+    // Assert that the follower node receives the block from the network
+    let received_block = fixture.expect_event_on(1).new_block_received().await?;
+    assert_eq!(received_block.body.transactions.len(), 1);
 
-    // wait for the sequencer to build a block
-    wait_n_events(
-        &mut sequencer_events,
-        |e| {
-            if let ChainOrchestratorEvent::BlockSequenced(block) = e {
-                assert_eq!(block.body.transactions.len(), 1);
-                true
-            } else {
-                false
-            }
-        },
-        1,
-    )
-    .await;
+    // Assert that a chain extension is triggered on the follower node
+    fixture.expect_event_on(1).chain_extended(1).await?;
 
-    // assert that the follower node has received the block from the peer
-    wait_n_events(
-        &mut follower_events,
-        |e| {
-            if let ChainOrchestratorEvent::NewBlockReceived(block_with_peer) = e {
-                assert_eq!(block_with_peer.block.body.transactions.len(), 1);
-                true
-            } else {
-                false
-            }
-        },
-        1,
-    )
-    .await;
-
-    // assert that a chain extension is triggered on the follower node
-    wait_n_events(
-        &mut follower_events,
-        |e| matches!(e, ChainOrchestratorEvent::ChainExtended(_)),
-        1,
-    )
-    .await;
+    Ok(())
 }
 
 #[tokio::test]
-async fn can_penalize_peer_for_invalid_block() {
+async fn can_penalize_peer_for_invalid_block() -> eyre::Result<()> {
     reth_tracing::init_test_tracing();
 
-    // create 2 nodes
-    let chain_spec = (*SCROLL_DEV).clone();
-    let rollup_manager_args = ScrollRollupNodeConfig {
-        test: true,
-        network_args: ScrollNetworkArgs {
-            enable_eth_scroll_wire_bridge: true,
-            enable_scroll_wire: true,
-            sequencer_url: None,
-            signer_address: None,
-        },
-        database_args: RollupNodeDatabaseArgs {
-            rn_db_path: Some(PathBuf::from("sqlite::memory:")),
-        },
-        l1_provider_args: L1ProviderArgs::default(),
-        engine_driver_args: EngineDriverArgs::default(),
-        sequencer_args: SequencerArgs {
-            sequencer_enabled: true,
-            auto_start: false,
-            block_time: 0,
-            l1_message_inclusion_mode: L1MessageInclusionMode::BlockDepth(0),
-            payload_building_duration: 1000,
-            allow_empty_blocks: true,
-            ..SequencerArgs::default()
-        },
-        blob_provider_args: BlobProviderArgs { mock: true, ..Default::default() },
-        signer_args: Default::default(),
-        gas_price_oracle_args: RollupNodeGasPriceOracleArgs::default(),
-        consensus_args: ConsensusArgs::noop(),
-        chain_orchestrator_args: ChainOrchestratorArgs::default(),
-        database: None,
-        rpc_args: RpcArgs::default(),
-    };
+    // Create 2 nodes with the TestFixture API
+    let mut fixture = TestFixture::builder()
+        .sequencer()
+        .followers(1)
+        .block_time(0)
+        .allow_empty_blocks(true)
+        .with_eth_scroll_bridge(true)
+        .with_scroll_wire(true)
+        .payload_building_duration(1000)
+        .build()
+        .await?;
 
-    let (nodes, _tasks, _) =
-        setup_engine(rollup_manager_args, 2, chain_spec, false, false).await.unwrap();
+    // Check initial reputation of node 0 from node 1's perspective
+    fixture.check_reputation_on(1).of_node(0).await?.equals(0).await?;
 
-    let node0_rmn_handle = nodes[0].inner.add_ons_handle.rollup_manager_handle.clone();
-    let node0_network_handle = node0_rmn_handle.get_network_handle().await.unwrap();
-    let node0_id = node0_network_handle.inner().peer_id();
-
-    let node1_rnm_handle = nodes[1].inner.add_ons_handle.rollup_manager_handle.clone();
-    let node1_network_handle = node1_rnm_handle.get_network_handle().await.unwrap();
-
-    // get initial reputation of node0 from pov of node1
-    let initial_reputation =
-        node1_network_handle.inner().reputation_by_id(*node0_id).await.unwrap().unwrap();
-    assert_eq!(initial_reputation, 0);
-
-    // create invalid block
+    // Create invalid block
     let mut block = ScrollBlock::default();
     block.header.number = 1;
     block.header.parent_hash =
         b256!("0x14844a4fc967096c628e90df3bb0c3e98941bdd31d1982c2f3e70ed17250d98b");
 
-    // send invalid block from node0 to node1. We don't care about the signature here since we use a
+    // Send invalid block from node0 to node1. We don't care about the signature here since we use a
     // NoopConsensus in the test.
-    node0_network_handle.announce_block(block, Signature::new(U256::from(1), U256::from(1), false));
+    fixture
+        .network_on(0)
+        .announce_block(block, Signature::new(U256::from(1), U256::from(1), false))
+        .await?;
 
-    eventually(
-        Duration::from_secs(5),
-        Duration::from_millis(10),
-        "Peer0 reputation should be lower after sending invalid block",
-        || async {
-            // check that the node0 is penalized on node1
-            let slashed_reputation =
-                node1_network_handle.inner().reputation_by_id(*node0_id).await.unwrap().unwrap();
-            slashed_reputation < initial_reputation
-        },
-    )
-    .await;
+    // Wait for reputation to decrease
+    fixture
+        .check_reputation_on(1)
+        .of_node(0)
+        .await?
+        .with_timeout(Duration::from_secs(5))
+        .with_poll_interval(Duration::from_millis(10))
+        .eventually_less_than(0)
+        .await?;
+
+    Ok(())
 }
 
 /// Tests that peers are penalized for broadcasting blocks with invalid signatures.
@@ -343,74 +183,39 @@ async fn can_penalize_peer_for_invalid_signature() -> eyre::Result<()> {
     let unauthorized_signer =
         PrivateKeySigner::random().with_chain_id(Some(chain_spec.chain().id()));
 
-    let mut test_config = default_sequencer_test_scroll_rollup_node_config();
-    test_config.consensus_args.algorithm = ConsensusAlgorithm::SystemContract;
-    test_config.consensus_args.authorized_signer = Some(authorized_address);
-    test_config.signer_args.private_key = Some(authorized_signer.clone());
-
-    // Setup nodes
-    let (mut nodes, _tasks, _) =
-        setup_engine(test_config, 2, chain_spec.clone(), false, false).await.unwrap();
-
-    let node0 = nodes.remove(0);
-    let node1 = nodes.remove(0);
-
-    // Get handles
-    let node0_rmn_handle = node0.inner.add_ons_handle.rollup_manager_handle.clone();
-    let node0_network_handle = node0_rmn_handle.get_network_handle().await.unwrap();
-    let node0_l1_watcher_tx = node0.inner.add_ons_handle.l1_watcher_tx.clone().unwrap();
-    let node0_id = node0_network_handle.inner().peer_id();
-
-    let node1_rnm_handle = node1.inner.add_ons_handle.rollup_manager_handle.clone();
-    let node1_network_handle = node1_rnm_handle.get_network_handle().await.unwrap();
-
-    // Get event streams
-    let mut node0_events = node0_rmn_handle.get_event_listener().await.unwrap();
-    let mut node1_events = node1_rnm_handle.get_event_listener().await.unwrap();
+    // Build fixture with SystemContract consensus
+    let mut fixture = TestFixture::builder()
+        .sequencer()
+        .followers(1)
+        .with_chain_spec(chain_spec)
+        .block_time(0)
+        .allow_empty_blocks(true)
+        .with_consensus_system_contract(authorized_address)
+        .with_signer(authorized_signer.clone())
+        .payload_building_duration(1000)
+        .build()
+        .await?;
 
     // Set the L1 to synced on the sequencer node
-    node0_l1_watcher_tx.send(Arc::new(L1Notification::Synced)).await.unwrap();
-    node0_events.next().await;
-    node0_events.next().await;
+    fixture.l1().for_node(0).sync().await?;
+    fixture.expect_event_on(0).l1_synced().await?;
 
     // === Phase 1: Test valid block with correct signature ===
 
     // Have the legitimate sequencer build and sign a block
-    node0_rmn_handle.build_block();
+    let block0 = fixture.build_block().expect_tx_count(0).build_and_await_block().await?;
 
-    // Wait for the sequencer to build the block
-    let block0 =
-        if let Some(ChainOrchestratorEvent::BlockSequenced(block)) = node0_events.next().await {
-            assert_eq!(block.body.transactions.len(), 0, "Block should have no transactions");
-            block
-        } else {
-            panic!("Failed to receive block from sequencer");
-        };
-
-    // Node1 should receive and accept the valid block
-    if let Some(ChainOrchestratorEvent::NewBlockReceived(block_with_peer)) =
-        node1_events.next().await
-    {
-        assert_eq!(block0.hash_slow(), block_with_peer.block.hash_slow());
-
-        // Verify the signature is from the authorized signer
-        let hash = sig_encode_hash(&block_with_peer.block);
-        let recovered = block_with_peer.signature.recover_address_from_prehash(&hash).unwrap();
-        assert_eq!(recovered, authorized_address, "Block should be signed by authorized signer");
-    } else {
-        panic!("Failed to receive valid block at follower");
-    }
+    // Wait for node1 to receive and validate the block with correct signature
+    let received_block = fixture.expect_event_on(1).new_block_received().await?;
+    assert_eq!(block0.hash_slow(), received_block.hash_slow());
 
     // Wait for successful import
-    wait_n_events(&mut node1_events, |e| matches!(e, ChainOrchestratorEvent::ChainExtended(_)), 1)
-        .await;
+    fixture.expect_event_on(1).chain_extended(block0.header.number).await?;
 
     // === Phase 2: Create and send valid block with unauthorized signer signature ===
 
-    // Get initial reputation of node0 from node1's perspective
-    let initial_reputation =
-        node1_network_handle.inner().reputation_by_id(*node0_id).await.unwrap().unwrap();
-    assert_eq!(initial_reputation, 0, "Initial reputation should be zero");
+    // Check initial reputation
+    fixture.check_reputation_on(1).of_node(0).await?.equals(0).await?;
 
     // Create a new block manually (we'll reuse the valid block structure but with wrong signature)
     let mut block1 = block0.clone();
@@ -420,73 +225,69 @@ async fn can_penalize_peer_for_invalid_signature() -> eyre::Result<()> {
 
     // Sign the block with the unauthorized signer
     let block_hash = sig_encode_hash(&block1);
-    let unauthorized_signature = unauthorized_signer.sign_hash(&block_hash).await.unwrap();
+    let unauthorized_signature = unauthorized_signer.sign_hash(&block_hash).await?;
 
     // Send the block with invalid signature from node0 to node1
-    node0_network_handle.announce_block(block1.clone(), unauthorized_signature);
+    fixture.network_on(0).announce_block(block1.clone(), unauthorized_signature).await?;
 
     // Node1 should receive and process the invalid block
-    wait_for_event_predicate_5s(&mut node1_events, |e| {
-        if let ChainOrchestratorEvent::NewBlockReceived(block_with_peer) = e {
-            assert_eq!(block1.hash_slow(), block_with_peer.block.hash_slow());
+    fixture
+        .expect_event_on(1)
+        .timeout(Duration::from_secs(5))
+        .extract(|e| {
+            if let ChainOrchestratorEvent::NewBlockReceived(block_with_peer) = e {
+                if block1.hash_slow() == block_with_peer.block.hash_slow() {
+                    // Verify the signature is from the unauthorized signer
+                    let hash = sig_encode_hash(&block_with_peer.block);
+                    if let Result::Ok(recovered) =
+                        block_with_peer.signature.recover_address_from_prehash(&hash)
+                    {
+                        return Some(recovered == unauthorized_signer.address());
+                    }
+                }
+            }
+            None
+        })
+        .await?;
 
-            // Verify the signature is from the unauthorized signer
-            let hash = sig_encode_hash(&block_with_peer.block);
-            let recovered = block_with_peer.signature.recover_address_from_prehash(&hash).unwrap();
-            return recovered == unauthorized_signer.address();
-        }
-        false
-    })
-    .await?;
-
-    eventually(
-        Duration::from_secs(5),
-        Duration::from_millis(100),
-        "Node0 reputation should be lower after sending block with invalid signature",
-        || async {
-            let current_reputation =
-                node1_network_handle.inner().reputation_by_id(*node0_id).await.unwrap().unwrap();
-            current_reputation < initial_reputation
-        },
-    )
-    .await;
+    // Wait for reputation to decrease
+    fixture
+        .check_reputation_on(1)
+        .of_node(0)
+        .await?
+        .with_timeout(Duration::from_secs(5))
+        .with_poll_interval(Duration::from_millis(100))
+        .eventually_less_than(0)
+        .await?;
 
     // === Phase 3: Send valid block with invalid signature ===
-    // Get current reputation of node0 from node1's perspective
-    let current_reputation =
-        node1_network_handle.inner().reputation_by_id(*node0_id).await.unwrap().unwrap();
+
+    // Get current reputation before sending malformed signature
+    let current_reputation = fixture.check_reputation_on(1).of_node(0).await?.get().await?.unwrap();
 
     let invalid_signature = Signature::new(U256::from(1), U256::from(1), false);
 
     // Create a new block with the same structure as before but with an invalid signature.
     // We need to make sure the block is different so that it is not filtered.
     block1.header.timestamp += 1;
-    node0_network_handle.announce_block(block1.clone(), invalid_signature);
+    fixture.network_on(0).announce_block(block1.clone(), invalid_signature).await?;
 
-    eventually(
-        Duration::from_secs(5),
-        Duration::from_millis(100),
-        "Node0 reputation should be lower after sending block with invalid signature",
-        || async {
-            let all_peers = node1_network_handle.inner().get_all_peers().await.unwrap();
-            if all_peers.is_empty() {
-                return true; // No peers to check, assume penalization and peer0 is blocked and
-                             // disconnected
-            }
-
-            let penalized_reputation =
-                node1_network_handle.inner().reputation_by_id(*node0_id).await.unwrap().unwrap();
-            penalized_reputation < current_reputation
-        },
-    )
-    .await;
+    // Wait for the node's 0 reputation to eventually fall.
+    fixture
+        .check_reputation_on(1)
+        .of_node(0)
+        .await?
+        .with_timeout(Duration::from_secs(5))
+        .with_poll_interval(Duration::from_millis(100))
+        .eventually_less_than(current_reputation)
+        .await?;
 
     Ok(())
 }
 
 #[allow(clippy::large_stack_frames)]
 #[tokio::test]
-async fn can_forward_tx_to_sequencer() {
+async fn can_forward_tx_to_sequencer() -> eyre::Result<()> {
     reth_tracing::init_test_tracing();
 
     // create 2 nodes
@@ -592,118 +393,52 @@ async fn can_forward_tx_to_sequencer() {
         1,
     )
     .await;
+
+    Ok(())
 }
 
 #[allow(clippy::large_stack_frames)]
 #[tokio::test]
-async fn can_sequence_and_gossip_transactions() {
+async fn can_sequence_and_gossip_transactions() -> eyre::Result<()> {
     reth_tracing::init_test_tracing();
 
-    // create 2 nodes
-    let mut sequencer_node_config = default_sequencer_test_scroll_rollup_node_config();
-    sequencer_node_config.sequencer_args.block_time = 0;
-    let follower_node_config = default_test_scroll_rollup_node_config();
+    // Create 2 nodes with the TestFixture API
+    let mut fixture = TestFixture::builder()
+        .sequencer()
+        .followers(1)
+        .block_time(0)
+        .allow_empty_blocks(true)
+        .build()
+        .await?;
 
-    // Create the chain spec for scroll mainnet with Euclid v2 activated and a test genesis.
-    let chain_spec = (*SCROLL_DEV).clone();
-    let (mut sequencer_node, _tasks, _) =
-        setup_engine(sequencer_node_config, 1, chain_spec.clone(), false, false).await.unwrap();
+    // Send L1 synced notification to sequencer
+    fixture.l1().for_node(0).sync().await?;
+    fixture.expect_event_on(0).l1_synced().await?;
 
-    let (mut follower_node, _tasks, wallet) =
-        setup_engine(follower_node_config, 1, chain_spec, false, false).await.unwrap();
+    // Have the sequencer build an empty block
+    fixture.build_block().expect_tx_count(0).build_and_await_block().await?;
 
-    let wallet = Arc::new(Mutex::new(wallet));
+    // Assert that the follower node has received the block
+    fixture.expect_event_on(1).chain_extended(1).await?;
 
-    // Connect the nodes together.
-    sequencer_node[0].network.add_peer(follower_node[0].network.record()).await;
-    follower_node[0].network.next_session_established().await;
-    sequencer_node[0].network.next_session_established().await;
+    // Inject a transaction into the follower node's pool
+    let tx = generate_tx(fixture.wallet.clone()).await;
+    fixture.inject_tx_on(1, tx).await?;
 
-    // generate rollup node manager event streams for each node
-    let sequencer_rnm_handle = sequencer_node[0].inner.add_ons_handle.rollup_manager_handle.clone();
-    let mut sequencer_events = sequencer_rnm_handle.get_event_listener().await.unwrap();
-    let sequencer_l1_watcher_tx =
-        sequencer_node[0].inner.add_ons_handle.l1_watcher_tx.clone().unwrap();
-    let mut follower_events = follower_node[0]
-        .inner
-        .add_ons_handle
-        .rollup_manager_handle
-        .get_event_listener()
-        .await
-        .unwrap();
+    // Wait for transaction propagation
+    tokio::time::sleep(Duration::from_secs(10)).await;
 
-    // Send a notification to set the L1 to synced
-    sequencer_l1_watcher_tx.send(Arc::new(L1Notification::Synced)).await.unwrap();
-    sequencer_events.next().await;
-    sequencer_events.next().await;
+    // Build block on sequencer - should include the transaction gossiped from follower
+    fixture.build_block().expect_tx_count(1).expect_block_number(2).build_and_await_block().await?;
 
-    // have the sequencer build an empty block and gossip it to follower
-    sequencer_rnm_handle.build_block();
+    // Assert that the follower node has received the block with the transaction
+    let received_block = fixture.expect_event_on(1).new_block_received().await?;
+    assert_eq!(received_block.body.transactions.len(), 1);
 
-    // wait for the sequencer to build a block with no transactions
-    if let Some(ChainOrchestratorEvent::BlockSequenced(block)) = sequencer_events.next().await {
-        assert_eq!(block.body.transactions.len(), 0);
-    } else {
-        panic!("Failed to receive block from rollup node");
-    }
+    // Assert that the block was successfully imported by the follower node
+    fixture.expect_event_on(1).chain_extended(2).await?;
 
-    // assert that the follower node has received the block from the peer
-    wait_n_events(
-        &mut follower_events,
-        |e| matches!(e, ChainOrchestratorEvent::ChainExtended(_)),
-        1,
-    )
-    .await;
-
-    // inject a transaction into the pool of the follower node
-    let tx = generate_tx(wallet).await;
-    follower_node[0].rpc.inject_tx(tx).await.unwrap();
-
-    tokio::time::sleep(tokio::time::Duration::from_secs(10)).await;
-
-    // build block
-    sequencer_rnm_handle.build_block();
-
-    // wait for the sequencer to build a block with transactions
-    wait_n_events(
-        &mut sequencer_events,
-        |e| {
-            if let ChainOrchestratorEvent::BlockSequenced(block) = e {
-                assert_eq!(block.header.number, 2);
-                assert_eq!(block.body.transactions.len(), 1);
-                return true
-            }
-            false
-        },
-        1,
-    )
-    .await;
-
-    // assert that the follower node has received the block from the peer
-    if let Some(ChainOrchestratorEvent::NewBlockReceived(block_with_peer)) =
-        follower_events.next().await
-    {
-        assert_eq!(block_with_peer.block.body.transactions.len(), 1);
-    } else {
-        panic!("Failed to receive block from rollup node");
-    }
-
-    // assert that the block was successfully imported by the follower node
-    wait_n_events(
-        &mut follower_events,
-        |e| {
-            if let ChainOrchestratorEvent::ChainExtended(chain) = e {
-                assert_eq!(chain.chain.len(), 1);
-                let block = chain.chain.first().unwrap();
-                assert_eq!(block.body.transactions.len(), 1);
-                true
-            } else {
-                false
-            }
-        },
-        1,
-    )
-    .await;
+    Ok(())
 }
 
 /// We test the bridge from the eth-wire protocol to the scroll-wire protocol.
@@ -717,7 +452,7 @@ async fn can_sequence_and_gossip_transactions() {
 /// The test will send messages from Node 3 to Node 1, which will bridge the messages to Node
 /// Node 2 will then receive the messages and verify that they are correct.
 #[tokio::test]
-async fn can_bridge_blocks() {
+async fn can_bridge_blocks() -> eyre::Result<()> {
     reth_tracing::init_test_tracing();
 
     // Create the chain spec for scroll dev with Feynman activated and a test genesis.
@@ -726,8 +461,7 @@ async fn can_bridge_blocks() {
     // Setup the bridge node and a standard node.
     let (mut nodes, tasks, _) =
         setup_engine(default_test_scroll_rollup_node_config(), 1, chain_spec.clone(), false, false)
-            .await
-            .unwrap();
+            .await?;
     let mut bridge_node = nodes.pop().unwrap();
     let bridge_peer_id = bridge_node.network.record().id;
     let bridge_node_l1_watcher_tx = bridge_node.inner.add_ons_handle.l1_watcher_tx.clone().unwrap();
@@ -806,13 +540,14 @@ async fn can_bridge_blocks() {
         assert_eq!(peer_id, bridge_peer_id);
         assert_eq!(block.hash_slow(), block_1_hash);
         assert_eq!(
-            TryInto::<Signature>::try_into(extra_data.as_ref().windows(65).last().unwrap())
-                .unwrap(),
+            TryInto::<Signature>::try_into(extra_data.as_ref().windows(65).last().unwrap())?,
             signature
         )
     } else {
         panic!("Failed to receive block from scroll-wire network");
     }
+
+    Ok(())
 }
 
 /// Test that when the rollup node manager is shutdown, it consolidates the most recent batch
@@ -1210,115 +945,92 @@ async fn graceful_shutdown_sets_fcs_to_latest_signed_block_in_db_on_start_up() -
 #[tokio::test]
 async fn consolidates_committed_batches_after_chain_consolidation() -> eyre::Result<()> {
     reth_tracing::init_test_tracing();
-    let chain_spec = (*SCROLL_MAINNET).clone();
 
-    // Launch a node
-    let (mut nodes, _tasks, _) =
-        setup_engine(default_test_scroll_rollup_node_config(), 1, chain_spec.clone(), false, false)
-            .await?;
-    let node = nodes.pop().unwrap();
-    let handle = node.inner.add_ons_handle.rollup_manager_handle.clone();
-    let l1_watcher_tx = node.inner.add_ons_handle.l1_watcher_tx.clone().unwrap();
-
-    // Request an event stream from the rollup node manager and manually poll rnm to process the
-    // event stream request from the handle.
-    let mut rnm_events = handle.get_event_listener().await?;
+    // Create a follower test fixture using SCROLL_MAINNET chain spec
+    let mut fixture = TestFixture::builder()
+        .followers(1)
+        .with_chain_spec(SCROLL_MAINNET.clone())
+        .with_memory_db()
+        .build()
+        .await?;
 
     // Load test batches
     let batch_0_block_info = BlockInfo { number: 18318207, hash: B256::random() };
     let raw_calldata_0 = read_to_bytes("./tests/testdata/batch_0_calldata.bin")?;
-    let batch_0_data = BatchCommitData {
-        hash: b256!("5AAEB6101A47FC16866E80D77FFE090B6A7B3CF7D988BE981646AB6AEDFA2C42"),
-        index: 1,
-        block_number: 18318207,
-        block_timestamp: 1696935971,
-        calldata: Arc::new(raw_calldata_0),
-        blob_versioned_hash: None,
-        finalized_block_number: None,
-        reverted_block_number: None,
-    };
-    let batch_0_info = BatchInfo { index: batch_0_data.index, hash: batch_0_data.hash };
+    let batch_0_hash = b256!("5AAEB6101A47FC16866E80D77FFE090B6A7B3CF7D988BE981646AB6AEDFA2C42");
+
     let batch_0_finalization_block_info = BlockInfo { number: 18318210, hash: B256::random() };
     let batch_1_block_info = BlockInfo { number: 18318215, hash: B256::random() };
     let raw_calldata_1 = read_to_bytes("./tests/testdata/batch_1_calldata.bin")?;
-    let batch_1_data = BatchCommitData {
-        hash: b256!("AA8181F04F8E305328A6117FA6BC13FA2093A3C4C990C5281DF95A1CB85CA18F"),
-        index: 2,
-        block_number: 18318215,
-        block_timestamp: 1696936000,
-        calldata: Arc::new(raw_calldata_1),
-        blob_versioned_hash: None,
-        finalized_block_number: None,
-        reverted_block_number: None,
-    };
-    let batch_1_info = BatchInfo { index: batch_1_data.index, hash: batch_1_data.hash };
+    let batch_1_hash = b256!("AA8181F04F8E305328A6117FA6BC13FA2093A3C4C990C5281DF95A1CB85CA18F");
+
     let batch_1_finalization_block_info = BlockInfo { number: 18318220, hash: B256::random() };
 
-    // Send the first batch.
-    l1_watcher_tx
-        .send(Arc::new(L1Notification::BatchCommit {
-            block_info: batch_0_block_info,
-            data: batch_0_data,
-        }))
+    // Send the first batch
+    let (_, batch_0_index) = fixture
+        .l1()
+        .commit_batch()
+        .at_block(batch_0_block_info)
+        .hash(batch_0_hash)
+        .index(1)
+        .calldata(raw_calldata_0)
+        .send()
         .await?;
 
-    // Send a batch finalization for the first batch.
-    l1_watcher_tx
-        .send(Arc::new(L1Notification::BatchFinalization {
-            hash: batch_0_info.hash,
-            index: batch_0_info.index,
-            block_info: batch_0_finalization_block_info,
-        }))
-        .await?;
-    // Send the L1 block finalized notification.
-    l1_watcher_tx
-        .send(Arc::new(L1Notification::Finalized(batch_0_finalization_block_info.number)))
+    // Send a batch finalization for the first batch
+    fixture
+        .l1()
+        .finalize_batch()
+        .hash(batch_0_hash)
+        .index(batch_0_index)
+        .at_block(batch_0_finalization_block_info)
+        .send()
         .await?;
 
-    wait_for_event_predicate_5s(&mut rnm_events, |event| {
-        matches!(event, ChainOrchestratorEvent::BatchConsolidated(_))
-    })
-    .await?;
+    // Send the L1 block finalized notification
+    fixture.l1().finalize_l1_block(batch_0_finalization_block_info.number).await?;
 
-    // Send the second batch.
-    l1_watcher_tx
-        .send(Arc::new(L1Notification::BatchCommit {
-            block_info: batch_1_block_info,
-            data: batch_1_data,
-        }))
+    // Wait for batch consolidated event
+    fixture.expect_event().batch_consolidated().await?;
+
+    // Send the second batch
+    let (_, batch_1_index) = fixture
+        .l1()
+        .commit_batch()
+        .at_block(batch_1_block_info)
+        .hash(batch_1_hash)
+        .index(2)
+        .calldata(raw_calldata_1)
+        .send()
         .await?;
 
-    // send the Synced notification to the chain orchestrator
-    l1_watcher_tx.send(Arc::new(L1Notification::Synced)).await?;
+    // Send the Synced notification to the chain orchestrator
+    fixture.l1().sync().await?;
 
-    wait_for_event_predicate_5s(&mut rnm_events, |event| {
-        matches!(event, ChainOrchestratorEvent::BatchConsolidated(_))
-    })
-    .await?;
+    // Wait for the second batch to be consolidated
+    fixture.expect_event().batch_consolidated().await?;
 
-    let status = handle.status().await?;
+    let status = fixture.get_sequencer_status().await?;
 
     assert_eq!(status.l2.fcs.safe_block_info().number, 57);
     assert_eq!(status.l2.fcs.finalized_block_info().number, 4);
 
-    // Now send the batch finalization event for the second batch and finalize the L1 block.
-    l1_watcher_tx
-        .send(Arc::new(L1Notification::BatchFinalization {
-            hash: batch_1_info.hash,
-            index: batch_1_info.index,
-            block_info: batch_1_finalization_block_info,
-        }))
-        .await?;
-    l1_watcher_tx
-        .send(Arc::new(L1Notification::Finalized(batch_1_finalization_block_info.number)))
+    // Now send the batch finalization event for the second batch and finalize the L1 block
+    fixture
+        .l1()
+        .finalize_batch()
+        .hash(batch_1_hash)
+        .index(batch_1_index)
+        .at_block(batch_1_finalization_block_info)
+        .send()
         .await?;
 
-    wait_for_event_predicate_5s(&mut rnm_events, |event| {
-        matches!(event, ChainOrchestratorEvent::L1BlockFinalized(_, _))
-    })
-    .await?;
+    fixture.l1().finalize_l1_block(batch_1_finalization_block_info.number).await?;
 
-    let status = handle.status().await?;
+    // Wait for L1 block finalized event
+    fixture.expect_event().l1_block_finalized().await?;
+
+    let status = fixture.get_sequencer_status().await?;
 
     assert_eq!(status.l2.fcs.safe_block_info().number, 57);
     assert_eq!(status.l2.fcs.finalized_block_info().number, 57);
@@ -1329,146 +1041,93 @@ async fn consolidates_committed_batches_after_chain_consolidation() -> eyre::Res
 #[tokio::test]
 async fn can_handle_batch_revert_with_reorg() -> eyre::Result<()> {
     reth_tracing::init_test_tracing();
-    let chain_spec = (*SCROLL_MAINNET).clone();
 
-    // Launch a node
-    let (mut nodes, _tasks, _) =
-        setup_engine(default_test_scroll_rollup_node_config(), 1, chain_spec.clone(), false, false)
-            .await?;
-    let node = nodes.pop().unwrap();
-    let handle = node.inner.add_ons_handle.rollup_manager_handle.clone();
-    let l1_watcher_tx = node.inner.add_ons_handle.l1_watcher_tx.clone().unwrap();
+    // Create a follower test fixture using SCROLL_MAINNET chain spec
+    let mut fixture = TestFixture::builder()
+        .followers(1)
+        .with_chain_spec(SCROLL_MAINNET.clone())
+        .with_memory_db()
+        .build()
+        .await?;
 
-    // Request an event stream from the rollup node manager and manually poll rnm to process the
-    // event stream request from the handle.
-    let mut rnm_events = handle.get_event_listener().await?;
-
-    // send a Synced notification to the chain orchestrator
-    l1_watcher_tx.send(Arc::new(L1Notification::Synced)).await.unwrap();
+    // Send a Synced notification to the chain orchestrator
+    fixture.l1().sync().await?;
 
     // Load test batches
     let batch_0_block_info = BlockInfo { number: 18318207, hash: B256::random() };
     let raw_calldata_0 = read_to_bytes("./tests/testdata/batch_0_calldata.bin")?;
-    let batch_0_data = BatchCommitData {
-        hash: b256!("5AAEB6101A47FC16866E80D77FFE090B6A7B3CF7D988BE981646AB6AEDFA2C42"),
-        index: 1,
-        block_number: 18318207,
-        block_timestamp: 1696935971,
-        calldata: Arc::new(raw_calldata_0),
-        blob_versioned_hash: None,
-        finalized_block_number: None,
-        reverted_block_number: None,
-    };
-    let batch_0_info = BatchInfo { index: batch_0_data.index, hash: batch_0_data.hash };
+    let batch_0_hash = b256!("5AAEB6101A47FC16866E80D77FFE090B6A7B3CF7D988BE981646AB6AEDFA2C42");
+
     let batch_1_block_info = BlockInfo { number: 18318215, hash: B256::random() };
     let raw_calldata_1 = read_to_bytes("./tests/testdata/batch_1_calldata.bin")?;
-    let batch_1_data = BatchCommitData {
-        hash: b256!("AA8181F04F8E305328A6117FA6BC13FA2093A3C4C990C5281DF95A1CB85CA18F"),
-        index: 2,
-        block_number: 18318215,
-        block_timestamp: 1696936000,
-        calldata: Arc::new(raw_calldata_1),
-        blob_versioned_hash: None,
-        finalized_block_number: None,
-        reverted_block_number: None,
-    };
+    let batch_1_hash = b256!("AA8181F04F8E305328A6117FA6BC13FA2093A3C4C990C5281DF95A1CB85CA18F");
+
     let batch_1_revert_block_info = BlockInfo { number: 18318216, hash: B256::random() };
-    let batch_1_revert = L1Notification::BatchRevert {
-        batch_info: BatchInfo { index: batch_1_data.index, hash: batch_1_data.hash },
-        block_info: batch_1_revert_block_info,
-    };
 
-    // Send the first batch.
-    l1_watcher_tx
-        .send(Arc::new(L1Notification::BatchCommit {
-            block_info: batch_0_block_info,
-            data: batch_0_data,
-        }))
+    // Send the first batch
+    fixture
+        .l1()
+        .commit_batch()
+        .at_block(batch_0_block_info)
+        .hash(batch_0_hash)
+        .index(1)
+        .block_number(18318207)
+        .block_timestamp(1696935971)
+        .calldata(raw_calldata_0)
+        .send()
         .await?;
 
-    // Read the first 4 blocks.
-    loop {
-        if let Some(ChainOrchestratorEvent::BlockConsolidated(consolidation_outcome)) =
-            rnm_events.next().await
-        {
-            if consolidation_outcome.block_info().block_info.number == 4 {
-                break
-            }
-        }
-    }
+    // Wait for block 4 to be consolidated
+    fixture.expect_event().block_consolidated(4).await?;
 
-    // Send the second batch.
-    l1_watcher_tx
-        .send(Arc::new(L1Notification::BatchCommit {
-            block_info: batch_1_block_info,
-            data: batch_1_data,
-        }))
+    // Send the second batch
+    let (_, batch_1_index) = fixture
+        .l1()
+        .commit_batch()
+        .at_block(batch_1_block_info)
+        .hash(batch_1_hash)
+        .index(2)
+        .block_number(18318215)
+        .block_timestamp(1696936000)
+        .calldata(raw_calldata_1)
+        .send()
         .await?;
 
-    // Read the next 42 blocks.
-    loop {
-        if let Some(ChainOrchestratorEvent::BlockConsolidated(consolidation_outcome)) =
-            rnm_events.next().await
-        {
-            if consolidation_outcome.block_info().block_info.number == 46 {
-                break
-            }
-        }
-    }
+    // Wait for block 57 to be consolidated (after processing batch 1)
+    fixture.expect_event().block_consolidated(57).await?;
 
-    let status = handle.status().await?;
-
-    // Assert the forkchoice state is above 4
+    let status = fixture.get_sequencer_status().await?;
     assert!(status.l2.fcs.head_block_info().number > 4);
     assert!(status.l2.fcs.safe_block_info().number > 4);
 
-    // Send the revert for the second batch.
-    l1_watcher_tx.send(Arc::new(batch_1_revert)).await?;
-    wait_for_event(
-        &mut rnm_events,
-        ChainOrchestratorEvent::BatchReverted {
-            batch_info: batch_0_info,
-            safe_head: BlockInfo {
-                number: 4,
-                hash: B256::from_hex(
-                    "30af93536b9f2899c2f5e77be24a4447a8e49c5683c74c4aab8c880c1508fdc5",
-                )
-                .unwrap(),
-            },
-        },
-        Duration::from_secs(5),
-    )
-    .await?;
+    // Send the revert for the second batch
+    fixture
+        .l1()
+        .revert_batch()
+        .hash(batch_1_hash)
+        .index(batch_1_index)
+        .at_block(batch_1_revert_block_info)
+        .send()
+        .await?;
 
-    let status = handle.status().await?;
+    // Wait for batch reverted event
+    fixture.expect_event().batch_reverted().await?;
 
-    // Assert the forkchoice state was reset to 4.
+    let status = fixture.get_sequencer_status().await?;
+
+    // Assert the forkchoice state was reset to 4
     assert_eq!(status.l2.fcs.head_block_info().number, 57);
     assert_eq!(status.l2.fcs.safe_block_info().number, 4);
 
-    // Now lets reorg the L1 such that the batch revert should be reorged out.
-    l1_watcher_tx.send(Arc::new(L1Notification::Reorg(18318215))).await?;
-    wait_for_event(
-        &mut rnm_events,
-        ChainOrchestratorEvent::L1Reorg {
-            l1_block_number: 18318215,
-            queue_index: None,
-            l2_head_block_info: None,
-            l2_safe_block_info: Some(BlockInfo {
-                number: 57,
-                hash: B256::from_hex(
-                    "88ab32bd52bdbab5dd148bad0de208c634d357570055a62bacc46e7a78b371dd",
-                )
-                .unwrap(),
-            }),
-        },
-        Duration::from_secs(5),
-    )
-    .await?;
+    // Now let's reorg the L1 such that the batch revert should be reorged out
+    fixture.l1().reorg_to(18318215).await?;
 
-    let status = handle.status().await?;
+    // Wait for L1 reorg event
+    fixture.expect_event().l1_reorg().await?;
 
-    // Assert the forkchoice state safe block was reset to 57.
+    let status = fixture.get_sequencer_status().await?;
+
+    // Assert the forkchoice state safe block was reset to 57
     assert_eq!(status.l2.fcs.safe_block_info().number, 57);
 
     Ok(())
@@ -1479,145 +1138,105 @@ async fn can_handle_batch_revert_with_reorg() -> eyre::Result<()> {
 async fn can_handle_l1_message_reorg() -> eyre::Result<()> {
     reth_tracing::init_test_tracing();
     color_eyre::install()?;
-    let chain_spec = (*SCROLL_DEV).clone();
 
     // Launch 2 nodes: node0=sequencer and node1=follower.
-    let config = default_sequencer_test_scroll_rollup_node_config();
-    let (mut nodes, _tasks, _) = setup_engine(config, 2, chain_spec.clone(), false, false).await?;
-    let node0 = nodes.remove(0);
-    let node1 = nodes.remove(0);
-
-    // Get handles
-    let node0_rnm_handle = node0.inner.add_ons_handle.rollup_manager_handle.clone();
-    let mut node0_rnm_events = node0_rnm_handle.get_event_listener().await?;
-    let node0_l1_watcher_tx = node0.inner.add_ons_handle.l1_watcher_tx.as_ref().unwrap();
-
-    let node1_rnm_handle = node1.inner.add_ons_handle.rollup_manager_handle.clone();
-    let mut node1_rnm_events = node1_rnm_handle.get_event_listener().await?;
-    let node1_l1_watcher_tx = node1.inner.add_ons_handle.l1_watcher_tx.as_ref().unwrap();
+    let mut fixture = TestFixture::builder().sequencer().followers(1).block_time(0).build().await?;
 
     // Set L1 synced on both the sequencer and follower nodes.
-    node0_l1_watcher_tx.send(Arc::new(L1Notification::Synced)).await?;
-    node1_l1_watcher_tx.send(Arc::new(L1Notification::Synced)).await?;
+    fixture.l1().sync().await?;
+    fixture.expect_event_on_all_nodes().l1_synced().await?;
 
     // Let the sequencer build 10 blocks before performing the reorg process.
     let mut reorg_block = None;
     for i in 1..=10 {
-        node0_rnm_handle.build_block();
-        let b = wait_for_block_sequenced_5s(&mut node0_rnm_events, i).await?;
+        let b = fixture.build_block().expect_block_number(i).build_and_await_block().await?;
         tracing::info!(target: "scroll::test", block_number = ?b.header.number, block_hash = ?b.header.hash_slow(), "Sequenced block");
         reorg_block = Some(b);
     }
 
     // Assert that the follower node has received all 10 blocks from the sequencer node.
-    wait_for_block_imported_5s(&mut node1_rnm_events, 10).await?;
+    fixture
+        .expect_event_on(1)
+        .where_n_events(10, |e| matches!(e, ChainOrchestratorEvent::ChainExtended(_)))
+        .await?;
 
-    // Send a L1 message and wait for it to be indexed.
-    let block_10_block_info = BlockInfo { number: 10, hash: B256::random() };
-    let l1_message_notification = L1Notification::L1Message {
-        message: TxL1Message {
-            queue_index: 0,
-            gas_limit: 21000,
-            to: Default::default(),
-            value: Default::default(),
-            sender: address!("f39Fd6e51aad88F6F4ce6aB8827279cffFb92266"),
-            input: Default::default(),
-        },
-        block_info: block_10_block_info,
-        block_timestamp: 0,
-    };
+    // Send the L1 message to the nodes.
+    fixture
+        .l1()
+        .add_message()
+        .at_block(10)
+        .sender(address!("f39Fd6e51aad88F6F4ce6aB8827279cffFb92266"))
+        .send()
+        .await?;
+    fixture.l1().new_block(10).await?;
 
-    // Send the L1 message to the sequencer node.
-    node0_l1_watcher_tx.send(Arc::new(l1_message_notification.clone())).await?;
-    node0_l1_watcher_tx.send(Arc::new(L1Notification::NewBlock(block_10_block_info))).await?;
-    wait_for_event_5s(&mut node0_rnm_events, ChainOrchestratorEvent::L1MessageCommitted(0)).await?;
-    wait_for_event_5s(&mut node0_rnm_events, ChainOrchestratorEvent::NewL1Block(10)).await?;
-
-    // Send L1 the L1 message to follower node.
-    node1_l1_watcher_tx.send(Arc::new(l1_message_notification)).await?;
-    node1_l1_watcher_tx.send(Arc::new(L1Notification::NewBlock(block_10_block_info))).await?;
-    wait_for_event_5s(&mut node1_rnm_events, ChainOrchestratorEvent::L1MessageCommitted(0)).await?;
-    wait_for_event_5s(&mut node1_rnm_events, ChainOrchestratorEvent::NewL1Block(10)).await?;
+    // Expect the events to reach all nodes.
+    fixture.expect_event_on_all_nodes().l1_message_committed().await?;
+    fixture.expect_event_on_all_nodes().new_l1_block().await?;
 
     // Build block that contains the L1 message.
-    let mut block11_before_reorg = None;
-    node0_rnm_handle.build_block();
-    wait_for_event_predicate_5s(&mut node0_rnm_events, |e| {
-        if let ChainOrchestratorEvent::BlockSequenced(block) = e {
-            if block.header.number == 11 &&
-                block.body.transactions.len() == 1 &&
-                block.body.transactions.iter().any(|tx| tx.is_l1_message())
-            {
-                block11_before_reorg = Some(block.header.hash_slow());
-                return true;
-            }
-        }
-
-        false
-    })
-    .await?;
+    let block11_before_reorg = fixture
+        .build_block()
+        .expect_block_number(11)
+        .expect_l1_message_count(1)
+        .build_and_await_block()
+        .await?;
 
     for i in 12..=15 {
-        node0_rnm_handle.build_block();
-        wait_for_block_sequenced_5s(&mut node0_rnm_events, i).await?;
+        fixture.build_block().expect_block_number(i).build_and_await_block().await?;
     }
 
     // Assert that the follower node has received the latest block from the sequencer node.
-    wait_for_block_imported_5s(&mut node1_rnm_events, 15).await?;
+    fixture
+        .expect_event_on(1)
+        .where_n_events(5, |e| matches!(e, ChainOrchestratorEvent::ChainExtended(_)))
+        .await?;
 
     // Assert both nodes are at block 15.
-    let node0_latest_block = latest_block(&node0).await?;
-    assert_eq!(node0_latest_block.header.number, 15);
-    assert_eq!(
-        node0_latest_block.header.hash_slow(),
-        latest_block(&node1).await?.header.hash_slow()
-    );
+    let sequencer_latest_block = fixture.get_sequencer_block().await?;
+    let follower_latest_block = fixture.get_block(1).await?;
+    assert_eq!(sequencer_latest_block.header.number, 15);
+    assert_eq!(sequencer_latest_block.header.hash_slow(), follower_latest_block.header.hash_slow());
 
     // Issue and wait for the reorg.
-    node0_l1_watcher_tx.send(Arc::new(L1Notification::Reorg(9))).await?;
+    fixture.l1().reorg_to(9).await?;
+    fixture
+        .expect_event_on_all_nodes()
+        .where_event(|e| {
+            matches!(
+                e,
+                ChainOrchestratorEvent::L1Reorg {
+                    l1_block_number: 9,
+                    queue_index: Some(0),
+                    l2_head_block_info: b,
+                    l2_safe_block_info: None,
+                }
+                if *b == reorg_block.as_ref().map(|b| b.into())
+            )
+        })
+        .await?;
 
-    let reorg_block = reorg_block.as_ref().map(Into::<BlockInfo>::into);
-    wait_for_event_5s(
-        &mut node0_rnm_events,
-        ChainOrchestratorEvent::L1Reorg {
-            l1_block_number: 9,
-            queue_index: Some(0),
-            l2_head_block_info: reorg_block,
-            l2_safe_block_info: None,
-        },
-    )
-    .await?;
-    node1_l1_watcher_tx.send(Arc::new(L1Notification::Reorg(9))).await?;
-    wait_for_event_5s(
-        &mut node1_rnm_events,
-        ChainOrchestratorEvent::L1Reorg {
-            l1_block_number: 9,
-            queue_index: Some(0),
-            l2_head_block_info: reorg_block,
-            l2_safe_block_info: None,
-        },
-    )
-    .await?;
+    // Wait for block to handle the reorg
+    tokio::time::sleep(Duration::from_secs(1)).await;
 
     // Assert both nodes are at block 10.
-    assert_latest_block_on_rpc_by_number(&node0, 10).await;
-    assert_latest_block_on_rpc_by_number(&node1, 10).await;
+    assert_eq!(fixture.get_sequencer_block().await?.header.number, 10);
+    assert_eq!(fixture.get_block(1).await?.header.number, 10);
 
     // Since the L1 reorg reverted the L1 message included in block 11, the sequencer
     // should produce a new block at height 11.
-    node0_rnm_handle.build_block();
-    wait_for_block_sequenced_5s(&mut node0_rnm_events, 11).await?;
+    fixture.build_block().expect_block_number(11).build_and_await_block().await?;
 
     // Assert that the follower node has received the new block from the sequencer node.
-    wait_for_block_imported_5s(&mut node1_rnm_events, 11).await?;
+    fixture.expect_event_on(1).chain_extended(11).await?;
 
     // Assert both nodes are at block 11.
-    assert_latest_block_on_rpc_by_number(&node0, 11).await;
-    let node0_latest_block = latest_block(&node0).await?;
-    assert_latest_block_on_rpc_by_hash(&node1, node0_latest_block.header.hash_slow()).await;
+    let sequencer_block11 = fixture.get_sequencer_block().await?;
+    assert_eq!(sequencer_block11.header.number, 11);
+    assert_eq!(fixture.get_block(1).await?.header.number, 11);
 
     // Assert that block 11 has a different hash after the reorg.
-    assert_ne!(block11_before_reorg.unwrap(), node0_latest_block.header.hash_slow());
+    assert_ne!(block11_before_reorg.hash_slow(), sequencer_block11.header.hash_slow());
 
     Ok(())
 }
@@ -1628,80 +1247,39 @@ async fn can_handle_l1_message_reorg() -> eyre::Result<()> {
 async fn requeues_transactions_after_l1_reorg() -> eyre::Result<()> {
     reth_tracing::init_test_tracing();
 
-    let chain_spec = (*SCROLL_DEV).clone();
-    let mut config = default_sequencer_test_scroll_rollup_node_config();
-    config.sequencer_args.auto_start = false;
-    config.sequencer_args.block_time = 0;
+    let mut sequencer =
+        TestFixture::builder().sequencer().auto_start(false).block_time(0).build().await?;
 
-    let (mut nodes, _tasks, wallet) =
-        setup_engine(config, 1, chain_spec.clone(), false, false).await?;
-    let node = nodes.pop().expect("node exists");
-
-    let rnm_handle = node.inner.add_ons_handle.rollup_manager_handle.clone();
-    let mut events = rnm_handle.get_event_listener().await?;
-    let l1_watcher_tx = node.inner.add_ons_handle.l1_watcher_tx.clone().unwrap();
-
-    l1_watcher_tx.send(Arc::new(L1Notification::Synced)).await?;
-    let _ = events.next().await;
-    let _ = events.next().await;
+    // Set the l1 as being synced.
+    sequencer.l1().sync().await?;
 
     // Let the sequencer build 10 blocks.
     for i in 1..=10 {
-        rnm_handle.build_block();
-        let b = wait_for_block_sequenced_5s(&mut events, i).await?;
+        let b = sequencer.build_block().expect_block_number(i).build_and_await_block().await?;
         tracing::info!(target: "scroll::test", block_number = ?b.header.number, block_hash = ?b.header.hash_slow(), "Sequenced block");
     }
 
     // Send a L1 message and wait for it to be indexed.
-    let block_2_info = BlockInfo { number: 2, hash: B256::random() };
-    let l1_message_notification = L1Notification::L1Message {
-        message: TxL1Message {
-            queue_index: 0,
-            gas_limit: 21000,
-            to: Default::default(),
-            value: Default::default(),
-            sender: Default::default(),
-            input: Default::default(),
-        },
-        block_info: block_2_info,
-        block_timestamp: 0,
-    };
+    sequencer.l1().add_message().at_block(2).send().await?;
+    sequencer.expect_event().l1_message_committed().await?;
+
+    // Send the L1 block which finalizes the L1 message.
+    sequencer.l1().new_block(2).await?;
+    sequencer.expect_event().new_l1_block().await?;
 
     // Build a L2 block with L1 message, so we can revert it later.
-    l1_watcher_tx.send(Arc::new(l1_message_notification.clone())).await?;
-    l1_watcher_tx.send(Arc::new(L1Notification::NewBlock(block_2_info))).await?;
-    wait_for_event_5s(&mut events, ChainOrchestratorEvent::L1MessageCommitted(0)).await?;
-    wait_for_event_5s(&mut events, ChainOrchestratorEvent::NewL1Block(2)).await?;
-    rnm_handle.build_block();
-    wait_for_block_sequenced_5s(&mut events, 11).await?;
+    sequencer.build_block().build_and_await_block().await?;
 
     // Inject a user transaction and force the sequencer to include it in the next block
-    let wallet = Arc::new(Mutex::new(wallet));
-    let tx = generate_tx(wallet.clone()).await;
-    let injected_tx_bytes: Vec<u8> = tx.clone().into();
-    node.rpc.inject_tx(tx).await?;
-
-    rnm_handle.build_block();
-    let block_with_tx = wait_for_block_sequenced_5s(&mut events, 12).await?;
-    assert!(
-        block_contains_raw_tx(&block_with_tx, &injected_tx_bytes),
-        "block 11 should contain the injected transaction before the reorg"
-    );
+    let hash = sequencer.inject_transfer().await?;
+    sequencer.build_block().expect_tx(hash).expect_tx_count(1).build_and_await_block().await?;
 
     // Trigger an L1 reorg that reverts the block containing the transaction
-    l1_watcher_tx.send(Arc::new(L1Notification::Reorg(1))).await?;
-    wait_for_event_predicate_5s(&mut events, |event| {
-        matches!(event, ChainOrchestratorEvent::L1Reorg { l1_block_number: 1, .. })
-    })
-    .await?;
+    sequencer.l1().reorg_to(1).await?;
+    sequencer.expect_event().l1_reorg().await?;
 
     // Build the next block – the reverted transaction should have been requeued
-    rnm_handle.build_block();
-    let reseq_block = wait_for_block_sequenced_5s(&mut events, 11).await?;
-    assert!(
-        block_contains_raw_tx(&reseq_block, &injected_tx_bytes),
-        "re-sequenced block should contain the reverted transaction"
-    );
+    sequencer.build_block().expect_tx(hash).expect_tx_count(1).build_and_await_block().await?;
 
     Ok(())
 }
@@ -1713,58 +1291,49 @@ async fn requeues_transactions_after_l1_reorg() -> eyre::Result<()> {
 async fn requeues_transactions_after_update_fcs_head() -> eyre::Result<()> {
     reth_tracing::init_test_tracing();
 
-    let chain_spec = (*SCROLL_DEV).clone();
-    let mut config = default_sequencer_test_scroll_rollup_node_config();
-    config.sequencer_args.auto_start = false;
-    config.sequencer_args.block_time = 0;
+    let mut sequencer =
+        TestFixture::builder().sequencer().auto_start(false).block_time(0).build().await?;
 
-    let (mut nodes, _tasks, wallet) =
-        setup_engine(config, 1, chain_spec.clone(), false, false).await?;
-    let node = nodes.pop().expect("node exists");
-
-    let handle = node.inner.add_ons_handle.rollup_manager_handle.clone();
-    let mut events = handle.get_event_listener().await?;
-
-    // Set L1 synced to allow sequencing.
-    let l1_watcher_tx = node.inner.add_ons_handle.l1_watcher_tx.clone().unwrap();
-    l1_watcher_tx.send(Arc::new(L1Notification::Synced)).await?;
-    let _ = events.next().await;
-    let _ = events.next().await;
+    // Set the l1 as being synced.
+    sequencer.l1().sync().await?;
 
     // Build a few blocks and remember block #4 as the future reset target.
     let mut target_head: Option<BlockInfo> = None;
     for i in 1..=4 {
-        handle.build_block();
-        let b = wait_for_block_sequenced_5s(&mut events, i).await?;
+        let b =
+            sequencer.build_block().expect_block_number(i as u64).build_and_await_block().await?;
         if i == 4 {
             target_head = Some(BlockInfo { number: b.header.number, hash: b.header.hash_slow() });
         }
     }
 
     // Inject a user transaction and include it in block 5.
-    let wallet = Arc::new(Mutex::new(wallet));
-    let tx = generate_tx(wallet.clone()).await;
-    let injected_tx_bytes: Vec<u8> = tx.clone().into();
-    node.rpc.inject_tx(tx).await?;
-
-    handle.build_block();
-    let block_with_tx = wait_for_block_sequenced_5s(&mut events, 5).await?;
-    assert!(
-        block_contains_raw_tx(&block_with_tx, &injected_tx_bytes),
-        "block 5 should contain the injected transaction before the FCS reset",
-    );
+    let hash = sequencer.inject_transfer().await?;
+    sequencer
+        .build_block()
+        .expect_block_number(5)
+        .expect_tx(hash)
+        .expect_tx_count(1)
+        .build_and_await_block()
+        .await?;
 
     // Reset FCS head back to block 4; this should collect block 5's txs and requeue them.
     let head = target_head.expect("target head exists");
-    handle.update_fcs_head(head).await.expect("update_fcs_head should succeed");
+    sequencer
+        .sequencer()
+        .rollup_manager_handle
+        .update_fcs_head(head)
+        .await
+        .expect("update_fcs_head should succeed");
 
     // Build the next block – the reverted transaction should have been requeued and included.
-    handle.build_block();
-    let reseq_block = wait_for_block_sequenced_5s(&mut events, 5).await?;
-    assert!(
-        block_contains_raw_tx(&reseq_block, &injected_tx_bytes),
-        "re-sequenced block should contain the reverted transaction after FCS reset",
-    );
+    sequencer
+        .build_block()
+        .expect_block_number(5)
+        .expect_tx(hash)
+        .expect_tx_count(1)
+        .build_and_await_block()
+        .await?;
 
     Ok(())
 }
@@ -1853,19 +1422,12 @@ async fn test_custom_genesis_block_production_and_propagation() -> eyre::Result<
     let custom_chain_spec = Arc::new(ScrollChainSpec::from_custom_genesis(custom_genesis));
 
     // Launch 2 nodes: node0=sequencer and node1=follower.
-    let config = default_sequencer_test_scroll_rollup_node_config();
-    let (mut nodes, _tasks, _) =
-        setup_engine(config, 2, custom_chain_spec.clone(), false, false).await?;
-    let node0 = nodes.remove(0);
-    let node1 = nodes.remove(0);
-
-    // Get handles
-    let node0_rnm_handle = node0.inner.add_ons_handle.rollup_manager_handle.clone();
-    let mut node0_rnm_events = node0_rnm_handle.get_event_listener().await?;
-    let node0_l1_watcher_tx = node0.inner.add_ons_handle.l1_watcher_tx.clone().unwrap();
-
-    let node1_rnm_handle = node1.inner.add_ons_handle.rollup_manager_handle.clone();
-    let mut node1_rnm_events = node1_rnm_handle.get_event_listener().await?;
+    let mut fixture = TestFixture::builder()
+        .sequencer()
+        .followers(1)
+        .with_chain_spec(custom_chain_spec.clone())
+        .build()
+        .await?;
 
     // Verify the genesis hash is different from all predefined networks
     assert_ne!(custom_chain_spec.genesis_hash(), SCROLL_DEV.genesis_hash());
@@ -1875,33 +1437,40 @@ async fn test_custom_genesis_block_production_and_propagation() -> eyre::Result<
     // Verify both nodes start with the same genesis hash from the custom chain spec
     assert_eq!(
         custom_chain_spec.genesis_hash(),
-        node0.block_hash(0),
+        fixture.get_sequencer_block().await?.header.hash_slow(),
         "Node0 should have the custom genesis hash"
     );
     assert_eq!(
         custom_chain_spec.genesis_hash(),
-        node1.block_hash(0),
+        fixture.get_block(1).await?.header.hash_slow(),
         "Node1 should have the custom genesis hash"
     );
 
     // Set L1 synced on sequencer node
-    node0_l1_watcher_tx.send(Arc::new(L1Notification::Synced)).await?;
+    fixture.l1().for_node(0).sync().await?;
+    fixture.expect_event().l1_synced().await?;
 
     // Let the sequencer build 10 blocks.
-    for i in 1..=10 {
-        node0_rnm_handle.build_block();
-        let b = wait_for_block_sequenced_5s(&mut node0_rnm_events, i).await?;
+    for _ in 1..=10 {
+        let b = fixture.build_block().build_and_await_block().await?;
         tracing::info!(target: "scroll::test", block_number = ?b.header.number, block_hash = ?b.header.hash_slow(), "Sequenced block");
     }
 
     // Assert that the follower node has received all 10 blocks from the sequencer node.
-    wait_for_block_imported_5s(&mut node1_rnm_events, 10).await?;
+    fixture
+        .expect_event_on(1)
+        .where_n_events(10, |e| matches!(e, ChainOrchestratorEvent::ChainExtended(_)))
+        .await?;
 
     // Assert both nodes have the same latest block hash.
-    assert_eq!(latest_block(&node0).await?.header.number, 10, "Node0 should be at block 10");
     assert_eq!(
-        latest_block(&node0).await?.header.hash_slow(),
-        latest_block(&node1).await?.header.hash_slow(),
+        fixture.get_sequencer_block().await?.header.number,
+        10,
+        "Node0 should be at block 10"
+    );
+    assert_eq!(
+        fixture.get_sequencer_block().await?.header.hash_slow(),
+        fixture.get_block(1).await?.header.hash_slow(),
         "Both nodes should have the same latest block hash"
     );
 
@@ -1912,67 +1481,59 @@ async fn test_custom_genesis_block_production_and_propagation() -> eyre::Result<
 async fn can_rpc_enable_disable_sequencing() -> eyre::Result<()> {
     reth_tracing::init_test_tracing();
     color_eyre::install()?;
-    let chain_spec = (*SCROLL_DEV).clone();
 
     // Launch sequencer node with automatic sequencing enabled.
-    let mut config = default_sequencer_test_scroll_rollup_node_config();
-    config.sequencer_args.block_time = 40; // Enable automatic block production
-    config.sequencer_args.auto_start = true;
-
-    let (mut nodes, _tasks, _) = setup_engine(config, 2, chain_spec.clone(), false, false).await?;
-    let node0 = nodes.remove(0);
-    let node1 = nodes.remove(0);
-
-    // Get handles
-    let node0_rnm_handle = node0.inner.add_ons_handle.rollup_manager_handle.clone();
-    let mut node0_rnm_events = node0_rnm_handle.get_event_listener().await?;
-    let node0_l1_watcher_tx = node0.inner.add_ons_handle.l1_watcher_tx.clone().unwrap();
-
-    let node1_rnm_handle = node1.inner.add_ons_handle.rollup_manager_handle.clone();
-    let mut node1_rnm_events = node1_rnm_handle.get_event_listener().await?;
+    let mut fixture = TestFixture::builder()
+        .sequencer()
+        .followers(1)
+        .block_time(40)
+        .with_sequencer_auto_start(true)
+        .build()
+        .await?;
 
     // Set L1 synced
-    node0_l1_watcher_tx.send(Arc::new(L1Notification::Synced)).await?;
-
-    // Create RPC client
-    let client0 = node0.rpc_client().expect("RPC client should be available");
+    fixture.l1().sync().await?;
 
     // Test that sequencing is initially enabled (blocks produced automatically)
     tokio::time::sleep(Duration::from_millis(100)).await;
-    assert_ne!(latest_block(&node0).await?.header.number, 0, "Should produce blocks");
+    assert_ne!(fixture.get_sequencer_block().await?.header.number, 0, "Should produce blocks");
 
     // Disable automatic sequencing via RPC
-    let result = RollupNodeExtApiClient::disable_automatic_sequencing(&client0).await?;
+    let client = fixture.sequencer().node.rpc_client().expect("Should have rpc client");
+    let result = RollupNodeExtApiClient::disable_automatic_sequencing(&client).await?;
     assert!(result, "Disable automatic sequencing should return true");
 
     // Wait a bit and verify no more blocks are produced automatically.
     // +1 blocks is okay due to still being processed
-    let block_num_before_wait = latest_block(&node0).await?.header.number;
+    let block_num_before_wait = fixture.get_sequencer_block().await?.header.number;
     tokio::time::sleep(Duration::from_millis(300)).await;
-    let block_num_after_wait = latest_block(&node0).await?.header.number;
+    let block_num_after_wait = fixture.get_sequencer_block().await?.header.number;
     assert!(
         (block_num_before_wait..=block_num_before_wait + 1).contains(&block_num_after_wait),
         "No blocks should be produced automatically after disabling"
     );
 
     // Make sure follower is at same block
-    wait_for_block_imported_5s(&mut node1_rnm_events, block_num_after_wait).await?;
-    assert_eq!(block_num_after_wait, latest_block(&node1).await?.header.number);
+    fixture.expect_event_on(1).chain_extended(block_num_after_wait).await?;
+    assert_eq!(block_num_after_wait, fixture.get_block(1).await?.header.number);
 
     // Verify manual block building still works
-    node0_rnm_handle.build_block();
-    wait_for_block_sequenced_5s(&mut node0_rnm_events, block_num_after_wait + 1).await?;
+    fixture
+        .build_block()
+        .expect_block_number(block_num_after_wait + 1)
+        .build_and_await_block()
+        .await?;
 
     // Wait for the follower to import the block
-    wait_for_block_imported_5s(&mut node1_rnm_events, block_num_after_wait + 1).await?;
+    fixture.expect_event_on(1).chain_extended(block_num_after_wait + 1).await?;
 
     // Enable sequencing again
-    let result = RollupNodeExtApiClient::enable_automatic_sequencing(&client0).await?;
+    let result = RollupNodeExtApiClient::enable_automatic_sequencing(&client).await?;
     assert!(result, "Enable automatic sequencing should return true");
 
     // Make sure automatic sequencing resumes
-    wait_for_block_sequenced_5s(&mut node0_rnm_events, block_num_after_wait + 2).await?;
-    wait_for_block_imported_5s(&mut node1_rnm_events, block_num_after_wait + 2).await?;
+    fixture.expect_event().block_sequenced(block_num_after_wait + 2).await?;
+    fixture.expect_event_on(1).chain_extended(block_num_after_wait + 2).await?;
 
     Ok(())
 }
@@ -2004,112 +1565,97 @@ async fn can_rpc_enable_disable_sequencing() -> eyre::Result<()> {
 async fn can_reject_l2_block_with_unknown_l1_message() -> eyre::Result<()> {
     reth_tracing::init_test_tracing();
     color_eyre::install()?;
-    let chain_spec = (*SCROLL_DEV).clone();
 
     // Launch 2 nodes: node0=sequencer and node1=follower.
-    let config = default_sequencer_test_scroll_rollup_node_config();
-    let (mut nodes, _tasks, _) = setup_engine(config, 2, chain_spec.clone(), false, false).await?;
-    let node0 = nodes.remove(0);
-    let node1 = nodes.remove(0);
-
-    // Get handles
-    let node0_rnm_handle = node0.inner.add_ons_handle.rollup_manager_handle.clone();
-    let mut node0_rnm_events = node0_rnm_handle.get_event_listener().await?;
-    let node0_l1_watcher_tx = node0.inner.add_ons_handle.l1_watcher_tx.as_ref().unwrap();
-
-    let node1_rnm_handle = node1.inner.add_ons_handle.rollup_manager_handle.clone();
-    let mut node1_rnm_events = node1_rnm_handle.get_event_listener().await?;
-    let node1_l1_watcher_tx = node1.inner.add_ons_handle.l1_watcher_tx.as_ref().unwrap();
+    let mut fixture = TestFixture::builder().sequencer().followers(1).build().await?;
 
     // Set L1 synced
-    node0_l1_watcher_tx.send(Arc::new(L1Notification::Synced)).await?;
-    node1_l1_watcher_tx.send(Arc::new(L1Notification::Synced)).await?;
+    fixture.l1().sync().await?;
+    fixture.expect_event_on_all_nodes().l1_synced().await?;
 
     // Let the sequencer build 10 blocks before performing the reorg process.
     for i in 1..=10 {
-        node0_rnm_handle.build_block();
-        let b = wait_for_block_sequenced_5s(&mut node0_rnm_events, i).await?;
+        let b = fixture.build_block().expect_block_number(i).build_and_await_block().await?;
         tracing::info!(target: "scroll::test", block_number = ?b.header.number, block_hash = ?b.header.hash_slow(), "Sequenced block")
     }
 
     // Assert that the follower node has received all 10 blocks from the sequencer node.
-    wait_for_block_imported_5s(&mut node1_rnm_events, 10).await?;
-
-    // Send a L1 message and wait for it to be indexed.
-    let block_10_block_info = BlockInfo { number: 10, hash: B256::random() };
-    let l1_message_notification = L1Notification::L1Message {
-        message: TxL1Message {
-            queue_index: 0,
-            gas_limit: 21000,
-            to: Default::default(),
-            value: Default::default(),
-            sender: address!("f39Fd6e51aad88F6F4ce6aB8827279cffFb92266"),
-            input: Default::default(),
-        },
-        block_info: block_10_block_info,
-        block_timestamp: 0,
-    };
+    fixture.expect_event_on(1).chain_extended(10).await?;
 
     // Send the L1 message to the sequencer node but not to follower node.
-    node0_l1_watcher_tx.send(Arc::new(l1_message_notification.clone())).await?;
-    node0_l1_watcher_tx.send(Arc::new(L1Notification::NewBlock(block_10_block_info))).await?;
-    wait_for_event_5s(&mut node0_rnm_events, ChainOrchestratorEvent::L1MessageCommitted(0)).await?;
-    wait_for_event_5s(&mut node0_rnm_events, ChainOrchestratorEvent::NewL1Block(10)).await?;
+    fixture
+        .l1()
+        .for_node(0)
+        .add_message()
+        .at_block(10)
+        .sender(address!("f39Fd6e51aad88F6F4ce6aB8827279cffFb92266"))
+        .value(0)
+        .to(Address::ZERO)
+        .send()
+        .await?;
+    fixture.expect_event().l1_message_committed().await?;
+
+    fixture.l1().for_node(0).new_block(10).await?;
+    fixture.expect_event().new_l1_block().await?;
 
     // Build block that contains the L1 message.
-    node0_rnm_handle.build_block();
-    wait_for_event_predicate_5s(&mut node0_rnm_events, |e| {
-        if let ChainOrchestratorEvent::BlockSequenced(block) = e {
-            if block.header.number == 11 &&
-                block.body.transactions.len() == 1 &&
-                block.body.transactions.iter().any(|tx| tx.is_l1_message())
-            {
-                return true;
-            }
-        }
-
-        false
-    })
-    .await?;
+    fixture
+        .build_block()
+        .expect_block_number(11)
+        .expect_l1_message()
+        .build_and_await_block()
+        .await?;
 
     for i in 12..=15 {
-        node0_rnm_handle.build_block();
-        wait_for_block_sequenced_5s(&mut node0_rnm_events, i).await?;
+        fixture.build_block().expect_block_number(i).build_and_await_block().await?;
     }
 
-    wait_for_event_5s(
-        &mut node1_rnm_events,
-        ChainOrchestratorEvent::L1MessageNotFoundInDatabase(L1MessageKey::TransactionHash(b256!(
-            "0x0a2f8e75392ab51a26a2af835042c614eb141cd934fe1bdd4934c10f2fe17e98"
-        ))),
-    )
-    .await?;
+    fixture
+        .expect_event_on(1)
+        .where_event(|e| {
+            matches!(
+                e,
+                ChainOrchestratorEvent::L1MessageNotFoundInDatabase(L1MessageKey::TransactionHash(
+                    hash
+                )) if hash == &b256!("0x0a2f8e75392ab51a26a2af835042c614eb141cd934fe1bdd4934c10f2fe17e98")
+            )
+        })
+        .await?;
 
     // follower node should not import block 15
     // follower node doesn't know about the L1 message so stops processing the chain at block 10
-    assert_eq!(latest_block(&node1).await?.header.number, 10);
+    assert_eq!(fixture.get_block(1).await?.header.number, 10);
 
     // Finally send L1 the L1 message to follower node.
-    node1_l1_watcher_tx.send(Arc::new(l1_message_notification)).await?;
-    node1_l1_watcher_tx.send(Arc::new(L1Notification::NewBlock(block_10_block_info))).await?;
-    wait_for_event_5s(&mut node1_rnm_events, ChainOrchestratorEvent::L1MessageCommitted(0)).await?;
-    wait_for_event_5s(&mut node1_rnm_events, ChainOrchestratorEvent::NewL1Block(10)).await?;
+    fixture
+        .l1()
+        .for_node(1)
+        .add_message()
+        .at_block(10)
+        .sender(address!("f39Fd6e51aad88F6F4ce6aB8827279cffFb92266"))
+        .value(0)
+        .to(Address::ZERO)
+        .send()
+        .await?;
+    fixture.expect_event_on(1).l1_message_committed().await?;
+
+    fixture.l1().for_node(1).new_block(10).await?;
+    fixture.expect_event_on(1).new_l1_block().await?;
 
     // Produce another block and send to follower node.
-    node0_rnm_handle.build_block();
-    wait_for_block_sequenced_5s(&mut node0_rnm_events, 16).await?;
+    fixture.build_block().expect_block_number(16).build_and_await_block().await?;
 
     // Assert that the follower node has received the latest block from the sequencer node and
     // processed the missing chain before.
     // This is possible now because it has received the L1 message.
-    wait_for_block_imported_5s(&mut node1_rnm_events, 16).await?;
+    fixture.expect_event_on(1).chain_extended(16).await?;
 
     // Assert both nodes are at block 16.
-    let node0_latest_block = latest_block(&node0).await?;
+    let node0_latest_block = fixture.get_sequencer_block().await?;
     assert_eq!(node0_latest_block.header.number, 16);
     assert_eq!(
         node0_latest_block.header.hash_slow(),
-        latest_block(&node1).await?.header.hash_slow()
+        fixture.get_block(1).await?.header.hash_slow()
     );
 
     Ok(())
@@ -2120,30 +1666,20 @@ async fn can_gossip_over_eth_wire() -> eyre::Result<()> {
     reth_tracing::init_test_tracing();
 
     // Create the chain spec for scroll dev with Feynman activated and a test genesis.
-    let chain_spec = (*SCROLL_DEV).clone();
-
-    let mut config = default_sequencer_test_scroll_rollup_node_config();
-    config.sequencer_args.block_time = 40;
-    config.sequencer_args.auto_start = true;
-
-    // Setup the rollup node manager.
-    let (mut nodes, _tasks, _) =
-        setup_engine(config, 2, chain_spec.clone(), false, false).await.unwrap();
-    let follower = nodes.pop().unwrap();
-    let sequencer = nodes.pop().unwrap();
+    let mut fixture = TestFixture::builder()
+        .sequencer()
+        .followers(1)
+        .with_sequencer_auto_start(true)
+        .block_time(40)
+        .build()
+        .await?;
 
     // Set the L1 synced on the sequencer node to start block production.
-    let mut sequencer_events =
-        sequencer.inner.add_ons_handle.rollup_manager_handle.get_event_listener().await.unwrap();
-    let sequencer_l1_notification_tx =
-        sequencer.inner.add_ons_handle.l1_watcher_tx.clone().unwrap();
+    fixture.l1().for_node(0).sync().await?;
+    fixture.expect_event().l1_synced().await?;
 
-    // Set the L1 synced on the sequencer node to start block production.
-    sequencer_l1_notification_tx.send(Arc::new(L1Notification::Synced)).await?;
-    sequencer_events.next().await;
-    sequencer_events.next().await;
-
-    let mut eth_wire_blocks = follower.inner.network.eth_wire_block_listener().await?;
+    let mut eth_wire_blocks =
+        fixture.follower(0).node.inner.network.eth_wire_block_listener().await?;
 
     if let Some(block) = eth_wire_blocks.next().await {
         println!("Received block from eth-wire network: {block:?}");
@@ -2168,58 +1704,41 @@ async fn signer_rotation() -> eyre::Result<()> {
     let signer_2 = PrivateKeySigner::random().with_chain_id(Some(chain_spec.chain().id()));
     let signer_2_address = signer_2.address();
 
-    let mut sequencer_1_config = default_sequencer_test_scroll_rollup_node_config();
+    let mut fixture1 = TestFixture::builder()
+        .sequencer()
+        .followers(1)
+        .with_test(false)
+        .with_consensus_system_contract(signer_1_address)
+        .with_signer(signer_1)
+        .with_sequencer_auto_start(true)
+        .with_eth_scroll_bridge(false)
+        .block_time(40)
+        .build()
+        .await?;
 
-    sequencer_1_config.test = false;
-    sequencer_1_config.consensus_args.algorithm = ConsensusAlgorithm::SystemContract;
-    sequencer_1_config.consensus_args.authorized_signer = Some(signer_1_address);
-    sequencer_1_config.signer_args.private_key = Some(signer_1);
-    sequencer_1_config.sequencer_args.block_time = 40;
-    sequencer_1_config.sequencer_args.auto_start = true;
-    sequencer_1_config.network_args.enable_eth_scroll_wire_bridge = false;
-
-    let mut sequencer_2_config = default_sequencer_test_scroll_rollup_node_config();
-    sequencer_2_config.test = false;
-    sequencer_2_config.consensus_args.algorithm = ConsensusAlgorithm::SystemContract;
-    sequencer_2_config.consensus_args.authorized_signer = Some(signer_1_address);
-    sequencer_2_config.signer_args.private_key = Some(signer_2);
-    sequencer_2_config.sequencer_args.block_time = 40;
-    sequencer_2_config.sequencer_args.auto_start = true;
-    sequencer_2_config.network_args.enable_eth_scroll_wire_bridge = false;
-
-    // Setup two sequencer nodes.
-    let (mut nodes, _tasks, _) =
-        setup_engine(sequencer_1_config, 2, chain_spec.clone(), false, false).await.unwrap();
-    let follower = nodes.pop().unwrap();
-    let mut sequencer_1 = nodes.pop().unwrap();
-    let (mut nodes, _tasks, _) =
-        setup_engine(sequencer_2_config, 1, chain_spec.clone(), false, false).await.unwrap();
-    let mut sequencer_2 = nodes.pop().unwrap();
-
-    // Create an L1
-    let follower_l1_notification_tx = follower.inner.add_ons_handle.l1_watcher_tx.clone().unwrap();
-    let sequencer_1_l1_notification_tx =
-        sequencer_1.inner.add_ons_handle.l1_watcher_tx.clone().unwrap();
-    let sequencer_2_l1_notification_tx =
-        sequencer_2.inner.add_ons_handle.l1_watcher_tx.clone().unwrap();
+    let mut fixture2 = TestFixture::builder()
+        .sequencer()
+        .with_test(false)
+        .with_consensus_system_contract(signer_1_address)
+        .with_signer(signer_2)
+        .with_sequencer_auto_start(true)
+        .with_eth_scroll_bridge(false)
+        .block_time(40)
+        .build()
+        .await?;
 
     // Set the L1 synced on both nodes to start block production.
-    sequencer_1_l1_notification_tx.send(Arc::new(L1Notification::Synced)).await?;
-    sequencer_2_l1_notification_tx.send(Arc::new(L1Notification::Synced)).await?;
-
-    // Create a follower event stream.
-    let mut follower_events =
-        follower.inner.add_ons_handle.rollup_manager_handle.get_event_listener().await.unwrap();
-    let mut sequencer_2_events =
-        sequencer_2.inner.add_ons_handle.rollup_manager_handle.get_event_listener().await.unwrap();
+    fixture1.l1().for_node(0).sync().await?;
+    fixture2.l1().for_node(0).sync().await?;
 
     // connect the two sequencers
-    sequencer_1.connect(&mut sequencer_2).await;
+    fixture1.sequencer().node.connect(&mut fixture2.sequencer().node).await;
 
-    for _ in 0..5 {
-        wait_n_events(
-            &mut follower_events,
-            |event| {
+    // wait for 5 blocks to be produced.
+    for i in 1..=5 {
+        fixture1
+            .expect_event_on(1)
+            .where_event(|event| {
                 if let ChainOrchestratorEvent::NewBlockReceived(block) = event {
                     let signature = block.signature;
                     let hash = sig_encode_hash(&block.block);
@@ -2229,45 +1748,22 @@ async fn signer_rotation() -> eyre::Result<()> {
                 } else {
                     false
                 }
-            },
-            1,
-        )
-        .await;
-        wait_n_events(
-            &mut follower_events,
-            |event| matches!(event, ChainOrchestratorEvent::ChainExtended(_)),
-            1,
-        )
-        .await;
+            })
+            .await?;
+        fixture1.expect_event_on(1).chain_extended(i).await?;
     }
 
-    wait_n_events(
-        &mut sequencer_2_events,
-        |e| matches!(e, ChainOrchestratorEvent::ChainExtended(_)),
-        5,
-    )
-    .await;
+    fixture2.expect_event().chain_extended(5).await?;
 
     // now update the authorized signer to sequencer 2
-    follower_l1_notification_tx
-        .send(Arc::new(L1Notification::Consensus(ConsensusUpdate::AuthorizedSigner(
-            signer_2_address,
-        ))))
-        .await?;
-    sequencer_1_l1_notification_tx
-        .send(Arc::new(L1Notification::Consensus(ConsensusUpdate::AuthorizedSigner(
-            signer_2_address,
-        ))))
-        .await?;
-    sequencer_2_l1_notification_tx
-        .send(Arc::new(L1Notification::Consensus(ConsensusUpdate::AuthorizedSigner(
-            signer_2_address,
-        ))))
-        .await?;
+    fixture1.l1().signer_update(signer_2_address).await?;
+    fixture2.l1().signer_update(signer_2_address).await?;
 
-    wait_n_events(
-        &mut follower_events,
-        |event| {
+    tokio::time::sleep(Duration::from_secs(1)).await;
+
+    fixture1
+        .expect_event_on(1)
+        .where_n_events(5, |event| {
             if let ChainOrchestratorEvent::NewBlockReceived(block) = event {
                 let signature = block.signature;
                 let hash = sig_encode_hash(&block.block);
@@ -2277,10 +1773,8 @@ async fn signer_rotation() -> eyre::Result<()> {
             } else {
                 false
             }
-        },
-        5,
-    )
-    .await;
+        })
+        .await?;
 
     Ok(())
 }
@@ -2289,136 +1783,6 @@ async fn signer_rotation() -> eyre::Result<()> {
 pub fn read_to_bytes<P: AsRef<std::path::Path>>(path: P) -> eyre::Result<Bytes> {
     use std::str::FromStr;
     Ok(Bytes::from_str(&std::fs::read_to_string(path)?)?)
-}
-
-async fn latest_block(
-    node: &NodeHelperType<
-        ScrollRollupNode,
-        BlockchainProvider<NodeTypesWithDBAdapter<ScrollRollupNode, TmpDB>>,
-    >,
-) -> eyre::Result<Block<ScrollAlloyTransaction>> {
-    node.rpc
-        .inner
-        .eth_api()
-        .block_by_number(BlockNumberOrTag::Latest, false)
-        .await?
-        .ok_or_else(|| eyre::eyre!("Latest block not found"))
-}
-
-async fn wait_for_block_sequenced(
-    events: &mut EventStream<ChainOrchestratorEvent>,
-    block_number: u64,
-    timeout: Duration,
-) -> eyre::Result<ScrollBlock> {
-    let mut block = None;
-
-    wait_for_event_predicate(
-        events,
-        |e| {
-            if let ChainOrchestratorEvent::BlockSequenced(b) = e {
-                if b.header.number == block_number {
-                    block = Some(b);
-                    return true;
-                }
-            }
-
-            false
-        },
-        timeout,
-    )
-    .await?;
-
-    block.ok_or_else(|| eyre::eyre!("Block with number {block_number} was not sequenced"))
-}
-
-async fn wait_for_block_sequenced_5s(
-    events: &mut EventStream<ChainOrchestratorEvent>,
-    block_number: u64,
-) -> eyre::Result<ScrollBlock> {
-    wait_for_block_sequenced(events, block_number, Duration::from_secs(5)).await
-}
-
-async fn wait_for_chain_extended(
-    events: &mut EventStream<ChainOrchestratorEvent>,
-    block_number: u64,
-    timeout: Duration,
-) -> eyre::Result<ScrollBlock> {
-    let mut block = None;
-
-    wait_for_event_predicate(
-        events,
-        |e| {
-            if let ChainOrchestratorEvent::ChainExtended(b) = e {
-                let b = &b.chain[0];
-                if b.header.number == block_number {
-                    block = Some(b.clone());
-                    return true;
-                }
-            }
-
-            false
-        },
-        timeout,
-    )
-    .await?;
-
-    block.ok_or_else(|| eyre::eyre!("Block with number {block_number} was not imported"))
-}
-
-async fn wait_for_block_imported_5s(
-    events: &mut EventStream<ChainOrchestratorEvent>,
-    block_number: u64,
-) -> eyre::Result<ScrollBlock> {
-    wait_for_chain_extended(events, block_number, Duration::from_secs(5)).await
-}
-
-async fn wait_for_event_predicate(
-    event_stream: &mut EventStream<ChainOrchestratorEvent>,
-    mut predicate: impl FnMut(ChainOrchestratorEvent) -> bool,
-    timeout: Duration,
-) -> eyre::Result<()> {
-    let sleep = tokio::time::sleep(timeout);
-    tokio::pin!(sleep);
-
-    loop {
-        tokio::select! {
-            maybe_event = event_stream.next() => {
-                match maybe_event {
-                    Some(e) if predicate(e.clone()) => {
-                        tracing::debug!(target: "scroll::test", event = ?e, "Received event");
-                        return Ok(());
-                    }
-                    Some(e) => {
-                        tracing::debug!(target: "scroll::test", event = ?e, "Ignoring event");
-                    }, // Ignore other events
-                    None => return Err(eyre::eyre!("Event stream ended unexpectedly")),
-                }
-            }
-            _ = &mut sleep => return Err(eyre::eyre!("Timeout while waiting for event")),
-        }
-    }
-}
-
-async fn wait_for_event_predicate_5s(
-    event_stream: &mut EventStream<ChainOrchestratorEvent>,
-    predicate: impl FnMut(ChainOrchestratorEvent) -> bool,
-) -> eyre::Result<()> {
-    wait_for_event_predicate(event_stream, predicate, Duration::from_secs(5)).await
-}
-
-async fn wait_for_event(
-    event_stream: &mut EventStream<ChainOrchestratorEvent>,
-    event: ChainOrchestratorEvent,
-    timeout: Duration,
-) -> eyre::Result<()> {
-    wait_for_event_predicate(event_stream, |e| e == event, timeout).await
-}
-
-async fn wait_for_event_5s(
-    event_stream: &mut EventStream<ChainOrchestratorEvent>,
-    event: ChainOrchestratorEvent,
-) -> eyre::Result<()> {
-    wait_for_event(event_stream, event, Duration::from_secs(5)).await
 }
 
 /// Waits for n events to be emitted.
@@ -2442,7 +1806,7 @@ async fn wait_n_events(
 pub async fn eventually<F, Fut>(timeout: Duration, tick: Duration, message: &str, mut predicate: F)
 where
     F: FnMut() -> Fut,
-    Fut: std::future::Future<Output = bool>,
+    Fut: Future<Output = bool>,
 {
     let mut interval = time::interval(tick);
     let start = time::Instant::now();
@@ -2455,47 +1819,4 @@ where
 
         interval.tick().await;
     }
-}
-
-async fn assert_latest_block_on_rpc_by_number(
-    node: &NodeHelperType<
-        ScrollRollupNode,
-        BlockchainProvider<NodeTypesWithDBAdapter<ScrollRollupNode, TmpDB>>,
-    >,
-    block_number: u64,
-) {
-    eventually(
-        Duration::from_secs(5),
-        Duration::from_millis(100),
-        "Waiting for latest block by number on node",
-        || async {
-            println!(
-                "Latest block number: {}, hash: {}",
-                latest_block(node).await.unwrap().header.number,
-                latest_block(node).await.unwrap().header.hash_slow()
-            );
-            latest_block(node).await.unwrap().header.number == block_number
-        },
-    )
-    .await;
-}
-
-async fn assert_latest_block_on_rpc_by_hash(
-    node: &NodeHelperType<
-        ScrollRollupNode,
-        BlockchainProvider<NodeTypesWithDBAdapter<ScrollRollupNode, TmpDB>>,
-    >,
-    block_hash: B256,
-) {
-    eventually(
-        Duration::from_secs(5),
-        Duration::from_millis(100),
-        "Waiting for latest block by hash on node",
-        || async { latest_block(node).await.unwrap().header.hash_slow() == block_hash },
-    )
-    .await;
-}
-
-fn block_contains_raw_tx(block: &ScrollBlock, raw_tx: &[u8]) -> bool {
-    block.body.transactions.iter().any(|tx| tx.encoded_2718().as_slice() == raw_tx)
 }
