@@ -4,7 +4,7 @@
 use alloy_rpc_types_eth::Log;
 use alloy_sol_types::SolEvent;
 use arbitrary::Arbitrary;
-use rollup_node_primitives::NodeConfig;
+use rollup_node_primitives::{L1BlockStartupInfo, NodeConfig};
 use rollup_node_watcher::{
     random,
     test_utils::{chain, chain_from, provider::MockProvider},
@@ -45,6 +45,7 @@ async fn test_should_not_miss_logs_on_reorg() -> eyre::Result<()> {
             queue_transaction.inner = inner_log;
             queue_transaction.block_number = Some(b.header.number);
             queue_transaction.block_timestamp = Some(b.header.timestamp);
+            queue_transaction.block_hash = Some(b.header.hash);
             queue_transaction
         })
         .collect();
@@ -63,8 +64,13 @@ async fn test_should_not_miss_logs_on_reorg() -> eyre::Result<()> {
     );
 
     // spawn the watcher and verify received notifications are consistent.
-    let mut l1_watcher =
-        L1Watcher::spawn(mock_provider, None, Arc::new(config), LOGS_QUERY_BLOCK_RANGE).await;
+    let mut l1_watcher = L1Watcher::spawn(
+        mock_provider,
+        L1BlockStartupInfo::None,
+        Arc::new(config),
+        LOGS_QUERY_BLOCK_RANGE,
+    )
+    .await;
     let mut received_logs = Vec::new();
     loop {
         let notification = l1_watcher.recv().await.map(|notif| (*notif).clone());
