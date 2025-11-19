@@ -176,6 +176,12 @@ pub trait DatabaseWriteOperations {
     /// block number.
     async fn unwind(&self, l1_block_number: u64) -> Result<UnwindResult, DatabaseError>;
 
+    /// Store multiple block signatures in the database.
+    async fn insert_signatures(
+        &self,
+        signatures: Vec<(B256, Signature)>,
+    ) -> Result<(), DatabaseError>;
+
     /// Store a block signature in the database.
     /// TODO: remove this once we deprecated l2geth.
     async fn insert_signature(
@@ -885,6 +891,34 @@ impl<T: WriteConnectionProvider + ?Sized + Sync> DatabaseWriteOperations for T {
 
         // commit the transaction
         Ok(UnwindResult { l1_block_number, queue_index, l2_head_block_number, l2_safe_block_info })
+    }
+
+    async fn insert_signatures(
+        &self,
+        signatures: Vec<(B256, Signature)>,
+    ) -> Result<(), DatabaseError> {
+        tracing::trace!(target: "scroll::db", num_signatures = signatures.len(), "Inserting block signatures into database.");
+
+        if signatures.is_empty() {
+            tracing::debug!(target: "scroll::db", "No signatures to insert.");
+            return Ok(());
+        }
+
+        models::block_signature::Entity::insert_many(
+            signatures
+                .into_iter()
+                .map(|(block_hash, signature)| (block_hash, signature).into())
+                .collect::<Vec<models::block_signature::ActiveModel>>(),
+        )
+        .on_conflict(
+            OnConflict::column(models::block_signature::Column::BlockHash)
+                .update_column(models::block_signature::Column::Signature)
+                .to_owned(),
+        )
+        .exec_without_returning(self.get_connection())
+        .await?;
+
+        Ok(())
     }
 
     async fn insert_signature(
