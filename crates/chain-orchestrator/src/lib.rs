@@ -841,7 +841,10 @@ impl<
             .await?;
 
         // Update the forkchoice state to the new safe block.
-        self.engine.update_fcs(None, Some(safe_block_info), None).await?;
+        if self.sync_state.is_synced() {
+            tracing::info!(target: "scroll::chain_orchestrator", ?safe_block_info, "Updating safe head to block after batch revert");
+            self.engine.update_fcs(None, Some(safe_block_info), None).await?;
+        }
 
         Ok(Some(ChainOrchestratorEvent::BatchReverted { batch_info, safe_head: safe_block_info }))
     }
