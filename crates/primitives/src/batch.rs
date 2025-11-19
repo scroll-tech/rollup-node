@@ -79,6 +79,11 @@ pub enum BatchStatus {
 }
 
 impl BatchStatus {
+    /// Returns true if the batch status is consolidated.
+    pub const fn is_consolidated(&self) -> bool {
+        matches!(self, Self::Consolidated)
+    }
+
     /// Returns true if the batch status is finalized.
     pub const fn is_finalized(&self) -> bool {
         matches!(self, Self::Finalized)
