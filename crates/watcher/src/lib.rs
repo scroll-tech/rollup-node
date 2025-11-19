@@ -341,6 +341,16 @@ where
                 notifications.push(system_contract_update);
             }
 
+            // Check that we haven't generated more notifications than logs
+            // Note: notifications.len() may be less than logs.len() because genesis batch
+            // (batch_index=0) is intentionally skipped
+            if notifications.len() > logs.len() {
+                return Err(L1WatcherError::Logs(FilterLogError::InvalidNotificationCount(
+                    logs.len(),
+                    notifications.len(),
+                )))
+            }
+
             // send all notifications on the channel.
             self.notify_all(notifications).await?;
 

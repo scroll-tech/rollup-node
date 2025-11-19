@@ -169,6 +169,7 @@ reth-provider = { git = "https://github.com/scroll-tech/reth.git", tag = "scroll
 reth-rpc-api = { git = "https://github.com/scroll-tech/reth.git", tag = "scroll-v91.1", default-features = false }
 reth-rpc-eth-api = { git = "https://github.com/scroll-tech/reth.git", tag = "scroll-v91.1", default-features = false }
 reth-rpc-eth-types = { git = "https://github.com/scroll-tech/reth.git", tag = "scroll-v91.1", default-features = false }
+reth-rpc-layer = { git = "https://github.com/scroll-tech/reth.git", tag = "scroll-v91.1", default-features = false }
 reth-rpc-server-types = { git = "https://github.com/scroll-tech/reth.git", tag = "scroll-v91.1", default-features = false }
 reth-storage-api = { git = "https://github.com/scroll-tech/reth.git", tag = "scroll-v91.1", default-features = false }
 reth-tasks = { git = "https://github.com/scroll-tech/reth.git", tag = "scroll-v91.1", default-features = false }
