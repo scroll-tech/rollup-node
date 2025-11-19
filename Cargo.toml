@@ -223,6 +223,7 @@ metrics = "0.24.0"
 metrics-derive = "0.1"
 parking_lot = "0.12"
 rand = { version = "0.9" }
+rayon = "1.7"
 reqwest = "0.12"
 serde = { version = "1.0" }
 serde_json = { version = "1.0" }

@@ -1,4 +1,4 @@
-use alloy_primitives::{Address, Signature};
+use alloy_primitives::{Address, Signature, B256};
 use reth_chainspec::EthChainSpec;
 use reth_eth_wire_types::BasicNetworkPrimitives;
 use reth_network::{
@@ -141,7 +141,7 @@ impl std::error::Error for HeaderTransformError {}
 #[derive(Debug, Clone)]
 #[non_exhaustive]
 pub(crate) struct ScrollHeaderTransform<ChainSpec> {
-    chain_spec: ChainSpec,
+    chain_spec: Arc<ChainSpec>,
     db: Arc<Database>,
     signer: Option<Address>,
 }
@@ -151,7 +151,7 @@ impl<ChainSpec: EthChainSpec + ScrollHardforks + Debug + Send + Sync + 'static>
 {
     /// Returns a new instance of the [`ScrollHeaderTransform`] from the provider chain spec.
     pub(crate) const fn new(
-        chain_spec: ChainSpec,
+        chain_spec: Arc<ChainSpec>,
         db: Arc<Database>,
         signer: Option<Address>,
     ) -> Self {
@@ -160,46 +160,55 @@ impl<ChainSpec: EthChainSpec + ScrollHardforks + Debug + Send + Sync + 'static>
 }
 
 #[async_trait::async_trait]
-impl<H: BlockHeader, ChainSpec: EthChainSpec + ScrollHardforks + Debug + Send + Sync>
+impl<H: BlockHeader, ChainSpec: EthChainSpec + ScrollHardforks + Debug + Send + Sync + 'static>
     HeaderTransform<H> for ScrollHeaderTransform<ChainSpec>
 {
     async fn map(&self, mut headers: Vec<H>) -> Vec<H> {
         // TODO: remove this once we deprecated l2geth
-        // TODO: parallelize with rayon?
-        let mut signatures = Vec::with_capacity(headers.len());
-        for header in &mut headers {
-            if !self.chain_spec.is_euclid_v2_active_at_timestamp(header.timestamp()) {
-                continue;
-            }
+        let signer = self.signer;
+        let chain_spec = self.chain_spec.clone();
 
-            let signature_bytes = std::mem::take(header.extra_data_mut());
-            let signature = if let Ok(sig) = parse_65b_signature(&signature_bytes) {
-                sig
-            } else {
-                debug!(
+        // Process headers in a blocking task to avoid blocking the async runtime
+        let (headers, signatures) = tokio::task::spawn_blocking(move || {
+            use rayon::prelude::*;
+
+            let signatures: Vec<(B256, Signature)> = headers.par_iter_mut().filter_map(|header| {
+                if !chain_spec.is_euclid_v2_active_at_timestamp(header.timestamp()) {
+                    return None
+                }
+
+                let signature_bytes = std::mem::take(header.extra_data_mut());
+                let signature = if let Ok(sig) = parse_65b_signature(&signature_bytes) {
+                    sig
+                } else {
+                    debug!(
+                            target: "scroll::network::header_transform",
+                            "Header signature persistence skipped due to invalid signature, block number: {:?}, header hash: {:?}",
+                            header.number(),
+                            header.hash_slow(),
+
+                    );
+                    return None
+                };
+
+                // Recover and verify signer
+                let hash = header.hash_slow();
+                if let Err(err) = recover_and_verify_signer(&signature, header, signer) {
+                    debug!(
                         target: "scroll::network::header_transform",
-                        "Header signature persistence skipped due to invalid signature, block number: {:?}, header hash: {:?}",
+                        "Header signature persistence failed, block number: {:?}, header hash: {:?}, error: {}",
                         header.number(),
-                        header.hash_slow(),
+                        hash, err
+                    );
+                    return None;
+                }
 
-                );
-                continue;
-            };
-
-            // Recover and verify signer
-            let hash = header.hash_slow();
-            if let Err(err) = recover_and_verify_signer(&signature, header, self.signer) {
-                debug!(
-                    target: "scroll::network::header_transform",
-                    "Header signature persistence failed, block number: {:?}, header hash: {:?}, error: {}",
-                    header.number(),
-                    header.hash_slow(), err
-                );
-                continue;
+                Some((hash, signature))
             }
+            ).collect();
 
-            signatures.push((hash, signature));
-        }
+            (headers, signatures)
+        }).await.expect("header transform task panicked");
 
         // Store signatures in database
         trace!(
