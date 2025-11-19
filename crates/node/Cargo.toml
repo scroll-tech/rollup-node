@@ -100,6 +100,7 @@ clap = { workspace = true, features = ["derive", "env"] }
 eyre.workspace = true
 futures.workspace = true
 jsonrpsee = { version = "0.26.0", features = ["server", "client", "macros"] }
+rayon.workspace = true
 reqwest.workspace = true
 tokio.workspace = true
 tracing.workspace = true

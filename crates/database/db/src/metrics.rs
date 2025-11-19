@@ -50,6 +50,7 @@ pub(crate) enum DatabaseOperation {
     PurgeL1MessageToL2BlockMappings,
     InsertBatchConsolidationOutcome,
     Unwind,
+    InsertSignatures,
     InsertSignature,
     // Read operations
     GetBatchByIndex,
@@ -118,6 +119,7 @@ impl DatabaseOperation {
             Self::PurgeL1MessageToL2BlockMappings => "purge_l1_message_to_l2_block_mappings",
             Self::InsertBatchConsolidationOutcome => "insert_batch_consolidation_outcome",
             Self::Unwind => "unwind",
+            Self::InsertSignatures => "insert_signatures",
             Self::InsertSignature => "insert_signature",
             Self::GetBatchByIndex => "get_batch_by_index",
             Self::GetBatchByHash => "get_batch_by_hash",
