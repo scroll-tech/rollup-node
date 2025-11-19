@@ -454,7 +454,7 @@ impl<
                 BlockConsolidationAction::Skip(_) => {
                     unreachable!("Skip actions have been filtered out in aggregation")
                 }
-                BlockConsolidationAction::UpdateSafeHead(block_info) => {
+                BlockConsolidationAction::UpdateFcs(block_info) => {
                     tracing::info!(target: "scroll::chain_orchestrator", ?block_info, "Updating safe head to consolidated block");
                     let finalized_block_info = batch_reconciliation_result
                         .target_status
