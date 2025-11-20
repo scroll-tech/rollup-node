@@ -229,6 +229,30 @@ impl TestFixture {
     pub const fn has_anvil(&self) -> bool {
         self.anvil.is_some()
     }
+
+    /// Send a raw transaction to Anvil.
+    pub async fn anvil_send_raw_transaction(
+        &self,
+        raw_tx: impl Into<alloy_primitives::Bytes>,
+    ) -> eyre::Result<alloy_primitives::B256> {
+        use alloy_provider::{Provider, ProviderBuilder};
+
+        // Ensure Anvil is running
+        let anvil_endpoint =
+            self.anvil_endpoint().ok_or_else(|| eyre::eyre!("Anvil is not running"))?;
+
+        // Create provider
+        let provider = ProviderBuilder::new().connect_http(anvil_endpoint.parse()?);
+
+        // Send raw transaction
+        let raw_tx_bytes = raw_tx.into();
+        let pending_tx = provider.send_raw_transaction(&raw_tx_bytes).await?;
+
+        let tx_hash = *pending_tx.tx_hash();
+        tracing::info!("Sent raw transaction to Anvil: {:?}", tx_hash);
+
+        Ok(tx_hash)
+    }
 }
 
 /// Builder for creating test fixtures with a fluent API.
@@ -466,7 +490,7 @@ impl TestFixtureBuilder {
     /// Enable Anvil with the default state file (`tests/anvil_state.json`).
     pub fn with_anvil_default_state(mut self) -> Self {
         self.enable_anvil = true;
-        self.anvil_state_path = Some(PathBuf::from("tests/anvil_state.json"));
+        self.anvil_state_path = Some(PathBuf::from("./tests/testdata/anvil_state.json"));
         self
     }
 
@@ -491,19 +515,25 @@ impl TestFixtureBuilder {
 
     /// Build the test fixture.
     pub async fn build(self) -> eyre::Result<TestFixture> {
-        let config = self.config;
+        let mut config = self.config;
         let chain_spec = self.chain_spec.unwrap_or_else(|| SCROLL_DEV.clone());
 
         // Start Anvil if requested
         let anvil = if self.enable_anvil {
-            Some(
+            let anvil = Some(
                 Self::spawn_anvil(
                     self.anvil_state_path.as_deref(),
                     self.anvil_chain_id,
                     self.anvil_block_time,
                 )
                 .await?,
-            )
+            );
+            if let Some(ref handle) = anvil {
+                let endpoint = handle.http_endpoint();
+                config.l1_provider_args.url = endpoint.parse::<reqwest::Url>().ok();
+                config.blob_provider_args.anvil_url = endpoint.parse::<reqwest::Url>().ok();
+            }
+            anvil
         } else {
             None
         };
@@ -579,11 +609,18 @@ impl TestFixtureBuilder {
             config.block_time = Some(std::time::Duration::from_secs(time));
         }
 
-        // Note: State loading from file is not yet implemented in this version
-        // The anvil::NodeConfig API for loading state is different from alloy_node_bindings
-        // TODO: Implement state loading once we understand the correct API
-        if state_path.is_some() {
-            tracing::warn!("State loading is not yet implemented with anvil crate");
+        // Load state from file if provided
+        if let Some(path) = state_path {
+            let state = anvil::eth::backend::db::SerializableState::load(path)
+                .map_err(|e| {
+                    eyre::eyre!(
+                        "Failed to load Anvil state from {}: {:?}",
+                        path.display(),
+                        e
+                    )
+                })?;
+            tracing::info!("Loaded Anvil state from: {}", path.display());
+            config.init_state = Some(state);
         }
 
         // Spawn Anvil and return the NodeHandle
