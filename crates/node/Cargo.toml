@@ -76,11 +76,16 @@ aws-config = "1.8.0"
 aws-sdk-kms = "1.76.0"
 
 # test-utils
+alloy-eips = { workspace = true, optional = true }
+alloy-rpc-types-eth = { workspace = true, optional = true }
 alloy-rpc-types-engine = { workspace = true, optional = true }
 reth-e2e-test-utils = { workspace = true, optional = true }
 reth-engine-local = { workspace = true, optional = true }
 reth-provider = { workspace = true, optional = true }
+reth-rpc-layer = { workspace = true, optional = true }
 reth-rpc-server-types = { workspace = true, optional = true }
+reth-storage-api = { workspace = true, optional = true }
+reth-tokio-util = { workspace = true, optional = true }
 scroll-alloy-rpc-types-engine = { workspace = true, optional = true }
 scroll-alloy-rpc-types.workspace = true
 
@@ -95,6 +100,7 @@ clap = { workspace = true, features = ["derive", "env"] }
 eyre.workspace = true
 futures.workspace = true
 jsonrpsee = { version = "0.26.0", features = ["server", "client", "macros"] }
+rayon.workspace = true
 reqwest.workspace = true
 tokio.workspace = true
 tracing.workspace = true
@@ -108,6 +114,7 @@ reth-e2e-test-utils.workspace = true
 reth-node-core.workspace = true
 reth-provider.workspace = true
 reth-primitives-traits.workspace = true
+reth-rpc-layer.workspace = true
 reth-rpc-server-types.workspace = true
 reth-scroll-node = { workspace = true, features = ["test-utils"] }
 reth-storage-api.workspace = true
@@ -140,10 +147,15 @@ test-utils = [
     "rollup-node/test-utils",
     "reth-e2e-test-utils",
     "reth-rpc-server-types",
+    "reth-rpc-layer",
+    "reth-tokio-util",
     "scroll-alloy-rpc-types-engine",
     "alloy-rpc-types-engine",
     "reth-primitives-traits/test-utils",
     "reth-network-p2p/test-utils",
     "rollup-node-chain-orchestrator/test-utils",
     "scroll-network/test-utils",
+    "alloy-eips",
+    "reth-storage-api",
+    "alloy-rpc-types-eth",
 ]

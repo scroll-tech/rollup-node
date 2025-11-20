@@ -176,6 +176,12 @@ pub trait DatabaseWriteOperations {
     /// block number.
     async fn unwind(&self, l1_block_number: u64) -> Result<UnwindResult, DatabaseError>;
 
+    /// Store multiple block signatures in the database.
+    async fn insert_signatures(
+        &self,
+        signatures: Vec<(B256, Signature)>,
+    ) -> Result<(), DatabaseError>;
+
     /// Store a block signature in the database.
     /// TODO: remove this once we deprecated l2geth.
     async fn insert_signature(
@@ -279,7 +285,7 @@ impl<T: WriteConnectionProvider + ?Sized + Sync> DatabaseWriteOperations for T {
             .add(models::batch_commit::Column::Index.lte(end_index as i64))
             .add(models::batch_commit::Column::RevertedBlockNumber.is_null());
 
-        // Fetch the batch hashes to update the
+        // Fetch the batch hashes
         let batch_hashes = models::batch_commit::Entity::find()
             .select_only()
             .column(models::batch_commit::Column::Hash)
@@ -293,6 +299,10 @@ impl<T: WriteConnectionProvider + ?Sized + Sync> DatabaseWriteOperations for T {
             .col_expr(
                 models::batch_commit::Column::RevertedBlockNumber,
                 Expr::value(Some(block_info.number as i64)),
+            )
+            .col_expr(
+                models::batch_commit::Column::Status,
+                Expr::value(BatchStatus::Reverted.as_str()),
             )
             .exec(self.get_connection())
             .await?;
@@ -883,6 +893,34 @@ impl<T: WriteConnectionProvider + ?Sized + Sync> DatabaseWriteOperations for T {
         Ok(UnwindResult { l1_block_number, queue_index, l2_head_block_number, l2_safe_block_info })
     }
 
+    async fn insert_signatures(
+        &self,
+        signatures: Vec<(B256, Signature)>,
+    ) -> Result<(), DatabaseError> {
+        tracing::trace!(target: "scroll::db", num_signatures = signatures.len(), "Inserting block signatures into database.");
+
+        if signatures.is_empty() {
+            tracing::debug!(target: "scroll::db", "No signatures to insert.");
+            return Ok(());
+        }
+
+        models::block_signature::Entity::insert_many(
+            signatures
+                .into_iter()
+                .map(|(block_hash, signature)| (block_hash, signature).into())
+                .collect::<Vec<models::block_signature::ActiveModel>>(),
+        )
+        .on_conflict(
+            OnConflict::column(models::block_signature::Column::BlockHash)
+                .update_column(models::block_signature::Column::Signature)
+                .to_owned(),
+        )
+        .exec_without_returning(self.get_connection())
+        .await?;
+
+        Ok(())
+    }
+
     async fn insert_signature(
         &self,
         block_hash: B256,
@@ -916,6 +954,12 @@ pub trait DatabaseReadOperations {
         &self,
         batch_index: u64,
     ) -> Result<Vec<BatchCommitData>, DatabaseError>;
+
+    /// Get a [`BatchCommitData`] from the database by its batch hash.
+    async fn get_batch_by_hash(
+        &self,
+        batch_hash: B256,
+    ) -> Result<Option<BatchCommitData>, DatabaseError>;
 
     /// Get a [`BatchCommitData`] from the database by its batch hash.
     async fn get_batch_by_hash(
@@ -1019,6 +1063,21 @@ impl<T: ReadConnectionProvider + Sync + ?Sized> DatabaseReadOperations for T {
             .all(self.get_connection())
             .await
             .map(|x| x.into_iter().map(Into::into).collect())?)
+    }
+
+    async fn get_batch_by_hash(
+        &self,
+        batch_hash: B256,
+    ) -> Result<Option<BatchCommitData>, DatabaseError> {
+        Ok(models::batch_commit::Entity::find()
+            .filter(
+                models::batch_commit::Column::Index
+                    .eq(TryInto::<i64>::try_into(batch_index).expect("index should fit in i64"))
+                    .and(models::batch_commit::Column::RevertedBlockNumber.is_null()),
+            )
+            .one(self.get_connection())
+            .await
+            .map(|x| x.map(Into::into))?)
     }
 
     async fn get_batch_by_hash(

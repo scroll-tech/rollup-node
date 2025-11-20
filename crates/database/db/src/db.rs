@@ -505,6 +505,20 @@ impl DatabaseWriteOperations for Database {
         )
     }
 
+    async fn insert_signatures(
+        &self,
+        signatures: Vec<(B256, Signature)>,
+    ) -> Result<(), DatabaseError> {
+        metered!(
+            DatabaseOperation::InsertSignatures,
+            self,
+            tx_mut(move |tx| {
+                let signatures = signatures.clone();
+                async move { tx.insert_signatures(signatures).await }
+            })
+        )
+    }
+
     async fn insert_signature(
         &self,
         block_hash: B256,
