@@ -112,6 +112,39 @@ impl<'a> EventWaiter<'a> {
         Ok(())
     }
 
+    /// Wait for L1 message duplicate event on all specified nodes.
+    pub async fn l1_message_duplicate(self, expected_queue_index: u64) -> eyre::Result<()> {
+        self.wait_for_event_on_all(|e| {
+            if let ChainOrchestratorEvent::L1MessageDuplicate(queue_index) = e {
+                (*queue_index == expected_queue_index).then_some(())
+            } else {
+                None
+            }
+        })
+        .await?;
+        Ok(())
+    }
+
+    /// Wait for L1 message gap event on all specified nodes.
+    pub async fn l1_message_gap(
+        self,
+        expected_missing_index: u64,
+        expected_l1_block_number_reset: u64,
+    ) -> eyre::Result<()> {
+        self.wait_for_event_on_all(|e| {
+            if let ChainOrchestratorEvent::L1MessageGap { missing_index, l1_block_number_reset } = e
+            {
+                (*missing_index == expected_missing_index
+                    && *l1_block_number_reset == expected_l1_block_number_reset)
+                    .then_some(())
+            } else {
+                None
+            }
+        })
+        .await?;
+        Ok(())
+    }
+
     /// Wait for L1 reorg event to be received by all.
     pub async fn l1_reorg(self) -> eyre::Result<()> {
         self.wait_for_event_on_all(|e| {

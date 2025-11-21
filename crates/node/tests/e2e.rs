@@ -1849,100 +1849,39 @@ async fn test_batch_commit_gap() -> eyre::Result<()> {
 
 // Test that the chain orchestrator detects gaps in L1 messages, triggers a reset command to the
 // L1 watcher for self-healing and skips duplicate L1 messages received.
-// #[tokio::test]
-// async fn test_l1_message_gap() -> eyre::Result<()> {
-//     reth_tracing::init_test_tracing();
-//
-//     let (mut nodes, _tasks, _wallet) = setup_engine(
-//         default_test_scroll_rollup_node_config(),
-//         1,
-//         (*SCROLL_DEV).clone(),
-//         false,
-//         false,
-//     )
-//     .await?;
-//     let node = nodes.pop().unwrap();
-//
-//     // Get handles for sending L1 notifications and receiving commands
-//     let l1_watcher_tx = node.inner.add_ons_handle.l1_watcher_tx.clone().unwrap();
-//     let l1_watcher_command_rx = node.inner.add_ons_handle.l1_watcher_command_rx.clone();
-//     let chain_orchestrator = node.inner.add_ons_handle.rollup_manager_handle.clone();
-//
-//     // Get event listener to monitor chain orchestrator events
-//     let mut events = chain_orchestrator.get_event_listener().await?;
-//
-//     // Node is unsynced initially -> does not derive batches (which is what we want)
-//
-//     // Send L1 message 1 to populate the database
-//     let l1_message_0 = TxL1Message { queue_index: 0, ..Default::default() };
-//     let l1_message_0_block_info = BlockInfo { number: 1, hash: B256::random() };
-//     l1_watcher_tx
-//         .send(Arc::new(L1Notification::L1Message {
-//             message: l1_message_0.clone(),
-//             block_info: l1_message_0_block_info,
-//             block_timestamp: 0,
-//         }))
-//         .await?;
-//     wait_for_event_5s(
-//         &mut events,
-//         ChainOrchestratorEvent::L1MessageCommitted(l1_message_0.queue_index),
-//     )
-//     .await?;
-//
-//     // Send duplicate L1 message 0 - should be skipped and duplicate detected
-//     l1_watcher_tx
-//         .send(Arc::new(L1Notification::L1Message {
-//             message: l1_message_0.clone(),
-//             block_info: l1_message_0_block_info,
-//             block_timestamp: 0,
-//         }))
-//         .await?;
-//     wait_for_event_5s(
-//         &mut events,
-//         ChainOrchestratorEvent::L1MessageDuplicate(l1_message_0.queue_index),
-//     )
-//     .await?;
-//
-//     // Send L1 message 2 - should trigger reset due to gap (missing L1 message 1)
-//     let l1_message_3 = TxL1Message {
-//         queue_index: 2, // Gap! Missing index 2
-//         ..Default::default()
-//     };
-//     let l1_message_3_block_info = BlockInfo { number: 3, hash: B256::random() };
-//     l1_watcher_tx
-//         .send(Arc::new(L1Notification::L1Message {
-//             message: l1_message_3.clone(),
-//             block_info: l1_message_3_block_info,
-//             block_timestamp: 0,
-//         }))
-//         .await?;
-//     wait_for_event_5s(
-//         &mut events,
-//         ChainOrchestratorEvent::L1MessageGap {
-//             missing_index: l1_message_3.queue_index,
-//             l1_block_number_reset: l1_message_0_block_info.number,
-//         },
-//     )
-//     .await?;
-//
-//     let mut command_rx = l1_watcher_command_rx.lock().await;
-//     let command = tokio::time::timeout(Duration::from_secs(5), command_rx.recv())
-//         .await
-//         .expect("should receive command within timeout")
-//         .expect("should receive Some(command)");
-//
-//     // Verify it's a ResetToBlock command with the correct block number
-//     match command {
-//         L1WatcherCommand::ResetToBlock { block, .. } => {
-//             assert_eq!(
-//                 block, l1_message_0_block_info.number,
-//                 "Reset block should be the L1 block of the last known L1 message"
-//             );
-//         }
-//     }
-//
-//     Ok(())
-// }
+#[tokio::test]
+async fn test_l1_message_gap() -> eyre::Result<()> {
+    reth_tracing::init_test_tracing();
+
+    let mut fixture = TestFixture::builder().sequencer().build().await?;
+
+    // Node is unsynced initially -> does not derive batches (which is what we want)
+
+    let to_address = Address::random();
+    let sender = Address::random();
+    // Send L1 message 0 to populate the database
+    fixture.l1().add_message().queue_index(0).to(to_address).sender(sender).at_block(1).send().await?;
+    fixture.expect_event().l1_message_committed().await?;
+
+    // Send duplicate L1 message 0 - should be skipped and duplicate detected
+    fixture.l1().add_message().queue_index(0).to(to_address).sender(sender).at_block(1).send().await?;
+    fixture.expect_event().l1_message_duplicate(0).await?;
+
+    // Send L1 message 2 - should trigger reset due to gap (missing L1 message 1)
+    fixture.l1().add_message().queue_index(2).at_block(3).send().await?;
+    // Expect gap event: missing index 2, reset to L1 block 1 (where message 0 was committed)
+    fixture.expect_event().l1_message_gap(2, 1).await?;
+
+    // Verify that a ResetToBlock command was sent to the L1 watcher
+    let command = fixture.expect_l1_watcher_command().await?;
+    match command {
+        rollup_node_watcher::L1WatcherCommand::ResetToBlock { block, .. } => {
+            assert_eq!(block, 1, "Reset block should be the L1 block of the last known L1 message");
+        }
+    }
+
+    Ok(())
+}
 
 // #[tokio::test]
 // async fn test_batch_revert_gap() -> eyre::Result<()> {
