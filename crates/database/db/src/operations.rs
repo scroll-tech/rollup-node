@@ -961,12 +961,6 @@ pub trait DatabaseReadOperations {
         batch_hash: B256,
     ) -> Result<Option<BatchCommitData>, DatabaseError>;
 
-    /// Get a [`BatchCommitData`] from the database by its batch hash.
-    async fn get_batch_by_hash(
-        &self,
-        batch_hash: B256,
-    ) -> Result<Option<BatchCommitData>, DatabaseError>;
-
     /// Get the status of a batch by its hash.
     #[cfg(test)]
     async fn get_batch_status_by_hash(
@@ -1064,22 +1058,6 @@ impl<T: ReadConnectionProvider + Sync + ?Sized> DatabaseReadOperations for T {
             .await
             .map(|x| x.into_iter().map(Into::into).collect())?)
     }
-
-    async fn get_batch_by_hash(
-        &self,
-        batch_hash: B256,
-    ) -> Result<Option<BatchCommitData>, DatabaseError> {
-        Ok(models::batch_commit::Entity::find()
-            .filter(
-                models::batch_commit::Column::Index
-                    .eq(TryInto::<i64>::try_into(batch_index).expect("index should fit in i64"))
-                    .and(models::batch_commit::Column::RevertedBlockNumber.is_null()),
-            )
-            .one(self.get_connection())
-            .await
-            .map(|x| x.map(Into::into))?)
-    }
-
     async fn get_batch_by_hash(
         &self,
         batch_hash: B256,

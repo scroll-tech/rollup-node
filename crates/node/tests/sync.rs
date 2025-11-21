@@ -209,7 +209,6 @@ async fn test_should_consolidate_after_optimistic_sync() -> eyre::Result<()> {
     // Create a sequence of L1 messages to be added to the sequencer node.
     const L1_MESSAGES_COUNT: usize = 200;
     let mut l1_messages = Vec::with_capacity(L1_MESSAGES_COUNT);
-    let mut l1_block_info = Vec::with_capacity(L1_MESSAGES_COUNT);
     for i in 0..L1_MESSAGES_COUNT as u64 {
         let l1_message = TxL1Message {
             queue_index: i,
@@ -220,8 +219,6 @@ async fn test_should_consolidate_after_optimistic_sync() -> eyre::Result<()> {
             input: Default::default(),
         };
         l1_messages.push(l1_message);
-        let block_info = BlockInfo { number: i, hash: B256::random() };
-        l1_block_info.push(block_info)
     }
 
     // Add the L1 messages to the sequencer node.

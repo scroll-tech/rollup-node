@@ -450,6 +450,7 @@ mod tests {
 
     use alloy_eips::Decodable2718;
     use alloy_primitives::{address, b256, bytes, U256};
+    use eyre::bail;
     use futures::StreamExt;
     use rollup_node_primitives::L1MessageEnvelope;
     use rollup_node_providers::{test_utils::MockL1Provider, L1ProviderError};
@@ -510,7 +511,7 @@ mod tests {
             finalized_block_number: None,
             reverted_block_number: None,
         };
-        db.insert_batch(batch_data).await?;
+        db.insert_batch(batch_data.clone()).await?;
 
         // load message in db, leaving a l1 message missing.
         db.insert_l1_message(L1_MESSAGE_INDEX_33).await?;
@@ -522,7 +523,7 @@ mod tests {
         // as long as we don't call `push_batch`, pipeline should not return attributes.
         pipeline
             .push_batch(
-                BatchInfo { index: 12, hash: Default::default() },
+                BatchInfo { index: 12, hash: batch_data.hash },
                 BatchStatus::Consolidated,
             )
             .await;
@@ -541,14 +542,22 @@ mod tests {
 
         // check the correctness of the last attribute.
         let mut attribute = ScrollPayloadAttributes::default();
-        if let Some(BatchDerivationResult { attributes, .. }) = pipeline.next().await {
-            for a in attributes {
-                if a.attributes.payload_attributes.timestamp == 1696935657 {
-                    attribute = a.attributes;
-                    break;
+        tokio::select! {
+            _ = tokio::time::sleep(tokio::time::Duration::from_secs(5000)) => {
+                bail!("pipeline did not yield in time");
+            }
+            maybe_result = pipeline.next() => {
+                if let Some(BatchDerivationResult { attributes, .. }) = maybe_result {
+                    for a in attributes {
+                        if a.attributes.payload_attributes.timestamp == 1696935657 {
+                            attribute = a.attributes;
+                            break;
+                        }
+                    }
                 }
             }
         }
+
         let expected = ScrollPayloadAttributes {
             payload_attributes: PayloadAttributes {
                 timestamp: 1696935657,
@@ -582,7 +591,7 @@ mod tests {
             finalized_block_number: None,
             reverted_block_number: None,
         };
-        db.insert_batch(batch_data).await?;
+        db.insert_batch(batch_data.clone()).await?;
         // load messages in db.
         let l1_messages = vec![L1_MESSAGE_INDEX_33, L1_MESSAGE_INDEX_34];
         for message in l1_messages {
@@ -595,7 +604,7 @@ mod tests {
 
         // as long as we don't call `push_batch`, pipeline should not return attributes.
         pipeline
-            .push_batch(BatchInfo { index: 12, hash: Default::default() }, BatchStatus::Committed)
+            .push_batch(BatchInfo { index: 12, hash: batch_data.hash }, BatchStatus::Committed)
             .await;
 
         // check the correctness of the last attribute.
