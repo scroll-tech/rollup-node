@@ -38,13 +38,14 @@ pub(crate) async fn reconcile_batch<L2P: Provider<Scroll>>(
 
                 // The block matches the derived attributes and the block is below or equal to the
                 // safe current safe head.
-                if attributes.block_number <= fcs.safe_block_info().number {
+                if attributes.block_number <= fcs.finalized_block_info().number ||
+                    ((attributes.block_number <= fcs.safe_block_info().number) &&
+                        batch.target_status.is_consolidated())
+                {
                     Ok::<_, ChainOrchestratorError>(BlockConsolidationAction::Skip(block_info))
                 } else {
                     // The block matches the derived attributes, no action is needed.
-                    Ok::<_, ChainOrchestratorError>(BlockConsolidationAction::UpdateSafeHead(
-                        block_info,
-                    ))
+                    Ok::<_, ChainOrchestratorError>(BlockConsolidationAction::UpdateFcs(block_info))
                 }
             } else {
                 // The block does not match the derived attributes, a reorg is needed.
@@ -81,7 +82,7 @@ impl BatchReconciliationResult {
         for next in &self.actions {
             if let Some(last) = actions.last_mut() {
                 match (last, next) {
-                    (last, next) if last.is_update_safe_head() && next.is_update_safe_head() => {
+                    (last, next) if last.is_update_fcs() && next.is_update_fcs() => {
                         *last = next.clone();
                     }
                     _ => {
@@ -128,8 +129,8 @@ pub(crate) struct AggregatedBatchConsolidationActions {
 /// An action that must be performed on the L2 chain to consolidate a block.
 #[derive(Debug, Clone)]
 pub(crate) enum BlockConsolidationAction {
-    /// Update the safe head to the given block.
-    UpdateSafeHead(L2BlockInfoWithL1Messages),
+    /// Update the fcs to the given block.
+    UpdateFcs(L2BlockInfoWithL1Messages),
     /// The derived attributes match the L2 chain and the safe head is already at or beyond the
     /// block, so no action is needed.
     Skip(L2BlockInfoWithL1Messages),
@@ -138,9 +139,9 @@ pub(crate) enum BlockConsolidationAction {
 }
 
 impl BlockConsolidationAction {
-    /// Returns true if the action is to update the safe head.
-    pub(crate) const fn is_update_safe_head(&self) -> bool {
-        matches!(self, Self::UpdateSafeHead(_))
+    /// Returns true if the action is to update the fcs.
+    pub(crate) const fn is_update_fcs(&self) -> bool {
+        matches!(self, Self::UpdateFcs(_))
     }
 
     /// Returns true if the action is to skip the block.
@@ -157,7 +158,7 @@ impl BlockConsolidationAction {
     /// skip, returns None for reorg.
     pub(crate) fn into_block_info(self) -> Option<L2BlockInfoWithL1Messages> {
         match self {
-            Self::UpdateSafeHead(info) | Self::Skip(info) => Some(info),
+            Self::UpdateFcs(info) | Self::Skip(info) => Some(info),
             Self::Reorg(_attrs) => None,
         }
     }
@@ -166,7 +167,7 @@ impl BlockConsolidationAction {
 impl std::fmt::Display for BlockConsolidationAction {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Self::UpdateSafeHead(info) => {
+            Self::UpdateFcs(info) => {
                 write!(f, "UpdateSafeHead to block {}", info.block_info.number)
             }
             Self::Skip(info) => write!(f, "Skip block {}", info.block_info.number),

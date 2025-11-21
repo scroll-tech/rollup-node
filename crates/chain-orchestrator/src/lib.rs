@@ -454,7 +454,7 @@ impl<
                 BlockConsolidationAction::Skip(_) => {
                     unreachable!("Skip actions have been filtered out in aggregation")
                 }
-                BlockConsolidationAction::UpdateSafeHead(block_info) => {
+                BlockConsolidationAction::UpdateFcs(block_info) => {
                     tracing::info!(target: "scroll::chain_orchestrator", ?block_info, "Updating safe head to consolidated block");
                     let finalized_block_info = batch_reconciliation_result
                         .target_status
@@ -650,7 +650,7 @@ impl<
                     .get_block_by_number(block_number.into())
                     .full()
                     .await?
-                    .expect("L2 head block must exist")
+                    .ok_or(ChainOrchestratorError::L2BlockNotFoundInL2Client(block_number))?
                     .header
                     .hash_slow();
 
@@ -841,7 +841,10 @@ impl<
             .await?;
 
         // Update the forkchoice state to the new safe block.
-        self.engine.update_fcs(None, Some(safe_block_info), None).await?;
+        if self.sync_state.is_synced() {
+            tracing::info!(target: "scroll::chain_orchestrator", ?safe_block_info, "Updating safe head to block after batch revert");
+            self.engine.update_fcs(None, Some(safe_block_info), None).await?;
+        }
 
         Ok(Some(ChainOrchestratorEvent::BatchReverted { batch_info, safe_head: safe_block_info }))
     }
@@ -1015,7 +1018,9 @@ impl<
                 .get_block_by_number(current_head_block_number.into())
                 .full()
                 .await?
-                .expect("current head block must exist");
+                .ok_or(ChainOrchestratorError::L2BlockNotFoundInL2Client(
+                    current_head_block_number,
+                ))?;
 
             // If the timestamp of the received block is less than or equal to the current head,
             // we ignore it.
@@ -1077,7 +1082,7 @@ impl<
                     .get_block_by_number(header.number.into())
                     .full()
                     .await?
-                    .expect("block must exist")
+                    .ok_or(ChainOrchestratorError::L2BlockNotFoundInL2Client(header.number))?
                     .into_consensus()
                     .map_transactions(|tx| tx.inner.into_inner());
 

@@ -48,10 +48,16 @@ impl ForkchoiceState {
     pub async fn from_provider<P: Provider<Scroll>>(provider: &P) -> Option<Self> {
         let latest_block =
             provider.get_block(BlockId::Number(BlockNumberOrTag::Latest)).await.ok()??;
-        let safe_block =
+        let mut safe_block =
             provider.get_block(BlockId::Number(BlockNumberOrTag::Safe)).await.ok()??;
         let finalized_block =
             provider.get_block(BlockId::Number(BlockNumberOrTag::Finalized)).await.ok()??;
+
+        // Ensure safe is at least finalized.
+        if safe_block.header.number < finalized_block.header.number {
+            safe_block = finalized_block.clone();
+        }
+
         Some(Self {
             head: BlockInfo { number: latest_block.header.number, hash: latest_block.header.hash },
             safe: BlockInfo { number: safe_block.header.number, hash: safe_block.header.hash },

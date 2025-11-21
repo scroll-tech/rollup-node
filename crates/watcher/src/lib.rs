@@ -325,25 +325,40 @@ where
         if latest.header.number != self.current_block_number {
             // index the next range of blocks.
             let logs = self.next_filtered_logs(latest.header.number).await?;
+            let num_logs = logs.len();
 
             // prepare notifications.
             let mut notifications = Vec::with_capacity(logs.len());
 
-            // handle all events.
-            notifications.extend(self.handle_l1_messages(&logs).await?);
-            notifications.extend(self.handle_batch_reverts(&logs).await?);
-            notifications.extend(self.handle_batch_revert_ranges(&logs).await?);
-            notifications.extend(self.handle_batch_commits(&logs).await?);
-            notifications.extend(self.handle_batch_finalization(&logs).await?);
+            for log in logs {
+                let sig = log.topics()[0];
+
+                let notification = match sig {
+                    QueueTransaction::SIGNATURE_HASH => self.handle_l1_messages(&[log]).await?,
+                    CommitBatch::SIGNATURE_HASH => self.handle_batch_commits(&[log]).await?,
+                    FinalizeBatch::SIGNATURE_HASH => self.handle_batch_finalization(&[log]).await?,
+                    RevertBatch_0::SIGNATURE_HASH => self.handle_batch_reverts(&[log]).await?,
+                    RevertBatch_1::SIGNATURE_HASH => {
+                        self.handle_batch_revert_ranges(&[log]).await?
+                    }
+                    _ => unreachable!("log signature already filtered"),
+                };
+
+                notifications.extend(notification);
+            }
+
             if let Some(system_contract_update) =
                 self.handle_system_contract_update(&latest).await?
             {
                 notifications.push(system_contract_update);
             }
 
-            if logs.len() != notifications.len() {
+            // Check that we haven't generated more notifications than logs
+            // Note: notifications.len() may be less than logs.len() because genesis batch
+            // (batch_index=0) is intentionally skipped
+            if notifications.len() > num_logs {
                 return Err(L1WatcherError::Logs(FilterLogError::InvalidNotificationCount(
-                    logs.len(),
+                    num_logs,
                     notifications.len(),
                 )))
             }

@@ -161,7 +161,7 @@ async fn can_build_blocks() {
     assert_eq!(block.header.parent_hash, genesis_hash);
 
     // check the base fee has been set for the block.
-    assert_eq!(block.header.base_fee_per_gas.unwrap(), 1015680000);
+    assert_eq!(block.header.base_fee_per_gas.unwrap(), 876960000);
 
     // now lets add an L1 message to the database
     let wallet_lock = wallet.lock().await;
