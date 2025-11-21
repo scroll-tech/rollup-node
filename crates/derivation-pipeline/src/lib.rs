@@ -522,10 +522,7 @@ mod tests {
 
         // as long as we don't call `push_batch`, pipeline should not return attributes.
         pipeline
-            .push_batch(
-                BatchInfo { index: 12, hash: batch_data.hash },
-                BatchStatus::Consolidated,
-            )
+            .push_batch(BatchInfo { index: 12, hash: batch_data.hash }, BatchStatus::Consolidated)
             .await;
 
         // wait for 5 seconds to ensure the pipeline is in a retry loop.

@@ -656,7 +656,7 @@ async fn shutdown_consolidates_most_recent_batch_on_startup() -> eyre::Result<()
     // Lets iterate over all blocks expected to be derived from the first batch commit.
     let consolidation_outcome = loop {
         let event = rnm_events.next().await;
-        println!("Received event: {:?}", event);
+        tracing::info!(target: "scroll::test", event = ?event, "Received event");
         if let Some(ChainOrchestratorEvent::BatchConsolidated(consolidation_outcome)) = event {
             break consolidation_outcome;
         }
@@ -756,37 +756,55 @@ async fn shutdown_consolidates_most_recent_batch_on_startup() -> eyre::Result<()
     // Request an event stream from the rollup node manager.
     let mut rnm_events = handle.get_event_listener().await?;
 
-    println!("im here");
+    // Send the second batch again to test skipping of already known batch.
+    l1_notification_tx
+        .send(Arc::new(L1Notification::BatchCommit {
+            block_info: block_1_info,
+            data: batch_1_data.clone(),
+        }))
+        .await?;
+    loop {
+        select! {
+            _ = tokio::time::sleep(Duration::from_secs(5)) => {
+                bail!("Timed out waiting for first consolidated block after RNM restart");
+            }
 
-    // Send the second batch again to mimic the watcher behaviour.
-    let block_1_info = BlockInfo { number: 18318215, hash: B256::random() };
-    l1_notification_tx.send(Arc::new(L1Notification::Finalized(block_1_info.number))).await?;
+            evt = rnm_events.next() => {
+                tracing::info!(target: "scroll::test", event = ?evt, "Received event");
 
-    let mut l2_block = None;
-    // Lets fetch the first consolidated block event - this should be the first block of the batch.
-    select! {
-        _ = tokio::time::sleep(Duration::from_secs(5)) => {
-            bail!("Timed out waiting for first consolidated block after RNM restart");
-        }
-
-        evt = rnm_events.next() => {
-            if let Some(ChainOrchestratorEvent::BlockConsolidated(consolidation_outcome)) = evt {
-                l2_block = Some(consolidation_outcome.block_info().clone());
-            } else {
-                println!("Received unexpected event: {:?}", evt);
+                if evt == Some(ChainOrchestratorEvent::BatchCommitDuplicate(batch_1_data.index)) {
+                    break;
+                }
             }
         }
     }
 
-    println!("First consolidated block after RNM restart: {:?}", l2_block);
-    // TODO: this test needs to be adjusted since currently a partial batch is applied and assumed
-    // that it will be re-applied on restart.  However, with the gap detection and skipping of
-    // duplicate batches this doesn't work.  We need the changes from https://github.com/scroll-tech/rollup-node/pull/409
-    return Ok(());
+    // Send L1 finalized block event again to trigger consolidation from the last known safe block.
+    let block_1_info = BlockInfo { number: 18318215, hash: B256::random() };
+    l1_notification_tx.send(Arc::new(L1Notification::Finalized(block_1_info.number))).await?;
 
-    // One issue #273 is completed, we will again have safe blocks != finalized blocks, and this
-    // should be changed to 1. Assert that the consolidated block is the first block that was not
-    // previously processed of the batch.
+    let l2_block;
+    // Lets fetch the first consolidated block event - this should be the first block of the batch.
+    loop {
+        select! {
+            _ = tokio::time::sleep(Duration::from_secs(5)) => {
+                bail!("Timed out waiting for first consolidated block after RNM restart");
+            }
+
+            evt = rnm_events.next() => {
+                if let Some(ChainOrchestratorEvent::BlockConsolidated(consolidation_outcome)) = evt {
+                    l2_block = Some(consolidation_outcome.block_info().clone());
+                    break;
+                }
+
+                tracing::info!(target: "scroll::test", event = ?evt, "Received event");
+            }
+        }
+    }
+
+    // Assert that the consolidated block is the first block that was not previously processed of
+    // the batch. The last consolidated block before shutdown was block 40, so the next should
+    // be block 41. Since we apply blocks from a partially processed batch this is expected as described in https://github.com/scroll-tech/rollup-node/issues/411. Once we implement full batch atomicity (for setting safe blocks from a batch) this should change to block 5.
     assert_eq!(
         l2_block.unwrap().block_info.number,
         41,
@@ -800,7 +818,7 @@ async fn shutdown_consolidates_most_recent_batch_on_startup() -> eyre::Result<()
             if let Some(ChainOrchestratorEvent::BlockConsolidated(consolidation_outcome)) =
                 rnm_events.next().await
             {
-                assert!(consolidation_outcome.block_info().block_info.number == i);
+                assert_eq!(consolidation_outcome.block_info().block_info.number, i);
                 break;
             }
         }
