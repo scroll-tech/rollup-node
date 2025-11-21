@@ -27,7 +27,7 @@ use reth_tokio_util::EventStream;
 use rollup_node_chain_orchestrator::{ChainOrchestratorEvent, ChainOrchestratorHandle};
 use rollup_node_primitives::BlockInfo;
 use rollup_node_sequencer::L1MessageInclusionMode;
-use rollup_node_watcher::L1Notification;
+use rollup_node_watcher::{L1Notification, L1WatcherCommand};
 use scroll_alloy_consensus::ScrollPooledTransaction;
 use scroll_alloy_provider::{ScrollAuthApiEngineClient, ScrollEngineApi};
 use scroll_alloy_rpc_types::Transaction;
@@ -36,8 +36,9 @@ use std::{
     fmt::{Debug, Formatter},
     path::PathBuf,
     sync::Arc,
+    time::Duration,
 };
-use tokio::sync::{mpsc, Mutex};
+use tokio::sync::{mpsc, mpsc::UnboundedReceiver, Mutex};
 
 /// Main test fixture providing a high-level interface for testing rollup nodes.
 #[derive(Debug)]
@@ -77,6 +78,8 @@ pub struct NodeHandle {
     pub engine: Engine<Arc<dyn ScrollEngineApi + Send + Sync + 'static>>,
     /// L1 watcher notification channel.
     pub l1_watcher_tx: Option<mpsc::Sender<Arc<L1Notification>>>,
+    /// L1 watcher command receiver.
+    pub l1_watcher_command_rx: Arc<Mutex<UnboundedReceiver<L1WatcherCommand>>>,
     /// Chain orchestrator listener.
     pub chain_orchestrator_rx: EventStream<ChainOrchestratorEvent>,
     /// Chain orchestrator handle.
@@ -200,6 +203,27 @@ impl TestFixture {
         &self,
     ) -> eyre::Result<rollup_node_chain_orchestrator::ChainOrchestratorStatus> {
         self.get_status(0).await
+    }
+
+    /// Wait for an L1 watcher command on the sequencer node.
+    ///
+    /// Returns the received command or an error if timeout is reached.
+    pub async fn expect_l1_watcher_command(&self) -> eyre::Result<L1WatcherCommand> {
+        self.expect_l1_watcher_command_on(0).await
+    }
+
+    /// Wait for an L1 watcher command on a specific node.
+    ///
+    /// Returns the received command or an error if timeout is reached.
+    pub async fn expect_l1_watcher_command_on(
+        &self,
+        node_index: usize,
+    ) -> eyre::Result<L1WatcherCommand> {
+        let mut command_rx = self.nodes[node_index].l1_watcher_command_rx.lock().await;
+        tokio::time::timeout(Duration::from_secs(5), command_rx.recv())
+            .await
+            .map_err(|_| eyre::eyre!("Timeout waiting for L1 watcher command"))?
+            .ok_or_else(|| eyre::eyre!("L1 watcher command channel closed"))
     }
 }
 
@@ -452,6 +476,7 @@ impl TestFixtureBuilder {
 
             // Get handles if available
             let l1_watcher_tx = node.inner.add_ons_handle.l1_watcher_tx.clone();
+            let l1_watcher_command_rx = node.inner.add_ons_handle.l1_watcher_command_rx.clone();
             let rollup_manager_handle = node.inner.add_ons_handle.rollup_manager_handle.clone();
             let chain_orchestrator_rx =
                 node.inner.add_ons_handle.rollup_manager_handle.get_event_listener().await?;
@@ -461,6 +486,7 @@ impl TestFixtureBuilder {
                 engine,
                 chain_orchestrator_rx,
                 l1_watcher_tx,
+                l1_watcher_command_rx,
                 rollup_manager_handle,
                 typ: if config.sequencer_args.sequencer_enabled && index == 0 {
                     NodeType::Sequencer

@@ -143,6 +143,53 @@ impl<'a> EventWaiter<'a> {
         Ok(())
     }
 
+    /// Wait for batch commit indexed event on all specified nodes.
+    pub async fn batch_commit_indexed(self, target_batch_index: u64, target_l1_block_number: u64) -> eyre::Result<()> {
+        self.wait_for_event_on_all(|e| {
+            if let ChainOrchestratorEvent::BatchCommitIndexed {batch_info, l1_block_number} = e {
+                (batch_info.index == target_batch_index && *l1_block_number == target_l1_block_number).then_some(())
+            } else {
+                None
+            }
+        })
+        .await?;
+        Ok(())
+    }
+
+    /// Wait for batch commit duplicate event on all specified nodes.
+    pub async fn batch_commit_duplicates(self, target_batch_index: u64) -> eyre::Result<()> {
+        self.wait_for_event_on_all(|e| {
+            if let ChainOrchestratorEvent::BatchCommitDuplicate(batch_index) = e {
+                (*batch_index == target_batch_index).then_some(())
+            } else {
+                None
+            }
+        })
+        .await?;
+        Ok(())
+    }
+
+    /// Wait for batch commit gap event on all specified nodes.
+    pub async fn batch_commit_gap(
+        self,
+        expected_missing_index: u64,
+        expected_l1_block_number_reset: u64,
+    ) -> eyre::Result<()> {
+        self.wait_for_event_on_all(|e| {
+            if let ChainOrchestratorEvent::BatchCommitGap { missing_index, l1_block_number_reset } =
+                e
+            {
+                (*missing_index == expected_missing_index
+                    && *l1_block_number_reset == expected_l1_block_number_reset)
+                    .then_some(())
+            } else {
+                None
+            }
+        })
+        .await?;
+        Ok(())
+    }
+
     /// Wait for batch reverted event on all specified nodes.
     pub async fn batch_reverted(self) -> eyre::Result<()> {
         self.wait_for_event_on_all(|e| {

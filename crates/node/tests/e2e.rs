@@ -1814,104 +1814,38 @@ async fn signer_rotation() -> eyre::Result<()> {
 
 // Test that the chain orchestrator detects gaps in batch commits, triggers a reset command to the
 // L1 watcher for self-healing and skips duplicate batch commits.
-// #[tokio::test]
-// async fn test_batch_commit_gap() -> eyre::Result<()> {
-//     reth_tracing::init_test_tracing();
-//
-//     let (mut nodes, _tasks, _wallet) = setup_engine(
-//         default_test_scroll_rollup_node_config(),
-//         1,
-//         (*SCROLL_DEV).clone(),
-//         false,
-//         false,
-//     )
-//     .await?;
-//     let node = nodes.pop().unwrap();
-//
-//     // Get handles for sending L1 notifications and receiving commands
-//     let l1_watcher_tx = node.inner.add_ons_handle.l1_watcher_tx.clone().unwrap();
-//     let l1_watcher_command_rx = node.inner.add_ons_handle.l1_watcher_command_rx.clone();
-//     let chain_orchestrator = node.inner.add_ons_handle.rollup_manager_handle.clone();
-//
-//     // Get event listener to monitor chain orchestrator events
-//     let mut events = chain_orchestrator.get_event_listener().await?;
-//
-//     // Node is unsynced initially -> does not derive batches (which is what we want)
-//
-//     // Send batch commit 1 to populate the database
-//     let batch_commit_1 =
-//         BatchCommitData { hash: B256::random(), index: 1, block_number: 1, ..Default::default()
-// };
-//
-//     l1_watcher_tx
-//         .send(Arc::new(L1Notification::BatchCommit {
-//             block_info: BlockInfo { number: batch_commit_1.block_number, hash: B256::random() },
-//             data: batch_commit_1.clone(),
-//         }))
-//         .await?;
-//     wait_for_event_5s(
-//         &mut events,
-//         ChainOrchestratorEvent::BatchCommitIndexed {
-//             batch_info: BatchInfo { index: batch_commit_1.index, hash: batch_commit_1.hash },
-//             l1_block_number: batch_commit_1.block_number,
-//         },
-//     )
-//     .await?;
-//
-//     // Send duplicate batch commit 1 - should be skipped and duplicate detected
-//     l1_watcher_tx
-//         .send(Arc::new(L1Notification::BatchCommit {
-//             block_info: BlockInfo { number: batch_commit_1.block_number, hash: B256::random() },
-//             data: batch_commit_1.clone(),
-//         }))
-//         .await?;
-//     wait_for_event_5s(
-//         &mut events,
-//         ChainOrchestratorEvent::BatchCommitDuplicate(batch_commit_1.index),
-//     )
-//     .await?;
-//
-//     // Send batch commit 3 - should trigger reset due to gap (missing batch 2)
-//     let batch_commit_3 = BatchCommitData {
-//         hash: B256::random(),
-//         index: 3, // Gap! Missing index 2
-//         block_number: 3,
-//         ..Default::default()
-//     };
-//
-//     l1_watcher_tx
-//         .send(Arc::new(L1Notification::BatchCommit {
-//             block_info: BlockInfo { number: batch_commit_3.block_number, hash: B256::random() },
-//             data: batch_commit_3.clone(),
-//         }))
-//         .await?;
-//     wait_for_event_5s(
-//         &mut events,
-//         ChainOrchestratorEvent::BatchCommitGap {
-//             missing_index: batch_commit_3.index,
-//             l1_block_number_reset: batch_commit_1.block_number,
-//         },
-//     )
-//     .await?;
-//
-//     let mut command_rx = l1_watcher_command_rx.lock().await;
-//     let command = tokio::time::timeout(Duration::from_secs(5), command_rx.recv())
-//         .await
-//         .expect("should receive command within timeout")
-//         .expect("should receive Some(command)");
-//
-//     // Verify it's a ResetToBlock command with the correct block number
-//     match command {
-//         L1WatcherCommand::ResetToBlock { block, .. } => {
-//             assert_eq!(
-//                 block, batch_commit_1.block_number,
-//                 "Reset block should be the L1 block of the last known batch"
-//             );
-//         }
-//     }
-//
-//     Ok(())
-// }
+#[tokio::test]
+async fn test_batch_commit_gap() -> eyre::Result<()> {
+    reth_tracing::init_test_tracing();
+
+    let mut fixture = TestFixture::builder().sequencer().build().await?;
+
+    // Node is unsynced initially -> does not derive batches (which is what we want)
+
+    let batch_1_hash = B256::random();
+    // Send batch commit 1 to populate the database
+    fixture.l1().commit_batch().hash(batch_1_hash).index(1).block_number(1).send().await?;
+    fixture.expect_event().batch_commit_indexed(1, 1).await?;
+
+    // Send duplicate batch commit 1 - should be skipped and duplicate detected
+    fixture.l1().commit_batch().hash(batch_1_hash).index(1).block_number(1).send().await?;
+    fixture.expect_event().batch_commit_duplicates(1).await?;
+
+    // Send batch commit 3 - should trigger reset due to gap (missing batch 2)
+    fixture.l1().commit_batch().index(3).block_number(3).send().await?;
+    // Expect gap event: missing index 3, reset to L1 block 1 (where batch 1 was committed)
+    fixture.expect_event().batch_commit_gap(3, 1).await?;
+
+    // Verify that a ResetToBlock command was sent to the L1 watcher
+    let command = fixture.expect_l1_watcher_command().await?;
+    match command {
+        rollup_node_watcher::L1WatcherCommand::ResetToBlock { block, .. } => {
+            assert_eq!(block, 1, "Reset block should be the L1 block of the last known batch");
+        }
+    }
+
+    Ok(())
+}
 
 // Test that the chain orchestrator detects gaps in L1 messages, triggers a reset command to the
 // L1 watcher for self-healing and skips duplicate L1 messages received.
