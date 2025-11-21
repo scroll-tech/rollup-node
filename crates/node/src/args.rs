@@ -341,7 +341,7 @@ impl ScrollRollupNodeConfig {
         let consensus = self.consensus_args.consensus(authorized_signer)?;
 
         let (l1_notification_tx, l1_notification_rx): (Option<Sender<Arc<L1Notification>>>, _) =
-            if let Some(provider) = l1_provider.filter(|_| !self.test) {
+            if let Some(provider) = l1_provider.filter(|_| !self.test||self.blob_provider_args.anvil_url.is_some()) {
                 tracing::info!(target: "scroll::node::args", ?l1_block_startup_info, "Starting L1 watcher");
                 (
                     None,

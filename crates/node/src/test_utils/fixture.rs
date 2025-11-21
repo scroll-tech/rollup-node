@@ -520,20 +520,26 @@ impl TestFixtureBuilder {
 
         // Start Anvil if requested
         let anvil = if self.enable_anvil {
-            let anvil = Some(
-                Self::spawn_anvil(
-                    self.anvil_state_path.as_deref(),
-                    self.anvil_chain_id,
-                    self.anvil_block_time,
-                )
-                .await?,
-            );
-            if let Some(ref handle) = anvil {
-                let endpoint = handle.http_endpoint();
-                config.l1_provider_args.url = endpoint.parse::<reqwest::Url>().ok();
-                config.blob_provider_args.anvil_url = endpoint.parse::<reqwest::Url>().ok();
-            }
-            anvil
+            let handle = Self::spawn_anvil(
+                self.anvil_state_path.as_deref(),
+                self.anvil_chain_id,
+                self.anvil_block_time,
+            )
+            .await?;
+
+            // Parse endpoint URL once and reuse
+            let endpoint_url = handle
+                .http_endpoint()
+                .parse::<reqwest::Url>()
+                .map_err(|e| eyre::eyre!("Failed to parse Anvil endpoint URL: {}", e))?;
+
+            // Configure L1 provider and blob provider to use Anvil
+            config.l1_provider_args.url = Some(endpoint_url.clone());
+            config.l1_provider_args.logs_query_block_range = 500;
+            config.blob_provider_args.anvil_url = Some(endpoint_url);
+            config.blob_provider_args.mock = false;
+
+            Some(handle)
         } else {
             None
         };
@@ -603,6 +609,8 @@ impl TestFixtureBuilder {
         if let Some(id) = chain_id {
             config.chain_id = Some(id);
         }
+        
+        config.port = 8544;
 
         // Configure block time
         if let Some(time) = block_time {

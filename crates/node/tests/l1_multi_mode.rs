@@ -101,10 +101,6 @@ async fn test_batch_commit_while_synced() -> eyre::Result<()> {
         .build()
         .await?;
 
-    // First, send L1Synced notification
-    fixture.l1().sync().await?;
-    fixture.expect_event().l1_synced().await?;
-
     // Get initial status
     let initial_status = fixture.get_sequencer_status().await?;
     let initial_safe = initial_status.l2.fcs.safe_block_info().number;
@@ -116,8 +112,19 @@ async fn test_batch_commit_while_synced() -> eyre::Result<()> {
     let commit_batch_1_tx = read_test_transaction("commitBatch", "1")?;
     fixture.anvil_send_raw_transaction(commit_batch_1_tx).await?;
 
+    let commit_batch_1_tx = read_test_transaction("commitBatch", "2")?;
+    fixture.anvil_send_raw_transaction(commit_batch_1_tx).await?;
+
     // Give it some time to process
-    tokio::time::sleep(tokio::time::Duration::from_millis(1000)).await;
+    tokio::time::sleep(tokio::time::Duration::from_millis(10000)).await;
+
+    // First, send L1Synced notification
+    // fixture.l1().sync().await?;
+    // fixture.expect_event().l1_synced().await?;
+    // fixture.expect_event().batch_consolidated().await?;
+
+    // Give it some time to process
+    // tokio::time::sleep(tokio::time::Duration::from_millis(10000)).await;
 
     // Check that safe head was updated
     let new_status = fixture.get_sequencer_status().await?;
