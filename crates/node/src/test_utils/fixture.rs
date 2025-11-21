@@ -40,7 +40,6 @@ use std::{
 use tokio::sync::{mpsc, Mutex};
 
 /// Main test fixture providing a high-level interface for testing rollup nodes.
-#[derive(Debug)]
 pub struct TestFixture {
     /// The list of nodes in the test setup.
     pub nodes: Vec<NodeHandle>,
@@ -48,8 +47,22 @@ pub struct TestFixture {
     pub wallet: Arc<Mutex<Wallet>>,
     /// Chain spec used by the nodes.
     pub chain_spec: Arc<<ScrollRollupNode as NodeTypes>::ChainSpec>,
+    /// Optional Anvil instance for L1 simulation.
+    pub anvil: Option<anvil::NodeHandle>,
     /// The task manager. Held in order to avoid dropping the node.
     _tasks: TaskManager,
+}
+
+impl Debug for TestFixture {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("TestFixture")
+            .field("nodes", &self.nodes)
+            .field("wallet", &"<Mutex<Wallet>>")
+            .field("chain_spec", &self.chain_spec)
+            .field("anvil", &self.anvil.is_some())
+            .field("_tasks", &"<TaskManager>")
+            .finish()
+    }
 }
 
 /// The network handle to the Scroll network.
@@ -201,6 +214,45 @@ impl TestFixture {
     ) -> eyre::Result<rollup_node_chain_orchestrator::ChainOrchestratorStatus> {
         self.get_status(0).await
     }
+
+    /// Get the Anvil instance if one was started.
+    pub const fn anvil(&self) -> Option<&anvil::NodeHandle> {
+        self.anvil.as_ref()
+    }
+
+    /// Get the Anvil HTTP endpoint if Anvil was started.
+    pub fn anvil_endpoint(&self) -> Option<String> {
+        self.anvil.as_ref().map(|a| a.http_endpoint())
+    }
+
+    /// Check if Anvil is running.
+    pub const fn has_anvil(&self) -> bool {
+        self.anvil.is_some()
+    }
+
+    /// Send a raw transaction to Anvil.
+    pub async fn anvil_send_raw_transaction(
+        &self,
+        raw_tx: impl Into<alloy_primitives::Bytes>,
+    ) -> eyre::Result<alloy_primitives::B256> {
+        use alloy_provider::{Provider, ProviderBuilder};
+
+        // Ensure Anvil is running
+        let anvil_endpoint =
+            self.anvil_endpoint().ok_or_else(|| eyre::eyre!("Anvil is not running"))?;
+
+        // Create provider
+        let provider = ProviderBuilder::new().connect_http(anvil_endpoint.parse()?);
+
+        // Send raw transaction
+        let raw_tx_bytes = raw_tx.into();
+        let pending_tx = provider.send_raw_transaction(&raw_tx_bytes).await?;
+
+        let tx_hash = *pending_tx.tx_hash();
+        tracing::info!("Sent raw transaction to Anvil: {:?}", tx_hash);
+
+        Ok(tx_hash)
+    }
 }
 
 /// Builder for creating test fixtures with a fluent API.
@@ -211,6 +263,10 @@ pub struct TestFixtureBuilder {
     chain_spec: Option<Arc<<ScrollRollupNode as NodeTypes>::ChainSpec>>,
     is_dev: bool,
     no_local_transactions_propagation: bool,
+    enable_anvil: bool,
+    anvil_state_path: Option<PathBuf>,
+    anvil_chain_id: Option<u64>,
+    anvil_block_time: Option<u64>,
 }
 
 impl Default for TestFixtureBuilder {
@@ -228,6 +284,10 @@ impl TestFixtureBuilder {
             chain_spec: None,
             is_dev: false,
             no_local_transactions_propagation: false,
+            enable_anvil: false,
+            anvil_state_path: None,
+            anvil_chain_id: None,
+            anvil_block_time: None,
         }
     }
 
@@ -421,10 +481,68 @@ impl TestFixtureBuilder {
         &mut self.config
     }
 
+    /// Enable Anvil with default settings.
+    pub const fn with_anvil(mut self) -> Self {
+        self.enable_anvil = true;
+        self
+    }
+
+    /// Enable Anvil with the default state file (`tests/anvil_state.json`).
+    pub fn with_anvil_default_state(mut self) -> Self {
+        self.enable_anvil = true;
+        self.anvil_state_path = Some(PathBuf::from("./tests/testdata/anvil_state.json"));
+        self
+    }
+
+    /// Enable Anvil with a custom state file.
+    pub fn with_anvil_state(mut self, path: impl Into<PathBuf>) -> Self {
+        self.enable_anvil = true;
+        self.anvil_state_path = Some(path.into());
+        self
+    }
+
+    /// Set the chain ID for Anvil.
+    pub const fn with_anvil_chain_id(mut self, chain_id: u64) -> Self {
+        self.anvil_chain_id = Some(chain_id);
+        self
+    }
+
+    /// Set the block time for Anvil (in seconds).
+    pub const fn with_anvil_block_time(mut self, block_time: u64) -> Self {
+        self.anvil_block_time = Some(block_time);
+        self
+    }
+
     /// Build the test fixture.
     pub async fn build(self) -> eyre::Result<TestFixture> {
-        let config = self.config;
+        let mut config = self.config;
         let chain_spec = self.chain_spec.unwrap_or_else(|| SCROLL_DEV.clone());
+
+        // Start Anvil if requested
+        let anvil = if self.enable_anvil {
+            let handle = Self::spawn_anvil(
+                self.anvil_state_path.as_deref(),
+                self.anvil_chain_id,
+                self.anvil_block_time,
+            )
+            .await?;
+
+            // Parse endpoint URL once and reuse
+            let endpoint_url = handle
+                .http_endpoint()
+                .parse::<reqwest::Url>()
+                .map_err(|e| eyre::eyre!("Failed to parse Anvil endpoint URL: {}", e))?;
+
+            // Configure L1 provider and blob provider to use Anvil
+            config.l1_provider_args.url = Some(endpoint_url.clone());
+            config.l1_provider_args.logs_query_block_range = 500;
+            config.blob_provider_args.anvil_url = Some(endpoint_url);
+            config.blob_provider_args.mock = false;
+
+            Some(handle)
+        } else {
+            None
+        };
 
         let (nodes, _tasks, wallet) = setup_engine(
             config.clone(),
@@ -475,6 +593,46 @@ impl TestFixtureBuilder {
             wallet: Arc::new(Mutex::new(wallet)),
             chain_spec,
             _tasks,
+            anvil,
         })
+    }
+
+    /// Spawn an Anvil instance with the given configuration.
+    async fn spawn_anvil(
+        state_path: Option<&std::path::Path>,
+        chain_id: Option<u64>,
+        block_time: Option<u64>,
+    ) -> eyre::Result<anvil::NodeHandle> {
+        let mut config = anvil::NodeConfig::default();
+
+        // Configure chain ID
+        if let Some(id) = chain_id {
+            config.chain_id = Some(id);
+        }
+        
+        config.port = 8544;
+
+        // Configure block time
+        if let Some(time) = block_time {
+            config.block_time = Some(std::time::Duration::from_secs(time));
+        }
+
+        // Load state from file if provided
+        if let Some(path) = state_path {
+            let state = anvil::eth::backend::db::SerializableState::load(path)
+                .map_err(|e| {
+                    eyre::eyre!(
+                        "Failed to load Anvil state from {}: {:?}",
+                        path.display(),
+                        e
+                    )
+                })?;
+            tracing::info!("Loaded Anvil state from: {}", path.display());
+            config.init_state = Some(state);
+        }
+
+        // Spawn Anvil and return the NodeHandle
+        let (_api, handle) = anvil::spawn(config).await;
+        Ok(handle)
     }
 }
