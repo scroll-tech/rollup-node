@@ -2,6 +2,7 @@
 
 use super::args::ScrollRollupNodeConfig;
 use crate::constants;
+use std::sync::Arc;
 
 use reth_evm::{ConfigureEngineEvm, EvmFactory, EvmFactoryFor};
 use reth_network::NetworkProtocols;
@@ -37,7 +38,7 @@ pub use rpc::{RollupNodeExtApiClient, RollupNodeExtApiServer, RollupNodeRpcExt};
 mod rollup;
 pub use rollup::IsDevChain;
 use rollup::RollupManagerAddOn;
-use tokio::sync::mpsc::UnboundedReceiver;
+use tokio::sync::{mpsc::UnboundedReceiver, Mutex};
 
 /// Add-ons for the Scroll follower node.
 #[derive(Debug)]
@@ -137,7 +138,7 @@ where
         }
 
         let rpc_handle = rpc_add_ons.launch_add_ons_with(ctx.clone(), |_| Ok(())).await?;
-        let (rollup_manager_handle, l1_watcher_tx) =
+        let (rollup_manager_handle, l1_watcher_tx, l1_watcher_command_rx) =
             rollup_node_manager_addon.launch(ctx.clone(), rpc_handle.clone()).await?;
 
         tx.send(rollup_manager_handle.clone())
@@ -148,6 +149,10 @@ where
             rpc_handle,
             #[cfg(feature = "test-utils")]
             l1_watcher_tx,
+            #[cfg(feature = "test-utils")]
+            l1_watcher_command_rx: Arc::new(Mutex::new(
+                l1_watcher_command_rx.expect("l1_watcher_command_rx must exist in test utils"),
+            )),
         })
     }
 }

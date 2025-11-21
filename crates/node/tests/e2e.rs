@@ -4,6 +4,7 @@ use alloy_eips::BlockNumberOrTag;
 use alloy_primitives::{address, b256, Address, Bytes, Signature, B256, U256};
 use alloy_signer::Signer;
 use alloy_signer_local::PrivateKeySigner;
+use eyre::{bail, Ok};
 use futures::{task::noop_waker_ref, FutureExt, StreamExt};
 use reth_chainspec::EthChainSpec;
 use reth_network::{NetworkConfigBuilder, NetworkEventListenerProvider, PeersInfo};
@@ -38,7 +39,7 @@ use std::{
     task::{Context, Poll},
     time::Duration,
 };
-use tokio::{sync::Mutex, time};
+use tokio::{select, sync::Mutex, time};
 use tracing::trace;
 
 #[tokio::test]
@@ -574,7 +575,7 @@ async fn shutdown_consolidates_most_recent_batch_on_startup() -> eyre::Result<()
     config.hydrate(node.inner.config.clone()).await?;
 
     let (_, events) = ScrollWireProtocolHandler::new(ScrollWireConfig::new(true));
-    let (chain_orchestrator, handle, l1_notification_tx) = config
+    let (chain_orchestrator, handle, l1_notification_tx, _) = config
         .clone()
         .build(
             RollupNodeContext::new(
@@ -655,7 +656,7 @@ async fn shutdown_consolidates_most_recent_batch_on_startup() -> eyre::Result<()
     // Lets iterate over all blocks expected to be derived from the first batch commit.
     let consolidation_outcome = loop {
         let event = rnm_events.next().await;
-        println!("Received event: {:?}", event);
+        tracing::info!(target: "scroll::test", event = ?event, "Received event");
         if let Some(ChainOrchestratorEvent::BatchConsolidated(consolidation_outcome)) = event {
             break consolidation_outcome;
         }
@@ -724,7 +725,7 @@ async fn shutdown_consolidates_most_recent_batch_on_startup() -> eyre::Result<()
 
     // Start the RNM again.
     let (_, events) = ScrollWireProtocolHandler::new(ScrollWireConfig::new(true));
-    let (chain_orchestrator, handle, l1_notification_tx) = config
+    let (chain_orchestrator, handle, l1_notification_tx, _) = config
         .clone()
         .build(
             RollupNodeContext::new(
@@ -755,26 +756,58 @@ async fn shutdown_consolidates_most_recent_batch_on_startup() -> eyre::Result<()
     // Request an event stream from the rollup node manager.
     let mut rnm_events = handle.get_event_listener().await?;
 
-    println!("im here");
+    // Send the second batch again to test skipping of already known batch.
+    l1_notification_tx
+        .send(Arc::new(L1Notification::BatchCommit {
+            block_info: block_1_info,
+            data: batch_1_data.clone(),
+        }))
+        .await?;
+    loop {
+        select! {
+            _ = tokio::time::sleep(Duration::from_secs(5)) => {
+                bail!("Timed out waiting for first consolidated block after RNM restart");
+            }
 
-    // Send the second batch again to mimic the watcher behaviour.
+            evt = rnm_events.next() => {
+                tracing::info!(target: "scroll::test", event = ?evt, "Received event");
+
+                if evt == Some(ChainOrchestratorEvent::BatchCommitDuplicate(batch_1_data.index)) {
+                    break;
+                }
+            }
+        }
+    }
+
+    // Send L1 finalized block event again to trigger consolidation from the last known safe block.
     let block_1_info = BlockInfo { number: 18318215, hash: B256::random() };
     l1_notification_tx.send(Arc::new(L1Notification::Finalized(block_1_info.number))).await?;
 
+    let l2_block;
     // Lets fetch the first consolidated block event - this should be the first block of the batch.
-    let l2_block = loop {
-        if let Some(ChainOrchestratorEvent::BlockConsolidated(consolidation_outcome)) =
-            rnm_events.next().await
-        {
-            break consolidation_outcome.block_info().clone();
-        }
-    };
+    loop {
+        select! {
+            _ = tokio::time::sleep(Duration::from_secs(5)) => {
+                bail!("Timed out waiting for first consolidated block after RNM restart");
+            }
 
-    // One issue #273 is completed, we will again have safe blocks != finalized blocks, and this
-    // should be changed to 1. Assert that the consolidated block is the first block that was not
-    // previously processed of the batch.
+            evt = rnm_events.next() => {
+                if let Some(ChainOrchestratorEvent::BlockConsolidated(consolidation_outcome)) = evt {
+                    l2_block = Some(consolidation_outcome.block_info().clone());
+                    break;
+                }
+
+                tracing::info!(target: "scroll::test", event = ?evt, "Received event");
+            }
+        }
+    }
+
+    // Assert that the consolidated block is the first block that was not previously processed of
+    // the batch. The last consolidated block before shutdown was block 40, so the next should
+    // be block 41. Since we apply blocks from a partially processed batch this is expected as described in https://github.com/scroll-tech/rollup-node/issues/411. Once we implement full batch atomicity (for setting safe blocks from a batch) this should change to block 5.
     assert_eq!(
-        l2_block.block_info.number, 41,
+        l2_block.unwrap().block_info.number,
+        41,
         "Consolidated block number does not match expected number"
     );
 
@@ -785,7 +818,7 @@ async fn shutdown_consolidates_most_recent_batch_on_startup() -> eyre::Result<()
             if let Some(ChainOrchestratorEvent::BlockConsolidated(consolidation_outcome)) =
                 rnm_events.next().await
             {
-                assert!(consolidation_outcome.block_info().block_info.number == i);
+                assert_eq!(consolidation_outcome.block_info().block_info.number, i);
                 break;
             }
         }
@@ -840,7 +873,7 @@ async fn graceful_shutdown_sets_fcs_to_latest_signed_block_in_db_on_start_up() -
     config.hydrate(node.inner.config.clone()).await?;
 
     let (_, events) = ScrollWireProtocolHandler::new(ScrollWireConfig::new(true));
-    let (rnm, handle, l1_watcher_tx) = config
+    let (rnm, handle, l1_watcher_tx, _) = config
         .clone()
         .build(
             RollupNodeContext::new(
@@ -913,7 +946,7 @@ async fn graceful_shutdown_sets_fcs_to_latest_signed_block_in_db_on_start_up() -
 
     // Start the RNM again.
     let (_, events) = ScrollWireProtocolHandler::new(ScrollWireConfig::new(true));
-    let (rnm, handle, _) = config
+    let (rnm, handle, _, _) = config
         .clone()
         .build(
             RollupNodeContext::new(
@@ -1775,6 +1808,129 @@ async fn signer_rotation() -> eyre::Result<()> {
             }
         })
         .await?;
+
+    Ok(())
+}
+
+// Test that the chain orchestrator detects gaps in batch commits, triggers a reset command to the
+// L1 watcher for self-healing and skips duplicate batch commits.
+#[tokio::test]
+async fn test_batch_commit_gap() -> eyre::Result<()> {
+    reth_tracing::init_test_tracing();
+
+    let mut fixture = TestFixture::builder().sequencer().build().await?;
+
+    // Node is unsynced initially -> does not derive batches (which is what we want)
+
+    let batch_1_hash = B256::random();
+    // Send batch commit 1 to populate the database
+    fixture.l1().commit_batch().hash(batch_1_hash).index(1).block_number(1).send().await?;
+    fixture.expect_event().batch_commit_indexed(1, 1).await?;
+
+    // Send duplicate batch commit 1 - should be skipped and duplicate detected
+    fixture.l1().commit_batch().hash(batch_1_hash).index(1).block_number(1).send().await?;
+    fixture.expect_event().batch_commit_duplicates(1).await?;
+
+    // Send batch commit 3 - should trigger reset due to gap (missing batch 2)
+    fixture.l1().commit_batch().index(3).block_number(3).send().await?;
+    // Expect gap event: missing index 3, reset to L1 block 1 (where batch 1 was committed)
+    fixture.expect_event().batch_commit_gap(3, 1).await?;
+
+    // Process the reset command and update the notification sender for subsequent notifications
+    let reset_block = fixture.process_gap_recovery_command().await?;
+    assert_eq!(reset_block, 1, "Reset block should be the L1 block of the last known batch");
+
+    Ok(())
+}
+
+// Test that the chain orchestrator detects gaps in L1 messages, triggers a reset command to the
+// L1 watcher for self-healing and skips duplicate L1 messages received.
+#[tokio::test]
+async fn test_l1_message_gap() -> eyre::Result<()> {
+    reth_tracing::init_test_tracing();
+
+    let mut fixture = TestFixture::builder().sequencer().build().await?;
+
+    // Node is unsynced initially -> does not derive batches (which is what we want)
+
+    let to_address = Address::random();
+    let sender = Address::random();
+    // Send L1 message 0 to populate the database
+    fixture
+        .l1()
+        .add_message()
+        .queue_index(0)
+        .to(to_address)
+        .sender(sender)
+        .at_block(1)
+        .send()
+        .await?;
+    fixture.expect_event().l1_message_committed().await?;
+
+    // Send duplicate L1 message 0 - should be skipped and duplicate detected
+    fixture
+        .l1()
+        .add_message()
+        .queue_index(0)
+        .to(to_address)
+        .sender(sender)
+        .at_block(1)
+        .send()
+        .await?;
+    fixture.expect_event().l1_message_duplicate(0).await?;
+
+    // Send L1 message 2 - should trigger reset due to gap (missing L1 message 1)
+    fixture.l1().add_message().queue_index(2).at_block(3).send().await?;
+    // Expect gap event: missing index 2, reset to L1 block 1 (where message 0 was committed)
+    fixture.expect_event().l1_message_gap(2, 1).await?;
+
+    // Process the reset command and update the notification sender for subsequent notifications
+    let reset_block = fixture.process_gap_recovery_command().await?;
+    assert_eq!(reset_block, 1, "Reset block should be the L1 block of the last known L1 message");
+
+    Ok(())
+}
+
+// Test that the chain orchestrator detects gaps in batch reverts (missed revert events),
+// triggers a reset command to the L1 watcher for self-healing and skips duplicate batch reverts.
+#[tokio::test]
+async fn test_batch_revert_gap() -> eyre::Result<()> {
+    reth_tracing::init_test_tracing();
+
+    let mut fixture = TestFixture::builder().sequencer().build().await?;
+
+    // Node is unsynced initially -> does not derive batches (which is what we want)
+
+    // Send batch commit 1 to populate the database
+    fixture.l1().commit_batch().index(1).block_number(1).send().await?;
+    fixture.expect_event().batch_commit_indexed(1, 1).await?;
+
+    // Send batch commit 2 to populate the database
+    fixture.l1().commit_batch().index(2).block_number(2).send().await?;
+    fixture.expect_event().batch_commit_indexed(2, 2).await?;
+
+    // Send batch commit 2_new - simulating a missed revert event
+    // This should trigger a BatchRevertGap because we're seeing batch 2 again at a different
+    // L1 block, which indicates we missed a revert event
+    fixture.l1().commit_batch().index(2).block_number(10).send().await?;
+    // Expect revert gap event: missing index 2, reset to L1 block 2 (where batch 2 was committed)
+    fixture.expect_event().batch_revert_gap(2, 2).await?;
+
+    // Process the reset command and update the notification sender for subsequent notifications
+    let reset_block = fixture.process_gap_recovery_command().await?;
+    assert_eq!(reset_block, 2, "Reset block should be the L1 block of the last known batch");
+
+    // Send actual revert for batch commit 2
+    fixture.l1().revert_batch_range().start(2).end(2).at_block_number(6).send().await?;
+    // can't assert event due to no safe block head being set
+
+    // Send duplicate batch revert for batch commit 2 - should be skipped and duplicate detected
+    fixture.l1().revert_batch_range().start(2).end(2).at_block_number(6).send().await?;
+    fixture.expect_event().batch_revert_duplicate(2).await?;
+
+    // Send batch commit 2_new again to continue normal processing
+    fixture.l1().commit_batch().index(2).block_number(10).send().await?;
+    fixture.expect_event().batch_commit_indexed(2, 10).await?;
 
     Ok(())
 }
