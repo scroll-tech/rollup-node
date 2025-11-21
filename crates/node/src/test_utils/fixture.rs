@@ -98,6 +98,14 @@ impl NodeHandle {
     pub const fn is_follower(&self) -> bool {
         matches!(self.typ, NodeType::Follower)
     }
+
+    /// Update the L1 watcher notification sender.
+    ///
+    /// This is used after gap recovery to update the sender to the new channel
+    /// that the `ChainOrchestrator` is now listening on.
+    pub fn set_l1_watcher_tx(&mut self, tx: mpsc::Sender<Arc<L1Notification>>) {
+        self.l1_watcher_tx = Some(tx);
+    }
 }
 
 impl Debug for NodeHandle {
@@ -224,6 +232,41 @@ impl TestFixture {
             .await
             .map_err(|_| eyre::eyre!("Timeout waiting for L1 watcher command"))?
             .ok_or_else(|| eyre::eyre!("L1 watcher command channel closed"))
+    }
+
+    /// Process an L1 watcher reset command and update the notification sender.
+    ///
+    /// After a gap is detected, the `ChainOrchestrator` calls `trigger_gap_recovery` which
+    /// creates a new notification channel and sends the new sender via the command channel.
+    /// This method reads that command and updates the test fixture's `l1_watcher_tx` so
+    /// subsequent L1 notifications can be sent to the `ChainOrchestrator`.
+    ///
+    /// Returns the block number that the L1 watcher should reset to.
+    pub async fn process_gap_recovery_command(&mut self) -> eyre::Result<u64> {
+        self.process_gap_recovery_command_on(0).await
+    }
+
+    /// Process an L1 watcher reset command on a specific node.
+    ///
+    /// See [`Self::process_gap_recovery_command`] for details.
+    pub async fn process_gap_recovery_command_on(
+        &mut self,
+        node_index: usize,
+    ) -> eyre::Result<u64> {
+        let command = {
+            let mut command_rx = self.nodes[node_index].l1_watcher_command_rx.lock().await;
+            tokio::time::timeout(Duration::from_secs(5), command_rx.recv())
+                .await
+                .map_err(|_| eyre::eyre!("Timeout waiting for L1 watcher command"))?
+                .ok_or_else(|| eyre::eyre!("L1 watcher command channel closed"))?
+        };
+
+        match command {
+            L1WatcherCommand::ResetToBlock { block, new_sender } => {
+                self.nodes[node_index].set_l1_watcher_tx(new_sender);
+                Ok(block)
+            }
+        }
     }
 }
 

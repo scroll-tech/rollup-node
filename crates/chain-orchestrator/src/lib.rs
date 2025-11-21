@@ -826,8 +826,7 @@ impl<
                     missing_index,
                     l1_block_number_reset
                 );
-                // TODO: getting channel closed here
-                // self.l1_watcher_handle.trigger_gap_recovery(l1_block_number_reset).await;
+                self.l1_watcher_handle.trigger_gap_recovery(l1_block_number_reset).await;
             }
             Some(BatchCommitDuplicate(index)) => {
                 tracing::info!(

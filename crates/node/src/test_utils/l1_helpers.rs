@@ -96,6 +96,11 @@ impl<'a> L1Helper<'a> {
         BatchRevertBuilder::new(self)
     }
 
+    /// Create a batch revert range builder.
+    pub fn revert_batch_range(self) -> BatchRevertRangeBuilder<'a> {
+        BatchRevertRangeBuilder::new(self)
+    }
+
     /// Send an L1 finalized block notification.
     pub async fn finalize_l1_block(self, block_number: u64) -> eyre::Result<()> {
         let notification = Arc::new(L1Notification::Finalized(block_number));
@@ -447,6 +452,61 @@ impl<'a> BatchRevertBuilder<'a> {
 
         let notification = Arc::new(L1Notification::BatchRevert {
             batch_info: BatchInfo { hash: self.hash, index: self.index },
+            block_info: self.block_info,
+        });
+
+        self.l1_helper.send_to_nodes(notification).await
+    }
+}
+
+/// Builder for creating batch revert range notifications in tests.
+#[derive(Debug)]
+pub struct BatchRevertRangeBuilder<'a> {
+    l1_helper: L1Helper<'a>,
+    block_info: BlockInfo,
+    start: u64,
+    end: u64,
+}
+
+impl<'a> BatchRevertRangeBuilder<'a> {
+    fn new(l1_helper: L1Helper<'a>) -> Self {
+        Self {
+            l1_helper,
+            block_info: BlockInfo { number: 0, hash: B256::random() },
+            start: 0,
+            end: 0,
+        }
+    }
+
+    /// Set the L1 block info for this batch revert range.
+    pub const fn at_block(mut self, block_info: BlockInfo) -> Self {
+        self.block_info = block_info;
+        self
+    }
+
+    /// Set the L1 block number for this batch revert range.
+    pub const fn at_block_number(mut self, block_number: u64) -> Self {
+        self.block_info.number = block_number;
+        self
+    }
+
+    /// Set the start batch index.
+    pub const fn start(mut self, start: u64) -> Self {
+        self.start = start;
+        self
+    }
+
+    /// Set the end batch index.
+    pub const fn end(mut self, end: u64) -> Self {
+        self.end = end;
+        self
+    }
+
+    /// Send the batch revert range notification.
+    pub async fn send(self) -> eyre::Result<()> {
+        let notification = Arc::new(L1Notification::BatchRevertRange {
+            start: self.start,
+            end: self.end,
             block_info: self.block_info,
         });
 
