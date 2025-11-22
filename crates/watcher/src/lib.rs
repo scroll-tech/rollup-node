@@ -353,7 +353,7 @@ where
             // Check that we haven't generated more notifications than logs
             // Note: notifications.len() may be less than logs.len() because genesis batch
             // (batch_index=0) is intentionally skipped
-            if notifications.len() != num_logs {
+            if notifications.len() > num_logs {
                 return Err(L1WatcherError::Logs(FilterLogError::InvalidNotificationCount(
                     num_logs,
                     notifications.len(),
