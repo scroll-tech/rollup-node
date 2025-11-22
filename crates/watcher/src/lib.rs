@@ -325,6 +325,7 @@ where
         if latest.header.number != self.current_block_number {
             // index the next range of blocks.
             let logs = self.next_filtered_logs(latest.header.number).await?;
+            println!("logs: {:?}", logs);
             let num_logs = logs.len();
 
             // prepare notifications.
@@ -356,6 +357,7 @@ where
             // Check that we haven't generated more notifications than logs
             // Note: notifications.len() may be less than logs.len() because genesis batch
             // (batch_index=0) is intentionally skipped
+            println!("notifications: {:?}", notifications);
             if notifications.len() != num_logs {
                 return Err(L1WatcherError::Logs(FilterLogError::InvalidNotificationCount(
                     num_logs,
