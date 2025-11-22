@@ -523,6 +523,9 @@ where
                 });
             }
         }
+        if notifications.is_empty() {
+            tracing::error!(target: "scroll::watcher", "failed to decode any L1 messages from logs");
+        }
         Ok(notifications)
     }
 
@@ -605,6 +608,9 @@ where
                 });
             }
         }
+        if notifications.is_empty() {
+            tracing::error!(target: "scroll::watcher", "failed to decode any batch commits from logs");
+        }
         Ok(notifications)
     }
 
@@ -612,7 +618,8 @@ where
     #[tracing::instrument(skip_all)]
     async fn handle_batch_reverts(&self, logs: &[Log]) -> L1WatcherResult<Vec<L1Notification>> {
         // filter revert logs.
-        logs.iter()
+        let notifications = logs
+            .iter()
             .map(|l| (l, l.block_number, l.block_hash))
             .filter_map(|(log, bn, bh)| {
                 try_decode_log::<RevertBatch_0>(&log.inner).map(|decoded| (decoded.data, bn, bh))
@@ -624,12 +631,17 @@ where
                 let batch_index =
                     decoded_log.batchIndex.uint_try_to().expect("u256 to u64 conversion error");
                 let batch_hash = decoded_log.batchHash;
-                Ok(L1Notification::BatchRevert {
+                Ok::<_, FilterLogError>(L1Notification::BatchRevert {
                     batch_info: BatchInfo { index: batch_index, hash: batch_hash },
                     block_info: BlockInfo { number: block_number, hash: block_hash },
                 })
             })
-            .collect()
+            .collect::<Result<Vec<_>, _>>()?;
+
+        if notifications.is_empty() {
+            tracing::error!(target: "scroll::watcher", "failed to decode any batch reverts from logs");
+        }
+        Ok(notifications)
     }
 
     /// Handle the batch revert range events.
@@ -639,7 +651,8 @@ where
         logs: &[Log],
     ) -> L1WatcherResult<Vec<L1Notification>> {
         // filter revert range logs.
-        logs.iter()
+        let notifications = logs
+            .iter()
             .map(|l| (l, l.block_number, l.block_hash))
             .filter_map(|(log, bn, bh)| {
                 try_decode_log::<RevertBatch_1>(&log.inner).map(|decoded| (decoded.data, bn, bh))
@@ -656,13 +669,18 @@ where
                     .finishBatchIndex
                     .uint_try_to()
                     .expect("u256 to u64 conversion error");
-                Ok(L1Notification::BatchRevertRange {
+                Ok::<_, FilterLogError>(L1Notification::BatchRevertRange {
                     start: start_index,
                     end: end_index,
                     block_info: BlockInfo { number: block_number, hash: block_hash },
                 })
             })
-            .collect()
+            .collect::<Result<Vec<_>, _>>()?;
+
+        if notifications.is_empty() {
+            tracing::error!(target: "scroll::watcher", "failed to decode any batch revert ranges from logs");
+        }
+        Ok(notifications)
     }
 
     /// Handles the finalize batch events.
@@ -672,7 +690,8 @@ where
         logs: &[Log],
     ) -> L1WatcherResult<Vec<L1Notification>> {
         // filter finalize logs and skip genesis batch (batch_index == 0).
-        logs.iter()
+        let notifications = logs
+            .iter()
             .map(|l| (l, l.block_number, l.block_hash))
             .filter_map(|(log, bn, bh)| {
                 try_decode_log::<FinalizeBatch>(&log.inner)
@@ -685,13 +704,18 @@ where
                 let block_hash = maybe_block_hash.ok_or(FilterLogError::MissingBlockHash)?;
                 let index =
                     decoded_log.batch_index.uint_try_to().expect("u256 to u64 conversion error");
-                Ok(L1Notification::BatchFinalization {
+                Ok::<_, FilterLogError>(L1Notification::BatchFinalization {
                     hash: decoded_log.batch_hash,
                     index,
                     block_info: BlockInfo { number: block_number, hash: block_hash },
                 })
             })
-            .collect()
+            .collect::<Result<Vec<_>, _>>()?;
+
+        if notifications.is_empty() {
+            tracing::error!(target: "scroll::watcher", "failed to decode any batch finalizations from logs");
+        }
+        Ok(notifications)
     }
 
     /// Handles the system contract update events.
