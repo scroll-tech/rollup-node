@@ -325,27 +325,23 @@ where
         if latest.header.number != self.current_block_number {
             // index the next range of blocks.
             let logs = self.next_filtered_logs(latest.header.number).await?;
-            println!("logs: {:?}", logs);
             let num_logs = logs.len();
 
             // prepare notifications.
             let mut notifications = Vec::with_capacity(logs.len());
 
-            for log in logs {
-                let sig = log.topics()[0];
+            for log in &logs {
+                let l1_messages = self.handle_l1_messages(&[log]).await?;
+                let batch_commits = self.handle_batch_commits(&[log]).await?;
+                let finalize_batch = self.handle_batch_finalization(&[log]).await?;
+                let revert_batch_0 = self.handle_batch_reverts(&[log]).await?;
+                let revert_batch_1 = self.handle_batch_revert_ranges(&[log]).await?;
 
-                let notification = match sig {
-                    QueueTransaction::SIGNATURE_HASH => self.handle_l1_messages(&[log]).await?,
-                    CommitBatch::SIGNATURE_HASH => self.handle_batch_commits(&[log]).await?,
-                    FinalizeBatch::SIGNATURE_HASH => self.handle_batch_finalization(&[log]).await?,
-                    RevertBatch_0::SIGNATURE_HASH => self.handle_batch_reverts(&[log]).await?,
-                    RevertBatch_1::SIGNATURE_HASH => {
-                        self.handle_batch_revert_ranges(&[log]).await?
-                    }
-                    _ => unreachable!("log signature already filtered"),
-                };
-
-                notifications.extend(notification);
+                notifications.extend(l1_messages);
+                notifications.extend(batch_commits);
+                notifications.extend(finalize_batch);
+                notifications.extend(revert_batch_0);
+                notifications.extend(revert_batch_1);
             }
 
             if let Some(system_contract_update) =
@@ -357,7 +353,6 @@ where
             // Check that we haven't generated more notifications than logs
             // Note: notifications.len() may be less than logs.len() because genesis batch
             // (batch_index=0) is intentionally skipped
-            println!("notifications: {:?}", notifications);
             if notifications.len() != num_logs {
                 return Err(L1WatcherError::Logs(FilterLogError::InvalidNotificationCount(
                     num_logs,
@@ -481,7 +476,7 @@ where
 
     /// Filters the logs into L1 messages and sends them over the channel.
     #[tracing::instrument(skip_all)]
-    async fn handle_l1_messages(&self, logs: &[Log]) -> L1WatcherResult<Vec<L1Notification>> {
+    async fn handle_l1_messages(&self, logs: &[&Log]) -> L1WatcherResult<Vec<L1Notification>> {
         let mut l1_messages = logs
             .iter()
             .map(|l| (&l.inner, l.block_number, l.block_hash, l.block_timestamp))
@@ -523,15 +518,12 @@ where
                 });
             }
         }
-        if notifications.is_empty() {
-            tracing::error!(target: "scroll::watcher", "failed to decode any L1 messages from logs");
-        }
         Ok(notifications)
     }
 
     /// Handles the batch commits events.
     #[tracing::instrument(skip_all)]
-    async fn handle_batch_commits(&self, logs: &[Log]) -> L1WatcherResult<Vec<L1Notification>> {
+    async fn handle_batch_commits(&self, logs: &[&Log]) -> L1WatcherResult<Vec<L1Notification>> {
         // filter commit logs and skip genesis batch (batch_index == 0).
         let mut commit_logs_with_tx = logs
             .iter()
@@ -608,15 +600,12 @@ where
                 });
             }
         }
-        if notifications.is_empty() {
-            tracing::error!(target: "scroll::watcher", "failed to decode any batch commits from logs");
-        }
         Ok(notifications)
     }
 
     /// Handles the batch revert events.
     #[tracing::instrument(skip_all)]
-    async fn handle_batch_reverts(&self, logs: &[Log]) -> L1WatcherResult<Vec<L1Notification>> {
+    async fn handle_batch_reverts(&self, logs: &[&Log]) -> L1WatcherResult<Vec<L1Notification>> {
         // filter revert logs.
         let notifications = logs
             .iter()
@@ -638,9 +627,6 @@ where
             })
             .collect::<Result<Vec<_>, _>>()?;
 
-        if notifications.is_empty() {
-            tracing::error!(target: "scroll::watcher", "failed to decode any batch reverts from logs");
-        }
         Ok(notifications)
     }
 
@@ -648,7 +634,7 @@ where
     #[tracing::instrument(skip_all)]
     async fn handle_batch_revert_ranges(
         &self,
-        logs: &[Log],
+        logs: &[&Log],
     ) -> L1WatcherResult<Vec<L1Notification>> {
         // filter revert range logs.
         let notifications = logs
@@ -677,9 +663,6 @@ where
             })
             .collect::<Result<Vec<_>, _>>()?;
 
-        if notifications.is_empty() {
-            tracing::error!(target: "scroll::watcher", "failed to decode any batch revert ranges from logs");
-        }
         Ok(notifications)
     }
 
@@ -687,7 +670,7 @@ where
     #[tracing::instrument(skip_all)]
     async fn handle_batch_finalization(
         &self,
-        logs: &[Log],
+        logs: &[&Log],
     ) -> L1WatcherResult<Vec<L1Notification>> {
         // filter finalize logs and skip genesis batch (batch_index == 0).
         let notifications = logs
@@ -712,9 +695,6 @@ where
             })
             .collect::<Result<Vec<_>, _>>()?;
 
-        if notifications.is_empty() {
-            tracing::error!(target: "scroll::watcher", "failed to decode any batch finalizations from logs");
-        }
         Ok(notifications)
     }
 
@@ -1108,7 +1088,8 @@ mod tests {
         logs.push(queue_transaction);
 
         // When
-        let notification = watcher.handle_l1_messages(&logs).await?.pop().unwrap();
+        let notification =
+            watcher.handle_l1_messages(&logs.iter().collect::<Vec<_>>()).await?.pop().unwrap();
 
         // Then
         assert!(matches!(notification, L1Notification::L1Message { .. }));
@@ -1151,7 +1132,8 @@ mod tests {
         logs.push(batch_commit);
 
         // When
-        let notification = watcher.handle_batch_commits(&logs).await?.pop().unwrap();
+        let notification =
+            watcher.handle_batch_commits(&logs.iter().collect::<Vec<_>>()).await?.pop().unwrap();
 
         // Then
         assert!(matches!(notification, L1Notification::BatchCommit { .. }));
@@ -1178,7 +1160,8 @@ mod tests {
         logs.push(revert_batch);
 
         // When
-        let notification = watcher.handle_batch_reverts(&logs).await?.pop().unwrap();
+        let notification =
+            watcher.handle_batch_reverts(&logs.iter().collect::<Vec<_>>()).await?.pop().unwrap();
 
         // Then
         assert!(matches!(notification, L1Notification::BatchRevert { .. }));
@@ -1207,7 +1190,11 @@ mod tests {
         logs.push(revert_batch_range);
 
         // When
-        let notification = watcher.handle_batch_revert_ranges(&logs).await?.pop().unwrap();
+        let notification = watcher
+            .handle_batch_revert_ranges(&logs.iter().collect::<Vec<_>>())
+            .await?
+            .pop()
+            .unwrap();
 
         // Then
         assert!(matches!(notification, L1Notification::BatchRevertRange { .. }));
@@ -1234,7 +1221,11 @@ mod tests {
         logs.push(finalize_commit);
 
         // When
-        let notification = watcher.handle_batch_finalization(&logs).await?.pop().unwrap();
+        let notification = watcher
+            .handle_batch_finalization(&logs.iter().collect::<Vec<_>>())
+            .await?
+            .pop()
+            .unwrap();
 
         // Then
         assert!(matches!(notification, L1Notification::BatchFinalization { .. }));
