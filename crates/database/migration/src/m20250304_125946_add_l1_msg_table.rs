@@ -11,7 +11,7 @@ impl MigrationTrait for Migration {
                 Table::create()
                     .table(L1Message::Table)
                     .if_not_exists()
-                    .col(pk_auto(L1Message::QueueIndex))
+                    .col(big_unsigned(L1Message::QueueIndex).primary_key())
                     .col(binary_len_null(L1Message::QueueHash, 32))
                     .col(binary_len(L1Message::Hash, 32))
                     .col(unsigned(L1Message::L1BlockNumber))
@@ -36,6 +36,7 @@ impl MigrationTrait for Migration {
 #[derive(DeriveIden)]
 pub(crate) enum L1Message {
     Table,
+    #[sea_orm(primary_key)]
     QueueIndex,
     QueueHash,
     Hash,
