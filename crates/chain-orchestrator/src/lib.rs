@@ -744,6 +744,11 @@ impl<
         block_info: BlockInfo,
         batch: BatchCommitData,
     ) -> Result<Option<ChainOrchestratorEvent>, ChainOrchestratorError> {
+        if batch.index == 0 {
+            tracing::info!(target: "scroll::chain_orchestrator", "Skipping genesis batch commit");
+            return Ok(None);
+        }
+
         let batch_info: BatchInfo = (&batch).into();
         let event = self
             .database

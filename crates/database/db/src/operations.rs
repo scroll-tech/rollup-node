@@ -620,6 +620,7 @@ impl<T: WriteConnectionProvider + ?Sized + Sync> DatabaseWriteOperations for T {
     }
 
     async fn update_skipped_l1_messages(&self, indexes: Vec<u64>) -> Result<(), DatabaseError> {
+        tracing::trace!(target: "scroll::db", indexes = ?indexes, "Updating skipped L1 messages in database.");
         Ok(models::l1_message::Entity::update_many()
             .col_expr(models::l1_message::Column::Skipped, Expr::value(true))
             .filter(models::l1_message::Column::QueueIndex.is_in(indexes.iter().map(|&x| x as i64)))
@@ -829,6 +830,7 @@ impl<T: WriteConnectionProvider + ?Sized + Sync> DatabaseWriteOperations for T {
         &self,
         outcome: BatchConsolidationOutcome,
     ) -> Result<(), DatabaseError> {
+        tracing::trace!(target: "scroll::db", batch_info = ?outcome.batch_info, "Inserting batch consolidation outcome into database.");
         self.insert_blocks(
             outcome.blocks.iter().map(|b| b.block_info).collect(),
             outcome.batch_info,
