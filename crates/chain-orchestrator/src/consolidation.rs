@@ -38,10 +38,7 @@ pub(crate) async fn reconcile_batch<L2P: Provider<Scroll>>(
 
                 // The block matches the derived attributes and the block is below or equal to the
                 // safe current safe head.
-                if attributes.block_number <= fcs.finalized_block_info().number ||
-                    ((attributes.block_number <= fcs.safe_block_info().number) &&
-                        batch.target_status.is_consolidated())
-                {
+                if attributes.block_number <= fcs.finalized_block_info().number {
                     Ok::<_, ChainOrchestratorError>(BlockConsolidationAction::Skip(block_info))
                 } else {
                     // The block matches the derived attributes, no action is needed.
