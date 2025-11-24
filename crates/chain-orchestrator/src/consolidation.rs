@@ -36,15 +36,13 @@ pub(crate) async fn reconcile_batch<L2P: Provider<Scroll>>(
                 // Extract the block info with L1 messages.
                 let block_info: L2BlockInfoWithL1Messages = (&current_block).into();
 
-                // The block matches the derived attributes and the block is below or equal to the
-                // safe current safe head.
-                if attributes.block_number <= fcs.finalized_block_info().number ||
-                    ((attributes.block_number <= fcs.safe_block_info().number) &&
-                        batch.target_status.is_consolidated())
-                {
+                // The derived attributes match the L2 chain but are associated with a block
+                // number less than or equal to the finalized block, so skip.
+                if attributes.block_number <= fcs.finalized_block_info().number {
                     Ok::<_, ChainOrchestratorError>(BlockConsolidationAction::Skip(block_info))
                 } else {
-                    // The block matches the derived attributes, no action is needed.
+                    // The block matches the derived attributes but is above the finalized block,
+                    // so we need to update the fcs.
                     Ok::<_, ChainOrchestratorError>(BlockConsolidationAction::UpdateFcs(block_info))
                 }
             } else {
