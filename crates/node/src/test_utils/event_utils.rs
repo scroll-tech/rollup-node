@@ -22,7 +22,7 @@ pub struct EventWaiter<'a> {
 
 impl<'a> EventWaiter<'a> {
     /// Create a new multi-node event waiter.
-    pub fn new(fixture: &'a mut TestFixture, node_indices: Vec<usize>) -> Self {
+    pub const fn new(fixture: &'a mut TestFixture, node_indices: Vec<usize>) -> Self {
         Self { fixture, node_indices, timeout_duration: Duration::from_secs(30) }
     }
 

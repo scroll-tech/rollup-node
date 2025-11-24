@@ -32,7 +32,7 @@ async-trait.workspace = true
 auto_impl.workspace = true
 eyre.workspace = true
 futures.workspace = true
-lru = "0.13.0"
+lru.workspace = true
 reqwest = { workspace = true, features = ["json"] }
 serde = { workspace = true, features = ["derive"] }
 thiserror.workspace = true

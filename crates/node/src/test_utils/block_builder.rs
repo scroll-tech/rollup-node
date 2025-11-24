@@ -49,7 +49,7 @@ impl L1MessagesAssertion {
 
 impl<'a> BlockBuilder<'a> {
     /// Create a new block builder.
-    pub(crate) fn new(fixture: &'a mut TestFixture) -> Self {
+    pub(crate) const fn new(fixture: &'a mut TestFixture) -> Self {
         Self {
             fixture,
             expected_tx_hashes: Vec::new(),

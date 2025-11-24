@@ -135,17 +135,17 @@ impl TestFixture {
     }
 
     /// Start building a block using the sequencer.
-    pub fn build_block(&mut self) -> BlockBuilder<'_> {
+    pub const fn build_block(&mut self) -> BlockBuilder<'_> {
         BlockBuilder::new(self)
     }
 
     /// Get L1 helper for managing L1 interactions.
-    pub fn l1(&mut self) -> L1Helper<'_> {
+    pub const fn l1(&mut self) -> L1Helper<'_> {
         L1Helper::new(self)
     }
 
     /// Get transaction helper for creating and injecting transactions.
-    pub fn tx(&mut self) -> TxHelper<'_> {
+    pub const fn tx(&mut self) -> TxHelper<'_> {
         TxHelper::new(self)
     }
 
@@ -417,7 +417,7 @@ impl TestFixtureBuilder {
     }
 
     /// Get a mutable reference to the underlying config for advanced customization.
-    pub fn config_mut(&mut self) -> &mut ScrollRollupNodeConfig {
+    pub const fn config_mut(&mut self) -> &mut ScrollRollupNodeConfig {
         &mut self.config
     }
 

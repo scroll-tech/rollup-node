@@ -1,5 +1,8 @@
 //! L1 watcher for the Scroll Rollup Node.
 
+mod cache;
+use cache::Cache;
+
 mod error;
 pub use error::{EthRequestError, FilterLogError, L1WatcherError};
 
@@ -29,6 +32,7 @@ use scroll_l1::abi::logs::{
 use std::{
     cmp::Ordering,
     fmt::{Debug, Display, Formatter},
+    num::NonZeroUsize,
     sync::Arc,
     time::Duration,
 };
@@ -50,6 +54,10 @@ pub const HEADER_CAPACITY: usize = 100 * MAX_UNFINALIZED_BLOCK_COUNT;
 /// The maximum amount of retained headers for reorg detection.
 #[cfg(not(any(test, feature = "test-utils")))]
 pub const HEADER_CAPACITY: usize = 2 * MAX_UNFINALIZED_BLOCK_COUNT;
+
+/// The default capacity for the transaction cache.
+pub const TRANSACTION_CACHE_CAPACITY: NonZeroUsize =
+    NonZeroUsize::new(100).expect("non zero capacity");
 
 /// The Ethereum L1 block response.
 pub type Block = <Ethereum as Network>::BlockResponse;
@@ -77,6 +85,8 @@ pub struct L1Watcher<EP> {
     unfinalized_blocks: BoundedVec<Header>,
     /// The L1 state info relevant to the rollup node.
     l1_state: L1State,
+    /// The cache for the L1 watcher.
+    cache: Cache,
     /// The latest indexed block.
     current_block_number: BlockNumber,
     /// The sender part of the channel for [`L1Notification`].
@@ -255,6 +265,7 @@ where
             unfinalized_blocks: BoundedVec::new(HEADER_CAPACITY),
             current_block_number: start_block.saturating_sub(1),
             l1_state,
+            cache: Cache::new(TRANSACTION_CACHE_CAPACITY),
             sender: tx,
             config,
             metrics: WatcherMetrics::default(),
@@ -525,7 +536,7 @@ where
 
     /// Handles the batch commits events.
     #[tracing::instrument(skip_all)]
-    async fn handle_batch_commits(&self, logs: &[Log]) -> L1WatcherResult<Vec<L1Notification>> {
+    async fn handle_batch_commits(&mut self, logs: &[Log]) -> L1WatcherResult<Vec<L1Notification>> {
         // filter commit logs and skip genesis batch (batch_index == 0).
         let mut commit_logs_with_tx = logs
             .iter()
@@ -556,15 +567,10 @@ where
         // iterate each group of commits
         for (tx_hash, group) in groups {
             // fetch the commit transaction.
-            let transaction = self
-                .execution_provider
-                .get_transaction_by_hash(tx_hash)
-                .await?
-                .ok_or(EthRequestError::MissingTransactionHash(tx_hash))?;
+            let transaction =
+                self.cache.get_transaction_by_hash(tx_hash, &self.execution_provider).await?;
 
-            // get the optional blobs and calldata.
-            let mut blob_versioned_hashes =
-                transaction.blob_versioned_hashes().unwrap_or(&[]).iter().copied();
+            // get the calldata.
             let input = Arc::new(transaction.input().clone());
 
             // iterate the logs emitted in the group
@@ -572,6 +578,8 @@ where
                 let block_number =
                     raw_log.block_number.ok_or(FilterLogError::MissingBlockNumber)?;
                 let block_hash = raw_log.block_hash.ok_or(FilterLogError::MissingBlockHash)?;
+                let blob_versioned_hash =
+                    self.cache.get_transaction_next_blob_versioned_hash(tx_hash).await?;
                 // if the log is missing the block timestamp, we need to fetch it.
                 // the block timestamp is necessary in order to derive the beacon
                 // slot and query the blobs.
@@ -596,7 +604,7 @@ where
                         block_number,
                         block_timestamp,
                         calldata: input.clone(),
-                        blob_versioned_hash: blob_versioned_hashes.next(),
+                        blob_versioned_hash,
                         finalized_block_number: None,
                         reverted_block_number: None,
                     },
@@ -875,6 +883,7 @@ mod tests {
                 execution_provider: provider,
                 unfinalized_blocks: unfinalized_blocks.into(),
                 l1_state: L1State { head: Default::default(), finalized: Default::default() },
+                cache: Cache::new(TRANSACTION_CACHE_CAPACITY),
                 current_block_number: 0,
                 sender: tx,
                 config: Arc::new(NodeConfig::mainnet()),
@@ -1107,7 +1116,7 @@ mod tests {
             effective_gas_price: None,
         };
 
-        let (watcher, _) =
+        let (mut watcher, _) =
             l1_watcher(chain, vec![], vec![tx.clone()], finalized.clone(), latest.clone());
 
         // build test logs.
