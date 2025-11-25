@@ -11,7 +11,7 @@ use rollup_node::{
     test_utils::{default_test_scroll_rollup_node_config, setup_engine},
     BlobProviderArgs, ChainOrchestratorArgs, ConsensusArgs, EngineDriverArgs, L1ProviderArgs,
     RollupNodeDatabaseArgs, RollupNodeGasPriceOracleArgs, RollupNodeNetworkArgs, RpcArgs,
-    ScrollRollupNodeConfig, SequencerArgs, SignerArgs,
+    ScrollRollupNodeConfig, SequencerArgs, SignerArgs, TestArgs,
 };
 use rollup_node_chain_orchestrator::ChainOrchestratorEvent;
 use rollup_node_primitives::{sig_encode_hash, BlockInfo, L1MessageEnvelope};
@@ -481,7 +481,10 @@ async fn can_sequence_blocks_with_private_key_file() -> eyre::Result<()> {
 
     let chain_spec = (*SCROLL_DEV).clone();
     let rollup_manager_args = ScrollRollupNodeConfig {
-        test: false, // disable test mode to enable real signing
+        test_args: TestArgs {
+            test: false, // disable test mode to enable real signing
+            skip_l1_synced: false,
+        },
         network_args: RollupNodeNetworkArgs::default(),
         database_args: RollupNodeDatabaseArgs {
             rn_db_path: Some(PathBuf::from("sqlite::memory:")),
@@ -581,7 +584,10 @@ async fn can_sequence_blocks_with_hex_key_file_without_prefix() -> eyre::Result<
 
     let chain_spec = (*SCROLL_DEV).clone();
     let rollup_manager_args = ScrollRollupNodeConfig {
-        test: false, // disable test mode to enable real signing
+        test_args: TestArgs {
+            test: false, // disable test mode to enable real signing
+            skip_l1_synced: false,
+        },
         network_args: RollupNodeNetworkArgs::default(),
         database_args: RollupNodeDatabaseArgs {
             rn_db_path: Some(PathBuf::from("sqlite::memory:")),

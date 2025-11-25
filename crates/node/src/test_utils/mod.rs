@@ -78,7 +78,7 @@ pub use network_helpers::{
 use crate::{
     BlobProviderArgs, ChainOrchestratorArgs, ConsensusArgs, EngineDriverArgs, L1ProviderArgs,
     RollupNodeDatabaseArgs, RollupNodeNetworkArgs, RpcArgs, ScrollRollupNode,
-    ScrollRollupNodeConfig, SequencerArgs,
+    ScrollRollupNodeConfig, SequencerArgs, TestArgs,
 };
 use alloy_primitives::Bytes;
 use reth_chainspec::EthChainSpec;
@@ -220,7 +220,7 @@ pub async fn generate_tx(wallet: Arc<Mutex<Wallet>>) -> Bytes {
 /// Returns a default [`ScrollRollupNodeConfig`] preconfigured for testing.
 pub fn default_test_scroll_rollup_node_config() -> ScrollRollupNodeConfig {
     ScrollRollupNodeConfig {
-        test: true,
+        test_args: TestArgs { test: true, skip_l1_synced: false },
         network_args: RollupNodeNetworkArgs::default(),
         database_args: RollupNodeDatabaseArgs::default(),
         l1_provider_args: L1ProviderArgs::default(),
@@ -253,7 +253,7 @@ pub fn default_test_scroll_rollup_node_config() -> ScrollRollupNodeConfig {
 /// interval.
 pub fn default_sequencer_test_scroll_rollup_node_config() -> ScrollRollupNodeConfig {
     ScrollRollupNodeConfig {
-        test: true,
+        test_args: TestArgs { test: true, skip_l1_synced: false },
         network_args: RollupNodeNetworkArgs::default(),
         database_args: RollupNodeDatabaseArgs {
             rn_db_path: Some(PathBuf::from("sqlite::memory:")),

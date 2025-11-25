@@ -57,30 +57,47 @@ fn read_test_transaction(tx_type: &str, index: &str) -> eyre::Result<Bytes> {
 /// Expected: The node should not update the safe head since we only process
 /// BatchCommit events after the node is synced (post L1Synced notification).
 #[tokio::test]
-async fn test_batch_commit_while_syncing() -> eyre::Result<()> {
+async fn test_l1_sync_batch_commit() -> eyre::Result<()> {
     reth_tracing::init_test_tracing();
 
-    let fixture = TestFixture::builder()
+    let mut fixture = TestFixture::builder()
         .followers(1)
         .with_chain_spec(SCROLL_DEV.clone())
+        .skip_l1_synced_notifications()
         .with_anvil_default_state()
         .with_anvil_chain_id(22222222)
+        .with_anvil_l1_config()
         .build()
         .await?;
 
-    // Send BatchCommit while in Syncing state (before L1Synced)
-    let commit_batch_0_tx = read_test_transaction("commitBatch", "0")?;
-    fixture.anvil_send_raw_transaction(commit_batch_0_tx).await?;
+    // Get initial status
+    let initial_status = fixture.get_sequencer_status().await?;
+    let initial_safe = initial_status.l2.fcs.safe_block_info().number;
 
-    let commit_batch_1_tx = read_test_transaction("commitBatch", "1")?;
-    fixture.anvil_send_raw_transaction(commit_batch_1_tx).await?;
-
-    // Give it some time to process
-    tokio::time::sleep(tokio::time::Duration::from_millis(10000)).await;
+    // Send BatchCommit transactions
+    for i in 0..=2 {
+        let commit_batch_tx = read_test_transaction("commitBatch", &i.to_string())?;
+        fixture.anvil_send_raw_transaction(commit_batch_tx).await?;
+    }
 
     // Check status - safe head should still be at genesis
     let status = fixture.get_sequencer_status().await?;
-    assert_eq!(status.l2.fcs.safe_block_info().number, 0, "Safe head should not change during syncing");
+    assert_eq!(
+        status.l2.fcs.safe_block_info().number,
+        0,
+        "Safe head should not change during syncing"
+    );
+
+    fixture.l1().sync().await?;
+    fixture.expect_event().l1_synced().await?;
+    fixture.expect_event().batch_consolidated().await?;
+
+    // Check that safe head was updated
+    let new_status = fixture.get_sequencer_status().await?;
+    assert!(
+        new_status.l2.fcs.safe_block_info().number > initial_safe,
+        "Safe head should advance after BatchCommit when synced and L1Synced"
+    );
 
     Ok(())
 }
@@ -93,7 +110,7 @@ async fn test_batch_commit_while_syncing() -> eyre::Result<()> {
 async fn test_batch_commit_while_synced() -> eyre::Result<()> {
     reth_tracing::init_test_tracing();
 
-    let mut fixture = TestFixture::builder()
+    let fixture = TestFixture::builder()
         .followers(1)
         .with_chain_spec(SCROLL_DEV.clone())
         .with_anvil_default_state()
@@ -105,18 +122,16 @@ async fn test_batch_commit_while_synced() -> eyre::Result<()> {
     let initial_status = fixture.get_sequencer_status().await?;
     let initial_safe = initial_status.l2.fcs.safe_block_info().number;
 
+    // fixture.anvil_mine_blocks(1000).await?;
+
     // Send BatchCommit while in Syncing state (before L1Synced)
-    let commit_batch_0_tx = read_test_transaction("commitBatch", "0")?;
-    fixture.anvil_send_raw_transaction(commit_batch_0_tx).await?;
-
-    let commit_batch_1_tx = read_test_transaction("commitBatch", "1")?;
-    fixture.anvil_send_raw_transaction(commit_batch_1_tx).await?;
-
-    let commit_batch_1_tx = read_test_transaction("commitBatch", "2")?;
-    fixture.anvil_send_raw_transaction(commit_batch_1_tx).await?;
+    for i in 0..=2 {
+        let commit_batch_tx = read_test_transaction("commitBatch", &i.to_string())?;
+        fixture.anvil_send_raw_transaction(commit_batch_tx).await?;
+    }
 
     // Give it some time to process
-    tokio::time::sleep(tokio::time::Duration::from_millis(10000)).await;
+    tokio::time::sleep(tokio::time::Duration::from_millis(1000)).await;
 
     // First, send L1Synced notification
     // fixture.l1().sync().await?;
@@ -143,11 +158,8 @@ async fn test_batch_commit_while_synced() -> eyre::Result<()> {
 async fn test_batch_finalized_while_syncing() -> eyre::Result<()> {
     reth_tracing::init_test_tracing();
 
-    let mut fixture = TestFixture::builder()
-        .followers(1)
-        .with_chain_spec(SCROLL_DEV.clone())
-        .build()
-        .await?;
+    let mut fixture =
+        TestFixture::builder().followers(1).with_chain_spec(SCROLL_DEV.clone()).build().await?;
 
     // Load batch data
     let batch_0_calldata = read_batch_calldata("crates/node/tests/testdata/batch_0_calldata.bin")?;
@@ -167,14 +179,7 @@ async fn test_batch_finalized_while_syncing() -> eyre::Result<()> {
         .await?;
 
     // Send BatchFinalization (this should trigger processing)
-    fixture
-        .l1()
-        .finalize_batch()
-        .hash(batch_hash)
-        .index(1)
-        .at_block(finalize_block)
-        .send()
-        .await?;
+    fixture.l1().finalize_batch().hash(batch_hash).index(1).at_block(finalize_block).send().await?;
 
     // Finalize the L1 block
     fixture.l1().finalize_l1_block(finalize_block.number).await?;
@@ -197,11 +202,8 @@ async fn test_batch_finalized_while_syncing() -> eyre::Result<()> {
 async fn test_batch_finalized_while_synced() -> eyre::Result<()> {
     reth_tracing::init_test_tracing();
 
-    let mut fixture = TestFixture::builder()
-        .followers(1)
-        .with_chain_spec(SCROLL_DEV.clone())
-        .build()
-        .await?;
+    let mut fixture =
+        TestFixture::builder().followers(1).with_chain_spec(SCROLL_DEV.clone()).build().await?;
 
     // Load batch data
     let batch_0_calldata = read_batch_calldata("crates/node/tests/testdata/batch_0_calldata.bin")?;
@@ -229,14 +231,7 @@ async fn test_batch_finalized_while_synced() -> eyre::Result<()> {
     let safe_before = fixture.get_sequencer_status().await?.l2.fcs.safe_block_info().number;
 
     // Finalize batch
-    fixture
-        .l1()
-        .finalize_batch()
-        .hash(batch_hash)
-        .index(1)
-        .at_block(finalize_block)
-        .send()
-        .await?;
+    fixture.l1().finalize_batch().hash(batch_hash).index(1).at_block(finalize_block).send().await?;
 
     fixture.l1().finalize_l1_block(finalize_block.number).await?;
     fixture.expect_event().l1_block_finalized().await?;
@@ -254,11 +249,8 @@ async fn test_batch_finalized_while_synced() -> eyre::Result<()> {
 async fn test_batch_revert_while_syncing() -> eyre::Result<()> {
     reth_tracing::init_test_tracing();
 
-    let mut fixture = TestFixture::builder()
-        .followers(1)
-        .with_chain_spec(SCROLL_DEV.clone())
-        .build()
-        .await?;
+    let mut fixture =
+        TestFixture::builder().followers(1).with_chain_spec(SCROLL_DEV.clone()).build().await?;
 
     // Send a batch revert while syncing
     fixture
@@ -284,11 +276,8 @@ async fn test_batch_revert_while_syncing() -> eyre::Result<()> {
 async fn test_batch_revert_while_synced() -> eyre::Result<()> {
     reth_tracing::init_test_tracing();
 
-    let mut fixture = TestFixture::builder()
-        .followers(1)
-        .with_chain_spec(SCROLL_DEV.clone())
-        .build()
-        .await?;
+    let mut fixture =
+        TestFixture::builder().followers(1).with_chain_spec(SCROLL_DEV.clone()).build().await?;
 
     // Load batch data
     let batch_0_calldata = read_batch_calldata("crates/node/tests/testdata/batch_0_calldata.bin")?;
@@ -344,10 +333,7 @@ async fn test_batch_revert_while_synced() -> eyre::Result<()> {
 
     // Safe head should be back to batch 0 level
     let safe_after_revert = fixture.get_sequencer_status().await?.l2.fcs.safe_block_info().number;
-    assert_eq!(
-        safe_after_revert, safe_after_batch_0,
-        "Safe head should revert to batch 0 level"
-    );
+    assert_eq!(safe_after_revert, safe_after_batch_0, "Safe head should revert to batch 0 level");
 
     Ok(())
 }
@@ -363,11 +349,8 @@ async fn test_batch_revert_while_synced() -> eyre::Result<()> {
 async fn test_l1_reorg_batch_commit() -> eyre::Result<()> {
     reth_tracing::init_test_tracing();
 
-    let mut fixture = TestFixture::builder()
-        .followers(1)
-        .with_chain_spec(SCROLL_DEV.clone())
-        .build()
-        .await?;
+    let mut fixture =
+        TestFixture::builder().followers(1).with_chain_spec(SCROLL_DEV.clone()).build().await?;
 
     // Load batch data
     let batch_0_calldata = read_batch_calldata("crates/node/tests/testdata/batch_0_calldata.bin")?;
@@ -432,11 +415,8 @@ async fn test_l1_reorg_batch_commit() -> eyre::Result<()> {
 async fn test_l1_reorg_batch_finalized_has_no_effect() -> eyre::Result<()> {
     reth_tracing::init_test_tracing();
 
-    let mut fixture = TestFixture::builder()
-        .followers(1)
-        .with_chain_spec(SCROLL_DEV.clone())
-        .build()
-        .await?;
+    let mut fixture =
+        TestFixture::builder().followers(1).with_chain_spec(SCROLL_DEV.clone()).build().await?;
 
     // Load batch data
     let batch_calldata = read_batch_calldata("crates/node/tests/testdata/batch_0_calldata.bin")?;
@@ -458,25 +438,20 @@ async fn test_l1_reorg_batch_finalized_has_no_effect() -> eyre::Result<()> {
 
     fixture.expect_event().batch_consolidated().await?;
 
-    let finalized_before = fixture.get_sequencer_status().await?.l2.fcs.finalized_block_info().number;
+    let finalized_before =
+        fixture.get_sequencer_status().await?.l2.fcs.finalized_block_info().number;
 
     // Send BatchFinalized (but don't finalize the L1 block yet)
     let finalize_block = BlockInfo { number: 110, hash: B256::random() };
-    fixture
-        .l1()
-        .finalize_batch()
-        .hash(batch_hash)
-        .index(1)
-        .at_block(finalize_block)
-        .send()
-        .await?;
+    fixture.l1().finalize_batch().hash(batch_hash).index(1).at_block(finalize_block).send().await?;
 
     // Simulate L1 reorg at block 110 (where BatchFinalized was)
     fixture.l1().reorg_to(finalize_block.number).await?;
 
     // Finalized head should remain unchanged because the BatchFinalized
     // event was never finalized on L1
-    let finalized_after = fixture.get_sequencer_status().await?.l2.fcs.finalized_block_info().number;
+    let finalized_after =
+        fixture.get_sequencer_status().await?.l2.fcs.finalized_block_info().number;
     assert_eq!(
         finalized_after, finalized_before,
         "Finalized head should not change from reorg of unfinalized BatchFinalized event"
@@ -516,43 +491,3 @@ async fn test_node_restart_after_l1_reorg() -> eyre::Result<()> {
 
     Ok(())
 }
-
-// =============================================================================
-// Test Suite 4: Integration with Anvil for real L1 events
-// =============================================================================
-
-/// Test: Use Anvil to simulate real L1 contract interactions.
-///
-/// This test demonstrates how to use the integrated Anvil instance to send
-/// real transactions to L1 contracts and observe the resulting events.
-#[tokio::test]
-#[ignore] // Requires Anvil state to be properly configured
-async fn test_with_anvil_l1_events() -> eyre::Result<()> {
-    reth_tracing::init_test_tracing();
-
-    // Create fixture with Anvil enabled
-    let fixture = TestFixture::builder()
-        .sequencer()
-        .with_anvil_default_state()
-        .with_anvil_chain_id(1337)
-        .build()
-        .await?;
-
-    // Get Anvil instance
-    let _anvil = fixture.anvil.as_ref().expect("Anvil should be enabled");
-
-    // Note: Anvil NodeHandle doesn't expose port() directly
-    // We would need to enhance the TestFixture to track this information
-    tracing::info!("Anvil is running");
-
-    // TODO: Use the anvil URL to:
-    // 1. Send transactions to L1 contracts (ScrollChain, MessageQueue, etc.)
-    // 2. Trigger real BatchCommit/BatchFinalized events
-    // 3. Observe how the rollup node processes these real events
-
-    // For now, we can use the test transactions from test_transactions.json
-    // These can be sent to the Anvil instance using an RPC client
-
-    Ok(())
-}
-

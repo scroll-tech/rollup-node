@@ -53,12 +53,23 @@ use scroll_network::ScrollNetworkManager;
 use scroll_wire::ScrollWireEvent;
 use tokio::sync::mpsc::{Sender, UnboundedReceiver};
 
-/// A struct that represents the arguments for the rollup node.
-#[derive(Debug, Clone, clap::Args)]
-pub struct ScrollRollupNodeConfig {
+/// Test-related configuration arguments.
+#[derive(Debug, Clone, Default, clap::Args)]
+pub struct TestArgs {
     /// Whether the rollup node should be run in test mode.
     #[arg(long)]
     pub test: bool,
+    /// Test mode: skip L1 watcher Synced notifications.
+    #[arg(long, default_value = "false")]
+    pub skip_l1_synced: bool,
+}
+
+/// A struct that represents the arguments for the rollup node.
+#[derive(Debug, Clone, clap::Args)]
+pub struct ScrollRollupNodeConfig {
+    /// Test-related arguments
+    #[command(flatten)]
+    pub test_args: TestArgs,
     /// Consensus args
     #[command(flatten)]
     pub consensus_args: ConsensusArgs,
@@ -226,7 +237,7 @@ impl ScrollRollupNodeConfig {
         // Run the database migrations
         if let Some(named) = chain_spec.chain().named() {
             named
-                .migrate(db.inner().get_connection(), self.test)
+                .migrate(db.inner().get_connection(), self.test_args.test)
                 .await
                 .expect("failed to perform migration");
         } else {
@@ -341,7 +352,9 @@ impl ScrollRollupNodeConfig {
         let consensus = self.consensus_args.consensus(authorized_signer)?;
 
         let (l1_notification_tx, l1_notification_rx): (Option<Sender<Arc<L1Notification>>>, _) =
-            if let Some(provider) = l1_provider.filter(|_| !self.test||self.blob_provider_args.anvil_url.is_some()) {
+            if let Some(provider) = l1_provider
+                .filter(|_| !self.test_args.test || self.blob_provider_args.anvil_url.is_some())
+            {
                 tracing::info!(target: "scroll::node::args", ?l1_block_startup_info, "Starting L1 watcher");
                 (
                     None,
@@ -351,6 +364,7 @@ impl ScrollRollupNodeConfig {
                             l1_block_startup_info,
                             node_config,
                             self.l1_provider_args.logs_query_block_range,
+                            self.test_args.test && self.test_args.skip_l1_synced,
                         )
                         .await,
                     ),
@@ -410,7 +424,7 @@ impl ScrollRollupNodeConfig {
         let signer = if let Some(configured_signer) = self.signer_args.signer(chain_id).await? {
             // Use the signer configured by SignerArgs
             Some(rollup_node_signer::Signer::spawn(configured_signer))
-        } else if self.test {
+        } else if self.test_args.test {
             // Use a random private key signer for testing
             Some(rollup_node_signer::Signer::spawn(PrivateKeySigner::random()))
         } else {
@@ -887,7 +901,7 @@ mod tests {
     #[test]
     fn test_validate_sequencer_enabled_without_any_signer_fails() {
         let config = ScrollRollupNodeConfig {
-            test: false,
+            test_args: TestArgs::default(),
             sequencer_args: SequencerArgs { sequencer_enabled: true, ..Default::default() },
             signer_args: SignerArgs { key_file: None, aws_kms_key_id: None, private_key: None },
             database_args: RollupNodeDatabaseArgs::default(),
@@ -915,7 +929,7 @@ mod tests {
     #[test]
     fn test_validate_sequencer_enabled_with_both_signers_fails() {
         let config = ScrollRollupNodeConfig {
-            test: false,
+            test_args: TestArgs::default(),
             sequencer_args: SequencerArgs { sequencer_enabled: true, ..Default::default() },
             signer_args: SignerArgs {
                 key_file: Some(PathBuf::from("/path/to/key")),
@@ -945,7 +959,7 @@ mod tests {
     #[test]
     fn test_validate_sequencer_enabled_with_key_file_succeeds() {
         let config = ScrollRollupNodeConfig {
-            test: false,
+            test_args: TestArgs::default(),
             sequencer_args: SequencerArgs { sequencer_enabled: true, ..Default::default() },
             signer_args: SignerArgs {
                 key_file: Some(PathBuf::from("/path/to/key")),
@@ -970,7 +984,7 @@ mod tests {
     #[test]
     fn test_validate_sequencer_enabled_with_aws_kms_succeeds() {
         let config = ScrollRollupNodeConfig {
-            test: false,
+            test_args: TestArgs::default(),
             sequencer_args: SequencerArgs { sequencer_enabled: true, ..Default::default() },
             signer_args: SignerArgs {
                 key_file: None,
@@ -995,7 +1009,7 @@ mod tests {
     #[test]
     fn test_validate_sequencer_disabled_without_any_signer_succeeds() {
         let config = ScrollRollupNodeConfig {
-            test: false,
+            test_args: TestArgs::default(),
             sequencer_args: SequencerArgs { sequencer_enabled: false, ..Default::default() },
             signer_args: SignerArgs { key_file: None, aws_kms_key_id: None, private_key: None },
             database_args: RollupNodeDatabaseArgs::default(),

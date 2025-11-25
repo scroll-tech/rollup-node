@@ -6,11 +6,12 @@ use super::{
 use crate::{
     BlobProviderArgs, ChainOrchestratorArgs, ConsensusAlgorithm, ConsensusArgs, EngineDriverArgs,
     L1ProviderArgs, RollupNodeDatabaseArgs, RollupNodeGasPriceOracleArgs, RollupNodeNetworkArgs,
-    RpcArgs, ScrollRollupNode, ScrollRollupNodeConfig, SequencerArgs, SignerArgs,
+    RpcArgs, ScrollRollupNode, ScrollRollupNodeConfig, SequencerArgs, SignerArgs, TestArgs,
 };
 
 use alloy_eips::BlockNumberOrTag;
-use alloy_primitives::Address;
+use alloy_primitives::{address, Address};
+use alloy_provider::{Provider, ProviderBuilder};
 use alloy_rpc_types_eth::Block;
 use alloy_signer_local::PrivateKeySigner;
 use reth_chainspec::EthChainSpec;
@@ -230,13 +231,27 @@ impl TestFixture {
         self.anvil.is_some()
     }
 
+    /// Generate Anvil blocks by calling anvil_mine RPC method.
+    pub async fn anvil_mine_blocks(&self, num_blocks: u64) -> eyre::Result<()> {
+        // Ensure Anvil is running
+        let anvil_endpoint =
+            self.anvil_endpoint().ok_or_else(|| eyre::eyre!("Anvil is not running"))?;
+
+        // Create RPC client
+        let client = alloy_rpc_client::RpcClient::new_http(anvil_endpoint.parse()?);
+
+        // Mine blocks using anvil_mine RPC method
+        // Parameters: (num_blocks, interval_in_seconds)
+        let _: () = client.request("anvil_mine", (num_blocks, 0)).await?;
+
+        Ok(())
+    }
+
     /// Send a raw transaction to Anvil.
     pub async fn anvil_send_raw_transaction(
         &self,
         raw_tx: impl Into<alloy_primitives::Bytes>,
     ) -> eyre::Result<alloy_primitives::B256> {
-        use alloy_provider::{Provider, ProviderBuilder};
-
         // Ensure Anvil is running
         let anvil_endpoint =
             self.anvil_endpoint().ok_or_else(|| eyre::eyre!("Anvil is not running"))?;
@@ -294,7 +309,7 @@ impl TestFixtureBuilder {
     /// Returns the default rollup node config.
     fn default_config() -> ScrollRollupNodeConfig {
         ScrollRollupNodeConfig {
-            test: true,
+            test_args: TestArgs { test: true, skip_l1_synced: false },
             network_args: RollupNodeNetworkArgs::default(),
             database_args: RollupNodeDatabaseArgs::default(),
             l1_provider_args: L1ProviderArgs::default(),
@@ -339,8 +354,15 @@ impl TestFixtureBuilder {
     }
 
     /// Toggle the test field.
-    pub const fn with_test(mut self, test: bool) -> Self {
-        self.config.test = test;
+    pub fn with_test(mut self, test: bool) -> Self {
+        self.config.test_args.test = test;
+        self
+    }
+
+    /// Enable test mode to skip L1 watcher Synced notifications.
+    /// This is useful for tests that don't want to wait for L1 sync completion events.
+    pub fn skip_l1_synced_notifications(mut self) -> Self {
+        self.config.test_args.skip_l1_synced = true;
         self
     }
 
@@ -487,7 +509,7 @@ impl TestFixtureBuilder {
         self
     }
 
-    /// Enable Anvil with the default state file (`tests/anvil_state.json`).
+    /// Enable Anvil with the default state file (`./tests/testdata/anvil_state.json`).
     pub fn with_anvil_default_state(mut self) -> Self {
         self.enable_anvil = true;
         self.anvil_state_path = Some(PathBuf::from("./tests/testdata/anvil_state.json"));
@@ -510,6 +532,23 @@ impl TestFixtureBuilder {
     /// Set the block time for Anvil (in seconds).
     pub const fn with_anvil_block_time(mut self, block_time: u64) -> Self {
         self.anvil_block_time = Some(block_time);
+        self
+    }
+
+    /// Set custom L1 config addresses for Anvil testing.
+    /// This method reads contract addresses from tests/anvil.env.
+    pub fn with_anvil_l1_config(mut self) -> Self {
+        let chain_spec = self.chain_spec.take().unwrap_or_else(|| SCROLL_DEV.clone());
+        let mut spec = (*chain_spec).clone();
+        spec.config.l1_config.scroll_chain_address =
+            address!("0x5FC8d32690cc91D4c39d9d3abcBD16989F875707");
+        spec.config.l1_config.l1_message_queue_address =
+            address!("0xCf7Ed3AccA5a467e9e704C703E8D87F634fB0Fc9");
+        spec.config.l1_config.l1_message_queue_v2_address =
+            address!("0xDc64a140Aa3E981100a9becA4E685f962f0cF6C9");
+        spec.config.l1_config.l2_system_config_address =
+            address!("0x9fE46736679d2D9a65F0992F2272dE9f3c7fa6e0");
+        self.chain_spec = Some(Arc::new(spec));
         self
     }
 
@@ -609,7 +648,7 @@ impl TestFixtureBuilder {
         if let Some(id) = chain_id {
             config.chain_id = Some(id);
         }
-        
+
         config.port = 8544;
 
         // Configure block time
@@ -619,14 +658,9 @@ impl TestFixtureBuilder {
 
         // Load state from file if provided
         if let Some(path) = state_path {
-            let state = anvil::eth::backend::db::SerializableState::load(path)
-                .map_err(|e| {
-                    eyre::eyre!(
-                        "Failed to load Anvil state from {}: {:?}",
-                        path.display(),
-                        e
-                    )
-                })?;
+            let state = anvil::eth::backend::db::SerializableState::load(path).map_err(|e| {
+                eyre::eyre!("Failed to load Anvil state from {}: {:?}", path.display(), e)
+            })?;
             tracing::info!("Loaded Anvil state from: {}", path.display());
             config.init_state = Some(state);
         }

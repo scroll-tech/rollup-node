@@ -11,7 +11,7 @@ pub use metrics::WatcherMetrics;
 pub mod test_utils;
 
 use alloy_network::Ethereum;
-use alloy_primitives::{ruint::UintTryTo, BlockNumber, B256};
+use alloy_primitives::{address, ruint::UintTryTo, BlockNumber, B256};
 use alloy_provider::{Network, Provider};
 use alloy_rpc_types_eth::{BlockNumberOrTag, Filter, Log, TransactionTrait};
 use alloy_sol_types::SolEvent;
@@ -89,6 +89,8 @@ pub struct L1Watcher<EP> {
     is_synced: bool,
     /// The log query block range.
     log_query_block_range: u64,
+    /// Test mode: skip sending L1Notification::Synced events.
+    test_mode_skip_synced_notification: bool,
 }
 
 /// The L1 notification type yielded by the [`L1Watcher`].
@@ -198,6 +200,7 @@ where
         l1_block_startup_info: L1BlockStartupInfo,
         config: Arc<NodeConfig>,
         log_query_block_range: u64,
+        test_mode_skip_synced_notification: bool,
     ) -> mpsc::Receiver<Arc<L1Notification>> {
         tracing::trace!(target: "scroll::watcher", ?l1_block_startup_info, ?config, "spawning L1 watcher");
 
@@ -260,6 +263,7 @@ where
             metrics: WatcherMetrics::default(),
             is_synced: false,
             log_query_block_range,
+            test_mode_skip_synced_notification,
         };
 
         // notify at spawn.
@@ -302,10 +306,13 @@ where
             } else if self.current_block_number == self.l1_state.head {
                 // if we have synced to the head of the L1, notify the channel and set the
                 // `is_synced`` flag.
-                if let Err(L1WatcherError::SendError(_)) = self.notify(L1Notification::Synced).await
-                {
-                    tracing::warn!(target: "scroll::watcher", "L1 watcher channel closed, stopping the watcher");
-                    break;
+                if !self.test_mode_skip_synced_notification {
+                    if let Err(L1WatcherError::SendError(_)) =
+                        self.notify(L1Notification::Synced).await
+                    {
+                        tracing::warn!(target: "scroll::watcher", "L1 watcher channel closed, stopping the watcher");
+                        break;
+                    }
                 }
                 self.is_synced = true;
             }
@@ -793,9 +800,22 @@ where
 
     /// Returns the finalized L1 block.
     async fn finalized_block(&self) -> L1WatcherResult<Block> {
-        Ok(self
+        // We do not use BlockNumberOrTag::Finalized because because there is an issue with Anvil.
+        // See https://github.com/foundry-rs/foundry/issues/12645.
+        // Ok(self
+        //     .execution_provider
+        //     .get_block(BlockNumberOrTag::Finalized.into())
+        //     .await?
+        //     .expect("finalized block should always exist"))
+        let block = self
             .execution_provider
             .get_block(BlockNumberOrTag::Finalized.into())
+            .await?
+            .expect("finalized block should always exist");
+
+        Ok(self
+            .execution_provider
+            .get_block(block.number().into())
             .await?
             .expect("finalized block should always exist"))
     }
@@ -806,12 +826,16 @@ where
     /// [`field@L1Watcher::log_query_block_range`]\].
     async fn next_filtered_logs(&self, latest_block_number: u64) -> L1WatcherResult<Vec<Log>> {
         // set the block range for the query
-        let address_book = &self.config.address_book;
+        // let address_book = &self.config.address_book;
         let mut filter = Filter::new()
             .address(vec![
-                address_book.rollup_node_contract_address,
-                address_book.v1_message_queue_address,
-                address_book.v2_message_queue_address,
+                address!("0x5FC8d32690cc91D4c39d9d3abcBD16989F875707"), /* address_book.rollup_node_contract_address,
+                                                                         * address_book.
+                                                                         * v1_message_queue_address,
+                                                                         *
+                                                                         * address_book.
+                                                                         * v2_message_queue_address,
+                                                                         */
             ])
             .event_signature(vec![
                 QueueTransaction::SIGNATURE_HASH,
@@ -881,6 +905,7 @@ mod tests {
                 metrics: WatcherMetrics::default(),
                 is_synced: false,
                 log_query_block_range: LOG_QUERY_BLOCK_RANGE,
+                test_mode_skip_synced_notification: false,
             },
             rx,
         )
