@@ -67,13 +67,14 @@ type L1ProviderFactory<P> =
 /// Returns a pipeline with a provider initiated from the factory function.
 async fn setup_pipeline<P: L1Provider + Clone + Send + Sync + 'static>(
     factory: L1ProviderFactory<P>,
-) -> DerivationPipeline {
+) -> (DerivationPipeline, Vec<BatchCommitData>) {
     // load batch data in the db.
     let db = Arc::new(setup_test_db().await);
     let blob_hashes: Vec<B256> = serde_json::from_str(
         &std::fs::read_to_string("./benches/testdata/batch_info.json").unwrap(),
     )
     .unwrap();
+    let mut batches = vec![];
 
     for (index, hash) in (BATCHES_START_INDEX..=BATCHES_STOP_INDEX).zip(blob_hashes.into_iter()) {
         let raw_calldata =
@@ -89,7 +90,8 @@ async fn setup_pipeline<P: L1Provider + Clone + Send + Sync + 'static>(
             finalized_block_number: None,
             reverted_block_number: None,
         };
-        db.insert_batch(batch_data).await.unwrap();
+        db.insert_batch(batch_data.clone()).await.unwrap();
+        batches.push(batch_data);
     }
 
     // load messages in db.
@@ -108,7 +110,7 @@ async fn setup_pipeline<P: L1Provider + Clone + Send + Sync + 'static>(
 
     // construct the pipeline.
     let l1_provider = factory(db.clone()).await;
-    DerivationPipeline::new(l1_provider, db, u64::MAX).await
+    (DerivationPipeline::new(l1_provider, db, u64::MAX).await, batches)
 }
 
 /// Benchmark the derivation pipeline with blobs fetched from file. This does not bench the network
@@ -122,11 +124,11 @@ fn benchmark_pipeline_derivation_in_file_blobs(c: &mut Criterion) {
                 let (tx, rx) = std::sync::mpsc::channel();
                 Handle::current().spawn(async move {
                     // setup (not measured): create fresh pipeline with 253 committed batches
-                    let mut pipeline = setup_pipeline(Box::new(setup_mock_provider)).await;
+                    let (mut pipeline, batches) = setup_pipeline(Box::new(setup_mock_provider)).await;
 
                     // commit 253 batches.
-                    for index in BATCHES_START_INDEX..=BATCHES_STOP_INDEX {
-                        let batch_info = BatchInfo { index, hash: Default::default() };
+                    for batch in batches {
+                        let batch_info = BatchInfo { index: batch.index, hash: batch.hash };
                         pipeline.push_batch(batch_info, BatchStatus::Committed).await;
                     }
 
@@ -158,11 +160,11 @@ fn benchmark_pipeline_derivation_s3_blobs(c: &mut Criterion) {
                 let (tx, rx) = std::sync::mpsc::channel();
                 Handle::current().spawn(async move {
                     // setup (not measured): create fresh pipeline with 15 committed batches
-                    let mut pipeline = setup_pipeline(Box::new(setup_full_provider)).await;
+                    let (mut pipeline,batches) = setup_pipeline(Box::new(setup_full_provider)).await;
 
                     // commit 15 batches.
-                    for index in BATCHES_START_INDEX..=BATCHES_START_INDEX + 15 {
-                        let batch_info = BatchInfo { index, hash: Default::default() };
+                    for batch in batches {
+                        let batch_info = BatchInfo { index: batch.index, hash: batch.hash };
                         pipeline.push_batch(batch_info, BatchStatus::Committed).await;
                     }
 
