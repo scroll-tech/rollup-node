@@ -15,8 +15,9 @@ impl MigrationTrait for Migration {
                 Table::create()
                     .table(BatchCommit::Table)
                     .if_not_exists()
-                    .col(big_unsigned(BatchCommit::Index))
-                    .col(binary_len(BatchCommit::Hash, HASH_LENGTH).primary_key())
+                    .col(pk_auto(BatchCommit::Id))
+                    .col(big_unsigned(BatchCommit::Index).not_null())
+                    .col(binary_len(BatchCommit::Hash, HASH_LENGTH).not_null().unique_key())
                     .col(big_unsigned(BatchCommit::BlockNumber))
                     .col(big_unsigned(BatchCommit::BlockTimestamp))
                     .col(binary(BatchCommit::Calldata))
@@ -50,6 +51,64 @@ impl MigrationTrait for Migration {
             ))
             .await?;
 
+        // Indexes:
+        // ------------------------------------------------------------
+
+        // Add index on "index" column in batch_commit table.
+        manager
+            .create_index(
+                Index::create()
+                    .name("idx_batch_commit_batch_index")
+                    .col(BatchCommit::Index)
+                    .table(BatchCommit::Table)
+                    .to_owned(),
+            )
+            .await?;
+
+        // Add index on "block number" column in batch_commit table.
+        manager
+            .create_index(
+                Index::create()
+                    .name("idx_batch_commit_block_number")
+                    .col(BatchCommit::BlockNumber)
+                    .table(BatchCommit::Table)
+                    .to_owned(),
+            )
+            .await?;
+
+        // Add index on "finalized block number" column in batch_commit table.
+        manager
+            .create_index(
+                Index::create()
+                    .name("idx_batch_commit_finalized_block_number")
+                    .col(BatchCommit::FinalizedBlockNumber)
+                    .table(BatchCommit::Table)
+                    .to_owned(),
+            )
+            .await?;
+
+        // Add index on "reverted block number" column in batch_commit table.
+        manager
+            .create_index(
+                Index::create()
+                    .name("idx_batch_commit_reverted_block_number")
+                    .col(BatchCommit::RevertedBlockNumber)
+                    .table(BatchCommit::Table)
+                    .to_owned(),
+            )
+            .await?;
+
+        // Add index on `status` for the `batch_commit` table.
+        manager
+            .create_index(
+                Index::create()
+                    .name("idx_batch_commit_status")
+                    .col(BatchCommit::Status)
+                    .table(BatchCommit::Table)
+                    .to_owned(),
+            )
+            .await?;
+
         Ok(())
     }
 
@@ -61,6 +120,7 @@ impl MigrationTrait for Migration {
 #[derive(DeriveIden)]
 pub(crate) enum BatchCommit {
     Table,
+    Id,
     Index,
     Hash,
     BlockNumber,

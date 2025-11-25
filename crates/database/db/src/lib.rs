@@ -9,6 +9,9 @@ pub use db::Database;
 mod error;
 pub use error::DatabaseError;
 
+mod maintenance;
+pub use maintenance::DatabaseMaintenance;
+
 mod metrics;
 
 mod models;

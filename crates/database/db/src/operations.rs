@@ -708,13 +708,15 @@ impl<T: WriteConnectionProvider + ?Sized + Sync> DatabaseWriteOperations for T {
             blocks.into_iter().map(|b| (b, batch_info).into()).collect();
         models::l2_block::Entity::insert_many(l2_blocks)
             .on_conflict(
-                OnConflict::column(models::l2_block::Column::BlockHash)
-                    .update_columns([
-                        models::l2_block::Column::BlockNumber,
-                        models::l2_block::Column::BatchHash,
-                        models::l2_block::Column::BatchIndex,
-                    ])
-                    .to_owned(),
+                OnConflict::columns([
+                    models::l2_block::Column::BlockHash,
+                    models::l2_block::Column::BatchHash,
+                ])
+                .update_columns([
+                    models::l2_block::Column::BlockNumber,
+                    models::l2_block::Column::BatchIndex,
+                ])
+                .to_owned(),
             )
             .on_empty_do_nothing()
             .exec_without_returning(self.get_connection())

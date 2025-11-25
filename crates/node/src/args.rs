@@ -43,8 +43,8 @@ use scroll_alloy_hardforks::ScrollHardforks;
 use scroll_alloy_network::Scroll;
 use scroll_alloy_provider::{ScrollAuthApiEngineClient, ScrollEngineApi};
 use scroll_db::{
-    Database, DatabaseConnectionProvider, DatabaseError, DatabaseReadOperations,
-    DatabaseWriteOperations,
+    Database, DatabaseConnectionProvider, DatabaseError, DatabaseMaintenance,
+    DatabaseReadOperations, DatabaseWriteOperations,
 };
 use scroll_derivation_pipeline::DerivationPipeline;
 use scroll_engine::{Engine, ForkchoiceState};
@@ -222,6 +222,8 @@ impl ScrollRollupNodeConfig {
 
         // Fetch the database from the hydrated config.
         let db = self.database.clone().expect("should hydrate config before build");
+        let db_maintenance = DatabaseMaintenance::new(db.clone());
+        ctx.task_executor.spawn(db_maintenance.run());
 
         // Run the database migrations
         if let Some(named) = chain_spec.chain().named() {
@@ -323,7 +325,7 @@ impl ScrollRollupNodeConfig {
             td_constant(chain_spec.chain().named()),
             authorized_signer,
         );
-        tokio::spawn(scroll_network_manager);
+        ctx.task_executor.spawn(scroll_network_manager);
 
         tracing::info!(target: "scroll::node::args", fcs = ?fcs, payload_building_duration = ?self.sequencer_args.payload_building_duration, "Starting engine driver");
         let engine = Engine::new(Arc::new(engine_api), fcs);

@@ -862,7 +862,7 @@ mod test {
         BatchCommitData, BatchInfo, BlockInfo, L1MessageEnvelope, L2BlockInfoWithL1Messages,
     };
     use scroll_alloy_consensus::TxL1Message;
-    use sea_orm::{ColumnTrait, EntityTrait, QueryFilter};
+    use sea_orm::EntityTrait;
 
     #[tokio::test]
     async fn test_database_round_trip_batch_commit() {
@@ -1227,11 +1227,13 @@ mod test {
 
     #[tokio::test]
     async fn test_delete_l1_messages_gt() {
+        reth_tracing::init_test_tracing();
+
         // Set up the test database.
         let db = setup_test_db().await;
 
         // Generate unstructured bytes.
-        let mut bytes = [0u8; 1024];
+        let mut bytes = [0u8; 10240];
         rand::rng().fill(bytes.as_mut_slice());
         let mut u = Unstructured::new(&bytes);
 
@@ -1276,8 +1278,12 @@ mod test {
 
     #[tokio::test]
     async fn test_get_l2_block_info_by_number() {
+        reth_tracing::init_test_tracing();
+
         // Set up the test database.
         let db = setup_test_db().await;
+
+        println!("im here");
 
         // Generate unstructured bytes.
         let mut bytes = [0u8; 1024];
@@ -1289,6 +1295,8 @@ mod test {
         let batch_info: BatchInfo = batch_data.clone().into();
         db.insert_batch(batch_data).await.unwrap();
 
+        println!("inserted batch");
+
         // Generate and insert multiple L2 blocks
         let mut block_infos = Vec::new();
         for i in 200..205 {
@@ -1296,6 +1304,8 @@ mod test {
             block_infos.push(block_info);
         }
         db.insert_blocks(block_infos.clone(), batch_info).await.unwrap();
+
+        println!("inserted blocks");
 
         // Test getting existing blocks
         for expected_block in block_infos {
@@ -1473,67 +1483,6 @@ mod test {
                 db.get_n_l1_messages(Some(L1MessageKey::from_queue_index(i)), 1).await.unwrap();
             assert_eq!(l1_message.first().unwrap().l2_block_number, Some(500));
         }
-    }
-
-    #[tokio::test]
-    async fn test_insert_block_upsert_behavior() {
-        reth_tracing::init_test_tracing();
-
-        // Set up the test database.
-        let db = setup_test_db().await;
-
-        // Generate unstructured bytes.
-        let mut bytes = [0u8; 1024];
-        rand::rng().fill(bytes.as_mut_slice());
-        let mut u = Unstructured::new(&bytes);
-
-        // Generate batches
-        let batch_data_1 = BatchCommitData { index: 100, ..Arbitrary::arbitrary(&mut u).unwrap() };
-        let batch_info_1: BatchInfo = batch_data_1.clone().into();
-        let batch_data_2 = BatchCommitData { index: 200, ..Arbitrary::arbitrary(&mut u).unwrap() };
-        let batch_info_2: BatchInfo = batch_data_2.clone().into();
-
-        db.insert_batch(batch_data_1).await.unwrap();
-        db.insert_batch(batch_data_2).await.unwrap();
-
-        // Insert initial block
-        let block_info = BlockInfo { number: 600, hash: B256::arbitrary(&mut u).unwrap() };
-        db.insert_blocks(vec![block_info], batch_info_1).await.unwrap();
-
-        // Verify initial insertion
-        let retrieved_block = db.get_l2_block_info_by_number(600).await.unwrap();
-        assert_eq!(retrieved_block, Some(block_info));
-
-        // Verify initial batch association using model conversion
-        let initial_l2_block_model = models::l2_block::Entity::find()
-            .filter(models::l2_block::Column::BlockNumber.eq(600))
-            .one(db.inner().get_connection())
-            .await
-            .unwrap()
-            .unwrap();
-        let (initial_block_info, initial_batch_info): (BlockInfo, BatchInfo) =
-            initial_l2_block_model.into();
-        assert_eq!(initial_block_info, block_info);
-        assert_eq!(initial_batch_info, batch_info_1);
-
-        // Update the same block with different batch info (upsert)
-        db.insert_blocks(vec![block_info], batch_info_2).await.unwrap();
-
-        // Verify the block still exists and was updated
-        let retrieved_block = db.get_l2_block_info_by_number(600).await.unwrap().unwrap();
-        assert_eq!(retrieved_block, block_info);
-
-        // Verify batch association was updated using model conversion
-        let updated_l2_block_model = models::l2_block::Entity::find()
-            .filter(models::l2_block::Column::BlockNumber.eq(600))
-            .one(db.inner().get_connection())
-            .await
-            .unwrap()
-            .unwrap();
-        let (updated_block_info, updated_batch_info): (BlockInfo, BatchInfo) =
-            updated_l2_block_model.into();
-        assert_eq!(updated_block_info, block_info);
-        assert_eq!(updated_batch_info, batch_info_2);
     }
 
     #[tokio::test]
