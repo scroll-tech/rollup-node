@@ -17,7 +17,7 @@ pub struct L1Helper<'a> {
 
 impl<'a> L1Helper<'a> {
     /// Create a new L1 helper.
-    pub(crate) fn new(fixture: &'a mut TestFixture) -> Self {
+    pub(crate) const fn new(fixture: &'a mut TestFixture) -> Self {
         Self { fixture, target_node_index: None }
     }
 

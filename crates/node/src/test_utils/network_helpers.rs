@@ -161,7 +161,7 @@ pub struct ReputationChecker<'a> {
 
 impl<'a> ReputationChecker<'a> {
     /// Create a new reputation checker.
-    pub fn new(fixture: &'a mut TestFixture, observer_node: usize) -> Self {
+    pub const fn new(fixture: &'a mut TestFixture, observer_node: usize) -> Self {
         Self {
             fixture,
             observer_node,

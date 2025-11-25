@@ -13,7 +13,7 @@ pub struct TxHelper<'a> {
 
 impl<'a> TxHelper<'a> {
     /// Create a new transaction helper.
-    pub(crate) fn new(fixture: &'a mut TestFixture) -> Self {
+    pub(crate) const fn new(fixture: &'a mut TestFixture) -> Self {
         Self { fixture, target_node_index: 0 }
     }
 
