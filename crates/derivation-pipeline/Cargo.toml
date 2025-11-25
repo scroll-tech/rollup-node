@@ -29,6 +29,7 @@ scroll-db.workspace = true
 futures.workspace = true
 metrics.workspace = true
 metrics-derive.workspace = true
+moka = { workspace = true, features = ["future"] }
 tokio.workspace = true
 thiserror.workspace = true
 tracing.workspace = true

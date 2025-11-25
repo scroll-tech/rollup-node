@@ -996,6 +996,9 @@ pub trait DatabaseReadOperations {
         n: usize,
     ) -> Result<Vec<L1MessageEnvelope>, DatabaseError>;
 
+    /// Get the maximum block number for which we have stored extra data hints.
+    async fn get_max_block_data_hint_block_number(&self) -> Result<u64, DatabaseError>;
+
     /// Get the extra data for n block, starting at the provided block number.
     async fn get_n_l2_block_data_hint(
         &self,
@@ -1372,6 +1375,18 @@ impl<T: ReadConnectionProvider + Sync + ?Sized> DatabaseReadOperations for T {
             .into_iter()
             .map(Into::into)
             .collect())
+    }
+
+    async fn get_max_block_data_hint_block_number(&self) -> Result<u64, DatabaseError> {
+        Ok(models::block_data::Entity::find()
+            .select_only()
+            .column_as(models::block_data::Column::Number.max(), "max_number")
+            .into_tuple::<Option<i64>>()
+            .one(self.get_connection())
+            .await?
+            .flatten()
+            .map(|n| n as u64)
+            .unwrap_or(0))
     }
 
     async fn get_l2_block_and_batch_info_by_hash(

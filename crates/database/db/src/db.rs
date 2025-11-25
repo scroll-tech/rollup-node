@@ -643,6 +643,14 @@ impl DatabaseReadOperations for Database {
         )
     }
 
+    async fn get_max_block_data_hint_block_number(&self) -> Result<u64, DatabaseError> {
+        metered!(
+            DatabaseOperation::GetMaxBlockDataHintBlockNumber,
+            self,
+            tx(|tx| async move { tx.get_max_block_data_hint_block_number().await })
+        )
+    }
+
     async fn get_l2_block_and_batch_info_by_hash(
         &self,
         block_hash: B256,
