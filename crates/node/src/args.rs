@@ -8,7 +8,7 @@ use std::{fs, path::PathBuf, sync::Arc};
 
 use alloy_chains::NamedChain;
 use alloy_primitives::{hex, Address, U128};
-use alloy_provider::{Provider, ProviderBuilder};
+use alloy_provider::{layers::CacheLayer, Provider, ProviderBuilder};
 use alloy_rpc_client::RpcClient;
 use alloy_signer::Signer;
 use alloy_signer_aws::AwsSigner;
@@ -191,8 +191,13 @@ impl ScrollRollupNodeConfig {
 
         // Get a provider
         let l1_provider = self.l1_provider_args.url.clone().map(|url| {
-            let L1ProviderArgs { max_retries, initial_backoff, compute_units_per_second, .. } =
-                self.l1_provider_args;
+            let L1ProviderArgs {
+                max_retries,
+                initial_backoff,
+                compute_units_per_second,
+                cache_max_items,
+                ..
+            } = self.l1_provider_args;
             let client = RpcClient::builder()
                 .layer(RetryBackoffLayer::new(
                     max_retries,
@@ -200,7 +205,8 @@ impl ScrollRollupNodeConfig {
                     compute_units_per_second,
                 ))
                 .http(url);
-            ProviderBuilder::new().connect_client(client)
+            let cache_layer = CacheLayer::new(cache_max_items);
+            ProviderBuilder::new().layer(cache_layer).connect_client(client)
         });
 
         // Init a retry provider to the execution layer.
@@ -217,7 +223,9 @@ impl ScrollRollupNodeConfig {
                 .parse()
                 .expect("invalid l2 rpc url"),
         );
-        let l2_provider = ProviderBuilder::<_, _, Scroll>::default().connect_client(client);
+        let l2_provider = ProviderBuilder::<_, _, Scroll>::default()
+            .layer(CacheLayer::new(constants::L2_PROVIDER_CACHE_MAX_ITEMS))
+            .connect_client(client);
         let l2_provider = Arc::new(l2_provider);
 
         // Fetch the database from the hydrated config.
@@ -634,6 +642,9 @@ pub struct L1ProviderArgs {
     /// The logs query block range.
     #[arg(long = "l1.query-range", id = "l1_query_range", value_name = "L1_QUERY_RANGE", default_value_t = constants::LOGS_QUERY_BLOCK_RANGE)]
     pub logs_query_block_range: u64,
+    /// The maximum number of items to be stored in the cache layer.
+    #[arg(long = "l1.cache-max-items", id = "l1_cache_max_items", value_name = "L1_CACHE_MAX_ITEMS", default_value_t = constants::L1_PROVIDER_CACHE_MAX_ITEMS)]
+    pub cache_max_items: u32,
 }
 
 /// The arguments for the Beacon provider.
