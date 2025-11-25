@@ -124,7 +124,8 @@ fn benchmark_pipeline_derivation_in_file_blobs(c: &mut Criterion) {
                 let (tx, rx) = std::sync::mpsc::channel();
                 Handle::current().spawn(async move {
                     // setup (not measured): create fresh pipeline with 253 committed batches
-                    let (mut pipeline, batches) = setup_pipeline(Box::new(setup_mock_provider)).await;
+                    let (mut pipeline, batches) =
+                        setup_pipeline(Box::new(setup_mock_provider)).await;
 
                     // commit 253 batches.
                     for batch in batches {
@@ -160,7 +161,8 @@ fn benchmark_pipeline_derivation_s3_blobs(c: &mut Criterion) {
                 let (tx, rx) = std::sync::mpsc::channel();
                 Handle::current().spawn(async move {
                     // setup (not measured): create fresh pipeline with 15 committed batches
-                    let (mut pipeline,batches) = setup_pipeline(Box::new(setup_full_provider)).await;
+                    let (mut pipeline, batches) =
+                        setup_pipeline(Box::new(setup_full_provider)).await;
 
                     // commit 15 batches.
                     for batch in batches {

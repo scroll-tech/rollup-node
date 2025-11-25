@@ -25,7 +25,7 @@ impl L1WatcherHandle {
     }
 
     /// Get a mutable reference to the L1 notification receiver.
-    pub fn l1_notification_receiver(&mut self) -> &mut mpsc::Receiver<Arc<L1Notification>> {
+    pub const fn l1_notification_receiver(&mut self) -> &mut mpsc::Receiver<Arc<L1Notification>> {
         &mut self.l1_notification_rx
     }
 
