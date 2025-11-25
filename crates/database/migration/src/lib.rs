@@ -8,6 +8,7 @@ mod m20250411_072004_add_l2_block;
 mod m20250616_223947_add_metadata;
 mod m20250904_175949_block_signature;
 mod m20251028_110719_add_l1_block_table;
+mod m20251125_181536_add_batch_commit_index;
 
 mod migration_info;
 pub use migration_info::{
@@ -28,6 +29,7 @@ impl<MI: MigrationInfo + Send + Sync + 'static> MigratorTrait for Migrator<MI> {
             Box::new(m20250616_223947_add_metadata::Migration),
             Box::new(m20250904_175949_block_signature::Migration),
             Box::new(m20251028_110719_add_l1_block_table::Migration),
+            Box::new(m20251125_181536_add_batch_commit_index::Migration),
         ]
     }
 }
