@@ -48,11 +48,6 @@ impl PreFetchCache {
         &self,
         block_number: u64,
     ) -> Result<Option<BlockDataHint>, DerivationPipelineError> {
-        tracing::trace!(
-            target: "scroll::derivation_pipeline::cache",
-            block_number = block_number,
-            "Fetching block data hint from cache",
-        );
         // If the block number is beyond the maximum known block data hint, return None.
         if block_number > self.max_block_data_hint_block_number {
             return Ok(None);

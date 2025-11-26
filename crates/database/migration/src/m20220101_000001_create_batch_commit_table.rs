@@ -109,6 +109,20 @@ impl MigrationTrait for Migration {
             )
             .await?;
 
+        // Add a composite index on (status, finalized_block_number, index) for the `batch_commit`
+        // table.
+        manager
+            .create_index(
+                Index::create()
+                    .name("idx_batch_commit_status_finalized_block_number_index")
+                    .col(BatchCommit::Status)
+                    .col(BatchCommit::FinalizedBlockNumber)
+                    .col(BatchCommit::Index)
+                    .table(BatchCommit::Table)
+                    .to_owned(),
+            )
+            .await?;
+
         Ok(())
     }
 

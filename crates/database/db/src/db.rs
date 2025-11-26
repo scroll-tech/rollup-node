@@ -1291,8 +1291,6 @@ mod test {
         // Set up the test database.
         let db = setup_test_db().await;
 
-        println!("im here");
-
         // Generate unstructured bytes.
         let mut bytes = [0u8; 1024];
         rand::rng().fill(bytes.as_mut_slice());
@@ -1303,8 +1301,6 @@ mod test {
         let batch_info: BatchInfo = batch_data.clone().into();
         db.insert_batch(batch_data).await.unwrap();
 
-        println!("inserted batch");
-
         // Generate and insert multiple L2 blocks
         let mut block_infos = Vec::new();
         for i in 200..205 {
@@ -1312,8 +1308,6 @@ mod test {
             block_infos.push(block_info);
         }
         db.insert_blocks(block_infos.clone(), batch_info).await.unwrap();
-
-        println!("inserted blocks");
 
         // Test getting existing blocks
         for expected_block in block_infos {
