@@ -143,6 +143,15 @@ impl<'a> EventWaiter<'a> {
         Ok(())
     }
 
+    /// Wait for batch finalized event on all specified nodes.
+    pub async fn batch_finalized(self) -> eyre::Result<()> {
+        self.wait_for_event_on_all(|e| {
+            matches!(e, ChainOrchestratorEvent::BatchFinalized { .. }).then_some(())
+        })
+        .await?;
+        Ok(())
+    }
+
     /// Wait for batch reverted event on all specified nodes.
     pub async fn batch_reverted(self) -> eyre::Result<()> {
         self.wait_for_event_on_all(|e| {

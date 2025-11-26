@@ -201,7 +201,7 @@ where
         config: Arc<NodeConfig>,
         log_query_block_range: u64,
         test_mode_skip_synced_notification: bool,
-    ) -> mpsc::Receiver<Arc<L1Notification>> {
+    ) -> (mpsc::Sender<Arc<L1Notification>>, mpsc::Receiver<Arc<L1Notification>>) {
         tracing::trace!(target: "scroll::watcher", ?l1_block_startup_info, ?config, "spawning L1 watcher");
 
         let (tx, rx) = mpsc::channel(log_query_block_range as usize);
@@ -258,7 +258,7 @@ where
             unfinalized_blocks: BoundedVec::new(HEADER_CAPACITY),
             current_block_number: start_block.saturating_sub(1),
             l1_state,
-            sender: tx,
+            sender: tx.clone(),
             config,
             metrics: WatcherMetrics::default(),
             is_synced: false,
@@ -284,7 +284,7 @@ where
 
         tokio::spawn(watcher.run());
 
-        rx
+        (tx, rx)
     }
 
     /// Main execution loop for the [`L1Watcher`].
