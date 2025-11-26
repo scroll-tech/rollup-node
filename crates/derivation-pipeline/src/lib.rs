@@ -15,7 +15,7 @@ use scroll_db::{Database, DatabaseReadOperations, L1MessageKey};
 use tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender};
 
 mod cache;
-use cache::{PreFetchCache, DEFAULT_CACHE_SIZE, DEFAULT_CACHE_TTL, DEFAULT_PREFETCH_COUNT};
+use cache::{PreFetchCache, CACHE_SIZE, CACHE_TTL, PREFETCH_RANGE_SIZE};
 
 mod data_source;
 
@@ -130,13 +130,9 @@ impl<P> DerivationPipelineWorker<P> {
         batch_receiver: UnboundedReceiver<Arc<BatchDerivationRequest>>,
         result_sender: UnboundedSender<BatchDerivationResult>,
     ) -> Result<Self, DerivationPipelineError> {
-        let cache = PreFetchCache::new(
-            database.clone(),
-            DEFAULT_CACHE_SIZE,
-            DEFAULT_CACHE_TTL,
-            DEFAULT_PREFETCH_COUNT,
-        )
-        .await?;
+        let cache =
+            PreFetchCache::new(database.clone(), CACHE_SIZE, CACHE_TTL, PREFETCH_RANGE_SIZE)
+                .await?;
         Ok(Self {
             batch_receiver,
             result_sender,

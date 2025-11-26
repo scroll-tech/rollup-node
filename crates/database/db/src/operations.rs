@@ -1369,6 +1369,7 @@ impl<T: ReadConnectionProvider + Sync + ?Sized> DatabaseReadOperations for T {
     ) -> Result<Vec<BlockDataHint>, DatabaseError> {
         Ok(models::block_data::Entity::find()
             .filter(models::block_data::Column::Number.gte(block_number as i64))
+            .order_by_asc(models::block_data::Column::Number)
             .limit(Some(n as u64))
             .all(self.get_connection())
             .await?
