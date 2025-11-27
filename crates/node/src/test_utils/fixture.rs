@@ -268,6 +268,28 @@ impl TestFixture {
 
         Ok(tx_hash)
     }
+
+    /// Reorg Anvil by a specific depth (number of blocks to rewind).
+    pub async fn anvil_reorg(&self, depth: u64) -> eyre::Result<()> {
+        // Ensure Anvil is running
+        let anvil_endpoint =
+            self.anvil_endpoint().ok_or_else(|| eyre::eyre!("Anvil is not running"))?;
+
+        // Create RPC client
+        let client = alloy_rpc_client::RpcClient::new_http(anvil_endpoint.parse()?);
+
+        // Call anvil_reorg
+        // Parameters: (depth, transactions)
+        // - depth: number of blocks to rewind from current head
+        // - transactions: empty array means reorg without adding new transactions
+        let _: () = client
+            .request("anvil_reorg", (depth, Vec::<String>::new()))
+            .await?;
+
+        tracing::info!("Reorged Anvil by {} blocks", depth);
+
+        Ok(())
+    }
 }
 
 /// Builder for creating test fixtures with a fluent API.
