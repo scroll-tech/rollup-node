@@ -14,6 +14,9 @@ use scroll_codec::{decoding::payload::PayloadData, Codec, CodecError, DecodingEr
 use scroll_db::{Database, DatabaseReadOperations, L1MessageKey};
 use tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender};
 
+mod cache;
+use cache::{PreFetchCache, CACHE_SIZE, CACHE_TTL, PREFETCH_RANGE_SIZE};
+
 mod data_source;
 
 mod error;
@@ -108,6 +111,8 @@ pub struct DerivationPipelineWorker<P> {
     futures: FuturesOrdered<DerivationPipelineFuture>,
     /// A reference to the database.
     database: Arc<Database>,
+    /// A cache for pre-fetching derivation pipeline data from the database.
+    cache: PreFetchCache,
     /// A L1 provider.
     l1_provider: P,
     /// The L1 message queue index at which the V2 L1 message queue was enabled.
@@ -118,22 +123,26 @@ pub struct DerivationPipelineWorker<P> {
 
 impl<P> DerivationPipelineWorker<P> {
     /// Returns a new instance of the [`DerivationPipeline`].
-    pub fn new(
+    pub async fn new(
         l1_provider: P,
         database: Arc<Database>,
         l1_v2_message_queue_start_index: u64,
         batch_receiver: UnboundedReceiver<Arc<BatchDerivationRequest>>,
         result_sender: UnboundedSender<BatchDerivationResult>,
-    ) -> Self {
-        Self {
+    ) -> Result<Self, DerivationPipelineError> {
+        let cache =
+            PreFetchCache::new(database.clone(), CACHE_SIZE, CACHE_TTL, PREFETCH_RANGE_SIZE)
+                .await?;
+        Ok(Self {
             batch_receiver,
             result_sender,
             futures: FuturesOrdered::new(),
             database,
+            cache,
             l1_provider,
             l1_v2_message_queue_start_index,
             metrics: DerivationPipelineMetrics::default(),
-        }
+        })
     }
 }
 
@@ -158,7 +167,9 @@ where
                 l1_v2_message_queue_start_index,
                 batch_receiver,
                 result_sender,
-            );
+            )
+            .await
+            .expect("Failed to create derivation pipeline worker");
 
             worker.run().await;
         });
@@ -207,6 +218,7 @@ where
 
     fn derivation_future(&self, request: Arc<BatchDerivationRequest>) -> DerivationPipelineFuture {
         let db = self.database.clone();
+        let cache = self.cache.clone();
         let metrics = self.metrics.clone();
         let provider = self.l1_provider.clone();
         let l1_v2_message_queue_start_index = self.l1_v2_message_queue_start_index;
@@ -228,7 +240,7 @@ where
 
             // derive the attributes and attach the corresponding batch info.
             let result =
-                derive(batch, target_status, provider, db, l1_v2_message_queue_start_index)
+                derive(batch, target_status, provider, cache, l1_v2_message_queue_start_index)
                     .await
                     .map_err(|err| (request.clone(), err))?;
 
@@ -286,11 +298,11 @@ type DerivationPipelineFuture = Pin<
 
 /// Returns a [`BatchDerivationResult`] from the [`BatchCommitData`] by deriving the payload
 /// attributes for each L2 block in the batch.
-pub async fn derive<L1P: L1Provider + Sync + Send, DB: DatabaseReadOperations>(
+pub async fn derive<L1P: L1Provider + Sync + Send>(
     batch: BatchCommitData,
     target_status: BatchStatus,
     l1_provider: L1P,
-    db: DB,
+    cache: PreFetchCache,
     l1_v2_message_queue_start_index: u64,
 ) -> Result<BatchDerivationResult, DerivationPipelineError> {
     // fetch the blob then decode the input batch.
@@ -323,14 +335,7 @@ pub async fn derive<L1P: L1Provider + Sync + Send, DB: DatabaseReadOperations>(
     let blocks = decoded.data.into_l2_blocks();
     let mut attributes = Vec::with_capacity(blocks.len());
 
-    let start = blocks.first().map(|b| b.context.number);
-    let block_data = if let Some(start) = start {
-        db.get_n_l2_block_data_hint(start, blocks.len()).await?
-    } else {
-        vec![]
-    };
-
-    for (i, mut block) in blocks.into_iter().enumerate() {
+    for mut block in blocks {
         // query the appropriate amount of l1 messages.
         let mut txs = Vec::with_capacity(block.context.num_transactions as usize);
         for _ in 0..block.context.num_l1_messages {
@@ -369,7 +374,10 @@ pub async fn derive<L1P: L1Provider + Sync + Send, DB: DatabaseReadOperations>(
                 },
                 transactions: Some(txs),
                 no_tx_pool: true,
-                block_data_hint: block_data.get(i).cloned().unwrap_or_else(BlockDataHint::none),
+                block_data_hint: cache
+                    .get(block.context.number)
+                    .await?
+                    .unwrap_or_else(BlockDataHint::none),
                 gas_limit: Some(block.context.gas_limit),
             },
         };
@@ -446,7 +454,7 @@ async fn iter_l1_messages_from_payload<L1P: L1Provider>(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::sync::Arc;
+    use std::{sync::Arc, time::Duration};
 
     use alloy_eips::Decodable2718;
     use alloy_primitives::{address, b256, bytes, U256};
@@ -643,10 +651,12 @@ mod tests {
         for message in l1_messages {
             db.insert_l1_message(message).await?;
         }
+        let cache = PreFetchCache::new(db.clone(), 100, Duration::from_secs(60), 10).await?;
 
         let l1_provider = MockL1Provider { db: db.clone(), blobs: HashMap::new() };
 
-        let result = derive(batch_data, BatchStatus::Committed, l1_provider, db, u64::MAX).await?;
+        let result =
+            derive(batch_data, BatchStatus::Committed, l1_provider, cache, u64::MAX).await?;
         let attribute = result
             .attributes
             .iter()
@@ -745,10 +755,11 @@ mod tests {
         }
 
         let l1_provider = MockL1Provider { db: db.clone(), blobs: HashMap::new() };
+        let cache = PreFetchCache::new(db.clone(), 100, Duration::from_secs(60), 10).await?;
 
         // derive attributes and extract l1 messages.
         let attributes =
-            derive(batch_data, BatchStatus::Committed, l1_provider, db, u64::MAX).await?;
+            derive(batch_data, BatchStatus::Committed, l1_provider, cache, u64::MAX).await?;
         let derived_l1_messages: Vec<_> = attributes
             .attributes
             .into_iter()
@@ -800,10 +811,11 @@ mod tests {
         }
 
         let l1_provider = MockL1Provider { db: db.clone(), blobs: HashMap::new() };
+        let cache = PreFetchCache::new(db.clone(), 100, Duration::from_secs(60), 10).await?;
 
         // derive attributes and extract l1 messages.
         let attributes =
-            derive(batch_data, BatchStatus::Committed, l1_provider, db, u64::MAX).await?;
+            derive(batch_data, BatchStatus::Committed, l1_provider, cache, u64::MAX).await?;
         let derived_l1_messages: Vec<_> = attributes
             .attributes
             .into_iter()
@@ -916,8 +928,9 @@ mod tests {
                             blob_path
                         )]),
                     };
+                    let cache = PreFetchCache::new(db.clone(), 100, Duration::from_secs(60), 10).await?;
 
-                    let attributes = derive(batch_data, BatchStatus::Committed, l1_provider, db, u64::MAX).await?;
+                    let attributes = derive(batch_data, BatchStatus::Committed, l1_provider, cache, u64::MAX).await?;
 
                     let attribute = attributes.attributes.last().unwrap();
                     let expected = ScrollPayloadAttributes {

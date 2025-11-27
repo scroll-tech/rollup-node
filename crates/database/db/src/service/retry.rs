@@ -90,7 +90,7 @@ impl<S: DatabaseService> DatabaseService for Retry<S> {
                     };
 
                     attempt += 1;
-                    tracing::debug!(target: "scroll::chain_orchestrator", ?error, attempt, delay_ms, "Retrying database query");
+                    tracing::debug!(target: "scroll::db", ?error, attempt, delay_ms, "Retrying database query");
 
                     tokio::time::sleep(Duration::from_millis(delay_ms)).await;
                 }

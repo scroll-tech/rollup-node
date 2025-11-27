@@ -12,7 +12,8 @@ impl MigrationTrait for Migration {
                 Table::create()
                     .table(BlockSignature::Table)
                     .if_not_exists()
-                    .col(binary_len(BlockSignature::BlockHash, 32).primary_key())
+                    .col(pk_auto(BlockSignature::Id))
+                    .col(binary_len(BlockSignature::BlockHash, 32).unique_key())
                     .col(binary_len(BlockSignature::Signature, 65))
                     .to_owned(),
             )
@@ -27,6 +28,7 @@ impl MigrationTrait for Migration {
 #[derive(DeriveIden)]
 pub enum BlockSignature {
     Table,
+    Id,
     BlockHash,
     Signature,
 }

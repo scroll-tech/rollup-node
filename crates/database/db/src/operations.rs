@@ -708,13 +708,15 @@ impl<T: WriteConnectionProvider + ?Sized + Sync> DatabaseWriteOperations for T {
             blocks.into_iter().map(|b| (b, batch_info).into()).collect();
         models::l2_block::Entity::insert_many(l2_blocks)
             .on_conflict(
-                OnConflict::column(models::l2_block::Column::BlockHash)
-                    .update_columns([
-                        models::l2_block::Column::BlockNumber,
-                        models::l2_block::Column::BatchHash,
-                        models::l2_block::Column::BatchIndex,
-                    ])
-                    .to_owned(),
+                OnConflict::columns([
+                    models::l2_block::Column::BlockHash,
+                    models::l2_block::Column::BatchHash,
+                ])
+                .update_columns([
+                    models::l2_block::Column::BlockNumber,
+                    models::l2_block::Column::BatchIndex,
+                ])
+                .to_owned(),
             )
             .on_empty_do_nothing()
             .exec_without_returning(self.get_connection())
@@ -993,6 +995,9 @@ pub trait DatabaseReadOperations {
         start: Option<L1MessageKey>,
         n: usize,
     ) -> Result<Vec<L1MessageEnvelope>, DatabaseError>;
+
+    /// Get the maximum block number for which we have stored extra data hints.
+    async fn get_max_block_data_hint_block_number(&self) -> Result<u64, DatabaseError>;
 
     /// Get the extra data for n block, starting at the provided block number.
     async fn get_n_l2_block_data_hint(
@@ -1364,12 +1369,25 @@ impl<T: ReadConnectionProvider + Sync + ?Sized> DatabaseReadOperations for T {
     ) -> Result<Vec<BlockDataHint>, DatabaseError> {
         Ok(models::block_data::Entity::find()
             .filter(models::block_data::Column::Number.gte(block_number as i64))
+            .order_by_asc(models::block_data::Column::Number)
             .limit(Some(n as u64))
             .all(self.get_connection())
             .await?
             .into_iter()
             .map(Into::into)
             .collect())
+    }
+
+    async fn get_max_block_data_hint_block_number(&self) -> Result<u64, DatabaseError> {
+        Ok(models::block_data::Entity::find()
+            .select_only()
+            .column_as(models::block_data::Column::Number.max(), "max_number")
+            .into_tuple::<Option<i64>>()
+            .one(self.get_connection())
+            .await?
+            .flatten()
+            .map(|n| n as u64)
+            .unwrap_or(0))
     }
 
     async fn get_l2_block_and_batch_info_by_hash(

@@ -223,6 +223,7 @@ futures = { version = "0.3", default-features = false }
 lru = "0.13.0"
 metrics = "0.24.0"
 metrics-derive = "0.1"
+moka = "0.12.11"
 parking_lot = "0.12"
 rand = { version = "0.9" }
 rayon = "1.7"
