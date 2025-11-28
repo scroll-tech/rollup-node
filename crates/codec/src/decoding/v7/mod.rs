@@ -31,7 +31,7 @@ pub fn decode_v7(blob: &[u8]) -> Result<Batch, DecodingError> {
 
     // check version.
     let version = from_be_bytes_slice_and_advance_buf!(u8, buf);
-    debug_assert!((version == 7) || (version == 8) || (version == 9), "incorrect blob version");
+    debug_assert!((version == 7) || (version == 8) || (version == 9) || (version == 10), "incorrect blob version");
 
     let blob_payload_size = from_be_bytes_slice_and_advance_buf!(u32, 3, buf) as usize;
 
