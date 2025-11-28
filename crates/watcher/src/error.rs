@@ -27,6 +27,9 @@ pub enum L1WatcherError {
     /// The L1 nofication channel was closed.
     #[error("l1 notification channel closed")]
     SendError(#[from] SendError<Arc<L1Notification>>),
+    /// An error that occurred when accessing data from the cache.
+    #[error(transparent)]
+    Cache(#[from] CacheError),
 }
 
 /// An error occurred during a request to the Ethereum JSON RPC provider.
@@ -58,4 +61,12 @@ pub enum FilterLogError {
     /// Invalid extracted notification length.
     #[error("expected {0} notifications, got {1}")]
     InvalidNotificationCount(usize, usize),
+}
+
+/// An error that occurred when accessing data from the cache.
+#[derive(Debug, thiserror::Error)]
+pub enum CacheError {
+    /// The transaction for which the next blob versioned hash was requested is not in the cache.
+    #[error("transaction {0} not found in cache when requesting next blob versioned hash")]
+    MissingTransactionInCacheForBlobVersionedHash(B256),
 }

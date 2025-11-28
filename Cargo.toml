@@ -1,7 +1,7 @@
 [workspace.package]
-version = "0.0.1"
+version = "1.0.0"
 edition = "2021"
-rust-version = "1.82"
+rust-version = "1.83"
 license = "MIT OR Apache-2.0"
 exclude = [".github/"]
 
@@ -221,8 +221,10 @@ clap = { version = "4", features = ["derive", "env"] }
 derive_more = { version = "2.0", default-features = false }
 eyre = "0.6"
 futures = { version = "0.3", default-features = false }
+lru = "0.13.0"
 metrics = "0.24.0"
 metrics-derive = "0.1"
+moka = "0.12.11"
 parking_lot = "0.12"
 rand = { version = "0.9" }
 rayon = "1.7"

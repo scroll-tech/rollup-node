@@ -2,6 +2,7 @@ use crate::constants::SCROLL_GAS_LIMIT;
 use reth_node_api::{AddOnsContext, FullNodeComponents, FullNodeTypes};
 use reth_node_core::cli::config::PayloadBuilderConfig;
 use reth_node_types::NodeTypes;
+use reth_tasks::TaskExecutor;
 use std::{path::PathBuf, sync::Arc};
 
 /// The context passed to `ScrollRollupNodeConfig::build` method.
@@ -15,6 +16,8 @@ pub struct RollupNodeContext<N, CS> {
     pub datadir: PathBuf,
     /// The block gas limit of the rollup node.
     pub block_gas_limit: u64,
+    /// The task executor.
+    pub task_executor: TaskExecutor,
 }
 
 impl<N, CS> RollupNodeContext<N, CS> {
@@ -24,8 +27,9 @@ impl<N, CS> RollupNodeContext<N, CS> {
         chain_spec: Arc<CS>,
         datadir: PathBuf,
         block_gas_limit: u64,
+        task_executor: TaskExecutor,
     ) -> Self {
-        Self { network, chain_spec, datadir, block_gas_limit }
+        Self { network, chain_spec, datadir, block_gas_limit, task_executor }
     }
 }
 
@@ -40,6 +44,7 @@ where
             chain_spec: value.config.chain.clone(),
             datadir: value.config.datadir().db(),
             block_gas_limit: value.config.builder.gas_limit().unwrap_or(SCROLL_GAS_LIMIT),
+            task_executor: value.node.task_executor().clone(),
         }
     }
 }
