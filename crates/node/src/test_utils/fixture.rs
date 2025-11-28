@@ -216,17 +216,12 @@ impl TestFixture {
         self.get_status(0).await
     }
 
-    /// Get the Anvil instance if one was started.
-    pub const fn anvil(&self) -> Option<&anvil::NodeHandle> {
-        self.anvil.as_ref()
-    }
-
     /// Get the Anvil HTTP endpoint if Anvil was started.
     pub fn anvil_endpoint(&self) -> Option<String> {
         self.anvil.as_ref().map(|a| a.http_endpoint())
     }
 
-    /// Generate Anvil blocks by calling anvil_mine RPC method.
+    /// Generate Anvil blocks by calling `anvil_mine` RPC method.
     pub async fn anvil_mine_blocks(&self, num_blocks: u64) -> eyre::Result<()> {
         // Ensure Anvil is running
         let anvil_endpoint =
@@ -277,9 +272,7 @@ impl TestFixture {
         // Parameters: (depth, transactions)
         // - depth: number of blocks to rewind from current head
         // - transactions: empty array means reorg without adding new transactions
-        let _: () = client
-            .request("anvil_reorg", (depth, Vec::<String>::new()))
-            .await?;
+        let _: () = client.request("anvil_reorg", (depth, Vec::<String>::new())).await?;
 
         tracing::info!("Reorged Anvil by {} blocks", depth);
 
@@ -371,14 +364,14 @@ impl TestFixtureBuilder {
     }
 
     /// Toggle the test field.
-    pub fn with_test(mut self, test: bool) -> Self {
+    pub const fn with_test(mut self, test: bool) -> Self {
         self.config.test_args.test = test;
         self
     }
 
     /// Enable test mode to skip L1 watcher Synced notifications.
     /// This is useful for tests that don't want to wait for L1 sync completion events.
-    pub fn skip_l1_synced_notifications(mut self) -> Self {
+    pub const fn skip_l1_synced_notifications(mut self) -> Self {
         self.config.test_args.skip_l1_synced = true;
         self
     }
@@ -520,21 +513,15 @@ impl TestFixtureBuilder {
         &mut self.config
     }
 
-    /// Enable Anvil with default settings.
-    pub const fn with_anvil(mut self) -> Self {
-        self.enable_anvil = true;
-        self
-    }
-
     /// Enable Anvil with the default state file (`./tests/testdata/anvil_state.json`).
-    pub fn with_anvil_default_state(mut self) -> Self {
+    pub fn with_anvil(mut self) -> Self {
         self.enable_anvil = true;
         self.anvil_state_path = Some(PathBuf::from("./tests/testdata/anvil_state.json"));
         self
     }
 
     /// Enable Anvil with a custom state file.
-    pub fn with_anvil_state(mut self, path: impl Into<PathBuf>) -> Self {
+    pub fn with_anvil_custom_state(mut self, path: impl Into<PathBuf>) -> Self {
         self.enable_anvil = true;
         self.anvil_state_path = Some(path.into());
         self

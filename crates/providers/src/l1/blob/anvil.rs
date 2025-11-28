@@ -21,6 +21,7 @@ impl AnvilBlobProvider {
 
 #[async_trait::async_trait]
 impl BlobProvider for AnvilBlobProvider {
+    #[allow(clippy::large_stack_frames)]
     async fn blob(
         &self,
         _block_timestamp: u64,

@@ -366,15 +366,15 @@ impl ScrollRollupNodeConfig {
                 .filter(|_| !self.test_args.test || self.blob_provider_args.anvil_url.is_some())
             {
                 tracing::info!(target: "scroll::node::args", ?l1_block_startup_info, "Starting L1 watcher");
-                    let (tx, rx) = L1Watcher::spawn(
-                        provider,
-                        l1_block_startup_info,
-                        node_config,
-                        self.l1_provider_args.logs_query_block_range,
-                        self.test_args.test && self.test_args.skip_l1_synced,
-                    )
-                    .await;
-                    (Some(tx), Some(rx))
+                let (tx, rx) = L1Watcher::spawn(
+                    provider,
+                    l1_block_startup_info,
+                    node_config,
+                    self.l1_provider_args.logs_query_block_range,
+                    self.test_args.test && self.test_args.skip_l1_synced,
+                )
+                .await;
+                (Some(tx), Some(rx))
             } else {
                 // Create a channel for L1 notifications that we can use to inject L1 messages for
                 // testing

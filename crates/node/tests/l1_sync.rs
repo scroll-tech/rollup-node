@@ -3,14 +3,13 @@
 //! This test suite covers the behavior of the rollup node when consuming events from L1
 //! in different sync states, handling reorgs, and recovering from shutdowns.
 //!
-//! Related to: https://github.com/scroll-tech/rollup-node/issues/420
+//! Related to: <https://github.com/scroll-tech/rollup-node/issues/420>
 
 use alloy_primitives::Bytes;
 use rollup_node::test_utils::{EventAssertions, TestFixture};
 use serde_json::Value;
 
-
-/// Helper to read transaction from test_transactions.json
+/// Helper to read transaction from `test_transactions.json`
 fn read_test_transaction(tx_type: &str, index: &str) -> eyre::Result<Bytes> {
     let tx_json_path = "./tests/testdata/test_transactions.json";
     let tx_json_content = std::fs::read_to_string(tx_json_path)
@@ -43,10 +42,10 @@ fn read_test_transaction(tx_type: &str, index: &str) -> eyre::Result<Bytes> {
 // Test Suite 1: Correct behavior when consuming events from L1
 // =============================================================================
 
-/// Test: BatchCommit during Syncing state should have no effect.
+/// Test: `BatchCommit` during Syncing state should have no effect.
 ///
 /// Expected: The node should not update the safe head since we only process
-/// BatchCommit eventds after the node is synced (post L1Synced notification).
+/// `BatchCommit` eventds after the node is synced (post `L1Synced` notification).
 #[tokio::test]
 async fn test_l1_sync_batch_commit() -> eyre::Result<()> {
     reth_tracing::init_test_tracing();
@@ -54,7 +53,7 @@ async fn test_l1_sync_batch_commit() -> eyre::Result<()> {
     let mut fixture = TestFixture::builder()
         .followers(1)
         .skip_l1_synced_notifications()
-        .with_anvil_default_state()
+        .with_anvil()
         .with_anvil_chain_id(22222222)
         .build()
         .await?;
@@ -94,7 +93,6 @@ async fn test_l1_sync_batch_commit() -> eyre::Result<()> {
     Ok(())
 }
 
-
 #[tokio::test]
 async fn test_l1_sync_batch_finalized() -> eyre::Result<()> {
     reth_tracing::init_test_tracing();
@@ -102,7 +100,7 @@ async fn test_l1_sync_batch_finalized() -> eyre::Result<()> {
     let mut fixture = TestFixture::builder()
         .followers(1)
         .skip_l1_synced_notifications()
-        .with_anvil_default_state()
+        .with_anvil()
         .with_anvil_chain_id(22222222)
         .build()
         .await?;
@@ -173,11 +171,13 @@ async fn test_l1_sync_batch_finalized() -> eyre::Result<()> {
     // Check that finalized head was updated
     let batch_finalized_status = fixture.get_sequencer_status().await?;
     assert!(
-        batch_finalized_status.l2.fcs.safe_block_info().number == l1_synced_status.l2.fcs.safe_block_info().number,
+        batch_finalized_status.l2.fcs.safe_block_info().number ==
+            l1_synced_status.l2.fcs.safe_block_info().number,
         "Safe head should not advance after BatchFinalized event when L1 Synced"
     );
     assert!(
-        batch_finalized_status.l2.fcs.finalized_block_info().number > l1_synced_status.l2.fcs.finalized_block_info().number,
+        batch_finalized_status.l2.fcs.finalized_block_info().number >
+            l1_synced_status.l2.fcs.finalized_block_info().number,
         "Finalized head should advance after BatchFinalized event when L1 Synced"
     );
 
@@ -191,7 +191,7 @@ async fn test_l1_sync_batch_revert() -> eyre::Result<()> {
     let mut fixture = TestFixture::builder()
         .followers(1)
         .skip_l1_synced_notifications()
-        .with_anvil_default_state()
+        .with_anvil()
         .with_anvil_chain_id(22222222)
         .build()
         .await?;
@@ -206,10 +206,11 @@ async fn test_l1_sync_batch_revert() -> eyre::Result<()> {
         fixture.anvil_send_raw_transaction(commit_batch_tx).await?;
     }
 
+    fixture.anvil_mine_blocks(64).await?;
+
+    // Trigger L1 synced event
     fixture.l1().sync().await?;
     fixture.expect_event().l1_synced().await?;
-    fixture.expect_event().batch_consolidated().await?;
-    fixture.anvil_mine_blocks(64).await?;
 
     // Wait for l1 blocks to be processed
     tokio::time::sleep(tokio::time::Duration::from_secs(3)).await;
@@ -218,13 +219,13 @@ async fn test_l1_sync_batch_revert() -> eyre::Result<()> {
     let new_status = fixture.get_sequencer_status().await?;
     assert!(
         new_status.l2.fcs.safe_block_info().number > initial_safe,
-        "Safe head should advance after BatchCommit when synced and L1Synced"
+        "Safe head should advance after BatchCommit when L1Synced"
     );
 
     // Send BatchRevert transactions
     let revert_batch_tx = read_test_transaction("revertBatch", "0")?;
     fixture.anvil_send_raw_transaction(revert_batch_tx).await?;
-    fixture.anvil_mine_blocks(64).await?;
+    fixture.anvil_mine_blocks(10).await?;
 
     // Wait for l1 blocks to be processed
     tokio::time::sleep(tokio::time::Duration::from_secs(3)).await;
@@ -243,10 +244,10 @@ async fn test_l1_sync_batch_revert() -> eyre::Result<()> {
 // Test Suite 2: L1 Reorg handling for different batch events
 // =============================================================================
 
-/// Test: L1 reorg of BatchCommit after L1Synced.
+/// Test: L1 reorg of `BatchCommit` after `L1Synced`.
 ///
-/// Expected: When a BatchCommit is reorged after the node has synced (L1Synced),
-/// the safe head should revert to the last block of the previous BatchCommit.
+/// Expected: When a `BatchCommit` is reorged after the node has synced (`L1Synced`),
+/// the safe head should revert to the last block of the previous `BatchCommit`.
 #[tokio::test]
 async fn test_l1_reorg_batch_commit() -> eyre::Result<()> {
     reth_tracing::init_test_tracing();
@@ -254,7 +255,7 @@ async fn test_l1_reorg_batch_commit() -> eyre::Result<()> {
     let mut fixture = TestFixture::builder()
         .followers(1)
         .skip_l1_synced_notifications()
-        .with_anvil_default_state()
+        .with_anvil()
         .with_anvil_chain_id(22222222)
         .build()
         .await?;
@@ -267,7 +268,9 @@ async fn test_l1_reorg_batch_commit() -> eyre::Result<()> {
     for i in 0..=3 {
         let commit_batch_tx = read_test_transaction("commitBatch", &i.to_string())?;
         fixture.anvil_send_raw_transaction(commit_batch_tx).await?;
-        if i!=0 {fixture.expect_event().batch_consolidated().await?;}
+        if i != 0 {
+            fixture.expect_event().batch_consolidated().await?;
+        }
     }
 
     // Check that safe head was updated to batch 2
@@ -285,7 +288,8 @@ async fn test_l1_reorg_batch_commit() -> eyre::Result<()> {
     tokio::time::sleep(tokio::time::Duration::from_secs(3)).await;
 
     // Check that safe head advanced to batch 3
-    let status_after_batch_6: rollup_node_chain_orchestrator::ChainOrchestratorStatus = fixture.get_sequencer_status().await?;
+    let status_after_batch_6: rollup_node_chain_orchestrator::ChainOrchestratorStatus =
+        fixture.get_sequencer_status().await?;
     let safe_after_batch_6 = status_after_batch_6.l2.fcs.safe_block_info().number;
     tracing::info!("Safe head after batch 6: {}", safe_after_batch_6);
     assert!(
@@ -311,10 +315,10 @@ async fn test_l1_reorg_batch_commit() -> eyre::Result<()> {
     Ok(())
 }
 
-/// Test: L1 reorg of BatchFinalized event.
+/// Test: L1 reorg of `BatchFinalized` event.
 ///
-/// Expected: Reorging BatchFinalized should have no effect because we only update
-/// the finalized head after the BatchFinalized event is itself finalized on L1,
+/// Expected: Reorging `BatchFinalized` should have no effect because we only update
+/// the finalized head after the `BatchFinalized` event is itself finalized on L1,
 /// meaning it can never be reorged in practice.
 #[tokio::test]
 async fn test_l1_reorg_batch_finalized() -> eyre::Result<()> {
@@ -323,7 +327,7 @@ async fn test_l1_reorg_batch_finalized() -> eyre::Result<()> {
     let mut fixture = TestFixture::builder()
         .followers(1)
         .skip_l1_synced_notifications()
-        .with_anvil_default_state()
+        .with_anvil()
         .with_anvil_chain_id(22222222)
         .build()
         .await?;
@@ -372,9 +376,9 @@ async fn test_l1_reorg_batch_finalized() -> eyre::Result<()> {
     Ok(())
 }
 
-/// Test: L1 reorg of BatchRevert event.
+/// Test: L1 reorg of `BatchRevert` event.
 ///
-/// Expected: When a BatchRevert is reorged, the safe head should be restored to
+/// Expected: When a `BatchRevert` is reorged, the safe head should be restored to
 /// the state before the revert was applied. If the reverted batches are re-committed
 /// after the reorg, the safe head should advance again.
 #[tokio::test]
@@ -384,7 +388,7 @@ async fn test_l1_reorg_batch_revert() -> eyre::Result<()> {
     let mut fixture = TestFixture::builder()
         .followers(1)
         .skip_l1_synced_notifications()
-        .with_anvil_default_state()
+        .with_anvil()
         .with_anvil_chain_id(22222222)
         .build()
         .await?;
@@ -420,10 +424,7 @@ async fn test_l1_reorg_batch_revert() -> eyre::Result<()> {
     let status_after_revert = fixture.get_sequencer_status().await?;
     let safe_after_revert = status_after_revert.l2.fcs.safe_block_info().number;
     tracing::info!("Safe head after revert: {}", safe_after_revert);
-    assert!(
-        safe_after_revert < safe_after_commits,
-        "Safe head should decrease after BatchRevert"
-    );
+    assert!(safe_after_revert < safe_after_commits, "Safe head should decrease after BatchRevert");
 
     // Reorg to remove the BatchRevert event (reorg depth 1)
     fixture.anvil_reorg(2).await?;

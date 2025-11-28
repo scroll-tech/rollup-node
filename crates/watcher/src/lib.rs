@@ -99,7 +99,7 @@ pub struct L1Watcher<EP> {
     is_synced: bool,
     /// The log query block range.
     log_query_block_range: u64,
-    /// Test mode: skip sending L1Notification::Synced events.
+    /// Test mode: skip sending `L1Notification::Synced` events.
     test_mode_skip_synced_notification: bool,
 }
 
