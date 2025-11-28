@@ -11,7 +11,7 @@ pub use metrics::WatcherMetrics;
 pub mod test_utils;
 
 use alloy_network::Ethereum;
-use alloy_primitives::{address, ruint::UintTryTo, BlockNumber, B256};
+use alloy_primitives::{ruint::UintTryTo, BlockNumber, B256};
 use alloy_provider::{Network, Provider};
 use alloy_rpc_types_eth::{BlockNumberOrTag, Filter, Log, TransactionTrait};
 use alloy_sol_types::SolEvent;
@@ -826,16 +826,12 @@ where
     /// [`field@L1Watcher::log_query_block_range`]\].
     async fn next_filtered_logs(&self, latest_block_number: u64) -> L1WatcherResult<Vec<Log>> {
         // set the block range for the query
-        // let address_book = &self.config.address_book;
+        let address_book = &self.config.address_book;
         let mut filter = Filter::new()
             .address(vec![
-                address!("0x5FC8d32690cc91D4c39d9d3abcBD16989F875707"), /* address_book.rollup_node_contract_address,
-                                                                         * address_book.
-                                                                         * v1_message_queue_address,
-                                                                         *
-                                                                         * address_book.
-                                                                         * v2_message_queue_address,
-                                                                         */
+                address_book.rollup_node_contract_address,
+                address_book.v1_message_queue_address,
+                address_book.v2_message_queue_address,
             ])
             .event_signature(vec![
                 QueueTransaction::SIGNATURE_HASH,

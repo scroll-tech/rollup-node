@@ -6,7 +6,6 @@
 //! Related to: https://github.com/scroll-tech/rollup-node/issues/420
 
 use alloy_primitives::Bytes;
-use reth_scroll_chainspec::SCROLL_DEV;
 use rollup_node::test_utils::{EventAssertions, TestFixture};
 use serde_json::Value;
 
@@ -47,14 +46,13 @@ fn read_test_transaction(tx_type: &str, index: &str) -> eyre::Result<Bytes> {
 /// Test: BatchCommit during Syncing state should have no effect.
 ///
 /// Expected: The node should not update the safe head since we only process
-/// BatchCommit events after the node is synced (post L1Synced notification).
+/// BatchCommit eventds after the node is synced (post L1Synced notification).
 #[tokio::test]
 async fn test_l1_sync_batch_commit() -> eyre::Result<()> {
     reth_tracing::init_test_tracing();
 
     let mut fixture = TestFixture::builder()
         .followers(1)
-        .with_chain_spec(SCROLL_DEV.clone())
         .skip_l1_synced_notifications()
         .with_anvil_default_state()
         .with_anvil_chain_id(22222222)
@@ -103,7 +101,6 @@ async fn test_l1_sync_batch_finalized() -> eyre::Result<()> {
 
     let mut fixture = TestFixture::builder()
         .followers(1)
-        .with_chain_spec(SCROLL_DEV.clone())
         .skip_l1_synced_notifications()
         .with_anvil_default_state()
         .with_anvil_chain_id(22222222)
@@ -170,8 +167,8 @@ async fn test_l1_sync_batch_finalized() -> eyre::Result<()> {
     }
     fixture.anvil_mine_blocks(64).await?;
 
-    // Wait for l1 blocks to be processed
-    tokio::time::sleep(tokio::time::Duration::from_secs(3)).await;
+    // Wait for batch finalized event
+    fixture.expect_event().batch_finalized().await?;
 
     // Check that finalized head was updated
     let batch_finalized_status = fixture.get_sequencer_status().await?;
@@ -193,7 +190,6 @@ async fn test_l1_sync_batch_revert() -> eyre::Result<()> {
 
     let mut fixture = TestFixture::builder()
         .followers(1)
-        .with_chain_spec(SCROLL_DEV.clone())
         .skip_l1_synced_notifications()
         .with_anvil_default_state()
         .with_anvil_chain_id(22222222)
@@ -257,58 +253,58 @@ async fn test_l1_reorg_batch_commit() -> eyre::Result<()> {
 
     let mut fixture = TestFixture::builder()
         .followers(1)
-        .with_chain_spec(SCROLL_DEV.clone())
         .skip_l1_synced_notifications()
         .with_anvil_default_state()
         .with_anvil_chain_id(22222222)
         .build()
         .await?;
 
-    // Send BatchCommit transactions 0-2
-    for i in 0..=2 {
+    // Trigger L1 synced event
+    fixture.l1().sync().await?;
+    fixture.expect_event().l1_synced().await?;
+
+    // Send BatchCommit transactions 0-3
+    for i in 0..=3 {
+        let commit_batch_tx = read_test_transaction("commitBatch", &i.to_string())?;
+        fixture.anvil_send_raw_transaction(commit_batch_tx).await?;
+        if i!=0 {fixture.expect_event().batch_consolidated().await?;}
+    }
+
+    // Check that safe head was updated to batch 2
+    let status_after_batch_3 = fixture.get_sequencer_status().await?;
+    let safe_after_batch_3 = status_after_batch_3.l2.fcs.safe_block_info().number;
+    tracing::info!("Safe head after batch 3: {}", safe_after_batch_3);
+
+    // Send BatchCommit transactions 4-6
+    for i in 4..=6 {
         let commit_batch_tx = read_test_transaction("commitBatch", &i.to_string())?;
         fixture.anvil_send_raw_transaction(commit_batch_tx).await?;
     }
-
-    // Trigger L1 sync
-    fixture.l1().sync().await?;
-    fixture.expect_event().l1_synced().await?;
-    fixture.expect_event().batch_consolidated().await?;
-
-    // Check that safe head was updated to batch 2
-    let status_after_sync = fixture.get_sequencer_status().await?;
-    let safe_after_batch_2 = status_after_sync.l2.fcs.safe_block_info().number;
-    tracing::info!("Safe head after batch 2: {}", safe_after_batch_2);
-
-    // Send BatchCommit transaction 3
-    let commit_batch_3_tx = read_test_transaction("commitBatch", "3")?;
-    fixture.anvil_send_raw_transaction(commit_batch_3_tx).await?;
 
     // Wait for processing
     tokio::time::sleep(tokio::time::Duration::from_secs(3)).await;
 
     // Check that safe head advanced to batch 3
-    let status_after_batch_3 = fixture.get_sequencer_status().await?;
-    let safe_after_batch_3 = status_after_batch_3.l2.fcs.safe_block_info().number;
-    tracing::info!("Safe head after batch 3: {}", safe_after_batch_3);
+    let status_after_batch_6: rollup_node_chain_orchestrator::ChainOrchestratorStatus = fixture.get_sequencer_status().await?;
+    let safe_after_batch_6 = status_after_batch_6.l2.fcs.safe_block_info().number;
+    tracing::info!("Safe head after batch 6: {}", safe_after_batch_6);
     assert!(
-        safe_after_batch_3 > safe_after_batch_2,
+        safe_after_batch_6 > safe_after_batch_6,
         "Safe head should advance after BatchCommit when L1Synced"
     );
 
     // Reorg to remove batch 3 (reorg depth 1)
-    fixture.anvil_reorg(1).await?;
+    fixture.anvil_reorg(3).await?;
     fixture.anvil_mine_blocks(1).await?;
 
-    // Wait for reorg to be detected and processed
-    tokio::time::sleep(tokio::time::Duration::from_secs(3)).await;
+    fixture.expect_event().l1_reorg().await?;
 
-    // Check that safe head reverted to batch 2
+    // Check that safe head reverted
     let status_after_reorg = fixture.get_sequencer_status().await?;
     let safe_after_reorg = status_after_reorg.l2.fcs.safe_block_info().number;
     tracing::info!("Safe head after reorg: {}", safe_after_reorg);
     assert_eq!(
-        safe_after_reorg, safe_after_batch_2,
+        safe_after_reorg, safe_after_batch_3,
         "Safe head should revert to previous BatchCommit after reorg"
     );
 
@@ -326,7 +322,6 @@ async fn test_l1_reorg_batch_finalized() -> eyre::Result<()> {
 
     let mut fixture = TestFixture::builder()
         .followers(1)
-        .with_chain_spec(SCROLL_DEV.clone())
         .skip_l1_synced_notifications()
         .with_anvil_default_state()
         .with_anvil_chain_id(22222222)
@@ -388,7 +383,6 @@ async fn test_l1_reorg_batch_revert() -> eyre::Result<()> {
 
     let mut fixture = TestFixture::builder()
         .followers(1)
-        .with_chain_spec(SCROLL_DEV.clone())
         .skip_l1_synced_notifications()
         .with_anvil_default_state()
         .with_anvil_chain_id(22222222)

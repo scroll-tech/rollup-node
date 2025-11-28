@@ -10,7 +10,7 @@ use crate::{
 };
 
 use alloy_eips::BlockNumberOrTag;
-use alloy_primitives::{address, Address};
+use alloy_primitives::Address;
 use alloy_provider::{Provider, ProviderBuilder};
 use alloy_rpc_types_eth::Block;
 use alloy_signer_local::PrivateKeySigner;
@@ -224,11 +224,6 @@ impl TestFixture {
     /// Get the Anvil HTTP endpoint if Anvil was started.
     pub fn anvil_endpoint(&self) -> Option<String> {
         self.anvil.as_ref().map(|a| a.http_endpoint())
-    }
-
-    /// Check if Anvil is running.
-    pub const fn has_anvil(&self) -> bool {
-        self.anvil.is_some()
     }
 
     /// Generate Anvil blocks by calling anvil_mine RPC method.
@@ -554,23 +549,6 @@ impl TestFixtureBuilder {
     /// Set the block time for Anvil (in seconds).
     pub const fn with_anvil_block_time(mut self, block_time: u64) -> Self {
         self.anvil_block_time = Some(block_time);
-        self
-    }
-
-    /// Set custom L1 config addresses for Anvil testing.
-    /// This method reads contract addresses from tests/anvil.env.
-    pub fn with_anvil_l1_config(mut self) -> Self {
-        let chain_spec = self.chain_spec.take().unwrap_or_else(|| SCROLL_DEV.clone());
-        let mut spec = (*chain_spec).clone();
-        spec.config.l1_config.scroll_chain_address =
-            address!("0x5FC8d32690cc91D4c39d9d3abcBD16989F875707");
-        spec.config.l1_config.l1_message_queue_address =
-            address!("0xCf7Ed3AccA5a467e9e704C703E8D87F634fB0Fc9");
-        spec.config.l1_config.l1_message_queue_v2_address =
-            address!("0xDc64a140Aa3E981100a9becA4E685f962f0cF6C9");
-        spec.config.l1_config.l2_system_config_address =
-            address!("0x9fE46736679d2D9a65F0992F2272dE9f3c7fa6e0");
-        self.chain_spec = Some(Arc::new(spec));
         self
     }
 
