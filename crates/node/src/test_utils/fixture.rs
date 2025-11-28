@@ -280,6 +280,19 @@ impl TestFixture {
     }
 }
 
+/// Configuration for Anvil L1 simulation.
+#[derive(Debug, Default, Clone)]
+pub struct AnvilConfig {
+    /// Whether to enable Anvil.
+    pub enabled: bool,
+    /// Optional state file to load into Anvil.
+    pub state_path: Option<PathBuf>,
+    /// Optional chain ID for Anvil.
+    pub chain_id: Option<u64>,
+    /// Optional block time for Anvil (in seconds).
+    pub block_time: Option<u64>,
+}
+
 /// Builder for creating test fixtures with a fluent API.
 #[derive(Debug)]
 pub struct TestFixtureBuilder {
@@ -288,10 +301,7 @@ pub struct TestFixtureBuilder {
     chain_spec: Option<Arc<<ScrollRollupNode as NodeTypes>::ChainSpec>>,
     is_dev: bool,
     no_local_transactions_propagation: bool,
-    enable_anvil: bool,
-    anvil_state_path: Option<PathBuf>,
-    anvil_chain_id: Option<u64>,
-    anvil_block_time: Option<u64>,
+    anvil_config: AnvilConfig,
 }
 
 impl Default for TestFixtureBuilder {
@@ -309,10 +319,7 @@ impl TestFixtureBuilder {
             chain_spec: None,
             is_dev: false,
             no_local_transactions_propagation: false,
-            enable_anvil: false,
-            anvil_state_path: None,
-            anvil_chain_id: None,
-            anvil_block_time: None,
+            anvil_config: AnvilConfig::default(),
         }
     }
 
@@ -515,27 +522,27 @@ impl TestFixtureBuilder {
 
     /// Enable Anvil with the default state file (`./tests/testdata/anvil_state.json`).
     pub fn with_anvil(mut self) -> Self {
-        self.enable_anvil = true;
-        self.anvil_state_path = Some(PathBuf::from("./tests/testdata/anvil_state.json"));
+        self.anvil_config.enabled = true;
+        self.anvil_config.state_path = Some(PathBuf::from("./tests/testdata/anvil_state.json"));
         self
     }
 
     /// Enable Anvil with a custom state file.
     pub fn with_anvil_custom_state(mut self, path: impl Into<PathBuf>) -> Self {
-        self.enable_anvil = true;
-        self.anvil_state_path = Some(path.into());
+        self.anvil_config.enabled = true;
+        self.anvil_config.state_path = Some(path.into());
         self
     }
 
     /// Set the chain ID for Anvil.
     pub const fn with_anvil_chain_id(mut self, chain_id: u64) -> Self {
-        self.anvil_chain_id = Some(chain_id);
+        self.anvil_config.chain_id = Some(chain_id);
         self
     }
 
     /// Set the block time for Anvil (in seconds).
     pub const fn with_anvil_block_time(mut self, block_time: u64) -> Self {
-        self.anvil_block_time = Some(block_time);
+        self.anvil_config.block_time = Some(block_time);
         self
     }
 
@@ -545,11 +552,11 @@ impl TestFixtureBuilder {
         let chain_spec = self.chain_spec.unwrap_or_else(|| SCROLL_DEV.clone());
 
         // Start Anvil if requested
-        let anvil = if self.enable_anvil {
+        let anvil = if self.anvil_config.enabled {
             let handle = Self::spawn_anvil(
-                self.anvil_state_path.as_deref(),
-                self.anvil_chain_id,
-                self.anvil_block_time,
+                self.anvil_config.state_path.as_deref(),
+                self.anvil_config.chain_id,
+                self.anvil_config.block_time,
             )
             .await?;
 
