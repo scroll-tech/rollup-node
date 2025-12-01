@@ -311,13 +311,12 @@ async fn test_l1_sync_batch_revert() -> eyre::Result<()> {
         fixture.anvil_inject_tx(commit_batch_tx).await?;
     }
 
-    // Mine blocks to ensure commits are included
-    fixture.anvil_mine_blocks(64).await?;
-
     // Step 3: Complete L1 sync
     fixture.l1().sync().await?;
     fixture.expect_event().l1_synced().await?;
-    tokio::time::sleep(tokio::time::Duration::from_secs(3)).await;
+    for _ in 1..=6 {
+        fixture.expect_event().batch_consolidated().await?;
+    }
 
     // Verify safe head advanced after processing commits
     let new_status = fixture.get_status(0).await?;
@@ -329,9 +328,8 @@ async fn test_l1_sync_batch_revert() -> eyre::Result<()> {
     // Step 4: Send BatchRevert transaction to revert some batches
     let revert_batch_tx = read_test_transaction("revertBatch", "0")?;
     fixture.anvil_inject_tx(revert_batch_tx).await?;
-    fixture.anvil_mine_blocks(10).await?;
 
-    tokio::time::sleep(tokio::time::Duration::from_secs(3)).await;
+    fixture.expect_event().batch_reverted().await?;
 
     // Step 5: Verify safe head decreased after revert
     let revert_status = fixture.get_status(0).await?;
@@ -384,9 +382,9 @@ async fn test_l1_reorg_batch_commit() -> eyre::Result<()> {
     for i in 0..=3 {
         let commit_batch_tx = read_test_transaction("commitBatch", &i.to_string())?;
         fixture.anvil_inject_tx(commit_batch_tx).await?;
-        if i != 0 {
-            fixture.expect_event().batch_consolidated().await?;
-        }
+    }
+    for _ in 1..=3 {
+        fixture.expect_event().batch_consolidated().await?;
     }
 
     // Record safe head after batch 3
@@ -399,8 +397,9 @@ async fn test_l1_reorg_batch_commit() -> eyre::Result<()> {
         let commit_batch_tx = read_test_transaction("commitBatch", &i.to_string())?;
         fixture.anvil_inject_tx(commit_batch_tx).await?;
     }
-
-    tokio::time::sleep(tokio::time::Duration::from_secs(3)).await;
+    for _ in 1..=3 {
+        fixture.expect_event().batch_consolidated().await?;
+    }
 
     // Record advanced safe head after batch 6
     let status_after_batch_6 = fixture.get_status(0).await?;
@@ -413,7 +412,6 @@ async fn test_l1_reorg_batch_commit() -> eyre::Result<()> {
 
     // Step 4: Perform L1 reorg to remove batches 4-6 (reorg depth 3)
     fixture.anvil_reorg(3).await?;
-    fixture.anvil_mine_blocks(1).await?;
 
     // Wait for reorg detection
     fixture.expect_event().l1_reorg().await?;
@@ -435,9 +433,8 @@ async fn test_l1_reorg_batch_commit() -> eyre::Result<()> {
 /// # Test Flow
 /// 1. Send `BatchCommit` transactions (batches 0-6) to L1
 /// 2. Send `BatchFinalized` transactions (batches 1-2) to L1
-/// 3. Complete L1 sync and verify finalized head advanced
-/// 4. Perform L1 reorg to remove the `BatchFinalized` events
-/// 5. Verify finalized head remains unchanged despite the reorg
+/// 3. Perform L1 reorg to remove the `BatchFinalized` events
+/// 4. Verify finalized head remains unchanged despite the reorg
 ///
 /// # Expected Behavior
 /// The finalized head should NOT change when `BatchFinalized` events are reorged.
@@ -462,10 +459,16 @@ async fn test_l1_reorg_batch_finalized() -> eyre::Result<()> {
         .build()
         .await?;
 
+    fixture.l1().sync().await?;
+    fixture.expect_event().l1_synced().await?;
+
     // Step 2: Send BatchCommit transactions (batches 0-6)
     for i in 0..=6 {
         let commit_batch_tx = read_test_transaction("commitBatch", &i.to_string())?;
         fixture.anvil_inject_tx(commit_batch_tx).await?;
+    }
+    for _ in 1..=6 {
+        fixture.expect_event().batch_consolidated().await?;
     }
 
     // Step 3: Send BatchFinalized transactions (batches 1-2)
@@ -473,28 +476,22 @@ async fn test_l1_reorg_batch_finalized() -> eyre::Result<()> {
         let finalize_batch_tx = read_test_transaction("finalizeBatch", &i.to_string())?;
         fixture.anvil_inject_tx(finalize_batch_tx).await?;
     }
-
-    // Step 4: Complete L1 sync
-    fixture.l1().sync().await?;
-    fixture.expect_event().l1_synced().await?;
-
-    // Wait for batch processing
-    fixture.expect_event().batch_consolidated().await?;
-    tokio::time::sleep(tokio::time::Duration::from_secs(3)).await;
+    for _ in 1..=2 {
+        fixture.expect_event().batch_finalized().await?;
+    }
 
     // Record finalized head after finalization
     let status_after_finalize = fixture.get_status(0).await?;
     let finalized_after = status_after_finalize.l2.fcs.finalized_block_info().number;
     tracing::info!("Finalized head after batch finalized: {}", finalized_after);
 
-    // Step 5: Perform L1 reorg to remove the BatchFinalized events (depth 2)
+    // Step 4: Perform L1 reorg to remove the BatchFinalized events (depth 2)
     fixture.anvil_reorg(2).await?;
-    fixture.anvil_mine_blocks(1).await?;
 
     // Wait for reorg detection
-    tokio::time::sleep(tokio::time::Duration::from_secs(3)).await;
+    fixture.expect_event().l1_reorg().await?;
 
-    // Step 6: Verify finalized head hasn't changed (reorg has no effect)
+    // Step 5: Verify finalized head hasn't changed (reorg has no effect)
     let status_after_reorg = fixture.get_status(0).await?;
     let finalized_after_reorg = status_after_reorg.l2.fcs.finalized_block_info().number;
     tracing::info!("Finalized head after reorg: {}", finalized_after_reorg);
@@ -550,8 +547,9 @@ async fn test_l1_reorg_batch_revert() -> eyre::Result<()> {
         let commit_batch_tx = read_test_transaction("commitBatch", &i.to_string())?;
         fixture.anvil_inject_tx(commit_batch_tx).await?;
     }
-
-    tokio::time::sleep(tokio::time::Duration::from_secs(3)).await;
+    for _ in 1..=6 {
+        fixture.expect_event().batch_consolidated().await?;
+    }
 
     // Record safe head after all commits are processed
     let status_after_commits = fixture.get_status(0).await?;
@@ -561,9 +559,7 @@ async fn test_l1_reorg_batch_revert() -> eyre::Result<()> {
     // Step 3: Send BatchRevert transaction to roll back some batches
     let revert_batch_tx = read_test_transaction("revertBatch", "0")?;
     fixture.anvil_inject_tx(revert_batch_tx).await?;
-    fixture.anvil_mine_blocks(1).await?;
-
-    tokio::time::sleep(tokio::time::Duration::from_secs(3)).await;
+    fixture.expect_event().batch_reverted().await?;
 
     // Step 4: Verify safe head decreased after revert
     let status_after_revert = fixture.get_status(0).await?;
@@ -572,10 +568,8 @@ async fn test_l1_reorg_batch_revert() -> eyre::Result<()> {
     assert!(safe_after_revert < safe_after_commits, "Safe head should decrease after BatchRevert");
 
     // Step 5: Perform L1 reorg to remove the BatchRevert event (reorg depth 2)
-    fixture.anvil_reorg(2).await?;
-    fixture.anvil_mine_blocks(3).await?;
-
-    tokio::time::sleep(tokio::time::Duration::from_secs(3)).await;
+    fixture.anvil_reorg(1).await?;
+    fixture.expect_event().l1_reorg().await?;
 
     // Step 6: Verify safe head restored to pre-revert state
     // The batches are no longer reverted, so safe head should be back to full height
