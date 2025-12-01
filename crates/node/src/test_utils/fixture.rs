@@ -237,8 +237,8 @@ impl TestFixture {
         Ok(())
     }
 
-    /// Send a raw transaction to Anvil.
-    pub async fn anvil_send_raw_transaction(
+    /// Inject a raw transaction to Anvil.
+    pub async fn anvil_inject_tx(
         &self,
         raw_tx: impl Into<alloy_primitives::Bytes>,
     ) -> eyre::Result<alloy_primitives::B256> {

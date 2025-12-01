@@ -79,7 +79,8 @@ fn read_test_transaction(tx_type: &str, index: &str) -> eyre::Result<Bytes> {
 // Test Suite 1: Correct behavior when consuming events from L1
 // =============================================================================
 
-/// Test: `BatchCommit` events during initial syncing should be buffered and processed after `L1Synced`.
+/// Test: `BatchCommit` events during initial syncing should be buffered and processed after
+/// `L1Synced`.
 ///
 /// # Test Flow
 /// 1. Start a follower node in syncing state (skip automatic L1Synced notifications)
@@ -106,21 +107,23 @@ async fn test_l1_sync_batch_commit() -> eyre::Result<()> {
         .await?;
 
     // Record initial state - should be at genesis
-    let initial_status = fixture.get_sequencer_status().await?;
+    let initial_status = fixture.get_status(0).await?;
     let initial_safe = initial_status.l2.fcs.safe_block_info().number;
+    assert_eq!(initial_safe, 0, "Initial safe head should be at genesis (block 0)");
 
     // Step 2: Send BatchCommit transactions to L1 while node is syncing
     // These commits contain L2 blocks that should eventually become the safe head
     for i in 0..=6 {
         let commit_batch_tx = read_test_transaction("commitBatch", &i.to_string())?;
-        fixture.anvil_send_raw_transaction(commit_batch_tx).await?;
+        fixture.anvil_inject_tx(commit_batch_tx).await?;
     }
+    // fixture.anvil_mine_blocks(1).await?;
 
     // Allow time for L1 block processing
     tokio::time::sleep(tokio::time::Duration::from_secs(3)).await;
 
     // Step 3: Verify safe head hasn't moved - events should be buffered
-    let status = fixture.get_sequencer_status().await?;
+    let status = fixture.get_status(0).await?;
     assert_eq!(
         status.l2.fcs.safe_block_info().number,
         0,
@@ -130,10 +133,12 @@ async fn test_l1_sync_batch_commit() -> eyre::Result<()> {
     // Step 4: Trigger L1 sync completion
     fixture.l1().sync().await?;
     fixture.expect_event().l1_synced().await?;
-    fixture.expect_event().batch_consolidated().await?;
+    for _ in 1..=6 {
+        fixture.expect_event().batch_consolidated().await?;
+    }
 
     // Step 5: Verify safe head advanced after processing buffered events
-    let new_status = fixture.get_sequencer_status().await?;
+    let new_status = fixture.get_status(0).await?;
     assert!(
         new_status.l2.fcs.safe_block_info().number > initial_safe,
         "Safe head should advance after L1Synced when processing buffered BatchCommit events"
@@ -154,10 +159,10 @@ async fn test_l1_sync_batch_commit() -> eyre::Result<()> {
 /// 7. Verify only finalized head advances (safe head already set by commits)
 ///
 /// # Expected Behavior
-/// - Before `L1Synced`: `BatchFinalized` events update both safe and finalized heads
-///   because they imply the batches are committed and finalized on L1.
-/// - After `L1Synced`: `BatchFinalized` events only update the finalized head,
-///   as the safe head is already managed by `BatchCommit` events.
+/// - Before `L1Synced`: `BatchFinalized` events update both safe and finalized heads because they
+///   imply the batches are committed and finalized on L1.
+/// - After `L1Synced`: `BatchFinalized` events only update the finalized head, as the safe head is
+///   already managed by `BatchCommit` events.
 #[tokio::test]
 async fn test_l1_sync_batch_finalized() -> eyre::Result<()> {
     reth_tracing::init_test_tracing();
@@ -172,20 +177,25 @@ async fn test_l1_sync_batch_finalized() -> eyre::Result<()> {
         .await?;
 
     // Record initial state
-    let initial_status = fixture.get_sequencer_status().await?;
+    let initial_status = fixture.get_status(0).await?;
     let initial_safe = initial_status.l2.fcs.safe_block_info().number;
     let initial_finalized = initial_status.l2.fcs.finalized_block_info().number;
+    assert_eq!(
+        (initial_safe, initial_finalized),
+        (0, 0),
+        "Initial safe and finalized heads should both be at genesis (block 0)"
+    );
 
     // Step 2: Send BatchCommit transactions (batches 0-6) to L1
     for i in 0..=6 {
         let commit_batch_tx = read_test_transaction("commitBatch", &i.to_string())?;
-        fixture.anvil_send_raw_transaction(commit_batch_tx).await?;
+        fixture.anvil_inject_tx(commit_batch_tx).await?;
     }
 
     tokio::time::sleep(tokio::time::Duration::from_secs(3)).await;
 
     // Step 3: Verify safe head hasn't changed (still syncing)
-    let status = fixture.get_sequencer_status().await?;
+    let status = fixture.get_status(0).await?;
     assert_eq!(
         status.l2.fcs.safe_block_info().number,
         0,
@@ -194,18 +204,21 @@ async fn test_l1_sync_batch_finalized() -> eyre::Result<()> {
 
     // Step 4: Send BatchFinalized transactions (batches 1-3) while syncing
     // Mine 64 blocks to ensure the BatchFinalized events are themselves finalized on L1
+    // This should trigger all unprocessed BatchCommit events up to the finalized batch
     for i in 1..=3 {
         let finalize_batch_tx = read_test_transaction("finalizeBatch", &i.to_string())?;
-        fixture.anvil_send_raw_transaction(finalize_batch_tx).await?;
+        fixture.anvil_inject_tx(finalize_batch_tx).await?;
     }
     fixture.anvil_mine_blocks(64).await?;
 
-    fixture.expect_event().batch_finalized().await?;
-    tokio::time::sleep(tokio::time::Duration::from_secs(3)).await;
+    for _ in 1..=3 {
+        // fixture.expect_event().batch_finalized().await?;
+        fixture.expect_event().batch_consolidated().await?;
+    }
 
     // Step 5: Verify both safe and finalized heads advanced
     // During syncing, BatchFinalized implies the batch is both committed and finalized
-    let batch_finalized_status = fixture.get_sequencer_status().await?;
+    let batch_finalized_status = fixture.get_status(0).await?;
     assert!(
         batch_finalized_status.l2.fcs.safe_block_info().number > initial_safe,
         "Safe head should advance after BatchFinalized event during syncing"
@@ -215,24 +228,38 @@ async fn test_l1_sync_batch_finalized() -> eyre::Result<()> {
         "Finalized head should advance after BatchFinalized event"
     );
 
-    // Step 6: Complete L1 sync
+    // Step 6: Complete L1 sync, this will process the buffered BatchCommit events
     fixture.l1().sync().await?;
     fixture.expect_event().l1_synced().await?;
-    tokio::time::sleep(tokio::time::Duration::from_secs(3)).await;
-
-    let l1_synced_status = fixture.get_sequencer_status().await?;
+    for _ in 1..=3 {
+        fixture.expect_event().batch_consolidated().await?;
+    }
+    let l1_synced_status = fixture.get_status(0).await?;
+    assert!(
+        batch_finalized_status.l2.fcs.safe_block_info().number <
+            l1_synced_status.l2.fcs.safe_block_info().number,
+        "Safe head should advance after L1 Synced when processing buffered BatchCommit events"
+    );
 
     // Step 7: Send more BatchFinalized transactions (batches 4-6) after L1Synced
     for i in 4..=6 {
         let finalize_batch_tx = read_test_transaction("finalizeBatch", &i.to_string())?;
-        fixture.anvil_send_raw_transaction(finalize_batch_tx).await?;
+        fixture.anvil_inject_tx(finalize_batch_tx).await?;
     }
-    fixture.anvil_mine_blocks(64).await?;
+    let batch_finalized_status = fixture.get_status(0).await?;
+    assert_eq!(
+        batch_finalized_status.l2.fcs.finalized_block_info().number,
+        l1_synced_status.l2.fcs.finalized_block_info().number,
+        "Finalized head should not advance before BatchFinalized event are finalized on L1"
+    );
 
-    fixture.expect_event().batch_finalized().await?;
+    fixture.anvil_mine_blocks(64).await?;
+    for _ in 1..=3 {
+        fixture.expect_event().batch_finalized().await?;
+    }
 
     // Step 8: Verify only finalized head advanced (safe head managed by BatchCommit)
-    let batch_finalized_status = fixture.get_sequencer_status().await?;
+    let batch_finalized_status = fixture.get_status(0).await?;
     assert!(
         batch_finalized_status.l2.fcs.safe_block_info().number ==
             l1_synced_status.l2.fcs.safe_block_info().number,
@@ -274,13 +301,14 @@ async fn test_l1_sync_batch_revert() -> eyre::Result<()> {
         .await?;
 
     // Record initial state
-    let initial_status = fixture.get_sequencer_status().await?;
+    let initial_status = fixture.get_status(0).await?;
     let initial_safe = initial_status.l2.fcs.safe_block_info().number;
+    assert_eq!(initial_safe, 0, "Initial safe head should be at genesis (block 0)");
 
     // Step 2: Send BatchCommit transactions (batches 0-6) to L1
     for i in 0..=6 {
         let commit_batch_tx = read_test_transaction("commitBatch", &i.to_string())?;
-        fixture.anvil_send_raw_transaction(commit_batch_tx).await?;
+        fixture.anvil_inject_tx(commit_batch_tx).await?;
     }
 
     // Mine blocks to ensure commits are included
@@ -292,7 +320,7 @@ async fn test_l1_sync_batch_revert() -> eyre::Result<()> {
     tokio::time::sleep(tokio::time::Duration::from_secs(3)).await;
 
     // Verify safe head advanced after processing commits
-    let new_status = fixture.get_sequencer_status().await?;
+    let new_status = fixture.get_status(0).await?;
     assert!(
         new_status.l2.fcs.safe_block_info().number > initial_safe,
         "Safe head should advance after BatchCommit when L1Synced"
@@ -300,13 +328,13 @@ async fn test_l1_sync_batch_revert() -> eyre::Result<()> {
 
     // Step 4: Send BatchRevert transaction to revert some batches
     let revert_batch_tx = read_test_transaction("revertBatch", "0")?;
-    fixture.anvil_send_raw_transaction(revert_batch_tx).await?;
+    fixture.anvil_inject_tx(revert_batch_tx).await?;
     fixture.anvil_mine_blocks(10).await?;
 
     tokio::time::sleep(tokio::time::Duration::from_secs(3)).await;
 
     // Step 5: Verify safe head decreased after revert
-    let revert_status = fixture.get_sequencer_status().await?;
+    let revert_status = fixture.get_status(0).await?;
     assert!(
         revert_status.l2.fcs.safe_block_info().number < new_status.l2.fcs.safe_block_info().number,
         "Safe head should decrease after BatchRevert to reflect rolled-back state"
@@ -355,27 +383,27 @@ async fn test_l1_reorg_batch_commit() -> eyre::Result<()> {
     // Step 2: Send first batch of commits (batches 0-3)
     for i in 0..=3 {
         let commit_batch_tx = read_test_transaction("commitBatch", &i.to_string())?;
-        fixture.anvil_send_raw_transaction(commit_batch_tx).await?;
+        fixture.anvil_inject_tx(commit_batch_tx).await?;
         if i != 0 {
             fixture.expect_event().batch_consolidated().await?;
         }
     }
 
     // Record safe head after batch 3
-    let status_after_batch_3 = fixture.get_sequencer_status().await?;
+    let status_after_batch_3 = fixture.get_status(0).await?;
     let safe_after_batch_3 = status_after_batch_3.l2.fcs.safe_block_info().number;
     tracing::info!("Safe head after batch 3: {}", safe_after_batch_3);
 
     // Step 3: Send more commits (batches 4-6) to advance safe head
     for i in 4..=6 {
         let commit_batch_tx = read_test_transaction("commitBatch", &i.to_string())?;
-        fixture.anvil_send_raw_transaction(commit_batch_tx).await?;
+        fixture.anvil_inject_tx(commit_batch_tx).await?;
     }
 
     tokio::time::sleep(tokio::time::Duration::from_secs(3)).await;
 
     // Record advanced safe head after batch 6
-    let status_after_batch_6 = fixture.get_sequencer_status().await?;
+    let status_after_batch_6 = fixture.get_status(0).await?;
     let safe_after_batch_6 = status_after_batch_6.l2.fcs.safe_block_info().number;
     tracing::info!("Safe head after batch 6: {}", safe_after_batch_6);
     assert!(
@@ -391,7 +419,7 @@ async fn test_l1_reorg_batch_commit() -> eyre::Result<()> {
     fixture.expect_event().l1_reorg().await?;
 
     // Step 5: Verify safe head reverted to state after batch 3
-    let status_after_reorg = fixture.get_sequencer_status().await?;
+    let status_after_reorg = fixture.get_status(0).await?;
     let safe_after_reorg = status_after_reorg.l2.fcs.safe_block_info().number;
     tracing::info!("Safe head after reorg: {}", safe_after_reorg);
     assert_eq!(
@@ -437,13 +465,13 @@ async fn test_l1_reorg_batch_finalized() -> eyre::Result<()> {
     // Step 2: Send BatchCommit transactions (batches 0-6)
     for i in 0..=6 {
         let commit_batch_tx = read_test_transaction("commitBatch", &i.to_string())?;
-        fixture.anvil_send_raw_transaction(commit_batch_tx).await?;
+        fixture.anvil_inject_tx(commit_batch_tx).await?;
     }
 
     // Step 3: Send BatchFinalized transactions (batches 1-2)
     for i in 1..=2 {
         let finalize_batch_tx = read_test_transaction("finalizeBatch", &i.to_string())?;
-        fixture.anvil_send_raw_transaction(finalize_batch_tx).await?;
+        fixture.anvil_inject_tx(finalize_batch_tx).await?;
     }
 
     // Step 4: Complete L1 sync
@@ -455,7 +483,7 @@ async fn test_l1_reorg_batch_finalized() -> eyre::Result<()> {
     tokio::time::sleep(tokio::time::Duration::from_secs(3)).await;
 
     // Record finalized head after finalization
-    let status_after_finalize = fixture.get_sequencer_status().await?;
+    let status_after_finalize = fixture.get_status(0).await?;
     let finalized_after = status_after_finalize.l2.fcs.finalized_block_info().number;
     tracing::info!("Finalized head after batch finalized: {}", finalized_after);
 
@@ -467,7 +495,7 @@ async fn test_l1_reorg_batch_finalized() -> eyre::Result<()> {
     tokio::time::sleep(tokio::time::Duration::from_secs(3)).await;
 
     // Step 6: Verify finalized head hasn't changed (reorg has no effect)
-    let status_after_reorg = fixture.get_sequencer_status().await?;
+    let status_after_reorg = fixture.get_status(0).await?;
     let finalized_after_reorg = status_after_reorg.l2.fcs.finalized_block_info().number;
     tracing::info!("Finalized head after reorg: {}", finalized_after_reorg);
     assert_eq!(
@@ -520,31 +548,28 @@ async fn test_l1_reorg_batch_revert() -> eyre::Result<()> {
     // Step 2: Send BatchCommit transactions (batches 0-6)
     for i in 0..=6 {
         let commit_batch_tx = read_test_transaction("commitBatch", &i.to_string())?;
-        fixture.anvil_send_raw_transaction(commit_batch_tx).await?;
+        fixture.anvil_inject_tx(commit_batch_tx).await?;
     }
 
     tokio::time::sleep(tokio::time::Duration::from_secs(3)).await;
 
     // Record safe head after all commits are processed
-    let status_after_commits = fixture.get_sequencer_status().await?;
+    let status_after_commits = fixture.get_status(0).await?;
     let safe_after_commits = status_after_commits.l2.fcs.safe_block_info().number;
     tracing::info!("Safe head after all commits: {}", safe_after_commits);
 
     // Step 3: Send BatchRevert transaction to roll back some batches
     let revert_batch_tx = read_test_transaction("revertBatch", "0")?;
-    fixture.anvil_send_raw_transaction(revert_batch_tx).await?;
+    fixture.anvil_inject_tx(revert_batch_tx).await?;
     fixture.anvil_mine_blocks(1).await?;
 
     tokio::time::sleep(tokio::time::Duration::from_secs(3)).await;
 
     // Step 4: Verify safe head decreased after revert
-    let status_after_revert = fixture.get_sequencer_status().await?;
+    let status_after_revert = fixture.get_status(0).await?;
     let safe_after_revert = status_after_revert.l2.fcs.safe_block_info().number;
     tracing::info!("Safe head after revert: {}", safe_after_revert);
-    assert!(
-        safe_after_revert < safe_after_commits,
-        "Safe head should decrease after BatchRevert"
-    );
+    assert!(safe_after_revert < safe_after_commits, "Safe head should decrease after BatchRevert");
 
     // Step 5: Perform L1 reorg to remove the BatchRevert event (reorg depth 2)
     fixture.anvil_reorg(2).await?;
@@ -554,7 +579,7 @@ async fn test_l1_reorg_batch_revert() -> eyre::Result<()> {
 
     // Step 6: Verify safe head restored to pre-revert state
     // The batches are no longer reverted, so safe head should be back to full height
-    let status_after_reorg = fixture.get_sequencer_status().await?;
+    let status_after_reorg = fixture.get_status(0).await?;
     let safe_after_reorg = status_after_reorg.l2.fcs.safe_block_info().number;
     tracing::info!("Safe head after reorg: {}", safe_after_reorg);
     assert_eq!(
