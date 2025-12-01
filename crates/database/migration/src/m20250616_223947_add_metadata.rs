@@ -15,7 +15,25 @@ impl MigrationTrait for Migration {
                     .col(string(Metadata::Value))
                     .to_owned(),
             )
-            .await
+            .await?;
+
+        // Insert both keys if they don't already exist
+        manager
+            .get_connection()
+            .execute_unprepared(
+                r#"
+            INSERT INTO metadata (key, value)
+            VALUES 
+                ('l1_finalized_block', '0'),
+                ('l1_latest_block', '0'),
+                ('l2_head_block', '0'),
+                ('l1_processed_block', '0')
+            ON CONFLICT(key) DO NOTHING;
+            "#,
+            )
+            .await?;
+
+        Ok(())
     }
 
     async fn down(&self, manager: &SchemaManager) -> Result<(), DbErr> {

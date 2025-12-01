@@ -8,7 +8,7 @@ use std::{fs, path::PathBuf, sync::Arc};
 
 use alloy_chains::NamedChain;
 use alloy_primitives::{hex, Address, U128};
-use alloy_provider::{Provider, ProviderBuilder};
+use alloy_provider::{layers::CacheLayer, Provider, ProviderBuilder};
 use alloy_rpc_client::RpcClient;
 use alloy_signer::Signer;
 use alloy_signer_aws::AwsSigner;
@@ -43,8 +43,8 @@ use scroll_alloy_hardforks::ScrollHardforks;
 use scroll_alloy_network::Scroll;
 use scroll_alloy_provider::{ScrollAuthApiEngineClient, ScrollEngineApi};
 use scroll_db::{
-    Database, DatabaseConnectionProvider, DatabaseError, DatabaseReadOperations,
-    DatabaseWriteOperations,
+    Database, DatabaseConnectionProvider, DatabaseError, DatabaseMaintenance,
+    DatabaseReadOperations, DatabaseWriteOperations,
 };
 use scroll_derivation_pipeline::DerivationPipeline;
 use scroll_engine::{Engine, ForkchoiceState};
@@ -191,8 +191,13 @@ impl ScrollRollupNodeConfig {
 
         // Get a provider
         let l1_provider = self.l1_provider_args.url.clone().map(|url| {
-            let L1ProviderArgs { max_retries, initial_backoff, compute_units_per_second, .. } =
-                self.l1_provider_args;
+            let L1ProviderArgs {
+                max_retries,
+                initial_backoff,
+                compute_units_per_second,
+                cache_max_items,
+                ..
+            } = self.l1_provider_args;
             let client = RpcClient::builder()
                 .layer(RetryBackoffLayer::new(
                     max_retries,
@@ -200,7 +205,8 @@ impl ScrollRollupNodeConfig {
                     compute_units_per_second,
                 ))
                 .http(url);
-            ProviderBuilder::new().connect_client(client)
+            let cache_layer = CacheLayer::new(cache_max_items);
+            ProviderBuilder::new().layer(cache_layer).connect_client(client)
         });
 
         // Init a retry provider to the execution layer.
@@ -217,11 +223,15 @@ impl ScrollRollupNodeConfig {
                 .parse()
                 .expect("invalid l2 rpc url"),
         );
-        let l2_provider = ProviderBuilder::<_, _, Scroll>::default().connect_client(client);
+        let l2_provider = ProviderBuilder::<_, _, Scroll>::default()
+            .layer(CacheLayer::new(constants::L2_PROVIDER_CACHE_MAX_ITEMS))
+            .connect_client(client);
         let l2_provider = Arc::new(l2_provider);
 
         // Fetch the database from the hydrated config.
         let db = self.database.clone().expect("should hydrate config before build");
+        let db_maintenance = DatabaseMaintenance::new(db.clone());
+        ctx.task_executor.spawn(db_maintenance.run());
 
         // Run the database migrations
         if let Some(named) = chain_spec.chain().named() {
@@ -323,7 +333,7 @@ impl ScrollRollupNodeConfig {
             td_constant(chain_spec.chain().named()),
             authorized_signer,
         );
-        tokio::spawn(scroll_network_manager);
+        ctx.task_executor.spawn(scroll_network_manager);
 
         tracing::info!(target: "scroll::node::args", fcs = ?fcs, payload_building_duration = ?self.sequencer_args.payload_building_duration, "Starting engine driver");
         let engine = Engine::new(Arc::new(engine_api), fcs);
@@ -634,6 +644,9 @@ pub struct L1ProviderArgs {
     /// The logs query block range.
     #[arg(long = "l1.query-range", id = "l1_query_range", value_name = "L1_QUERY_RANGE", default_value_t = constants::LOGS_QUERY_BLOCK_RANGE)]
     pub logs_query_block_range: u64,
+    /// The maximum number of items to be stored in the cache layer.
+    #[arg(long = "l1.cache-max-items", id = "l1_cache_max_items", value_name = "L1_CACHE_MAX_ITEMS", default_value_t = constants::L1_PROVIDER_CACHE_MAX_ITEMS)]
+    pub cache_max_items: u32,
 }
 
 /// The arguments for the Beacon provider.

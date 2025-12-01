@@ -8,6 +8,9 @@ pub(crate) const L1_PROVIDER_MAX_RETRIES: u32 = 10;
 /// The initial backoff for the L1 provider.
 pub(crate) const L1_PROVIDER_INITIAL_BACKOFF: u64 = 100;
 
+/// The maximum number of items to store in L1 provider's cache layer.
+pub(crate) const L1_PROVIDER_CACHE_MAX_ITEMS: u32 = 100;
+
 /// The block range used to fetch L1 logs.
 pub(crate) const LOGS_QUERY_BLOCK_RANGE: u64 = 500;
 
@@ -16,6 +19,9 @@ pub(crate) const L2_PROVIDER_MAX_RETRIES: u32 = u32::MAX;
 
 /// The initial backoff for the L2 provider.
 pub(crate) const L2_PROVIDER_INITIAL_BACKOFF: u64 = 50;
+
+/// The maximum number of items to store in L2 provider's cache layer.
+pub(crate) const L2_PROVIDER_CACHE_MAX_ITEMS: u32 = 100;
 
 /// The default provider compute units per second.
 pub(crate) const PROVIDER_COMPUTE_UNITS_PER_SECOND: u64 = 10000;

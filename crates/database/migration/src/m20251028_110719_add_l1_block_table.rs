@@ -18,26 +18,7 @@ impl MigrationTrait for Migration {
             )
             .await?;
 
-        // Add explicit indexes for fast lookups
-        manager
-            .create_index(
-                Index::create()
-                    .name("idx-l1_block-number")
-                    .table(L1Block::Table)
-                    .col(L1Block::BlockNumber)
-                    .to_owned(),
-            )
-            .await?;
-
-        manager
-            .create_index(
-                Index::create()
-                    .name("idx-l1_block-hash")
-                    .table(L1Block::Table)
-                    .col(L1Block::BlockHash)
-                    .to_owned(),
-            )
-            .await
+        Ok(())
     }
 
     async fn down(&self, manager: &SchemaManager) -> Result<(), DbErr> {

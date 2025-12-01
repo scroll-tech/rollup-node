@@ -19,8 +19,9 @@ impl<MI: MigrationInfo + Send + Sync> MigrationTrait for Migration<MI> {
                 Table::create()
                     .table(L2Block::Table)
                     .if_not_exists()
+                    .col(pk_auto(L2Block::Id))
                     .col(big_unsigned(L2Block::BlockNumber).not_null())
-                    .col(binary_len(L2Block::BlockHash, 32).not_null().primary_key())
+                    .col(binary_len(L2Block::BlockHash, 32).not_null())
                     .col(big_unsigned(L2Block::BatchIndex).not_null())
                     .col(binary_len(L2Block::BatchHash, 32).not_null())
                     .col(boolean(L2Block::Reverted).not_null().default(false))
@@ -51,6 +52,54 @@ impl<MI: MigrationInfo + Send + Sync> MigrationTrait for Migration<MI> {
             ))
             .await?;
 
+        // Indexes:
+        // ------------------------------------------------------------
+        // Add composite UNIQUE index on (batch_hash, block_hash) in l2_block table.
+        manager
+            .create_index(
+                Index::create()
+                    .name("uq_l2_block_batch_hash_block_hash")
+                    .table(L2Block::Table)
+                    .col(L2Block::BatchHash)
+                    .col(L2Block::BlockHash)
+                    .unique()
+                    .to_owned(),
+            )
+            .await?;
+
+        // Add index on "block_number" column in l2_block table.
+        manager
+            .create_index(
+                Index::create()
+                    .name("idx_l2_block_block_number")
+                    .col(L2Block::BlockNumber)
+                    .table(L2Block::Table)
+                    .to_owned(),
+            )
+            .await?;
+
+        // Add index on "block_hash" column in l2_block table.
+        manager
+            .create_index(
+                Index::create()
+                    .name("idx_l2_block_block_hash")
+                    .col(L2Block::BlockHash)
+                    .table(L2Block::Table)
+                    .to_owned(),
+            )
+            .await?;
+
+        // Add index on "batch_index" column in l2_block table.
+        manager
+            .create_index(
+                Index::create()
+                    .name("idx_l2_block_batch_index")
+                    .col(L2Block::BatchIndex)
+                    .table(L2Block::Table)
+                    .to_owned(),
+            )
+            .await?;
+
         Ok(())
     }
 
@@ -62,6 +111,7 @@ impl<MI: MigrationInfo + Send + Sync> MigrationTrait for Migration<MI> {
 #[derive(DeriveIden)]
 pub(crate) enum L2Block {
     Table,
+    Id,
     BatchIndex,
     BatchHash,
     BlockNumber,
