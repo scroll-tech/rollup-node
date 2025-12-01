@@ -101,8 +101,7 @@ async fn test_l1_sync_batch_commit() -> eyre::Result<()> {
     let mut fixture = TestFixture::builder()
         .followers(1)
         .skip_l1_synced_notifications() // Prevents automatic L1Synced, simulates initial sync
-        .with_anvil()
-        .with_anvil_chain_id(22222222)
+        .with_anvil(None, Some(22222222), None)
         .build()
         .await?;
 
@@ -171,8 +170,7 @@ async fn test_l1_sync_batch_finalized() -> eyre::Result<()> {
     let mut fixture = TestFixture::builder()
         .followers(1)
         .skip_l1_synced_notifications()
-        .with_anvil()
-        .with_anvil_chain_id(22222222)
+        .with_anvil(None, Some(22222222), None)
         .build()
         .await?;
 
@@ -295,8 +293,7 @@ async fn test_l1_sync_batch_revert() -> eyre::Result<()> {
     let mut fixture = TestFixture::builder()
         .followers(1)
         .skip_l1_synced_notifications()
-        .with_anvil()
-        .with_anvil_chain_id(22222222)
+        .with_anvil(None, Some(22222222), None)
         .build()
         .await?;
 
@@ -370,8 +367,7 @@ async fn test_l1_reorg_batch_commit() -> eyre::Result<()> {
     let mut fixture = TestFixture::builder()
         .followers(1)
         .skip_l1_synced_notifications()
-        .with_anvil()
-        .with_anvil_chain_id(22222222)
+        .with_anvil(None, Some(22222222), None)
         .build()
         .await?;
 
@@ -454,8 +450,7 @@ async fn test_l1_reorg_batch_finalized() -> eyre::Result<()> {
     let mut fixture = TestFixture::builder()
         .followers(1)
         .skip_l1_synced_notifications()
-        .with_anvil()
-        .with_anvil_chain_id(22222222)
+        .with_anvil(None, Some(22222222), None)
         .build()
         .await?;
 
@@ -534,8 +529,7 @@ async fn test_l1_reorg_batch_revert() -> eyre::Result<()> {
     let mut fixture = TestFixture::builder()
         .followers(1)
         .skip_l1_synced_notifications()
-        .with_anvil()
-        .with_anvil_chain_id(22222222)
+        .with_anvil(None, Some(22222222), None)
         .build()
         .await?;
 

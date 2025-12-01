@@ -520,29 +520,35 @@ impl TestFixtureBuilder {
         &mut self.config
     }
 
-    /// Enable Anvil with the default state file (`./tests/testdata/anvil_state.json`).
-    pub fn with_anvil(mut self) -> Self {
+    /// Enable Anvil with optional configuration.
+    ///
+    /// # Parameters
+    /// - `state_path`: Optional path to Anvil state file. Defaults to `./tests/testdata/anvil_state.json` if `None`.
+    /// - `chain_id`: Optional chain ID for Anvil. If `None`, Anvil uses its default.
+    /// - `block_time`: Optional block time in seconds. If `None`, Anvil uses its default.
+    ///
+    /// # Examples
+    /// ```ignore
+    /// // Use default state file and default Anvil settings
+    /// builder.with_anvil(None, None, None)
+    ///
+    /// // Use default state file with custom chain ID
+    /// builder.with_anvil(None, Some(22222222), None)
+    ///
+    /// // Use custom state file with custom chain ID and block time
+    /// builder.with_anvil(Some(PathBuf::from("custom_state.json")), Some(22222222), Some(1))
+    /// ```
+    pub fn with_anvil(
+        mut self,
+        state_path: Option<PathBuf>,
+        chain_id: Option<u64>,
+        block_time: Option<u64>,
+    ) -> Self {
         self.anvil_config.enabled = true;
-        self.anvil_config.state_path = Some(PathBuf::from("./tests/testdata/anvil_state.json"));
-        self
-    }
-
-    /// Enable Anvil with a custom state file.
-    pub fn with_anvil_custom_state(mut self, path: impl Into<PathBuf>) -> Self {
-        self.anvil_config.enabled = true;
-        self.anvil_config.state_path = Some(path.into());
-        self
-    }
-
-    /// Set the chain ID for Anvil.
-    pub const fn with_anvil_chain_id(mut self, chain_id: u64) -> Self {
-        self.anvil_config.chain_id = Some(chain_id);
-        self
-    }
-
-    /// Set the block time for Anvil (in seconds).
-    pub const fn with_anvil_block_time(mut self, block_time: u64) -> Self {
-        self.anvil_config.block_time = Some(block_time);
+        self.anvil_config.state_path = state_path
+            .or_else(|| Some(PathBuf::from("./tests/testdata/anvil_state.json")));
+        self.anvil_config.chain_id = chain_id;
+        self.anvil_config.block_time = block_time;
         self
     }
 
