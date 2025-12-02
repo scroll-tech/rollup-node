@@ -275,6 +275,8 @@ pub struct AnvilConfig {
     pub chain_id: Option<u64>,
     /// Optional block time for Anvil (in seconds).
     pub block_time: Option<u64>,
+    /// Optional slots in an epoch for Anvil.
+    pub slots_in_an_epoch: Option<u64>,
 }
 
 /// Builder for creating test fixtures with a fluent API.
@@ -528,12 +530,14 @@ impl TestFixtureBuilder {
         state_path: Option<PathBuf>,
         chain_id: Option<u64>,
         block_time: Option<u64>,
+        slots_in_an_epoch: Option<u64>,
     ) -> Self {
         self.anvil_config.enabled = true;
         self.anvil_config.state_path =
             state_path.or_else(|| Some(PathBuf::from("./tests/testdata/anvil_state.json")));
         self.anvil_config.chain_id = chain_id;
         self.anvil_config.block_time = block_time;
+        self.anvil_config.slots_in_an_epoch = slots_in_an_epoch;
         self
     }
 
@@ -545,9 +549,11 @@ impl TestFixtureBuilder {
         // Start Anvil if requested
         let anvil = if self.anvil_config.enabled {
             let handle = Self::spawn_anvil(
+                None,
                 self.anvil_config.state_path.as_deref(),
                 self.anvil_config.chain_id,
                 self.anvil_config.block_time,
+                None,
             )
             .await?;
 
@@ -623,18 +629,17 @@ impl TestFixtureBuilder {
 
     /// Spawn an Anvil instance with the given configuration.
     async fn spawn_anvil(
+        port: Option<u16>,
         state_path: Option<&std::path::Path>,
         chain_id: Option<u64>,
         block_time: Option<u64>,
+        slots_in_an_epoch: Option<u64>,
     ) -> eyre::Result<anvil::NodeHandle> {
-        let mut config = anvil::NodeConfig::default();
+        let mut config = anvil::NodeConfig { port: port.unwrap_or(8544), ..Default::default() };
 
-        // Configure chain ID
         if let Some(id) = chain_id {
             config.chain_id = Some(id);
         }
-
-        config.port = 8544;
 
         // Configure block time
         if let Some(time) = block_time {
@@ -649,6 +654,8 @@ impl TestFixtureBuilder {
             tracing::info!("Loaded Anvil state from: {}", path.display());
             config.init_state = Some(state);
         }
+
+        config.slots_in_an_epoch = slots_in_an_epoch.unwrap_or(1);
 
         // Spawn Anvil and return the NodeHandle
         let (_api, handle) = anvil::spawn(config).await;

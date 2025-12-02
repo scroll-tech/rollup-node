@@ -44,7 +44,7 @@ pub enum ChainOrchestratorEvent {
         l1_block_number: u64,
     },
     /// A batch has been finalized returning a list of finalized batches.
-    BatchFinalized {
+    BatchFinalizeIndexed {
         /// The L1 block info at which the batch finalization event was received.
         l1_block_info: BlockInfo,
         /// The list of batches that have been triggered for the derivation pipeline.

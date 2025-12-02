@@ -125,7 +125,7 @@ async fn test_l1_sync_batch_commit() -> eyre::Result<()> {
     let mut fixture = TestFixture::builder()
         .followers(1)
         .skip_l1_synced_notifications() // Prevents automatic L1Synced, simulates initial sync
-        .with_anvil(None, Some(22222222), None)
+        .with_anvil(None, Some(22222222), None, None)
         .build()
         .await?;
 
@@ -140,10 +140,9 @@ async fn test_l1_sync_batch_commit() -> eyre::Result<()> {
         let commit_batch_tx = read_test_transaction("commitBatch", &i.to_string())?;
         fixture.anvil_inject_tx(commit_batch_tx).await?;
     }
-    // fixture.anvil_mine_blocks(1).await?;
-
-    // Allow time for L1 block processing
-    tokio::time::sleep(tokio::time::Duration::from_secs(3)).await;
+    for _ in 1..=6 {
+        fixture.expect_event().batch_commit_indexed().await?;
+    }
 
     // Step 3: Verify safe head hasn't moved - events should be buffered
     let status = fixture.get_status(0).await?;
@@ -194,7 +193,7 @@ async fn test_l1_sync_batch_finalized() -> eyre::Result<()> {
     let mut fixture = TestFixture::builder()
         .followers(1)
         .skip_l1_synced_notifications()
-        .with_anvil(None, Some(22222222), None)
+        .with_anvil(None, Some(22222222), None, None)
         .build()
         .await?;
 
@@ -213,8 +212,9 @@ async fn test_l1_sync_batch_finalized() -> eyre::Result<()> {
         let commit_batch_tx = read_test_transaction("commitBatch", &i.to_string())?;
         fixture.anvil_inject_tx(commit_batch_tx).await?;
     }
-
-    tokio::time::sleep(tokio::time::Duration::from_secs(3)).await;
+    for _ in 1..=6 {
+        fixture.expect_event().batch_commit_indexed().await?;
+    }
 
     // Step 3: Verify safe head hasn't changed (still syncing)
     let status = fixture.get_status(0).await?;
@@ -225,16 +225,15 @@ async fn test_l1_sync_batch_finalized() -> eyre::Result<()> {
     );
 
     // Step 4: Send BatchFinalized transactions (batches 1-3) while syncing
-    // Mine 64 blocks to ensure the BatchFinalized events are themselves finalized on L1
+    // Mine blocks to ensure the BatchFinalized events are themselves finalized on L1
     // This should trigger all unprocessed BatchCommit events up to the finalized batch
     for i in 1..=3 {
         let finalize_batch_tx = read_test_transaction("finalizeBatch", &i.to_string())?;
         fixture.anvil_inject_tx(finalize_batch_tx).await?;
     }
-    fixture.anvil_mine_blocks(64).await?;
+    fixture.anvil_mine_blocks(2).await?;
 
     for _ in 1..=3 {
-        // fixture.expect_event().batch_finalized().await?;
         fixture.expect_event().batch_consolidated().await?;
     }
 
@@ -275,10 +274,11 @@ async fn test_l1_sync_batch_finalized() -> eyre::Result<()> {
         "Finalized head should not advance before BatchFinalized event are finalized on L1"
     );
 
-    fixture.anvil_mine_blocks(64).await?;
     for _ in 1..=3 {
-        fixture.expect_event().batch_finalized().await?;
+        fixture.expect_event().batch_finalize_indexed().await?;
     }
+    fixture.anvil_mine_blocks(2).await?;
+    fixture.expect_event().l1_block_finalized().await?;
 
     // Step 8: Verify only finalized head advanced (safe head managed by BatchCommit)
     let batch_finalized_status = fixture.get_status(0).await?;
@@ -317,7 +317,7 @@ async fn test_l1_sync_batch_revert() -> eyre::Result<()> {
     let mut fixture = TestFixture::builder()
         .followers(1)
         .skip_l1_synced_notifications()
-        .with_anvil(None, Some(22222222), None)
+        .with_anvil(None, Some(22222222), None, None)
         .build()
         .await?;
 
@@ -330,6 +330,9 @@ async fn test_l1_sync_batch_revert() -> eyre::Result<()> {
     for i in 0..=6 {
         let commit_batch_tx = read_test_transaction("commitBatch", &i.to_string())?;
         fixture.anvil_inject_tx(commit_batch_tx).await?;
+    }
+    for _ in 1..=6 {
+        fixture.expect_event().batch_commit_indexed().await?;
     }
 
     // Step 3: Complete L1 sync
@@ -391,7 +394,7 @@ async fn test_l1_reorg_batch_commit() -> eyre::Result<()> {
     let mut fixture = TestFixture::builder()
         .followers(1)
         .skip_l1_synced_notifications()
-        .with_anvil(None, Some(22222222), None)
+        .with_anvil(None, Some(22222222), None, None)
         .build()
         .await?;
 
@@ -432,6 +435,7 @@ async fn test_l1_reorg_batch_commit() -> eyre::Result<()> {
 
     // Step 4: Perform L1 reorg to remove batches 4-6 (reorg depth 3)
     fixture.anvil_reorg(3).await?;
+    tokio::time::sleep(tokio::time::Duration::from_secs(3)).await;
 
     // Wait for reorg detection
     fixture.expect_event().l1_reorg().await?;
@@ -474,7 +478,7 @@ async fn test_l1_reorg_batch_finalized() -> eyre::Result<()> {
     let mut fixture = TestFixture::builder()
         .followers(1)
         .skip_l1_synced_notifications()
-        .with_anvil(None, Some(22222222), None)
+        .with_anvil(None, Some(22222222), None, None)
         .build()
         .await?;
 
@@ -496,7 +500,7 @@ async fn test_l1_reorg_batch_finalized() -> eyre::Result<()> {
         fixture.anvil_inject_tx(finalize_batch_tx).await?;
     }
     for _ in 1..=2 {
-        fixture.expect_event().batch_finalized().await?;
+        fixture.expect_event().batch_finalize_indexed().await?;
     }
 
     // Record finalized head after finalization
@@ -553,7 +557,7 @@ async fn test_l1_reorg_batch_revert() -> eyre::Result<()> {
     let mut fixture = TestFixture::builder()
         .followers(1)
         .skip_l1_synced_notifications()
-        .with_anvil(None, Some(22222222), None)
+        .with_anvil(None, Some(22222222), None, None)
         .build()
         .await?;
 

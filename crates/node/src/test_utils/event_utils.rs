@@ -121,6 +121,15 @@ impl<'a> EventWaiter<'a> {
         Ok(())
     }
 
+    /// Wait for batch commit indexed event on all specified nodes.
+    pub async fn batch_commit_indexed(self) -> eyre::Result<()> {
+        self.wait_for_event_on_all(|e| {
+            matches!(e, ChainOrchestratorEvent::BatchCommitIndexed { .. }).then_some(())
+        })
+        .await?;
+        Ok(())
+    }
+
     /// Wait for batch consolidated event on all specified nodes.
     pub async fn batch_consolidated(self) -> eyre::Result<()> {
         self.wait_for_event_on_all(|e| {
@@ -143,10 +152,10 @@ impl<'a> EventWaiter<'a> {
         Ok(())
     }
 
-    /// Wait for batch finalized event on all specified nodes.
-    pub async fn batch_finalized(self) -> eyre::Result<()> {
+    /// Wait for batch finalize indexed event on all specified nodes.
+    pub async fn batch_finalize_indexed(self) -> eyre::Result<()> {
         self.wait_for_event_on_all(|e| {
-            matches!(e, ChainOrchestratorEvent::BatchFinalized { .. }).then_some(())
+            matches!(e, ChainOrchestratorEvent::BatchFinalizeIndexed { .. }).then_some(())
         })
         .await?;
         Ok(())
