@@ -26,7 +26,7 @@
 //! These tests use Anvil as a simulated L1 network, allowing precise control over:
 //! - Transaction injection (batch events)
 //! - Block production (mining)
-//! - Chain reorganizations (anvil_reorg RPC)
+//! - Chain reorganizations (`anvil_reorg` RPC)
 //!
 //! Related to: <https://github.com/scroll-tech/rollup-node/issues/420>
 
@@ -83,7 +83,7 @@ fn read_test_transaction(tx_type: &str, index: &str) -> eyre::Result<Bytes> {
 /// `L1Synced`.
 ///
 /// # Test Flow
-/// 1. Start a follower node in syncing state (skip automatic L1Synced notifications)
+/// 1. Start a follower node in syncing state (skip automatic `L1Synced` notifications)
 /// 2. Send multiple `BatchCommit` transactions to L1 (Anvil)
 /// 3. Verify safe head remains at genesis (events are buffered, not processed)
 /// 4. Trigger L1 sync completion by sending `L1Synced` notification
