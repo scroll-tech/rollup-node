@@ -33,8 +33,52 @@
 use alloy_primitives::Bytes;
 use rollup_node::test_utils::{EventAssertions, TestFixture};
 use serde_json::Value;
+use std::{collections::HashMap, sync::LazyLock};
 
-/// Helper to read pre-signed transactions from `test_transactions.json`.
+/// Lazily load and cache all test transactions from `test_transactions.json`.
+///
+/// This loads the file only once and keeps all transactions in memory for efficient access
+/// throughout the test suite. The cache is organized as a nested map:
+/// `tx_type -> index -> raw_bytes`
+static TEST_TRANSACTIONS: LazyLock<HashMap<String, HashMap<String, Bytes>>> = LazyLock::new(|| {
+    let tx_json_path = "./tests/testdata/test_transactions.json";
+    let tx_json_content = std::fs::read_to_string(tx_json_path)
+        .unwrap_or_else(|e| panic!("Failed to read {}: {}", tx_json_path, e));
+
+    let tx_data: Value = serde_json::from_str(&tx_json_content)
+        .unwrap_or_else(|e| panic!("Failed to parse JSON: {}", e));
+
+    let mut cache = HashMap::new();
+
+    if let Value::Object(map) = tx_data {
+        for (tx_type, tx_group) in map {
+            if let Value::Object(transactions) = tx_group {
+                let mut tx_map = HashMap::new();
+                for (index, raw_tx_hex) in transactions {
+                    if let Value::String(hex) = raw_tx_hex {
+                        if !hex.is_empty() {
+                            // Decode hex string to bytes
+                            let raw_tx_bytes = if let Some(stripped) = hex.strip_prefix("0x") {
+                                alloy_primitives::hex::decode(stripped)
+                            } else {
+                                alloy_primitives::hex::decode(hex.as_str())
+                            }
+                            .unwrap_or_else(|e| {
+                                panic!("Failed to decode hex for {}.{}: {}", tx_type, index, e)
+                            });
+                            tx_map.insert(index, Bytes::from(raw_tx_bytes));
+                        }
+                    }
+                }
+                cache.insert(tx_type, tx_map);
+            }
+        }
+    }
+
+    cache
+});
+
+/// Helper to read pre-signed transactions from the cached transaction data.
 ///
 /// The test data file contains signed transactions for various L1 batch operations:
 /// - `commitBatch`: Transactions that commit L2 batches to the L1 contract
@@ -48,31 +92,11 @@ use serde_json::Value;
 /// # Returns
 /// The raw transaction bytes ready to be sent to Anvil via `eth_sendRawTransaction`.
 fn read_test_transaction(tx_type: &str, index: &str) -> eyre::Result<Bytes> {
-    let tx_json_path = "./tests/testdata/test_transactions.json";
-    let tx_json_content = std::fs::read_to_string(tx_json_path)
-        .map_err(|e| eyre::eyre!("Failed to read {}: {}", tx_json_path, e))?;
-
-    let tx_data: Value = serde_json::from_str(&tx_json_content)
-        .map_err(|e| eyre::eyre!("Failed to parse JSON: {}", e))?;
-
-    let raw_tx_hex = tx_data
+    TEST_TRANSACTIONS
         .get(tx_type)
-        .and_then(|t| t.get(index))
-        .and_then(|v| v.as_str())
-        .ok_or_else(|| eyre::eyre!("Transaction not found: {}.{}", tx_type, index))?;
-
-    if raw_tx_hex.is_empty() {
-        return Err(eyre::eyre!("Transaction {}.{} is empty", tx_type, index));
-    }
-
-    // Decode hex string to bytes
-    let raw_tx_bytes = if let Some(stripped) = raw_tx_hex.strip_prefix("0x") {
-        alloy_primitives::hex::decode(stripped)?
-    } else {
-        alloy_primitives::hex::decode(raw_tx_hex)?
-    };
-
-    Ok(Bytes::from(raw_tx_bytes))
+        .and_then(|tx_group| tx_group.get(index))
+        .cloned()
+        .ok_or_else(|| eyre::eyre!("Transaction not found: {}.{}", tx_type, index))
 }
 
 // =============================================================================
