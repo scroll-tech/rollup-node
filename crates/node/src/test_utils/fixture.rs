@@ -4,16 +4,20 @@ use super::{
     block_builder::BlockBuilder, l1_helpers::L1Helper, setup_engine, tx_helpers::TxHelper,
 };
 use crate::{
-    BlobProviderArgs, ChainOrchestratorArgs, ConsensusAlgorithm, ConsensusArgs, EngineDriverArgs,
-    L1ProviderArgs, RollupNodeDatabaseArgs, RollupNodeGasPriceOracleArgs, RollupNodeNetworkArgs,
-    RpcArgs, ScrollRollupNode, ScrollRollupNodeConfig, SequencerArgs, SignerArgs, TestArgs,
+    constants, BlobProviderArgs, ChainOrchestratorArgs, ConsensusAlgorithm, ConsensusArgs,
+    EngineDriverArgs, L1ProviderArgs, RollupNodeDatabaseArgs, RollupNodeGasPriceOracleArgs,
+    RollupNodeNetworkArgs, RpcArgs, ScrollRollupNode, ScrollRollupNodeConfig, SequencerArgs,
+    SignerArgs, TestArgs,
 };
 
 use alloy_eips::BlockNumberOrTag;
 use alloy_primitives::Address;
-use alloy_provider::{Provider, ProviderBuilder};
+use alloy_provider::{ext::AnvilApi, layers::CacheLayer, Provider, ProviderBuilder};
+use alloy_rpc_client::RpcClient;
+use alloy_rpc_types_anvil::ReorgOptions;
 use alloy_rpc_types_eth::Block;
 use alloy_signer_local::PrivateKeySigner;
+use alloy_transport::layers::RetryBackoffLayer;
 use reth_chainspec::EthChainSpec;
 use reth_e2e_test_utils::{wallet::Wallet, NodeHelperType, TmpDB};
 use reth_eth_wire_types::BasicNetworkPrimitives;
@@ -216,25 +220,26 @@ impl TestFixture {
         self.get_status(0).await
     }
 
-    /// Get the Anvil HTTP endpoint if Anvil was started.
-    pub fn anvil_endpoint(&self) -> Option<String> {
-        self.anvil.as_ref().map(|a| a.http_endpoint())
+    /// Get the Anvil HTTP provider with retry and cache layers.
+    pub fn anvil_provider(&self) -> Option<impl Provider + Clone> {
+        self.anvil.as_ref().map(|anvil| {
+            let retry_layer = RetryBackoffLayer::new(
+                constants::L1_PROVIDER_MAX_RETRIES,
+                constants::L1_PROVIDER_INITIAL_BACKOFF,
+                constants::PROVIDER_COMPUTE_UNITS_PER_SECOND,
+            );
+            let client = RpcClient::builder()
+                .layer(retry_layer)
+                .http(anvil.http_endpoint().parse().expect("failed to parse anvil http endpoint"));
+            let cache_layer = CacheLayer::new(constants::L1_PROVIDER_CACHE_MAX_ITEMS);
+            ProviderBuilder::new().layer(cache_layer).connect_client(client)
+        })
     }
 
     /// Generate Anvil blocks by calling `anvil_mine` RPC method.
     pub async fn anvil_mine_blocks(&self, num_blocks: u64) -> eyre::Result<()> {
-        // Ensure Anvil is running
-        let anvil_endpoint =
-            self.anvil_endpoint().ok_or_else(|| eyre::eyre!("Anvil is not running"))?;
-
-        // Create RPC client
-        let client = alloy_rpc_client::RpcClient::new_http(anvil_endpoint.parse()?);
-
-        // Mine blocks using anvil_mine RPC method
-        // Parameters: (num_blocks, interval_in_seconds)
-        let _: () = client.request("anvil_mine", (num_blocks, 0)).await?;
-
-        Ok(())
+        let provider = self.anvil_provider().ok_or_else(|| eyre::eyre!("Anvil is not running"))?;
+        Ok(provider.anvil_mine(Some(num_blocks), None).await?)
     }
 
     /// Inject a raw transaction to Anvil.
@@ -242,40 +247,19 @@ impl TestFixture {
         &self,
         raw_tx: impl Into<alloy_primitives::Bytes>,
     ) -> eyre::Result<alloy_primitives::B256> {
-        // Ensure Anvil is running
-        let anvil_endpoint =
-            self.anvil_endpoint().ok_or_else(|| eyre::eyre!("Anvil is not running"))?;
-
-        // Create provider
-        let provider = ProviderBuilder::new().connect_http(anvil_endpoint.parse()?);
-
-        // Send raw transaction
+        let provider = self.anvil_provider().ok_or_else(|| eyre::eyre!("Anvil is not running"))?;
         let raw_tx_bytes = raw_tx.into();
         let pending_tx = provider.send_raw_transaction(&raw_tx_bytes).await?;
-
         let tx_hash = *pending_tx.tx_hash();
         tracing::info!("Sent raw transaction to Anvil: {:?}", tx_hash);
-
         Ok(tx_hash)
     }
 
     /// Reorg Anvil by a specific depth (number of blocks to rewind).
     pub async fn anvil_reorg(&self, depth: u64) -> eyre::Result<()> {
-        // Ensure Anvil is running
-        let anvil_endpoint =
-            self.anvil_endpoint().ok_or_else(|| eyre::eyre!("Anvil is not running"))?;
-
-        // Create RPC client
-        let client = alloy_rpc_client::RpcClient::new_http(anvil_endpoint.parse()?);
-
-        // Call anvil_reorg
-        // Parameters: (depth, transactions)
-        // - depth: number of blocks to rewind from current head
-        // - transactions: empty array means reorg without adding new transactions
-        let _: () = client.request("anvil_reorg", (depth, Vec::<String>::new())).await?;
-
+        let provider = self.anvil_provider().ok_or_else(|| eyre::eyre!("Anvil is not running"))?;
+        provider.anvil_reorg(ReorgOptions { depth, tx_block_pairs: Vec::new() }).await?;
         tracing::info!("Reorged Anvil by {} blocks", depth);
-
         Ok(())
     }
 }
@@ -523,7 +507,8 @@ impl TestFixtureBuilder {
     /// Enable Anvil with optional configuration.
     ///
     /// # Parameters
-    /// - `state_path`: Optional path to Anvil state file. Defaults to `./tests/testdata/anvil_state.json` if `None`.
+    /// - `state_path`: Optional path to Anvil state file. Defaults to
+    ///   `./tests/testdata/anvil_state.json` if `None`.
     /// - `chain_id`: Optional chain ID for Anvil. If `None`, Anvil uses its default.
     /// - `block_time`: Optional block time in seconds. If `None`, Anvil uses its default.
     ///
@@ -545,8 +530,8 @@ impl TestFixtureBuilder {
         block_time: Option<u64>,
     ) -> Self {
         self.anvil_config.enabled = true;
-        self.anvil_config.state_path = state_path
-            .or_else(|| Some(PathBuf::from("./tests/testdata/anvil_state.json")));
+        self.anvil_config.state_path =
+            state_path.or_else(|| Some(PathBuf::from("./tests/testdata/anvil_state.json")));
         self.anvil_config.chain_id = chain_id;
         self.anvil_config.block_time = block_time;
         self

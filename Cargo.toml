@@ -135,6 +135,7 @@ alloy-provider = { version = "1.0.37", default-features = false }
 alloy-rpc-client = { version = "1.0.37", default-features = false }
 alloy-rpc-types-engine = { version = "1.0.37", default-features = false }
 alloy-rpc-types-eth = { version = "1.0.37", default-features = false }
+alloy-rpc-types-anvil = { version = "1.0.37", default-features = false }
 alloy-sol-types = { version = "1.4.1", default-features = false }
 alloy-signer = { version = "1.0.37", default-features = false }
 alloy-signer-local = { version = "1.0.37", default-features = false }
