@@ -270,7 +270,7 @@ pub struct AnvilConfig {
     /// Whether to enable Anvil.
     pub enabled: bool,
     /// Optional port for Anvil.
-    pub port: Option<u16>,
+    pub port: u16,
     /// Optional state file to load into Anvil.
     pub state_path: Option<PathBuf>,
     /// Optional chain ID for Anvil.
@@ -278,7 +278,7 @@ pub struct AnvilConfig {
     /// Optional block time for Anvil (in seconds).
     pub block_time: Option<u64>,
     /// Optional slots in an epoch for Anvil.
-    pub slots_in_an_epoch: Option<u64>,
+    pub slots_in_an_epoch: u64,
 }
 
 /// Builder for creating test fixtures with a fluent API.
@@ -536,12 +536,12 @@ impl TestFixtureBuilder {
         slots_in_an_epoch: Option<u64>,
     ) -> Self {
         self.anvil_config.enabled = true;
-        self.anvil_config.port = port.or_else(|| Some(8544));
+        self.anvil_config.port = port.unwrap_or(8544);
         self.anvil_config.state_path =
             state_path.or_else(|| Some(PathBuf::from("./tests/testdata/anvil_state.json")));
         self.anvil_config.chain_id = chain_id;
         self.anvil_config.block_time = block_time;
-        self.anvil_config.slots_in_an_epoch = slots_in_an_epoch.or_else(|| Some(1));
+        self.anvil_config.slots_in_an_epoch = slots_in_an_epoch.unwrap_or(1);
         self
     }
 
@@ -633,13 +633,13 @@ impl TestFixtureBuilder {
 
     /// Spawn an Anvil instance with the given configuration.
     async fn spawn_anvil(
-        port: Option<u16>,
+        port: u16,
         state_path: Option<&std::path::Path>,
         chain_id: Option<u64>,
         block_time: Option<u64>,
-        slots_in_an_epoch: Option<u64>,
+        slots_in_an_epoch: u64,
     ) -> eyre::Result<anvil::NodeHandle> {
-        let mut config = anvil::NodeConfig { port: port.unwrap_or(8544), ..Default::default() };
+        let mut config = anvil::NodeConfig { port, ..Default::default() };
 
         if let Some(id) = chain_id {
             config.chain_id = Some(id);
@@ -659,9 +659,7 @@ impl TestFixtureBuilder {
             config.init_state = Some(state);
         }
 
-        if let Some(slots) = slots_in_an_epoch {
-            config.slots_in_an_epoch = slots;
-        }
+        config.slots_in_an_epoch = slots_in_an_epoch;
 
         // Spawn Anvil and return the NodeHandle
         let (_api, handle) = anvil::spawn(config).await;

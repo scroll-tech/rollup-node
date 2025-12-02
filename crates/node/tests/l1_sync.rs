@@ -299,7 +299,7 @@ async fn test_l1_sync_batch_finalized() -> eyre::Result<()> {
 /// Test: `BatchRevert` events are ignored before `L1Synced`.
 ///
 /// # Test Flow
-/// 1. Start node in syncing state (skip automatic L1Synced notifications)
+/// 1. Start node in syncing state (skip automatic `L1Synced` notifications)
 /// 2. Send `BatchCommit` transactions (batches 0-6) to L1
 /// 3. Verify safe head remains at genesis (events are buffered during sync)
 /// 4. Send a `BatchRevert` transaction to revert some batches
