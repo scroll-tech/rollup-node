@@ -100,6 +100,7 @@ pub struct L1Watcher<EP> {
     /// The log query block range.
     log_query_block_range: u64,
     /// Test mode: skip sending `L1Notification::Synced` events.
+    #[cfg(feature = "test-utils")]
     test_mode_skip_synced_notification: bool,
 }
 
@@ -210,7 +211,7 @@ where
         l1_block_startup_info: L1BlockStartupInfo,
         config: Arc<NodeConfig>,
         log_query_block_range: u64,
-        test_mode_skip_synced_notification: bool,
+        #[cfg(feature = "test-utils")] test_mode_skip_synced_notification: bool,
     ) -> (mpsc::Sender<Arc<L1Notification>>, mpsc::Receiver<Arc<L1Notification>>) {
         tracing::trace!(target: "scroll::watcher", ?l1_block_startup_info, ?config, "spawning L1 watcher");
 
@@ -274,6 +275,7 @@ where
             metrics: WatcherMetrics::default(),
             is_synced: false,
             log_query_block_range,
+            #[cfg(feature = "test-utils")]
             test_mode_skip_synced_notification,
         };
 
@@ -317,7 +319,12 @@ where
             } else if self.current_block_number == self.l1_state.head {
                 // if we have synced to the head of the L1, notify the channel and set the
                 // `is_synced`` flag.
-                if !self.test_mode_skip_synced_notification {
+                #[cfg(feature = "test-utils")]
+                let should_skip = self.test_mode_skip_synced_notification;
+                #[cfg(not(feature = "test-utils"))]
+                let should_skip = false;
+
+                if !should_skip {
                     if let Err(L1WatcherError::SendError(_)) =
                         self.notify(L1Notification::Synced).await
                     {
@@ -910,6 +917,7 @@ mod tests {
                 metrics: WatcherMetrics::default(),
                 is_synced: false,
                 log_query_block_range: LOG_QUERY_BLOCK_RANGE,
+                #[cfg(feature = "test-utils")]
                 test_mode_skip_synced_notification: false,
             },
             rx,
