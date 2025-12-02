@@ -269,6 +269,8 @@ impl TestFixture {
 pub struct AnvilConfig {
     /// Whether to enable Anvil.
     pub enabled: bool,
+    /// Optional port for Anvil.
+    pub port: Option<u16>,
     /// Optional state file to load into Anvil.
     pub state_path: Option<PathBuf>,
     /// Optional chain ID for Anvil.
@@ -527,17 +529,19 @@ impl TestFixtureBuilder {
     /// ```
     pub fn with_anvil(
         mut self,
+        port: Option<u16>,
         state_path: Option<PathBuf>,
         chain_id: Option<u64>,
         block_time: Option<u64>,
         slots_in_an_epoch: Option<u64>,
     ) -> Self {
         self.anvil_config.enabled = true;
+        self.anvil_config.port = port.or_else(|| Some(8544));
         self.anvil_config.state_path =
             state_path.or_else(|| Some(PathBuf::from("./tests/testdata/anvil_state.json")));
         self.anvil_config.chain_id = chain_id;
         self.anvil_config.block_time = block_time;
-        self.anvil_config.slots_in_an_epoch = slots_in_an_epoch;
+        self.anvil_config.slots_in_an_epoch = slots_in_an_epoch.or_else(|| Some(1));
         self
     }
 
@@ -549,11 +553,11 @@ impl TestFixtureBuilder {
         // Start Anvil if requested
         let anvil = if self.anvil_config.enabled {
             let handle = Self::spawn_anvil(
-                None,
+                self.anvil_config.port,
                 self.anvil_config.state_path.as_deref(),
                 self.anvil_config.chain_id,
                 self.anvil_config.block_time,
-                None,
+                self.anvil_config.slots_in_an_epoch,
             )
             .await?;
 
@@ -655,7 +659,9 @@ impl TestFixtureBuilder {
             config.init_state = Some(state);
         }
 
-        config.slots_in_an_epoch = slots_in_an_epoch.unwrap_or(1);
+        if let Some(slots) = slots_in_an_epoch {
+            config.slots_in_an_epoch = slots;
+        }
 
         // Spawn Anvil and return the NodeHandle
         let (_api, handle) = anvil::spawn(config).await;

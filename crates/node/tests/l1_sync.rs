@@ -125,7 +125,7 @@ async fn test_l1_sync_batch_commit() -> eyre::Result<()> {
     let mut fixture = TestFixture::builder()
         .followers(1)
         .skip_l1_synced_notifications() // Prevents automatic L1Synced, simulates initial sync
-        .with_anvil(None, Some(22222222), None, None)
+        .with_anvil(None, None, Some(22222222), None, None)
         .build()
         .await?;
 
@@ -193,7 +193,7 @@ async fn test_l1_sync_batch_finalized() -> eyre::Result<()> {
     let mut fixture = TestFixture::builder()
         .followers(1)
         .skip_l1_synced_notifications()
-        .with_anvil(None, Some(22222222), None, None)
+        .with_anvil(None, None, Some(22222222), None, None)
         .build()
         .await?;
 
@@ -296,28 +296,94 @@ async fn test_l1_sync_batch_finalized() -> eyre::Result<()> {
     Ok(())
 }
 
-/// Test: `BatchRevert` events correctly roll back the safe head after `L1Synced`.
+/// Test: `BatchRevert` events are ignored before `L1Synced`.
 ///
 /// # Test Flow
-/// 1. Start node in syncing state
+/// 1. Start node in syncing state (skip automatic L1Synced notifications)
 /// 2. Send `BatchCommit` transactions (batches 0-6) to L1
-/// 3. Complete L1 sync and verify safe head advanced
+/// 3. Verify safe head remains at genesis (events are buffered during sync)
 /// 4. Send a `BatchRevert` transaction to revert some batches
-/// 5. Verify safe head decreased to reflect the reverted state
+/// 5. Verify safe head still remains unchanged
 ///
 /// # Expected Behavior
-/// When a `BatchRevert` event is detected on L1 (after `L1Synced`), the node should
-/// roll back its safe head to the last valid batch before the reverted batches.
-/// This ensures the L2 state remains consistent with the canonical L1 state.
+/// During initial sync (before `L1Synced`), `BatchRevert` events should be indexed but
+/// NOT processed. The safe head should remain at genesis until L1 sync completes.
+/// This prevents the node from processing revert events out of order during catchup.
 #[tokio::test]
-async fn test_l1_sync_batch_revert() -> eyre::Result<()> {
+async fn test_l1_sync_batch_revert_before_l1_synced() -> eyre::Result<()> {
     reth_tracing::init_test_tracing();
 
     // Step 1: Setup node in syncing state
     let mut fixture = TestFixture::builder()
         .followers(1)
         .skip_l1_synced_notifications()
-        .with_anvil(None, Some(22222222), None, None)
+        .with_anvil(None, None, Some(22222222), None, None)
+        .build()
+        .await?;
+
+    // Record initial state
+    let initial_status = fixture.get_status(0).await?;
+    let initial_safe = initial_status.l2.fcs.safe_block_info().number;
+    assert_eq!(initial_safe, 0, "Initial safe head should be at genesis (block 0)");
+
+    // Step 2: Send BatchCommit transactions (batches 0-6) to L1
+    for i in 0..=6 {
+        let commit_batch_tx = read_test_transaction("commitBatch", &i.to_string())?;
+        fixture.anvil_inject_tx(commit_batch_tx).await?;
+    }
+    for _ in 1..=6 {
+        fixture.expect_event().batch_commit_indexed().await?;
+    }
+
+    // Verify safe head advanced after processing commits
+    let new_status = fixture.get_status(0).await?;
+    assert_eq!(
+        initial_safe,
+        new_status.l2.fcs.safe_block_info().number,
+        "Safe head should not advance after BatchCommit before L1Synced"
+    );
+
+    // Step 4: Send BatchRevert transaction to revert some batches
+    let revert_batch_tx = read_test_transaction("revertBatch", "0")?;
+    fixture.anvil_inject_tx(revert_batch_tx).await?;
+
+    fixture.expect_event().batch_reverted().await?;
+
+    // Step 5: Verify safe head decreased after revert
+    let revert_status = fixture.get_status(0).await?;
+    assert_eq!(
+        revert_status.l2.fcs.safe_block_info().number,
+        new_status.l2.fcs.safe_block_info().number,
+        "Safe head should not change after BatchRevert before L1Synced"
+    );
+
+    Ok(())
+}
+
+/// Test: `BatchRevert` events correctly roll back the safe head after `L1Synced`.
+///
+/// # Test Flow
+/// 1. Start node in syncing state
+/// 2. Send `BatchCommit` transactions (batches 0-6) to L1 and wait for indexing
+/// 3. Complete L1 sync by sending `L1Synced` notification
+/// 4. Verify safe head advances after processing buffered commits
+/// 5. Send a `BatchRevert` transaction to revert some batches
+/// 6. Verify safe head decreases to reflect the reverted state
+///
+/// # Expected Behavior
+/// After `L1Synced`, when a `BatchRevert` event is detected on L1, the node should
+/// immediately roll back its safe head to the last valid batch before the reverted
+/// batches. This ensures the L2 state remains consistent with the canonical L1 state
+/// and handles L1 sequencer coordinator initiated reverts correctly.
+#[tokio::test]
+async fn test_l1_sync_batch_revert_after_l1_synced() -> eyre::Result<()> {
+    reth_tracing::init_test_tracing();
+
+    // Step 1: Setup node in syncing state
+    let mut fixture = TestFixture::builder()
+        .followers(1)
+        .skip_l1_synced_notifications()
+        .with_anvil(None, None, Some(22222222), None, None)
         .build()
         .await?;
 
@@ -394,7 +460,7 @@ async fn test_l1_reorg_batch_commit() -> eyre::Result<()> {
     let mut fixture = TestFixture::builder()
         .followers(1)
         .skip_l1_synced_notifications()
-        .with_anvil(None, Some(22222222), None, None)
+        .with_anvil(None, None, Some(22222222), None, Some(32))
         .build()
         .await?;
 
@@ -435,7 +501,6 @@ async fn test_l1_reorg_batch_commit() -> eyre::Result<()> {
 
     // Step 4: Perform L1 reorg to remove batches 4-6 (reorg depth 3)
     fixture.anvil_reorg(3).await?;
-    tokio::time::sleep(tokio::time::Duration::from_secs(3)).await;
 
     // Wait for reorg detection
     fixture.expect_event().l1_reorg().await?;
@@ -478,7 +543,7 @@ async fn test_l1_reorg_batch_finalized() -> eyre::Result<()> {
     let mut fixture = TestFixture::builder()
         .followers(1)
         .skip_l1_synced_notifications()
-        .with_anvil(None, Some(22222222), None, None)
+        .with_anvil(None, None, Some(22222222), None, None)
         .build()
         .await?;
 
@@ -557,7 +622,7 @@ async fn test_l1_reorg_batch_revert() -> eyre::Result<()> {
     let mut fixture = TestFixture::builder()
         .followers(1)
         .skip_l1_synced_notifications()
-        .with_anvil(None, Some(22222222), None, None)
+        .with_anvil(None, None, Some(22222222), None, None)
         .build()
         .await?;
 
