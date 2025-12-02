@@ -36,6 +36,7 @@ use rollup_node_watcher::L1Notification;
 use scroll_alloy_consensus::ScrollPooledTransaction;
 use scroll_alloy_provider::{ScrollAuthApiEngineClient, ScrollEngineApi};
 use scroll_alloy_rpc_types::Transaction;
+use scroll_db::Database;
 use scroll_engine::{Engine, ForkchoiceState};
 use std::{
     fmt::{Debug, Formatter},
@@ -99,6 +100,8 @@ pub struct NodeHandle {
     pub chain_orchestrator_rx: EventStream<ChainOrchestratorEvent>,
     /// Chain orchestrator handle.
     pub rollup_manager_handle: ChainOrchestratorHandle<ScrollNetworkHandle>,
+    /// Database instance.
+    pub database: Arc<Database>,
     /// The type of the node.
     pub typ: NodeType,
 }
@@ -578,7 +581,7 @@ impl TestFixtureBuilder {
             None
         };
 
-        let (nodes, _tasks, wallet) = setup_engine(
+        let (nodes, databases, _tasks, wallet) = setup_engine(
             config.clone(),
             self.num_nodes,
             chain_spec.clone(),
@@ -614,6 +617,7 @@ impl TestFixtureBuilder {
                 chain_orchestrator_rx,
                 l1_watcher_tx,
                 rollup_manager_handle,
+                database: databases[index].clone(),
                 typ: if config.sequencer_args.sequencer_enabled && index == 0 {
                     NodeType::Sequencer
                 } else {

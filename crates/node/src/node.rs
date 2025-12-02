@@ -15,6 +15,7 @@ use reth_scroll_node::{
     ScrollConsensusBuilder, ScrollExecutorBuilder, ScrollNode, ScrollPayloadBuilderBuilder,
     ScrollPoolBuilder,
 };
+use scroll_db::Database;
 use scroll_wire::{ScrollWireConfig, ScrollWireEvent, ScrollWireProtocolHandler};
 use std::sync::Arc;
 use tokio::sync::{mpsc::UnboundedReceiver, Mutex};
@@ -43,6 +44,11 @@ impl ScrollRollupNode {
             .expect("Configuration hydration failed");
 
         Self { config, scroll_wire_events: Arc::new(Mutex::new(None)) }
+    }
+
+    /// Returns the database instance.
+    pub fn database(&self) -> Arc<Database> {
+        self.config.database.clone().expect("database is set via hydration")
     }
 }
 

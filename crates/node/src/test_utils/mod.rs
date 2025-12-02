@@ -61,6 +61,7 @@
 
 // Module declarations
 pub mod block_builder;
+pub mod database;
 pub mod event_utils;
 pub mod fixture;
 pub mod l1_helpers;
@@ -68,6 +69,7 @@ pub mod network_helpers;
 pub mod tx_helpers;
 
 // Re-export main types for convenience
+pub use database::{DatabaseHelper, DatabaseOperations};
 pub use event_utils::{EventAssertions, EventWaiter};
 pub use fixture::{NodeHandle, TestFixture, TestFixtureBuilder};
 pub use network_helpers::{
@@ -97,6 +99,7 @@ use reth_provider::providers::BlockchainProvider;
 use reth_rpc_server_types::RpcModuleSelection;
 use reth_tasks::TaskManager;
 use rollup_node_sequencer::L1MessageInclusionMode;
+use scroll_db::Database;
 use std::{path::PathBuf, sync::Arc};
 use tokio::sync::Mutex;
 use tracing::{span, Level};
@@ -118,6 +121,7 @@ pub async fn setup_engine(
             BlockchainProvider<NodeTypesWithDBAdapter<ScrollRollupNode, TmpDB>>,
         >,
     >,
+    Vec<Arc<Database>>,
     TaskManager,
     Wallet,
 )>
@@ -139,6 +143,7 @@ where
 
     // Create nodes and peer them
     let mut nodes: Vec<NodeTestContext<_, _>> = Vec::with_capacity(num_nodes);
+    let mut databases: Vec<Arc<Database>> = Vec::with_capacity(num_nodes);
 
     for idx in 0..num_nodes {
         // disable sequencer nodes after the first one
@@ -161,7 +166,9 @@ where
         let _enter = span.enter();
         let testing_node = NodeBuilder::new(node_config.clone()).testing_node(exec.clone());
         let testing_config = testing_node.config().clone();
-        let node = ScrollRollupNode::new(scroll_node_config.clone(), testing_config).await;
+        let node: ScrollRollupNode =
+            ScrollRollupNode::new(scroll_node_config.clone(), testing_config).await;
+        let database = node.database();
         let RethNodeHandle { node, node_exit_future: _ } = testing_node
             .with_types_and_provider::<ScrollRollupNode, BlockchainProvider<_>>()
             .with_components(node.components_builder())
@@ -199,10 +206,11 @@ where
             }
         }
 
+        databases.push(database);
         nodes.push(node);
     }
 
-    Ok((nodes, tasks, Wallet::default().with_chain_id(chain_spec.chain().into())))
+    Ok((nodes, databases, tasks, Wallet::default().with_chain_id(chain_spec.chain().into())))
 }
 
 /// Generate a transfer transaction with the given wallet.

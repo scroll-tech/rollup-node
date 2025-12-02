@@ -296,12 +296,12 @@ async fn can_forward_tx_to_sequencer() -> eyre::Result<()> {
 
     // Create the chain spec for scroll mainnet with Euclid v2 activated and a test genesis.
     let chain_spec = (*SCROLL_DEV).clone();
-    let (mut sequencer_node, _tasks, _) =
+    let (mut sequencer_node, _databases, _tasks, _) =
         setup_engine(sequencer_node_config, 1, chain_spec.clone(), false, true).await.unwrap();
 
     let sequencer_url = format!("http://localhost:{}", sequencer_node[0].rpc_url().port().unwrap());
     follower_node_config.network_args.sequencer_url = Some(sequencer_url);
-    let (mut follower_node, _tasks, wallet) =
+    let (mut follower_node, _databases, _tasks, wallet) =
         setup_engine(follower_node_config, 1, chain_spec, false, true).await.unwrap();
 
     let wallet = Arc::new(Mutex::new(wallet));
@@ -459,7 +459,7 @@ async fn can_bridge_blocks() -> eyre::Result<()> {
     let chain_spec = (*SCROLL_DEV).clone();
 
     // Setup the bridge node and a standard node.
-    let (mut nodes, tasks, _) =
+    let (mut nodes, _databases, tasks, _) =
         setup_engine(default_test_scroll_rollup_node_config(), 1, chain_spec.clone(), false, false)
             .await?;
     let mut bridge_node = nodes.pop().unwrap();
@@ -559,7 +559,7 @@ async fn shutdown_consolidates_most_recent_batch_on_startup() -> eyre::Result<()
     let chain_spec = (*SCROLL_MAINNET).clone();
 
     // Launch a node
-    let (mut nodes, _tasks, _) =
+    let (mut nodes, _databases, _tasks, _) =
         setup_engine(default_test_scroll_rollup_node_config(), 1, chain_spec.clone(), false, false)
             .await?;
     let node = nodes.pop().unwrap();
@@ -829,7 +829,7 @@ async fn graceful_shutdown_sets_fcs_to_latest_signed_block_in_db_on_start_up() -
     config.signer_args.private_key = Some(PrivateKeySigner::random());
 
     // Launch a node
-    let (mut nodes, _tasks, _) =
+    let (mut nodes, _databases, _tasks, _) =
         setup_engine(config.clone(), 1, chain_spec.clone(), false, false).await?;
     let node = nodes.pop().unwrap();
 

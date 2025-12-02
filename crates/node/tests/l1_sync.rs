@@ -31,7 +31,7 @@
 //! Related to: <https://github.com/scroll-tech/rollup-node/issues/420>
 
 use alloy_primitives::Bytes;
-use rollup_node::test_utils::{EventAssertions, TestFixture};
+use rollup_node::test_utils::{DatabaseOperations, EventAssertions, TestFixture};
 use serde_json::Value;
 use std::{collections::HashMap, sync::LazyLock};
 
@@ -193,7 +193,7 @@ async fn test_l1_sync_batch_finalized() -> eyre::Result<()> {
     let mut fixture = TestFixture::builder()
         .followers(1)
         .skip_l1_synced_notifications()
-        .with_anvil(None, None, Some(22222222), None, None)
+        .with_anvil(None, None, Some(22222222), None, Some(4))
         .build()
         .await?;
 
@@ -231,10 +231,18 @@ async fn test_l1_sync_batch_finalized() -> eyre::Result<()> {
         let finalize_batch_tx = read_test_transaction("finalizeBatch", &i.to_string())?;
         fixture.anvil_inject_tx(finalize_batch_tx).await?;
     }
-    fixture.anvil_mine_blocks(2).await?;
+    fixture.anvil_mine_blocks(8).await?;
 
-    for _ in 1..=3 {
+    for i in 1..=3 {
         fixture.expect_event().batch_consolidated().await?;
+        // Verify batch now has a finalized block number in database
+        let finalized_block_number =
+            fixture.db().get_batch_finalized_block_number_by_index(i).await?;
+        assert!(
+            matches!(finalized_block_number, Some(Some(n)) if n > 0),
+            "Finalized block number should be greater than 0, got {:?}",
+            finalized_block_number
+        );
     }
 
     // Step 5: Verify both safe and finalized heads advanced
@@ -252,8 +260,15 @@ async fn test_l1_sync_batch_finalized() -> eyre::Result<()> {
     // Step 6: Complete L1 sync, this will process the buffered BatchCommit events
     fixture.l1().sync().await?;
     fixture.expect_event().l1_synced().await?;
-    for _ in 1..=3 {
+    for i in 4..=6 {
         fixture.expect_event().batch_consolidated().await?;
+        let finalized_block_number =
+            fixture.db().get_batch_finalized_block_number_by_index(i).await?;
+        assert!(
+            matches!(finalized_block_number, Some(None)),
+            "Finalized block number should be None, got {:?}",
+            finalized_block_number
+        );
     }
     let l1_synced_status = fixture.get_status(0).await?;
     assert!(
@@ -267,6 +282,16 @@ async fn test_l1_sync_batch_finalized() -> eyre::Result<()> {
         let finalize_batch_tx = read_test_transaction("finalizeBatch", &i.to_string())?;
         fixture.anvil_inject_tx(finalize_batch_tx).await?;
     }
+    for i in 4..=6 {
+        fixture.expect_event().batch_finalize_indexed().await?;
+        let finalized_block_number =
+            fixture.db().get_batch_finalized_block_number_by_index(i).await?;
+        assert!(
+            matches!(finalized_block_number, Some(Some(n)) if n > 0),
+            "Finalized block number should be greater than 0, got {:?}",
+            finalized_block_number
+        );
+    }
     let batch_finalized_status = fixture.get_status(0).await?;
     assert_eq!(
         batch_finalized_status.l2.fcs.finalized_block_info().number,
@@ -274,10 +299,7 @@ async fn test_l1_sync_batch_finalized() -> eyre::Result<()> {
         "Finalized head should not advance before BatchFinalized event are finalized on L1"
     );
 
-    for _ in 1..=3 {
-        fixture.expect_event().batch_finalize_indexed().await?;
-    }
-    fixture.anvil_mine_blocks(2).await?;
+    fixture.anvil_mine_blocks(8).await?;
     fixture.expect_event().l1_block_finalized().await?;
 
     // Step 8: Verify only finalized head advanced (safe head managed by BatchCommit)
@@ -551,21 +573,39 @@ async fn test_l1_reorg_batch_finalized() -> eyre::Result<()> {
     fixture.expect_event().l1_synced().await?;
 
     // Step 2: Send BatchCommit transactions (batches 0-6)
+    // This commits the batches to L1 but doesn't finalize them yet
     for i in 0..=6 {
         let commit_batch_tx = read_test_transaction("commitBatch", &i.to_string())?;
         fixture.anvil_inject_tx(commit_batch_tx).await?;
     }
-    for _ in 1..=6 {
+    for i in 1..=6 {
         fixture.expect_event().batch_consolidated().await?;
+        // Verify batch exists in database but has no finalized block number yet
+        let finalized_block_number =
+            fixture.db().get_batch_finalized_block_number_by_index(i).await?;
+        assert_eq!(
+            finalized_block_number,
+            Some(None),
+            "Batch should exist but finalized block number should be None"
+        );
     }
 
     // Step 3: Send BatchFinalized transactions (batches 1-2)
+    // This finalizes the committed batches on L1
     for i in 1..=2 {
         let finalize_batch_tx = read_test_transaction("finalizeBatch", &i.to_string())?;
         fixture.anvil_inject_tx(finalize_batch_tx).await?;
     }
-    for _ in 1..=2 {
+    for i in 1..=2 {
         fixture.expect_event().batch_finalize_indexed().await?;
+        // Verify batch now has a finalized block number in database
+        let finalized_block_number =
+            fixture.db().get_batch_finalized_block_number_by_index(i).await?;
+        assert!(
+            matches!(finalized_block_number, Some(Some(n)) if n > 0),
+            "Finalized block number should be greater than 0, got {:?}",
+            finalized_block_number
+        );
     }
 
     // Record finalized head after finalization
