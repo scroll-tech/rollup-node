@@ -1108,25 +1108,46 @@ impl<T: ReadConnectionProvider + Sync + ?Sized> DatabaseReadOperations for T {
             .await?
             .flatten();
 
-        let latest_batch_event = models::batch_commit::Entity::find()
+        // Split the following lookups into three separate queries for better index utilization.
+        // Each query can use its respective index efficiently instead of doing a table scan.
+        let max_block_number = models::batch_commit::Entity::find()
+            .select_only()
+            .filter(models::batch_commit::Column::Index.gt(0))
+            .column_as(models::batch_commit::Column::BlockNumber.max(), "max_block_number")
+            .into_tuple::<Option<i64>>()
+            .one(self.get_connection())
+            .await?
+            .flatten();
+
+        let max_finalized_block_number = models::batch_commit::Entity::find()
             .select_only()
             .filter(models::batch_commit::Column::Index.gt(0))
             .column_as(
-                Expr::col(models::batch_commit::Column::BlockNumber).max(),
-                "max_block_number",
-            )
-            .column_as(
-                Expr::col(models::batch_commit::Column::FinalizedBlockNumber).max(),
+                models::batch_commit::Column::FinalizedBlockNumber.max(),
                 "max_finalized_block_number",
             )
-            .column_as(
-                Expr::col(models::batch_commit::Column::RevertedBlockNumber).max(),
-                "max_reverted_block_number",
-            )
-            .into_tuple::<(Option<i64>, Option<i64>, Option<i64>)>()
+            .into_tuple::<Option<i64>>()
             .one(self.get_connection())
             .await?
-            .and_then(|tuple| <[Option<i64>; 3]>::from(tuple).into_iter().flatten().max());
+            .flatten();
+
+        let max_reverted_block_number = models::batch_commit::Entity::find()
+            .select_only()
+            .filter(models::batch_commit::Column::Index.gt(0))
+            .column_as(
+                models::batch_commit::Column::RevertedBlockNumber.max(),
+                "max_reverted_block_number",
+            )
+            .into_tuple::<Option<i64>>()
+            .one(self.get_connection())
+            .await?
+            .flatten();
+
+        let latest_batch_event =
+            [max_block_number, max_finalized_block_number, max_reverted_block_number]
+                .into_iter()
+                .flatten()
+                .max();
 
         let latest_l1_block_number =
             [latest_l1_message, latest_batch_event].into_iter().flatten().max();
