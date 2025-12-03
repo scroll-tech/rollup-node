@@ -555,11 +555,8 @@ async fn test_l1_reorg_batch_commit() -> eyre::Result<()> {
 ///
 /// This is by design: The node only updates its finalized head when a `BatchFinalized`
 /// event is **itself finalized on L1** (i.e., included in a finalized L1 block).
-/// Since L1 finality is irreversible (at least under honest majority assumption),
-/// a properly processed `BatchFinalized` event can never actually be reorged in practice.
 ///
-/// This test simulates the impossible scenario to verify the node handles it gracefully
-/// (which it does by simply ignoring the reorg for finalized state).
+/// This test verifies the node handles such reorgs gracefully.
 #[tokio::test]
 async fn test_l1_reorg_batch_finalized() -> eyre::Result<()> {
     reth_tracing::init_test_tracing();
