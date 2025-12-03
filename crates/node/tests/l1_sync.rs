@@ -193,7 +193,7 @@ async fn test_l1_sync_batch_finalized() -> eyre::Result<()> {
     let mut fixture = TestFixture::builder()
         .followers(1)
         .skip_l1_synced_notifications()
-        .with_anvil(None, None, Some(22222222), None, Some(4))
+        .with_anvil(None, None, Some(22222222), None, Some(2))
         .build()
         .await?;
 
@@ -231,7 +231,9 @@ async fn test_l1_sync_batch_finalized() -> eyre::Result<()> {
         let finalize_batch_tx = read_test_transaction("finalizeBatch", &i.to_string())?;
         fixture.anvil_inject_tx(finalize_batch_tx).await?;
     }
-    fixture.anvil_mine_blocks(8).await?;
+    let anvil_block_number = fixture.anvil_get_block_number().await?;
+    fixture.anvil_mine_blocks(4).await?;
+    fixture.expect_event().l1_block_finalized_at_least(anvil_block_number).await?;
 
     for i in 1..=3 {
         fixture.expect_event().batch_consolidated().await?;
@@ -272,8 +274,8 @@ async fn test_l1_sync_batch_finalized() -> eyre::Result<()> {
     }
     let l1_synced_status = fixture.get_status(0).await?;
     assert!(
-        batch_finalized_status.l2.fcs.safe_block_info().number <
-            l1_synced_status.l2.fcs.safe_block_info().number,
+        l1_synced_status.l2.fcs.safe_block_info().number >
+            batch_finalized_status.l2.fcs.safe_block_info().number,
         "Safe head should advance after L1 Synced when processing buffered BatchCommit events"
     );
 
@@ -299,8 +301,9 @@ async fn test_l1_sync_batch_finalized() -> eyre::Result<()> {
         "Finalized head should not advance before BatchFinalized event are finalized on L1"
     );
 
-    fixture.anvil_mine_blocks(8).await?;
-    fixture.expect_event().l1_block_finalized().await?;
+    let anvil_block_number = fixture.anvil_get_block_number().await?;
+    fixture.anvil_mine_blocks(4).await?;
+    fixture.expect_event().l1_block_finalized_at_least(anvil_block_number).await?;
 
     // Step 8: Verify only finalized head advanced (safe head managed by BatchCommit)
     let batch_finalized_status = fixture.get_status(0).await?;

@@ -172,8 +172,15 @@ impl<'a> EventWaiter<'a> {
 
     /// Wait for L1 block finalized event on all specified nodes.
     pub async fn l1_block_finalized(self) -> eyre::Result<()> {
+        self.l1_block_finalized_at_least(0).await
+    }
+
+    /// Wait for L1 block finalized event on all specified nodes where the block number
+    /// is at least the specified target.
+    pub async fn l1_block_finalized_at_least(self, target_block_number: u64) -> eyre::Result<()> {
         self.wait_for_event_on_all(|e| {
-            matches!(e, ChainOrchestratorEvent::L1BlockFinalized(_, _)).then_some(())
+            matches!(e, ChainOrchestratorEvent::L1BlockFinalized(n, _) if n >= &target_block_number)
+                .then_some(())
         })
         .await?;
         Ok(())

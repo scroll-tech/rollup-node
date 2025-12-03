@@ -239,6 +239,20 @@ impl TestFixture {
         })
     }
 
+    /// Get the current block number from Anvil.
+    pub async fn anvil_get_block_number(&self) -> eyre::Result<u64> {
+        let provider = self.anvil_provider().ok_or_else(|| eyre::eyre!("Anvil is not running"))?;
+        let block_number = provider.get_block_number().await?;
+        Ok(block_number)
+    }
+
+    /// Get the finalized block number from Anvil.
+    pub async fn anvil_get_finalized_block_number(&self) -> eyre::Result<u64> {
+        let provider = self.anvil_provider().ok_or_else(|| eyre::eyre!("Anvil is not running"))?;
+        let finalized_block = provider.get_block(BlockNumberOrTag::Finalized.into()).await?;
+        Ok(finalized_block.map(|block| block.number()).unwrap_or(0u64))
+    }
+
     /// Generate Anvil blocks by calling `anvil_mine` RPC method.
     pub async fn anvil_mine_blocks(&self, num_blocks: u64) -> eyre::Result<()> {
         let provider = self.anvil_provider().ok_or_else(|| eyre::eyre!("Anvil is not running"))?;
