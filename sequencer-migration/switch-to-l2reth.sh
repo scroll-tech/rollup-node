@@ -18,7 +18,7 @@ perform_sequencing_switch() {
     # Phase 1: Disable L2GETH sequencing
     log_info "--- Phase 1: Disabling L2GETH sequencing ---"
     stop_l2geth_mining
-    
+
     # wait for l2reth to catch up with l2geth
     log_info "-- Phase 1.5: Waiting for L2RETH to catch up with L2GETH ---"
     wait_for_l2reth_to_catch_up_with_l2geth

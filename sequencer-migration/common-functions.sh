@@ -129,7 +129,7 @@ stop_l2geth_mining() {
 # Enable l2reth automatic sequencing
 enable_l2reth_sequencing() {
     log_info "Enabling L2RETH automatic sequencing..."
-    if cast rpc rollupNode_enableAutomaticSequencing --rpc-url "$L2RETH_RPC_URL" >/dev/null 2>&1; then
+    if cast rpc rollupNodeAdmin_enableAutomaticSequencing --rpc-url "$L2RETH_RPC_URL" >/dev/null 2>&1; then
         log_success "L2RETH automatic sequencing enabled"
         return 0
     else
@@ -141,7 +141,7 @@ enable_l2reth_sequencing() {
 # Disable l2reth automatic sequencing
 disable_l2reth_sequencing() {
     log_info "Disabling L2RETH automatic sequencing..."
-    if cast rpc rollupNode_disableAutomaticSequencing --rpc-url "$L2RETH_RPC_URL" >/dev/null 2>&1; then
+    if cast rpc rollupNodeAdmin_disableAutomaticSequencing --rpc-url "$L2RETH_RPC_URL" >/dev/null 2>&1; then
         log_success "L2RETH automatic sequencing disabled"
         return 0
     else
