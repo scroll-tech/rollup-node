@@ -16,6 +16,7 @@ exec rollup-node node --chain /l2reth/l2reth-genesis-e2e.json --datadir=/l2reth 
   --http --http.addr=0.0.0.0 --http.port=8545 --http.corsdomain "*" --http.api admin,debug,eth,net,trace,txpool,web3,rpc,reth,ots,flashbots,miner,mev \
   --ws --ws.addr=0.0.0.0 --ws.port=8546 --ws.api admin,debug,eth,net,trace,txpool,web3,rpc,reth,ots,flashbots,miner,mev \
   --rpc.rollup-node \
+  --rpc.rollup-node-admin \
   --log.stdout.format log-fmt -vvv \
   --sequencer.enabled \
   --sequencer.allow-empty-blocks \
