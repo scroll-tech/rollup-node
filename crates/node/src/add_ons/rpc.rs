@@ -39,10 +39,7 @@ where
     /// This struct implements both `RollupNodeApiServer` and `RollupNodeAdminApiServer`.
     /// Control which APIs are exposed by selectively registering them when extending RPC modules.
     pub fn new(rx: oneshot::Receiver<ChainOrchestratorHandle<N>>) -> Self {
-        Self {
-            rx: Mutex::new(Some(rx)),
-            handle: OnceCell::new(),
-        }
+        Self { rx: Mutex::new(Some(rx)), handle: OnceCell::new() }
     }
 
     /// Gets or initializes the rollup manager handle.

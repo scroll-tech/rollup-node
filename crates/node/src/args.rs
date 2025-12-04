@@ -752,7 +752,7 @@ pub struct SignerArgs {
 #[derive(Debug, Default, Clone, clap::Args)]
 pub struct RpcArgs {
     /// A boolean to represent if the rollup node rpc should be enabled.
-    #[arg(long = "rpc.rollup-node", help = "Enable the rollup node RPC namespace")]
+    #[arg(long = "rpc.rollup-node", num_args=0..=1, default_value_t = true, help = "Enable the rollup node RPC namespace(default: true)")]
     pub enabled: bool,
     /// A boolean to represent if the rollup node admin rpc should be enabled.
     #[arg(long = "rpc.rollup-node-admin", help = "Enable the rollup node admin RPC namespace")]
