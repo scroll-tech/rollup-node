@@ -66,7 +66,7 @@ sol! {
 pub async fn enable_automatic_sequencing(provider: &NamedProvider) -> Result<bool> {
     provider
         .client()
-        .request("rollupNodeAdminAdmin_enableAutomaticSequencing", ())
+        .request("rollupNodeAdmin_enableAutomaticSequencing", ())
         .await
         .map_err(|e| eyre::eyre!("Failed to enable automatic sequencing: {}", e))
 }
