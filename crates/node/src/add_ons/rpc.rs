@@ -53,23 +53,31 @@ where
     }
 }
 
-/// Defines the `rollupNode` JSON-RPC namespace for read-only operations.
+/// Defines the `rollupNode` JSON-RPC namespace for rollup management operations.
 ///
-/// This trait provides a custom RPC namespace that exposes rollup node status
-/// and query functionality to external clients. The namespace is exposed as `rollupNode`
-/// and is enabled by default.
+/// This trait provides a custom RPC namespace that exposes rollup node management
+/// functionality to external clients. The namespace is exposed as `rollupNode` and
+/// provides methods for controlling automatic sequencing behavior.
 ///
 /// # Usage
 /// These methods can be called via JSON-RPC using the `rollupNode` namespace:
 /// ```json
-/// {"jsonrpc": "2.0", "method": "rollupNode_status", "params": [], "id": 1}
+/// {"jsonrpc": "2.0", "method": "rollupNode_enableAutomaticSequencing", "params": [], "id": 1}
 /// ```
 /// or using cast:
 /// ```bash
-/// cast rpc rollupNode_status
+/// cast rpc rollupNode_enableAutomaticSequencing
 /// ```
 #[rpc(server, client, namespace = "rollupNode")]
-pub trait RollupNodeApi {
+pub trait RollupNodeExtApi {
+    /// Enables automatic sequencing in the rollup node.
+    #[method(name = "enableAutomaticSequencing")]
+    async fn enable_automatic_sequencing(&self) -> RpcResult<bool>;
+
+    /// Disables automatic sequencing in the rollup node.
+    #[method(name = "disableAutomaticSequencing")]
+    async fn disable_automatic_sequencing(&self) -> RpcResult<bool>;
+
     /// Returns the current status of the rollup node.
     #[method(name = "status")]
     async fn status(&self) -> RpcResult<ChainOrchestratorStatus>;
@@ -86,37 +94,47 @@ pub trait RollupNodeApi {
     ) -> RpcResult<Option<L1MessageEnvelope>>;
 }
 
-/// Defines the `rollupNodeAdmin` JSON-RPC namespace for administrative operations.
-///
-/// This trait provides a custom RPC namespace that exposes rollup node administrative
-/// functionality to external clients. The namespace is exposed as `rollupNodeAdmin` and
-/// requires the `--rpc.rollup-node-admin` flag to be enabled.
-///
-/// # Usage
-/// These methods can be called via JSON-RPC using the `rollupNodeAdmin` namespace:
-/// ```json
-/// {"jsonrpc": "2.0", "method": "rollupNodeAdmin_enableAutomaticSequencing", "params": [], "id": 1}
-/// ```
-/// or using cast:
-/// ```bash
-/// cast rpc rollupNodeAdmin_enableAutomaticSequencing
-/// ```
-#[rpc(server, client, namespace = "rollupNodeAdmin")]
-pub trait RollupNodeAdminApi {
-    /// Enables automatic sequencing in the rollup node.
-    #[method(name = "enableAutomaticSequencing")]
-    async fn enable_automatic_sequencing(&self) -> RpcResult<bool>;
-
-    /// Disables automatic sequencing in the rollup node.
-    #[method(name = "disableAutomaticSequencing")]
-    async fn disable_automatic_sequencing(&self) -> RpcResult<bool>;
-}
-
 #[async_trait]
-impl<N> RollupNodeApiServer for RollupNodeRpcExt<N>
+impl<N> RollupNodeExtApiServer for RollupNodeRpcExt<N>
 where
     N: FullNetwork<Primitives = ScrollNetworkPrimitives>,
 {
+    async fn enable_automatic_sequencing(&self) -> RpcResult<bool> {
+        let handle = self.rollup_manager_handle().await.map_err(|e| {
+            ErrorObjectOwned::owned(
+                error::INTERNAL_ERROR_CODE,
+                format!("Failed to get rollup manager handle: {}", e),
+                None::<()>,
+            )
+        })?;
+
+        handle.enable_automatic_sequencing().await.map_err(|e| {
+            ErrorObjectOwned::owned(
+                error::INTERNAL_ERROR_CODE,
+                format!("Failed to enable automatic sequencing: {}", e),
+                None::<()>,
+            )
+        })
+    }
+
+    async fn disable_automatic_sequencing(&self) -> RpcResult<bool> {
+        let handle = self.rollup_manager_handle().await.map_err(|e| {
+            ErrorObjectOwned::owned(
+                error::INTERNAL_ERROR_CODE,
+                format!("Failed to get rollup manager handle: {}", e),
+                None::<()>,
+            )
+        })?;
+
+        handle.disable_automatic_sequencing().await.map_err(|e| {
+            ErrorObjectOwned::owned(
+                error::INTERNAL_ERROR_CODE,
+                format!("Failed to disable automatic sequencing: {}", e),
+                None::<()>,
+            )
+        })
+    }
+
     async fn status(&self) -> RpcResult<ChainOrchestratorStatus> {
         let handle = self.rollup_manager_handle().await.map_err(|e| {
             ErrorObjectOwned::owned(
@@ -169,48 +187,6 @@ where
             ErrorObjectOwned::owned(
                 error::INTERNAL_ERROR_CODE,
                 format!("Failed to get L1 message by key: {}", e),
-                None::<()>,
-            )
-        })
-    }
-}
-
-#[async_trait]
-impl<N> RollupNodeAdminApiServer for RollupNodeRpcExt<N>
-where
-    N: FullNetwork<Primitives = ScrollNetworkPrimitives>,
-{
-    async fn enable_automatic_sequencing(&self) -> RpcResult<bool> {
-        let handle = self.rollup_manager_handle().await.map_err(|e| {
-            ErrorObjectOwned::owned(
-                error::INTERNAL_ERROR_CODE,
-                format!("Failed to get rollup manager handle: {}", e),
-                None::<()>,
-            )
-        })?;
-
-        handle.enable_automatic_sequencing().await.map_err(|e| {
-            ErrorObjectOwned::owned(
-                error::INTERNAL_ERROR_CODE,
-                format!("Failed to enable automatic sequencing: {}", e),
-                None::<()>,
-            )
-        })
-    }
-
-    async fn disable_automatic_sequencing(&self) -> RpcResult<bool> {
-        let handle = self.rollup_manager_handle().await.map_err(|e| {
-            ErrorObjectOwned::owned(
-                error::INTERNAL_ERROR_CODE,
-                format!("Failed to get rollup manager handle: {}", e),
-                None::<()>,
-            )
-        })?;
-
-        handle.disable_automatic_sequencing().await.map_err(|e| {
-            ErrorObjectOwned::owned(
-                error::INTERNAL_ERROR_CODE,
-                format!("Failed to disable automatic sequencing: {}", e),
                 None::<()>,
             )
         })

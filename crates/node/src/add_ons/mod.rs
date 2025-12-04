@@ -32,10 +32,7 @@ mod handle;
 pub use handle::ScrollAddOnsHandle;
 
 mod rpc;
-pub use rpc::{
-    RollupNodeAdminApiClient, RollupNodeAdminApiServer, RollupNodeApiClient, RollupNodeApiServer,
-    RollupNodeRpcExt,
-};
+pub use rpc::{RollupNodeExtApiClient, RollupNodeExtApiServer, RollupNodeRpcExt};
 
 mod rollup;
 pub use rollup::IsDevChain;
@@ -131,22 +128,10 @@ where
         );
 
         let (tx, rx) = tokio::sync::oneshot::channel();
-        let (tx_admin, rx_admin) = tokio::sync::oneshot::channel();
-        
-        // Register rollupNode API (always enabled for status and query methods)
         let rollup_node_rpc_ext = RollupNodeRpcExt::<N::Network>::new(rx);
-        rpc_add_ons = rpc_add_ons.extend_rpc_modules(move |ctx| {
-            ctx.modules.merge_configured(RollupNodeApiServer::into_rpc(rollup_node_rpc_ext))?;
-            Ok(())
-        });
-
-        // Register rollupNodeAdmin API (only if admin flag is enabled)
-        let rpc_config = rollup_node_manager_addon.config().rpc_args.clone();
-        if rpc_config.admin_enabled || rpc_config.enabled {
-            // Support both --rpc.rollup-node-admin and legacy --rpc.rollup-node
-            let rollup_node_admin_ext = RollupNodeRpcExt::<N::Network>::new(rx_admin);
+        if rollup_node_manager_addon.config().rpc_args.enabled {
             rpc_add_ons = rpc_add_ons.extend_rpc_modules(move |ctx| {
-                ctx.modules.merge_configured(RollupNodeAdminApiServer::into_rpc(rollup_node_admin_ext))?;
+                ctx.modules.merge_configured(rollup_node_rpc_ext.into_rpc())?;
                 Ok(())
             });
         }
@@ -157,12 +142,6 @@ where
 
         tx.send(rollup_manager_handle.clone())
             .map_err(|_| eyre::eyre!("failed to send rollup manager handle"))?;
-        
-        // Send handle to admin API if it was registered
-        let rpc_config = rollup_node_manager_addon.config().rpc_args.clone();
-        if rpc_config.admin_enabled || rpc_config.enabled {
-            let _ = tx_admin.send(rollup_manager_handle.clone());
-        }
 
         Ok(ScrollAddOnsHandle {
             rollup_manager_handle,

@@ -752,13 +752,8 @@ pub struct SignerArgs {
 #[derive(Debug, Default, Clone, clap::Args)]
 pub struct RpcArgs {
     /// A boolean to represent if the rollup node rpc should be enabled.
-    /// This is kept for backward compatibility but is now always enabled by default.
-    #[arg(long = "rpc.rollup-node", help = "Enable the rollup node RPC namespace (deprecated: now enabled by default)")]
+    #[arg(long = "rpc.rollup-node", help = "Enable the rollup node RPC namespace")]
     pub enabled: bool,
-    
-    /// A boolean to represent if the rollup node admin rpc should be enabled.
-    #[arg(long = "rpc.rollup-node-admin", help = "Enable the rollup node admin RPC namespace (for enable/disable sequencing)")]
-    pub admin_enabled: bool,
 }
 
 impl SignerArgs {
