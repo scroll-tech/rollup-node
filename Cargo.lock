@@ -341,7 +341,7 @@ checksum = "08e9e656d58027542447c1ca5aa4ca96293f09e6920c4651953b7451a7c35e4e"
 dependencies = [
  "alloy-consensus",
  "alloy-eips",
- "alloy-hardforks 0.4.4",
+ "alloy-hardforks 0.4.5",
  "alloy-primitives",
  "alloy-rpc-types-engine",
  "alloy-rpc-types-eth",
@@ -398,9 +398,9 @@ dependencies = [
 
 [[package]]
 name = "alloy-hardforks"
-version = "0.4.4"
+version = "0.4.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1e29d7eacf42f89c21d7f089916d0bdb4f36139a31698790e8837d2dbbd4b2c3"
+checksum = "2d9a33550fc21fd77a3f8b63e99969d17660eec8dcc50a95a80f7c9964f7680b"
 dependencies = [
  "alloy-chains",
  "alloy-eip2124",
@@ -7356,9 +7356,9 @@ dependencies = [
 
 [[package]]
 name = "mio"
-version = "1.1.0"
+version = "1.1.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "69d83b0086dc8ecf3ce9ae2874b2d1290252e2a30720bea58a5c6639b0092873"
+checksum = "a69bcab0ad47271a0234d9422b131806bf3968021e5dc9328caf2d4cd58557fc"
 dependencies = [
  "libc",
  "log",
@@ -9975,7 +9975,7 @@ dependencies = [
  "alloy-chains",
  "alloy-consensus",
  "alloy-eips",
- "alloy-hardforks 0.4.4",
+ "alloy-hardforks 0.4.5",
  "alloy-primitives",
  "alloy-rlp",
  "bytes",
@@ -10028,7 +10028,7 @@ version = "1.8.2"
 source = "git+https://github.com/scroll-tech/reth.git?tag=scroll-v91.3#f636225ec0c8d968374768796540e8bf9adb3615"
 dependencies = [
  "alloy-eip2124",
- "alloy-hardforks 0.4.4",
+ "alloy-hardforks 0.4.5",
  "alloy-primitives",
  "arbitrary",
  "auto_impl",
@@ -13520,7 +13520,7 @@ name = "scroll-alloy-hardforks"
 version = "1.8.2"
 source = "git+https://github.com/scroll-tech/reth.git?tag=scroll-v91.3#f636225ec0c8d968374768796540e8bf9adb3615"
 dependencies = [
- "alloy-hardforks 0.4.4",
+ "alloy-hardforks 0.4.5",
  "auto_impl",
  "serde",
 ]
@@ -15050,8 +15050,9 @@ dependencies = [
 
 [[package]]
 name = "svm-rs"
-version = "0.5.21"
-source = "git+https://github.com/alloy-rs/svm-rs?rev=ee99800a8a1b803263fcc12fe3ed8c059e2302c4#ee99800a8a1b803263fcc12fe3ed8c059e2302c4"
+version = "0.5.22"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "909e8ff825120cd2b34ceb236ab72e2a7f74b1d3a86c247936c8ff7a80c5d408"
 dependencies = [
  "const-hex",
  "dirs",
@@ -15068,8 +15069,9 @@ dependencies = [
 
 [[package]]
 name = "svm-rs-builds"
-version = "0.5.21"
-source = "git+https://github.com/alloy-rs/svm-rs?rev=ee99800a8a1b803263fcc12fe3ed8c059e2302c4#ee99800a8a1b803263fcc12fe3ed8c059e2302c4"
+version = "0.5.22"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "c1ebe77b200f965e8dbec3ef1d8337e974179ca1ecaa9fc28f67288d6b438159"
 dependencies = [
  "const-hex",
  "semver 1.0.27",

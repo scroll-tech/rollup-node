@@ -243,11 +243,6 @@ getrandom = { version = "0.2", features = ["js"] }
 [patch.crates-io]
 revm = { git = "https://github.com/scroll-tech/revm", tag = "scroll-v91" }
 op-revm = { git = "https://github.com/scroll-tech/revm", tag = "scroll-v91" }
-# Upstream svm-rs-builds has a bug where solc version 0.8.31 appears twice in the solidity binaries list (once as
-# prerelease, once as stable release), causing duplicate constant definitions and E0428 compilation errors.
-# See issue: https://github.com/alloy-rs/svm-rs/issues/177
-svm-rs-builds = { git = "https://github.com/alloy-rs/svm-rs", rev = "ee99800a8a1b803263fcc12fe3ed8c059e2302c4" }
-svm-rs = { git = "https://github.com/alloy-rs/svm-rs", rev = "ee99800a8a1b803263fcc12fe3ed8c059e2302c4" }
 
 # [patch."https://github.com/scroll-tech/reth.git"]
 # reth-chainspec = { path = "../reth/crates/chainspec" }
