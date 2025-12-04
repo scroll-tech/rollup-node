@@ -32,7 +32,10 @@ mod handle;
 pub use handle::ScrollAddOnsHandle;
 
 mod rpc;
-pub use rpc::{RollupNodeExtApiClient, RollupNodeExtApiServer, RollupNodeRpcExt};
+pub use rpc::{
+    RollupNodeAdminApiClient, RollupNodeAdminApiServer, RollupNodeApiClient, RollupNodeApiServer,
+    RollupNodeRpcExt,
+};
 
 mod rollup;
 pub use rollup::IsDevChain;
@@ -128,10 +131,22 @@ where
         );
 
         let (tx, rx) = tokio::sync::oneshot::channel();
-        let rollup_node_rpc_ext = RollupNodeRpcExt::<N::Network>::new(rx);
-        if rollup_node_manager_addon.config().rpc_args.enabled {
+        let rpc_config = rollup_node_manager_addon.config().rpc_args.clone();
+
+        // Register rollupNode API and optionally rollupNodeAdmin API
+        if rpc_config.enabled {
+            // Create a single RPC extension that implements both APIs
+            let rollup_node_rpc_ext = RollupNodeRpcExt::<N::Network>::new(rx);
+
+            let admin_enabled = rpc_config.admin_enabled;
             rpc_add_ons = rpc_add_ons.extend_rpc_modules(move |ctx| {
-                ctx.modules.merge_configured(rollup_node_rpc_ext.into_rpc())?;
+                // Always register rollupNode API (read-only operations)
+                // ctx.modules.merge_configured(RollupNodeApiServer::into_rpc(rollup_node_rpc_ext))?;
+
+                // Only register rollupNodeAdmin API if enabled (administrative operations)
+                if admin_enabled {
+                    ctx.modules.merge_configured(RollupNodeAdminApiServer::into_rpc(rollup_node_rpc_ext))?;
+                }
                 Ok(())
             });
         }
@@ -140,8 +155,11 @@ where
         let (rollup_manager_handle, l1_watcher_tx) =
             rollup_node_manager_addon.launch(ctx.clone(), rpc_handle.clone()).await?;
 
-        tx.send(rollup_manager_handle.clone())
-            .map_err(|_| eyre::eyre!("failed to send rollup manager handle"))?;
+        // Only send handle if RPC is enabled
+        if rpc_config.enabled {
+            tx.send(rollup_manager_handle.clone())
+                .map_err(|_| eyre::eyre!("failed to send rollup manager handle"))?;
+        }
 
         Ok(ScrollAddOnsHandle {
             rollup_manager_handle,
