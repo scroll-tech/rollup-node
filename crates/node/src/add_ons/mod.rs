@@ -134,12 +134,12 @@ where
         let (tx, rx) = tokio::sync::oneshot::channel();
         let rpc_config = rollup_node_manager_addon.config().rpc_args.clone();
 
-        // Register rollupNode API and optionally rollupNodeAdmin API
+        // Register rollupNode API and rollupNodeAdmin API if enabled
         let rollup_node_rpc_ext = Arc::new(RollupNodeRpcExt::<N::Network>::new(rx));
 
         rpc_add_ons = rpc_add_ons.extend_rpc_modules(move |ctx| {
             // Always register rollupNode API (read-only operations)
-            if rpc_config.enabled {
+            if rpc_config.basic_enabled {
                 ctx.modules
                     .merge_configured(RollupNodeApiServer::into_rpc(rollup_node_rpc_ext.clone()))?;
             }
@@ -156,7 +156,7 @@ where
             rollup_node_manager_addon.launch(ctx.clone(), rpc_handle.clone()).await?;
 
         // Only send handle if RPC is enabled
-        if rpc_config.enabled || rpc_config.admin_enabled {
+        if rpc_config.basic_enabled || rpc_config.admin_enabled {
             tx.send(rollup_manager_handle.clone())
                 .map_err(|_| eyre::eyre!("failed to send rollup manager handle"))?;
         }

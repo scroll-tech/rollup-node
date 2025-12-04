@@ -59,7 +59,7 @@ where
     }
 }
 
-/// Defines the `rollupNode` JSON-RPC namespace for read-only operations.
+/// Defines the `rollupNode` JSON-RPC namespace for basic operations.
 ///
 /// This trait provides a custom RPC namespace that exposes rollup node status
 /// and query functionality to external clients. The namespace is exposed as `rollupNode`.
