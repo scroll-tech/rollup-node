@@ -317,8 +317,7 @@ where
             if self.is_synced {
                 tokio::time::sleep(SLOW_SYNC_INTERVAL).await;
             } else if self.current_block_number == self.l1_state.head {
-                // if we have synced to the head of the L1, notify the channel and set the
-                // `is_synced`` flag.
+                // if we have synced to the head of the L1, notify the channel and set the `is_synced`` flag.
                 #[cfg(feature = "test-utils")]
                 let should_skip = self.test_mode_skip_synced_notification;
                 #[cfg(not(feature = "test-utils"))]
@@ -815,24 +814,31 @@ where
 
     /// Returns the finalized L1 block.
     async fn finalized_block(&self) -> L1WatcherResult<Block> {
-        // We do not use BlockNumberOrTag::Finalized because because there is an issue with Anvil.
-        // See https://github.com/foundry-rs/foundry/issues/12645.
-        // Ok(self
-        //     .execution_provider
-        //     .get_block(BlockNumberOrTag::Finalized.into())
-        //     .await?
-        //     .expect("finalized block should always exist"))
-        let block = self
-            .execution_provider
-            .get_block(BlockNumberOrTag::Finalized.into())
-            .await?
-            .expect("finalized block should always exist");
+        #[cfg(not(feature = "test-utils"))]
+        {
+            Ok(self
+                .execution_provider
+                .get_block(BlockNumberOrTag::Finalized.into())
+                .await?
+                .expect("finalized block should always exist"))
+        }
 
-        Ok(self
-            .execution_provider
-            .get_block(block.number().into())
-            .await?
-            .expect("finalized block should always exist"))
+        #[cfg(feature = "test-utils")]
+        {
+            // We do not use BlockNumberOrTag::Finalized directly because there is an issue with Anvil.
+            // See https://github.com/foundry-rs/foundry/issues/12645.
+            let block = self
+                .execution_provider
+                .get_block(BlockNumberOrTag::Finalized.into())
+                .await?
+                .expect("finalized block should always exist");
+
+            Ok(self
+                .execution_provider
+                .get_block(block.number().into())
+                .await?
+                .expect("finalized block should always exist"))
+        }
     }
 
     /// Returns the next range of logs, for the block range in
