@@ -22,33 +22,11 @@ impl DatabaseMaintenance {
 
     /// Runs the maintenance tasks in a loop.
     pub async fn run(self) {
-        self.startup_maintenance().await;
-
         loop {
             tokio::time::sleep(std::time::Duration::from_secs(PERIODIC_MAINTENANCE_INTERVAL_SECS))
                 .await;
             self.periodic_maintenance().await;
         }
-    }
-
-    /// Runs maintenance tasks at startup.
-    ///
-    /// This includes running `ANALYZE` and `PRAGMA optimize`.
-    async fn startup_maintenance(&self) {
-        let db = self.db.inner();
-        let conn = db.get_connection();
-
-        tracing::info!(target: "scroll::db::maintenance", "running startup ANALYZE...");
-        if let Err(err) = conn.execute_unprepared("ANALYZE;").await {
-            tracing::warn!(target: "scroll::db::maintenance", "ANALYZE failed: {:?}", err);
-        }
-
-        tracing::info!(target: "scroll::db::maintenance", "running PRAGMA optimize at startup...");
-        if let Err(err) = conn.execute_unprepared("PRAGMA optimize;").await {
-            tracing::warn!(target: "scroll::db::maintenance", "PRAGMA optimize failed: {:?}", err);
-        }
-
-        tracing::info!(target: "scroll::db::maintenance", "startup maintenance complete.");
     }
 
     /// Runs periodic maintenance tasks.
