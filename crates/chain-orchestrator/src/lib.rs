@@ -814,7 +814,7 @@ impl<
             self.derivation_pipeline.push_batch(*batch, BatchStatus::Finalized).await;
         }
 
-        Ok(Some(ChainOrchestratorEvent::BatchFinalized { l1_block_info, triggered_batches }))
+        Ok(Some(ChainOrchestratorEvent::BatchFinalizeIndexed { l1_block_info, triggered_batches }))
     }
 
     /// Handles a batch revert event by updating the database.
