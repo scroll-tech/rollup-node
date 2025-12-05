@@ -241,7 +241,7 @@ pub fn default_test_scroll_rollup_node_config() -> ScrollRollupNodeConfig {
         gas_price_oracle_args: crate::RollupNodeGasPriceOracleArgs::default(),
         consensus_args: ConsensusArgs::noop(),
         database: None,
-        rpc_args: RpcArgs { enabled: true },
+        rpc_args: RpcArgs { basic_enabled: true, admin_enabled: true },
     }
 }
 
@@ -281,6 +281,6 @@ pub fn default_sequencer_test_scroll_rollup_node_config() -> ScrollRollupNodeCon
         gas_price_oracle_args: crate::RollupNodeGasPriceOracleArgs::default(),
         consensus_args: ConsensusArgs::noop(),
         database: None,
-        rpc_args: RpcArgs { enabled: true },
+        rpc_args: RpcArgs { basic_enabled: true, admin_enabled: true },
     }
 }
