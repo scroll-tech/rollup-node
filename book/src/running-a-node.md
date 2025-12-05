@@ -130,7 +130,8 @@ These can be used as reliable blob sources without requiring your own beacon nod
 
 #### Rollup Node RPC
 
-- `--rpc.rollup-node`: Enable the rollup node RPC namespace (provides rollup-specific methods)
+- `--rpc.rollup-node=false`: Disable the rollup node basic RPC namespace(default: enabled) (provides rollup-specific methods)
+- `--rpc.rollup-node-admin`: Enable the rollup node admin RPC namespace (provides rollup-specific methods)
 
 ### Example Configurations
 

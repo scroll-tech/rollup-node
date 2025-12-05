@@ -22,7 +22,7 @@ use rollup_node::{
         generate_tx, setup_engine, EventAssertions, NetworkHelperProvider, ReputationChecks,
         TestFixture,
     },
-    RollupNodeContext, RollupNodeExtApiClient,
+    RollupNodeAdminApiClient, RollupNodeContext,
 };
 use rollup_node_chain_orchestrator::ChainOrchestratorEvent;
 use rollup_node_primitives::{sig_encode_hash, BatchCommitData, BlockInfo};
@@ -1504,7 +1504,7 @@ async fn can_rpc_enable_disable_sequencing() -> eyre::Result<()> {
 
     // Disable automatic sequencing via RPC
     let client = fixture.sequencer().node.rpc_client().expect("Should have rpc client");
-    let result = RollupNodeExtApiClient::disable_automatic_sequencing(&client).await?;
+    let result = RollupNodeAdminApiClient::disable_automatic_sequencing(&client).await?;
     assert!(result, "Disable automatic sequencing should return true");
 
     // Wait a bit and verify no more blocks are produced automatically.
@@ -1532,7 +1532,7 @@ async fn can_rpc_enable_disable_sequencing() -> eyre::Result<()> {
     fixture.expect_event_on(1).chain_extended(block_num_after_wait + 1).await?;
 
     // Enable sequencing again
-    let result = RollupNodeExtApiClient::enable_automatic_sequencing(&client).await?;
+    let result = RollupNodeAdminApiClient::enable_automatic_sequencing(&client).await?;
     assert!(result, "Enable automatic sequencing should return true");
 
     // Make sure automatic sequencing resumes

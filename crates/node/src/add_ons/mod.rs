@@ -27,12 +27,16 @@ use reth_scroll_primitives::ScrollPrimitives;
 use reth_scroll_rpc::{eth::ScrollEthApiBuilder, ScrollEthApiError};
 use scroll_alloy_evm::ScrollTransactionIntoTxEnv;
 use scroll_wire::ScrollWireEvent;
+use std::sync::Arc;
 
 mod handle;
 pub use handle::ScrollAddOnsHandle;
 
 mod rpc;
-pub use rpc::{RollupNodeExtApiClient, RollupNodeExtApiServer, RollupNodeRpcExt};
+pub use rpc::{
+    RollupNodeAdminApiClient, RollupNodeAdminApiServer, RollupNodeApiClient, RollupNodeApiServer,
+    RollupNodeRpcExt,
+};
 
 mod rollup;
 pub use rollup::IsDevChain;
@@ -128,20 +132,34 @@ where
         );
 
         let (tx, rx) = tokio::sync::oneshot::channel();
-        let rollup_node_rpc_ext = RollupNodeRpcExt::<N::Network>::new(rx);
-        if rollup_node_manager_addon.config().rpc_args.enabled {
-            rpc_add_ons = rpc_add_ons.extend_rpc_modules(move |ctx| {
-                ctx.modules.merge_configured(rollup_node_rpc_ext.into_rpc())?;
-                Ok(())
-            });
-        }
+        let rpc_config = rollup_node_manager_addon.config().rpc_args.clone();
+
+        // Register rollupNode API and rollupNodeAdmin API if enabled
+        let rollup_node_rpc_ext = Arc::new(RollupNodeRpcExt::<N::Network>::new(rx));
+
+        rpc_add_ons = rpc_add_ons.extend_rpc_modules(move |ctx| {
+            // Always register rollupNode API (read-only operations)
+            if rpc_config.basic_enabled {
+                ctx.modules
+                    .merge_configured(RollupNodeApiServer::into_rpc(rollup_node_rpc_ext.clone()))?;
+            }
+            // Only register rollupNodeAdmin API if enabled (administrative operations)
+            if rpc_config.admin_enabled {
+                ctx.modules
+                    .merge_configured(RollupNodeAdminApiServer::into_rpc(rollup_node_rpc_ext))?;
+            }
+            Ok(())
+        });
 
         let rpc_handle = rpc_add_ons.launch_add_ons_with(ctx.clone(), |_| Ok(())).await?;
         let (rollup_manager_handle, l1_watcher_tx) =
             rollup_node_manager_addon.launch(ctx.clone(), rpc_handle.clone()).await?;
 
-        tx.send(rollup_manager_handle.clone())
-            .map_err(|_| eyre::eyre!("failed to send rollup manager handle"))?;
+        // Only send handle if RPC is enabled
+        if rpc_config.basic_enabled || rpc_config.admin_enabled {
+            tx.send(rollup_manager_handle.clone())
+                .map_err(|_| eyre::eyre!("failed to send rollup manager handle"))?;
+        }
 
         Ok(ScrollAddOnsHandle {
             rollup_manager_handle,
