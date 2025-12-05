@@ -79,7 +79,7 @@ async fn test_should_consolidate_to_block_15k() -> eyre::Result<()> {
     };
 
     let chain_spec = (*SCROLL_SEPOLIA).clone();
-    let (mut nodes, _databases, _tasks, _) =
+    let (mut nodes, _tasks, _) =
         setup_engine(node_config, 1, chain_spec.clone(), false, false).await?;
     let node = nodes.pop().unwrap();
 
@@ -550,7 +550,7 @@ async fn test_chain_orchestrator_l1_reorg() -> eyre::Result<()> {
     let chain_spec = (*SCROLL_DEV).clone();
 
     // Create a sequencer node and an unsynced node.
-    let (mut nodes, _databases, _tasks, _) =
+    let (mut nodes, _tasks, _) =
         setup_engine(sequencer_node_config.clone(), 1, chain_spec.clone(), false, false)
             .await
             .unwrap();
@@ -559,7 +559,7 @@ async fn test_chain_orchestrator_l1_reorg() -> eyre::Result<()> {
     let mut sequencer_events = sequencer_handle.get_event_listener().await?;
     let sequencer_l1_watcher_tx = sequencer.inner.add_ons_handle.l1_watcher_tx.clone().unwrap();
 
-    let (mut nodes, _databases, _tasks, _) =
+    let (mut nodes, _tasks, _) =
         setup_engine(node_config.clone(), 1, chain_spec.clone(), false, false).await.unwrap();
     let mut follower = nodes.pop().unwrap();
     let mut follower_events = follower.inner.rollup_manager_handle.get_event_listener().await?;

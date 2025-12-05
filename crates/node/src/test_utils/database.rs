@@ -18,8 +18,8 @@ impl<'a> DatabaseHelper<'a> {
     }
 
     /// Get the database for this node.
-    fn database(&self) -> Arc<Database> {
-        self.fixture.nodes[self.node_index].database.clone()
+    async fn database(&self) -> eyre::Result<Arc<Database>> {
+        Ok(self.fixture.nodes[self.node_index].rollup_manager_handle.get_database_handle().await?)
     }
 
     /// Get the finalized block number of a batch by its index.
@@ -29,8 +29,8 @@ impl<'a> DatabaseHelper<'a> {
     pub async fn get_batch_finalized_block_number_by_index(
         &self,
         index: u64,
-    ) -> Result<Option<Option<u64>>, DatabaseError> {
-        let db = self.database();
+    ) -> eyre::Result<Option<Option<u64>>> {
+        let db = self.database().await?;
         let batch = db
             .tx_mut(move |tx| async move {
                 let batch = tx.get_batch_by_index(index).await?;
