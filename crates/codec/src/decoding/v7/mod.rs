@@ -56,11 +56,16 @@ pub fn decode_v7(blob: &[u8]) -> Result<Batch, DecodingError> {
     };
 
     // decode the payload.
-    decode_v7_payload(version, buf)
+    decode_payload(version, buf)
+}
+
+pub(crate) fn decode_payload(version: u8, blob: &[u8]) -> Result<Batch, DecodingError> {
+    let payload = decode_v7_payload(blob)?;
+    Ok(Batch::new(version, None, payload))
 }
 
 /// Decode the blob data into a [`Batch`].
-pub(crate) fn decode_v7_payload(version: u8, blob: &[u8]) -> Result<Batch, DecodingError> {
+pub(crate) fn decode_v7_payload(blob: &[u8]) -> Result<PayloadData, DecodingError> {
     let buf = &mut (&*blob);
 
     // check buf len.
@@ -97,13 +102,11 @@ pub(crate) fn decode_v7_payload(version: u8, blob: &[u8]) -> Result<Batch, Decod
             .push(L2Block::new(transactions, (context, initial_block_number + i as u64).into()));
     }
 
-    let payload = PayloadData {
+    Ok(PayloadData {
         blocks: l2_blocks,
         l1_message_queue_info: (prev_message_queue_hash, post_message_queue_hash).into(),
         skipped_l1_message_bitmap: None,
-    };
-
-    Ok(Batch::new(version, None, payload))
+    })
 }
 
 #[cfg(test)]
