@@ -560,8 +560,7 @@ impl TestFixtureBuilder {
     }
 
     /// Build the test fixture.
-    pub async fn build(self) -> eyre::Result<TestFixture> {
-        let mut config = self.config;
+    pub async fn build(mut self) -> eyre::Result<TestFixture> {
         let chain_spec = self.chain_spec.unwrap_or_else(|| SCROLL_DEV.clone());
 
         // Start Anvil if requested
@@ -582,10 +581,10 @@ impl TestFixtureBuilder {
                 .map_err(|e| eyre::eyre!("Failed to parse Anvil endpoint URL: {}", e))?;
 
             // Configure L1 provider and blob provider to use Anvil
-            config.l1_provider_args.url = Some(endpoint_url.clone());
-            config.l1_provider_args.logs_query_block_range = 500;
-            config.blob_provider_args.anvil_url = Some(endpoint_url);
-            config.blob_provider_args.mock = false;
+            self.config.l1_provider_args.url = Some(endpoint_url.clone());
+            self.config.l1_provider_args.logs_query_block_range = 500;
+            self.config.blob_provider_args.anvil_url = Some(endpoint_url);
+            self.config.blob_provider_args.mock = false;
 
             Some(handle)
         } else {
@@ -593,7 +592,7 @@ impl TestFixtureBuilder {
         };
 
         let (nodes, _tasks, wallet) = setup_engine(
-            config.clone(),
+            self.config.clone(),
             self.num_nodes,
             chain_spec.clone(),
             self.is_dev,
@@ -628,7 +627,7 @@ impl TestFixtureBuilder {
                 chain_orchestrator_rx,
                 l1_watcher_tx,
                 rollup_manager_handle,
-                typ: if config.sequencer_args.sequencer_enabled && index == 0 {
+                typ: if self.config.sequencer_args.sequencer_enabled && index == 0 {
                     NodeType::Sequencer
                 } else {
                     NodeType::Follower

@@ -66,6 +66,7 @@ pub mod event_utils;
 pub mod fixture;
 pub mod l1_helpers;
 pub mod network_helpers;
+pub mod reboot;
 pub mod tx_helpers;
 
 // Re-export main types for convenience
@@ -161,7 +162,7 @@ where
 
         let span = span!(Level::INFO, "node", idx);
         let _enter = span.enter();
-        let testing_node = NodeBuilder::new(node_config.clone()).testing_node(exec.clone());
+        let testing_node = NodeBuilder::new(node_config.clone()).testing_node_with_datadir(exec.clone(), "/Users/yiweichi/Scroll/rollup-node/crates/node/tests/testdata/node_data");
         let testing_config = testing_node.config().clone();
         let node = ScrollRollupNode::new(scroll_node_config.clone(), testing_config).await;
         let RethNodeHandle { node, node_exit_future: _ } = testing_node
