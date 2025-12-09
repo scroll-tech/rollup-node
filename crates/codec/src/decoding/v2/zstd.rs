@@ -2,14 +2,18 @@
 
 use std::io::Read;
 
-use zstd::Decoder;
-
 /// The ZSTD magic number for zstd compressed data header.
 const ZSTD_MAGIC_NUMBER: [u8; 4] = [0x28, 0xb5, 0x2f, 0xfd];
 
+#[cfg(not(any(feature = "zstd", feature = "ruzstd")))]
+compile_error!("Either feature \"zstd\" or \"ruzstd\" must be enabled for zstd support.");
+
 /// Uncompress the provided data.
+#[cfg(feature = "zstd")]
 pub fn decompress_blob_data(data: &[u8]) -> Vec<u8> {
+    use zstd::Decoder;
     let mut header_data = ZSTD_MAGIC_NUMBER.to_vec();
+
     header_data.extend_from_slice(data);
 
     // init decoder and owned output data.
@@ -28,6 +32,23 @@ pub fn decompress_blob_data(data: &[u8]) -> Vec<u8> {
         }
         output.extend_from_slice(&dst[..size]);
     }
+
+    output
+}
+
+/// Uncompress the provided data.
+#[cfg(feature = "ruzstd")]
+pub fn decompress_blob_data(data: &[u8]) -> Vec<u8> {
+    use ruzstd::decoding::StreamingDecoder;
+
+    let mut header_data = ZSTD_MAGIC_NUMBER.to_vec();
+    header_data.extend_from_slice(data);
+
+    // init decoder and owned output data.
+    let mut decoder = StreamingDecoder::new(header_data.as_slice()).unwrap();
+    // heuristic: use data length as the allocated output capacity.
+    let mut output = Vec::with_capacity(header_data.len());
+    decoder.read_to_end(&mut output).unwrap();
 
     output
 }
