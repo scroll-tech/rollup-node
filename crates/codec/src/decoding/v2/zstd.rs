@@ -2,11 +2,11 @@
 
 use std::io::Read;
 
+#[cfg(feature = "zstd")]
+use ruzstd as _;
+
 /// The ZSTD magic number for zstd compressed data header.
 const ZSTD_MAGIC_NUMBER: [u8; 4] = [0x28, 0xb5, 0x2f, 0xfd];
-
-#[cfg(not(any(feature = "zstd", feature = "ruzstd")))]
-compile_error!("Either feature \"zstd\" or \"ruzstd\" must be enabled for zstd support.");
 
 /// Uncompress the provided data.
 #[cfg(feature = "zstd")]
@@ -37,7 +37,7 @@ pub fn decompress_blob_data(data: &[u8]) -> Vec<u8> {
 }
 
 /// Uncompress the provided data.
-#[cfg(feature = "ruzstd")]
+#[cfg(not(feature = "zstd"))]
 pub fn decompress_blob_data(data: &[u8]) -> Vec<u8> {
     use ruzstd::decoding::StreamingDecoder;
 
