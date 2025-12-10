@@ -112,6 +112,39 @@ impl<'a> EventWaiter<'a> {
         Ok(())
     }
 
+    /// Wait for L1 message duplicate event on all specified nodes.
+    pub async fn l1_message_duplicate(self, expected_queue_index: u64) -> eyre::Result<()> {
+        self.wait_for_event_on_all(|e| {
+            if let ChainOrchestratorEvent::L1MessageDuplicate(queue_index) = e {
+                (*queue_index == expected_queue_index).then_some(())
+            } else {
+                None
+            }
+        })
+        .await?;
+        Ok(())
+    }
+
+    /// Wait for L1 message gap event on all specified nodes.
+    pub async fn l1_message_gap(
+        self,
+        expected_missing_index: u64,
+        expected_l1_block_number_reset: u64,
+    ) -> eyre::Result<()> {
+        self.wait_for_event_on_all(|e| {
+            if let ChainOrchestratorEvent::L1MessageGap { missing_index, l1_block_number_reset } = e
+            {
+                (*missing_index == expected_missing_index &&
+                    *l1_block_number_reset == expected_l1_block_number_reset)
+                    .then_some(())
+            } else {
+                None
+            }
+        })
+        .await?;
+        Ok(())
+    }
+
     /// Wait for L1 reorg event to be received by all.
     pub async fn l1_reorg(self) -> eyre::Result<()> {
         self.wait_for_event_on_all(|e| {
@@ -135,6 +168,93 @@ impl<'a> EventWaiter<'a> {
         self.wait_for_event_on_all(|e| {
             if let ChainOrchestratorEvent::BlockConsolidated(outcome) = e {
                 (outcome.block_info().block_info.number == target_block).then_some(())
+            } else {
+                None
+            }
+        })
+        .await?;
+        Ok(())
+    }
+
+    /// Wait for batch commit indexed event on all specified nodes.
+    pub async fn batch_commit_indexed(
+        self,
+        target_batch_index: u64,
+        target_l1_block_number: u64,
+    ) -> eyre::Result<()> {
+        self.wait_for_event_on_all(|e| {
+            if let ChainOrchestratorEvent::BatchCommitIndexed { batch_info, l1_block_number } = e {
+                (batch_info.index == target_batch_index &&
+                    *l1_block_number == target_l1_block_number)
+                    .then_some(())
+            } else {
+                None
+            }
+        })
+        .await?;
+        Ok(())
+    }
+
+    /// Wait for batch commit duplicate event on all specified nodes.
+    pub async fn batch_commit_duplicates(self, target_batch_index: u64) -> eyre::Result<()> {
+        self.wait_for_event_on_all(|e| {
+            if let ChainOrchestratorEvent::BatchCommitDuplicate(batch_index) = e {
+                (*batch_index == target_batch_index).then_some(())
+            } else {
+                None
+            }
+        })
+        .await?;
+        Ok(())
+    }
+
+    /// Wait for batch commit gap event on all specified nodes.
+    pub async fn batch_commit_gap(
+        self,
+        expected_missing_index: u64,
+        expected_l1_block_number_reset: u64,
+    ) -> eyre::Result<()> {
+        self.wait_for_event_on_all(|e| {
+            if let ChainOrchestratorEvent::BatchCommitGap { missing_index, l1_block_number_reset } =
+                e
+            {
+                (*missing_index == expected_missing_index &&
+                    *l1_block_number_reset == expected_l1_block_number_reset)
+                    .then_some(())
+            } else {
+                None
+            }
+        })
+        .await?;
+        Ok(())
+    }
+
+    /// Wait for batch revert duplicate event on all specified nodes.
+    pub async fn batch_revert_duplicate(self, expected_index: u64) -> eyre::Result<()> {
+        self.wait_for_event_on_all(|e| {
+            if let ChainOrchestratorEvent::BatchRevertDuplicate(index) = e {
+                (*index == expected_index).then_some(())
+            } else {
+                None
+            }
+        })
+        .await?;
+        Ok(())
+    }
+
+    /// Wait for batch revert gap event on all specified nodes.
+    pub async fn batch_revert_gap(
+        self,
+        expected_missing_index: u64,
+        expected_l1_block_number_reset: u64,
+    ) -> eyre::Result<()> {
+        self.wait_for_event_on_all(|e| {
+            if let ChainOrchestratorEvent::BatchRevertGap { missing_index, l1_block_number_reset } =
+                e
+            {
+                (*missing_index == expected_missing_index &&
+                    *l1_block_number_reset == expected_l1_block_number_reset)
+                    .then_some(())
             } else {
                 None
             }

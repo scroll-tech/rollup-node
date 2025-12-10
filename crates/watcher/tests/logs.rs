@@ -13,6 +13,7 @@ use rollup_node_watcher::{
 use scroll_alloy_consensus::TxL1Message;
 use scroll_l1::abi::logs::{try_decode_log, QueueTransaction};
 use std::sync::Arc;
+use tokio::select;
 
 #[tokio::test]
 async fn test_should_not_miss_logs_on_reorg() -> eyre::Result<()> {
@@ -64,7 +65,7 @@ async fn test_should_not_miss_logs_on_reorg() -> eyre::Result<()> {
     );
 
     // spawn the watcher and verify received notifications are consistent.
-    let mut l1_watcher = L1Watcher::spawn(
+    let mut handle = L1Watcher::spawn(
         mock_provider,
         L1BlockStartupInfo::None,
         Arc::new(config),
@@ -72,12 +73,23 @@ async fn test_should_not_miss_logs_on_reorg() -> eyre::Result<()> {
     )
     .await;
     let mut received_logs = Vec::new();
+
+    // make sure we time out if we don't receive the expected logs
     loop {
-        let notification = l1_watcher.recv().await.map(|notif| (*notif).clone());
-        if let Some(L1Notification::L1Message { block_timestamp, message, .. }) = notification {
-            received_logs.push(message);
-            if block_timestamp == last_log.block_timestamp.unwrap() {
-                break
+        select! {
+            _ = tokio::time::sleep(tokio::time::Duration::from_secs(5)) => {
+                eyre::bail!("Timed out waiting for logs");
+            }
+            notif = handle.l1_notification_receiver().recv() => {
+                let notification = notif.map(|notif| (*notif).clone());
+                if let Some(L1Notification::L1Message { block_timestamp, message, .. }) = notification {
+                    received_logs.push(message);
+                    if block_timestamp == last_log.block_timestamp.unwrap() {
+                        break
+                    }
+                } else if notification.is_none() {
+                    break // channel closed
+                }
             }
         }
     }

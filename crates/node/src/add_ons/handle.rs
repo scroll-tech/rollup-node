@@ -5,6 +5,10 @@ use reth_rpc_eth_api::EthApiTypes;
 use reth_scroll_node::ScrollNetworkPrimitives;
 use rollup_node_chain_orchestrator::ChainOrchestratorHandle;
 #[cfg(feature = "test-utils")]
+use tokio::sync::mpsc::UnboundedReceiver;
+#[cfg(feature = "test-utils")]
+use tokio::sync::Mutex;
+#[cfg(feature = "test-utils")]
 use {rollup_node_watcher::L1Notification, std::sync::Arc, tokio::sync::mpsc::Sender};
 
 /// A handle for scroll addons, which includes handles for the rollup manager and RPC server.
@@ -20,6 +24,10 @@ pub struct ScrollAddOnsHandle<
     /// An optional channel used to send `L1Watcher` notifications to the `RollupNodeManager`.
     #[cfg(feature = "test-utils")]
     pub l1_watcher_tx: Option<Sender<Arc<L1Notification>>>,
+    /// An optional channel used to receive commands from the `RollupNodeManager` to the
+    /// `L1Watcher`.
+    #[cfg(feature = "test-utils")]
+    pub l1_watcher_command_rx: Arc<Mutex<UnboundedReceiver<rollup_node_watcher::L1WatcherCommand>>>,
 }
 
 impl<

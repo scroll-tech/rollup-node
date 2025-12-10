@@ -27,7 +27,7 @@ use reth_tokio_util::EventStream;
 use rollup_node_chain_orchestrator::{ChainOrchestratorEvent, ChainOrchestratorHandle};
 use rollup_node_primitives::BlockInfo;
 use rollup_node_sequencer::L1MessageInclusionMode;
-use rollup_node_watcher::L1Notification;
+use rollup_node_watcher::{L1Notification, L1WatcherCommand};
 use scroll_alloy_consensus::ScrollPooledTransaction;
 use scroll_alloy_provider::{ScrollAuthApiEngineClient, ScrollEngineApi};
 use scroll_alloy_rpc_types::Transaction;
@@ -36,8 +36,9 @@ use std::{
     fmt::{Debug, Formatter},
     path::PathBuf,
     sync::Arc,
+    time::Duration,
 };
-use tokio::sync::{mpsc, Mutex};
+use tokio::sync::{mpsc, mpsc::UnboundedReceiver, Mutex};
 
 /// Main test fixture providing a high-level interface for testing rollup nodes.
 #[derive(Debug)]
@@ -77,6 +78,8 @@ pub struct NodeHandle {
     pub engine: Engine<Arc<dyn ScrollEngineApi + Send + Sync + 'static>>,
     /// L1 watcher notification channel.
     pub l1_watcher_tx: Option<mpsc::Sender<Arc<L1Notification>>>,
+    /// L1 watcher command receiver.
+    pub l1_watcher_command_rx: Arc<Mutex<UnboundedReceiver<L1WatcherCommand>>>,
     /// Chain orchestrator listener.
     pub chain_orchestrator_rx: EventStream<ChainOrchestratorEvent>,
     /// Chain orchestrator handle.
@@ -94,6 +97,14 @@ impl NodeHandle {
     /// Returns true if this is a handle to a follower.
     pub const fn is_follower(&self) -> bool {
         matches!(self.typ, NodeType::Follower)
+    }
+
+    /// Update the L1 watcher notification sender.
+    ///
+    /// This is used after gap recovery to update the sender to the new channel
+    /// that the `ChainOrchestrator` is now listening on.
+    pub fn set_l1_watcher_tx(&mut self, tx: mpsc::Sender<Arc<L1Notification>>) {
+        self.l1_watcher_tx = Some(tx);
     }
 }
 
@@ -200,6 +211,62 @@ impl TestFixture {
         &self,
     ) -> eyre::Result<rollup_node_chain_orchestrator::ChainOrchestratorStatus> {
         self.get_status(0).await
+    }
+
+    /// Wait for an L1 watcher command on the sequencer node.
+    ///
+    /// Returns the received command or an error if timeout is reached.
+    pub async fn expect_l1_watcher_command(&self) -> eyre::Result<L1WatcherCommand> {
+        self.expect_l1_watcher_command_on(0).await
+    }
+
+    /// Wait for an L1 watcher command on a specific node.
+    ///
+    /// Returns the received command or an error if timeout is reached.
+    pub async fn expect_l1_watcher_command_on(
+        &self,
+        node_index: usize,
+    ) -> eyre::Result<L1WatcherCommand> {
+        let mut command_rx = self.nodes[node_index].l1_watcher_command_rx.lock().await;
+        tokio::time::timeout(Duration::from_secs(5), command_rx.recv())
+            .await
+            .map_err(|_| eyre::eyre!("Timeout waiting for L1 watcher command"))?
+            .ok_or_else(|| eyre::eyre!("L1 watcher command channel closed"))
+    }
+
+    /// Process an L1 watcher reset command and update the notification sender.
+    ///
+    /// After a gap is detected, the `ChainOrchestrator` calls `trigger_gap_recovery` which
+    /// creates a new notification channel and sends the new sender via the command channel.
+    /// This method reads that command and updates the test fixture's `l1_watcher_tx` so
+    /// subsequent L1 notifications can be sent to the `ChainOrchestrator`.
+    ///
+    /// Returns the block number that the L1 watcher should reset to.
+    pub async fn process_gap_recovery_command(&mut self) -> eyre::Result<u64> {
+        self.process_gap_recovery_command_on(0).await
+    }
+
+    /// Process an L1 watcher reset command on a specific node.
+    ///
+    /// See [`Self::process_gap_recovery_command`] for details.
+    pub async fn process_gap_recovery_command_on(
+        &mut self,
+        node_index: usize,
+    ) -> eyre::Result<u64> {
+        let command = {
+            let mut command_rx = self.nodes[node_index].l1_watcher_command_rx.lock().await;
+            tokio::time::timeout(Duration::from_secs(5), command_rx.recv())
+                .await
+                .map_err(|_| eyre::eyre!("Timeout waiting for L1 watcher command"))?
+                .ok_or_else(|| eyre::eyre!("L1 watcher command channel closed"))?
+        };
+
+        match command {
+            L1WatcherCommand::ResetToBlock { block, new_sender } => {
+                self.nodes[node_index].set_l1_watcher_tx(new_sender);
+                Ok(block)
+            }
+        }
     }
 }
 
@@ -452,6 +519,7 @@ impl TestFixtureBuilder {
 
             // Get handles if available
             let l1_watcher_tx = node.inner.add_ons_handle.l1_watcher_tx.clone();
+            let l1_watcher_command_rx = node.inner.add_ons_handle.l1_watcher_command_rx.clone();
             let rollup_manager_handle = node.inner.add_ons_handle.rollup_manager_handle.clone();
             let chain_orchestrator_rx =
                 node.inner.add_ons_handle.rollup_manager_handle.get_event_listener().await?;
@@ -461,6 +529,7 @@ impl TestFixtureBuilder {
                 engine,
                 chain_orchestrator_rx,
                 l1_watcher_tx,
+                l1_watcher_command_rx,
                 rollup_manager_handle,
                 typ: if config.sequencer_args.sequencer_enabled && index == 0 {
                     NodeType::Sequencer
