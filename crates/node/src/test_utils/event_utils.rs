@@ -121,6 +121,15 @@ impl<'a> EventWaiter<'a> {
         Ok(())
     }
 
+    /// Wait for batch commit indexed event on all specified nodes.
+    pub async fn batch_commit_indexed(self) -> eyre::Result<()> {
+        self.wait_for_event_on_all(|e| {
+            matches!(e, ChainOrchestratorEvent::BatchCommitIndexed { .. }).then_some(())
+        })
+        .await?;
+        Ok(())
+    }
+
     /// Wait for batch consolidated event on all specified nodes.
     pub async fn batch_consolidated(self) -> eyre::Result<()> {
         self.wait_for_event_on_all(|e| {
@@ -143,6 +152,15 @@ impl<'a> EventWaiter<'a> {
         Ok(())
     }
 
+    /// Wait for batch finalize indexed event on all specified nodes.
+    pub async fn batch_finalize_indexed(self) -> eyre::Result<()> {
+        self.wait_for_event_on_all(|e| {
+            matches!(e, ChainOrchestratorEvent::BatchFinalizeIndexed { .. }).then_some(())
+        })
+        .await?;
+        Ok(())
+    }
+
     /// Wait for batch reverted event on all specified nodes.
     pub async fn batch_reverted(self) -> eyre::Result<()> {
         self.wait_for_event_on_all(|e| {
@@ -154,8 +172,15 @@ impl<'a> EventWaiter<'a> {
 
     /// Wait for L1 block finalized event on all specified nodes.
     pub async fn l1_block_finalized(self) -> eyre::Result<()> {
+        self.l1_block_finalized_at_least(0).await
+    }
+
+    /// Wait for L1 block finalized event on all specified nodes where the block number
+    /// is at least the specified target.
+    pub async fn l1_block_finalized_at_least(self, target_block_number: u64) -> eyre::Result<()> {
         self.wait_for_event_on_all(|e| {
-            matches!(e, ChainOrchestratorEvent::L1BlockFinalized(_, _)).then_some(())
+            matches!(e, ChainOrchestratorEvent::L1BlockFinalized(n, _) if n >= &target_block_number)
+                .then_some(())
         })
         .await?;
         Ok(())

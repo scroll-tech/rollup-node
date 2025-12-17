@@ -59,11 +59,12 @@ async fn test_should_not_index_latest_block_multiple_times() -> eyre::Result<()>
     );
 
     // spawn the watcher and verify received notifications are consistent.
-    let mut l1_watcher = L1Watcher::spawn(
+    let (_, mut l1_watcher) = L1Watcher::spawn(
         mock_provider,
         L1BlockStartupInfo::None,
         Arc::new(config),
         LOGS_QUERY_BLOCK_RANGE,
+        false,
     )
     .await;
     let mut prev_block_info = Default::default();

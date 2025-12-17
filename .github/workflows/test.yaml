@@ -51,8 +51,31 @@ jobs:
       - name: Run integration tests
         run: |
           cargo nextest run --all-features --workspace --locked \
-            --no-tests=pass -E 'kind(test) and not test(docker)' \
+            --no-tests=pass -E 'kind(test) and not test(docker) and not binary(l1_sync)' \
             -- --skip test_should_consolidate_to_block_15k
+
+  integration-l1-sync:
+    runs-on:
+      group: scroll-reth-runner-group
+    timeout-minutes: 60
+    env:
+      RUST_BACKTRACE: 1
+    steps:
+      - uses: actions/checkout@v6
+      - uses: rui314/setup-mold@v1
+      - uses: dtolnay/rust-toolchain@nightly
+        with:
+          toolchain: 'nightly'
+      - uses: Swatinem/rust-cache@v2
+        with:
+          cache-on-failure: true
+      - uses: taiki-e/install-action@nextest
+      - name: Run L1 sync integration tests (serial)
+        run: |
+          cargo nextest run --all-features --workspace --locked \
+            --no-tests=pass -E 'binary(l1_sync)' --test-threads=1 \
+            --failure-output immediate \
+            --success-output never
 
   integration-docker-compose:
     runs-on:

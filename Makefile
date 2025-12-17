@@ -69,7 +69,18 @@ test:
 	--locked \
 	--all-features \
 	--no-fail-fast \
-	-E 'not test(docker)'
+	-E 'not test(docker) and not binary(l1_sync)'
+
+.PHONY: test-l1-sync
+test-l1-sync:
+	cargo nextest run \
+	--workspace \
+	--locked \
+	--all-features \
+	--no-fail-fast \
+	--test-threads=1 \
+	--failure-output immediate \
+	-E 'binary(l1_sync)'
 
 .PHONY: test-docker
 test-docker:
@@ -100,7 +111,7 @@ docs:
 	cargo docs --document-private-items --exclude rollup-node-chain-orchestrator
 
 .PHONY: pr
-pr: lint test docs
+pr: lint test test-l1-sync docs
 
 .PHONY: docker
 docker:
