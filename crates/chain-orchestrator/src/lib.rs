@@ -307,9 +307,11 @@ impl<
                         .as_mut()
                         .expect("signer must be present")
                         .sign_block(block.clone())?;
-                    self.metric_handler.finish_block_building_recording();
+                    self.metric_handler.finish_no_empty_block_building_recording();
                     return Ok(Some(ChainOrchestratorEvent::BlockSequenced(block)));
                 }
+                self.metric_handler.finish_all_block_building_recording();
+                self.metric_handler.finish_block_building_interval_recording();
             }
         }
 
