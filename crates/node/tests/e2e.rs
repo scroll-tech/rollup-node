@@ -135,8 +135,7 @@ async fn can_penalize_peer_for_invalid_block() -> eyre::Result<()> {
     // Create invalid block
     let mut block = ScrollBlock::default();
     block.header.number = 1;
-    block.header.parent_hash =
-        b256!("0x14844a4fc967096c628e90df3bb0c3e98941bdd31d1982c2f3e70ed17250d98b");
+    block.header.parent_hash = fixture.chain_spec.genesis_header.hash();
 
     // Send invalid block from node0 to node1. We don't care about the signature here since we use a
     // NoopConsensus in the test.
