@@ -405,8 +405,6 @@ impl<
                 self.sync_state.l1_mut().set_syncing();
                 let unwind_result = self.database.unwind(block_number).await?;
 
-                println!("Unwind result: {:?}", unwind_result);
-
                 // Check if the unwind impacts the fcs safe head.
                 if let Some(block_info) = unwind_result.l2_safe_block_info {
                     // If the safe head was unwound and is above or equal to the finalized head,

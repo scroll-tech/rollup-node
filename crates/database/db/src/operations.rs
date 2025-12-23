@@ -852,7 +852,6 @@ impl<T: WriteConnectionProvider + ?Sized + Sync> DatabaseWriteOperations for T {
         // delete batch commits, l1 messages and batch finalization effects greater than the
         // provided l1 block number
         let batches_removed = self.delete_batches_gt_block_number(l1_block_number).await?;
-        println!("Deleted {} batches", batches_removed);
         let deleted_messages = self.delete_l1_messages_gt(l1_block_number).await?;
         self.delete_batch_finalization_gt_block_number(l1_block_number).await?;
         let batch_reverts_removed: u64 =

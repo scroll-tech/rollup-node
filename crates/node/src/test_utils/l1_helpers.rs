@@ -248,7 +248,6 @@ pub struct BatchCommitBuilder<'a> {
     block_info: BlockInfo,
     hash: B256,
     index: u64,
-    block_number: u64,
     block_timestamp: u64,
     calldata: Option<Bytes>,
     calldata_path: Option<String>,
@@ -262,7 +261,6 @@ impl<'a> BatchCommitBuilder<'a> {
             block_info: BlockInfo { number: 0, hash: B256::random() },
             hash: B256::random(),
             index: 0,
-            block_number: 0,
             block_timestamp: 0,
             calldata: None,
             calldata_path: None,
@@ -276,12 +274,6 @@ impl<'a> BatchCommitBuilder<'a> {
         self
     }
 
-    /// Set the L1 block number for this batch commit.
-    pub const fn at_block_number(mut self, block_number: u64) -> Self {
-        self.block_info.number = block_number;
-        self
-    }
-
     /// Set the batch hash.
     pub const fn hash(mut self, hash: B256) -> Self {
         self.hash = hash;
@@ -291,12 +283,6 @@ impl<'a> BatchCommitBuilder<'a> {
     /// Set the batch index.
     pub const fn index(mut self, index: u64) -> Self {
         self.index = index;
-        self
-    }
-
-    /// Set the batch block number.
-    pub const fn block_number(mut self, block_number: u64) -> Self {
-        self.block_number = block_number;
         self
     }
 
@@ -337,7 +323,7 @@ impl<'a> BatchCommitBuilder<'a> {
         let batch_data = BatchCommitData {
             hash: self.hash,
             index: self.index,
-            block_number: self.block_number,
+            block_number: self.block_info.number,
             block_timestamp: self.block_timestamp,
             calldata: Arc::new(raw_calldata),
             blob_versioned_hash: self.blob_versioned_hash,

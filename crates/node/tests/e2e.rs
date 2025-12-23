@@ -765,8 +765,6 @@ async fn shutdown_consolidates_most_recent_batch_on_startup() -> eyre::Result<()
     // Request an event stream from the rollup node manager.
     let mut rnm_events = handle.get_event_listener().await?;
 
-    println!("im here");
-
     // Send the second batch again to mimic the watcher behaviour.
     let block_1_info = BlockInfo { number: 18318215, hash: B256::random() };
     l1_notification_tx
@@ -1052,6 +1050,7 @@ async fn can_revert_to_l1_block() -> eyre::Result<()> {
 
     // Validate the safe block number is 57
     assert_eq!(status.l2.fcs.safe_block_info().number, 57);
+    assert_eq!(status.l1.status, SyncMode::Synced);
 
     Ok(())
 }
@@ -1185,7 +1184,7 @@ async fn can_handle_batch_revert_with_reorg() -> eyre::Result<()> {
         .at_block(batch_0_block_info)
         .hash(batch_0_hash)
         .index(1)
-        .block_number(18318207)
+        .at_block(batch_0_block_info)
         .block_timestamp(1696935971)
         .calldata(raw_calldata_0)
         .send()
@@ -1201,7 +1200,7 @@ async fn can_handle_batch_revert_with_reorg() -> eyre::Result<()> {
         .at_block(batch_1_block_info)
         .hash(batch_1_hash)
         .index(2)
-        .block_number(18318215)
+        .at_block(batch_1_block_info)
         .block_timestamp(1696936000)
         .calldata(raw_calldata_1)
         .send()
