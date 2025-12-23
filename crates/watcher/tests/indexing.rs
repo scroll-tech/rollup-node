@@ -72,7 +72,7 @@ async fn test_should_not_index_latest_block_multiple_times() -> eyre::Result<()>
 
     loop {
         select! {
-            notification = l1_watcher.recv() => {
+            notification = l1_watcher.l1_notification_receiver().recv() => {
                 let notification = notification.map(|notif| (*notif).clone());
                 if let Some(L1Notification::L1Message { block_info, .. }) = notification {
                     assert_ne!(prev_block_info, block_info, "indexed same block twice {block_info}");

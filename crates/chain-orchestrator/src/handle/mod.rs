@@ -103,6 +103,16 @@ impl<N: FullNetwork<Primitives = ScrollNetworkPrimitives>> ChainOrchestratorHand
         rx.await
     }
 
+    /// Revert the rollup node state to the specified L1 block number.
+    pub async fn revert_to_l1_block(
+        &self,
+        block_number: u64,
+    ) -> Result<bool, oneshot::error::RecvError> {
+        let (tx, rx) = oneshot::channel();
+        self.send_command(ChainOrchestratorCommand::RevertToL1Block((block_number, tx)));
+        rx.await
+    }
+
     /// Sends a command to the rollup manager to enable or disable gossiping of blocks to peers.
     #[cfg(feature = "test-utils")]
     pub async fn set_gossip(&self, enabled: bool) -> Result<(), oneshot::error::RecvError> {
