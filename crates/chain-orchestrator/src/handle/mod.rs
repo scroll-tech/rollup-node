@@ -22,13 +22,32 @@ use metrics::ChainOrchestratorHandleMetrics;
 pub struct ChainOrchestratorHandle<N: FullNetwork<Primitives = ScrollNetworkPrimitives>> {
     /// The channel used to send commands to the rollup manager.
     to_manager_tx: mpsc::UnboundedSender<ChainOrchestratorCommand<N>>,
+    /// The metrics for the handle.
     handle_metrics: ChainOrchestratorHandleMetrics,
+    /// Mock for the L1 Watcher used in tests.
+    #[cfg(feature = "test-utils")]
+    pub l1_watcher_mock: Option<rollup_node_watcher::test_utils::L1WatcherMock>,
 }
 
 impl<N: FullNetwork<Primitives = ScrollNetworkPrimitives>> ChainOrchestratorHandle<N> {
     /// Create a new rollup manager handle.
     pub fn new(to_manager_tx: mpsc::UnboundedSender<ChainOrchestratorCommand<N>>) -> Self {
-        Self { to_manager_tx, handle_metrics: ChainOrchestratorHandleMetrics::default() }
+        Self {
+            to_manager_tx,
+            handle_metrics: ChainOrchestratorHandleMetrics::default(),
+            #[cfg(feature = "test-utils")]
+            l1_watcher_mock: None,
+        }
+    }
+
+    /// Sets the L1 watcher mock for the handle.
+    #[cfg(feature = "test-utils")]
+    pub fn with_l1_watcher_mock(
+        mut self,
+        l1_watcher_mock: Option<rollup_node_watcher::test_utils::L1WatcherMock>,
+    ) -> Self {
+        self.l1_watcher_mock = l1_watcher_mock;
+        self
     }
 
     /// Sends a command to the rollup manager.

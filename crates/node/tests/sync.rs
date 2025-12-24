@@ -557,13 +557,15 @@ async fn test_chain_orchestrator_l1_reorg() -> eyre::Result<()> {
     let mut sequencer = nodes.pop().unwrap();
     let sequencer_handle = sequencer.inner.rollup_manager_handle.clone();
     let mut sequencer_events = sequencer_handle.get_event_listener().await?;
-    let sequencer_l1_watcher_tx = sequencer.inner.add_ons_handle.l1_watcher_tx.clone().unwrap();
+    let sequencer_l1_watcher_tx =
+        sequencer.inner.add_ons_handle.rollup_manager_handle.l1_watcher_mock.clone().unwrap();
 
     let (mut nodes, _tasks, _) =
         setup_engine(node_config.clone(), 1, chain_spec.clone(), false, false).await.unwrap();
     let mut follower = nodes.pop().unwrap();
     let mut follower_events = follower.inner.rollup_manager_handle.get_event_listener().await?;
-    let follower_l1_watcher_tx = follower.inner.add_ons_handle.l1_watcher_tx.clone().unwrap();
+    let follower_l1_watcher_tx =
+        follower.inner.add_ons_handle.rollup_manager_handle.l1_watcher_mock.clone().unwrap();
 
     // Connect the nodes together.
     sequencer.connect(&mut follower).await;

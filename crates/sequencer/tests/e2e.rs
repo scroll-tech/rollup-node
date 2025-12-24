@@ -516,7 +516,8 @@ async fn can_sequence_blocks_with_private_key_file() -> eyre::Result<()> {
 
     let sequencer_rnm_handle = nodes[0].inner.add_ons_handle.rollup_manager_handle.clone();
     let mut sequencer_events = sequencer_rnm_handle.get_event_listener().await?;
-    let sequencer_l1_watcher_tx = nodes[0].inner.add_ons_handle.l1_watcher_tx.clone().unwrap();
+    let sequencer_l1_watcher_tx =
+        nodes[0].inner.add_ons_handle.rollup_manager_handle.l1_watcher_mock.clone().unwrap();
 
     // Send a notification to set the L1 to synced
     sequencer_l1_watcher_tx.notification_tx.send(Arc::new(L1Notification::Synced)).await?;
@@ -616,7 +617,8 @@ async fn can_sequence_blocks_with_hex_key_file_without_prefix() -> eyre::Result<
 
     let sequencer_rnm_handle = nodes[0].inner.add_ons_handle.rollup_manager_handle.clone();
     let mut sequencer_events = sequencer_rnm_handle.get_event_listener().await?;
-    let sequencer_l1_watcher_tx = nodes[0].inner.add_ons_handle.l1_watcher_tx.clone().unwrap();
+    let sequencer_l1_watcher_tx =
+        nodes[0].inner.add_ons_handle.rollup_manager_handle.l1_watcher_mock.clone().unwrap();
 
     // Send a notification to set the L1 to synced
     sequencer_l1_watcher_tx.notification_tx.send(Arc::new(L1Notification::Synced)).await?;

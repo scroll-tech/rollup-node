@@ -1,5 +1,3 @@
-#[cfg(feature = "test-utils")]
-use crate::test_utils::l1_helpers::L1WatcherMock;
 use reth_network_api::FullNetwork;
 use reth_node_api::FullNodeComponents;
 use reth_node_builder::rpc::{RpcHandle, RpcHandleProvider};
@@ -17,9 +15,6 @@ pub struct ScrollAddOnsHandle<
     pub rollup_manager_handle: ChainOrchestratorHandle<Node::Network>,
     /// The handle used to send commands to the RPC server.
     pub rpc_handle: RpcHandle<Node, EthApi>,
-    /// An optional channel used to send `L1Watcher` notifications to the `RollupNodeManager`.
-    #[cfg(feature = "test-utils")]
-    pub l1_watcher_tx: Option<L1WatcherMock>,
 }
 
 impl<

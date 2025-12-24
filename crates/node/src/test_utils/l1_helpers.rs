@@ -5,18 +5,8 @@ use std::{fmt::Debug, str::FromStr, sync::Arc};
 
 use alloy_primitives::{Address, Bytes, B256, U256};
 use rollup_node_primitives::{BatchCommitData, BlockInfo, ConsensusUpdate};
-use rollup_node_watcher::{L1Notification, L1WatcherCommand};
+use rollup_node_watcher::L1Notification;
 use scroll_alloy_consensus::TxL1Message;
-use tokio::sync::{mpsc, Mutex};
-
-/// Mock for the L1 Watcher.
-#[derive(Clone, Debug)]
-pub struct L1WatcherMock {
-    /// Receiver for L1 watcher commands.
-    pub command_rx: Arc<Mutex<mpsc::UnboundedReceiver<L1WatcherCommand>>>,
-    /// Sender for L1 notifications.
-    pub notification_tx: mpsc::Sender<Arc<L1Notification>>,
-}
 
 /// Helper for managing L1 interactions in tests.
 #[derive(Debug)]
@@ -126,7 +116,7 @@ impl<'a> L1Helper<'a> {
         };
 
         for node in nodes {
-            if let Some(tx) = &node.l1_watcher_tx {
+            if let Some(tx) = &node.rollup_manager_handle.l1_watcher_mock {
                 tx.notification_tx.send(notification.clone()).await?;
             }
         }
@@ -232,7 +222,7 @@ impl<'a> L1MessageBuilder<'a> {
         };
 
         for node in nodes {
-            if let Some(tx) = &node.l1_watcher_tx {
+            if let Some(tx) = &node.rollup_manager_handle.l1_watcher_mock {
                 tx.notification_tx.send(notification.clone()).await?;
             }
         }

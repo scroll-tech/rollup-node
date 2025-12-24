@@ -4,10 +4,9 @@ use super::{
     block_builder::BlockBuilder, l1_helpers::L1Helper, setup_engine, tx_helpers::TxHelper,
 };
 use crate::{
-    test_utils::l1_helpers::L1WatcherMock, BlobProviderArgs, ChainOrchestratorArgs,
-    ConsensusAlgorithm, ConsensusArgs, EngineDriverArgs, L1ProviderArgs, RollupNodeDatabaseArgs,
-    RollupNodeGasPriceOracleArgs, RollupNodeNetworkArgs, RpcArgs, ScrollRollupNode,
-    ScrollRollupNodeConfig, SequencerArgs, SignerArgs,
+    BlobProviderArgs, ChainOrchestratorArgs, ConsensusAlgorithm, ConsensusArgs, EngineDriverArgs,
+    L1ProviderArgs, RollupNodeDatabaseArgs, RollupNodeGasPriceOracleArgs, RollupNodeNetworkArgs,
+    RpcArgs, ScrollRollupNode, ScrollRollupNodeConfig, SequencerArgs, SignerArgs,
 };
 
 use alloy_eips::BlockNumberOrTag;
@@ -75,8 +74,6 @@ pub struct NodeHandle {
     pub node: NodeHelperType<ScrollRollupNode, TestBlockChainProvider>,
     /// Engine instance for this node.
     pub engine: Engine<Arc<dyn ScrollEngineApi + Send + Sync + 'static>>,
-    /// L1 watcher notification channel.
-    pub l1_watcher_tx: Option<L1WatcherMock>,
     /// Chain orchestrator listener.
     pub chain_orchestrator_rx: EventStream<ChainOrchestratorEvent>,
     /// Chain orchestrator handle.
@@ -102,7 +99,6 @@ impl Debug for NodeHandle {
         f.debug_struct("NodeHandle")
             .field("node", &"NodeHelper")
             .field("engine", &"Box<dyn ScrollEngineApi>")
-            .field("l1_watcher_tx", &self.l1_watcher_tx)
             .field("rollup_manager_handle", &self.rollup_manager_handle)
             .finish()
     }
@@ -436,7 +432,7 @@ impl TestFixtureBuilder {
         .await?;
 
         let mut node_handles = Vec::with_capacity(nodes.len());
-        for (index, mut node) in nodes.into_iter().enumerate() {
+        for (index, node) in nodes.into_iter().enumerate() {
             let genesis_hash = node.inner.chain_spec().genesis_hash();
 
             // Create engine for the node
@@ -451,7 +447,6 @@ impl TestFixtureBuilder {
             let engine = Engine::new(Arc::new(engine_client), fcs);
 
             // Get handles if available
-            let l1_watcher_tx = node.inner.add_ons_handle.l1_watcher_tx.take();
             let rollup_manager_handle = node.inner.add_ons_handle.rollup_manager_handle.clone();
             let chain_orchestrator_rx =
                 node.inner.add_ons_handle.rollup_manager_handle.get_event_listener().await?;
@@ -460,7 +455,6 @@ impl TestFixtureBuilder {
                 node,
                 engine,
                 chain_orchestrator_rx,
-                l1_watcher_tx,
                 rollup_manager_handle,
                 typ: if config.sequencer_args.sequencer_enabled && index == 0 {
                     NodeType::Sequencer

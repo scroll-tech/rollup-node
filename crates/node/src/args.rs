@@ -6,7 +6,6 @@ use crate::{
 use scroll_migration::MigratorTrait;
 use std::{fs, path::PathBuf, sync::Arc};
 
-use super::test_utils::l1_helpers::L1WatcherMock;
 use alloy_chains::NamedChain;
 use alloy_primitives::{hex, Address, U128};
 use alloy_provider::{layers::CacheLayer, Provider, ProviderBuilder};
@@ -167,7 +166,6 @@ impl ScrollRollupNodeConfig {
             impl ScrollEngineApi,
         >,
         ChainOrchestratorHandle<N>,
-        Option<L1WatcherMock>,
     )>
     where
         N: FullNetwork<Primitives = ScrollNetworkPrimitives> + NetworkProtocols,
@@ -351,42 +349,49 @@ impl ScrollRollupNodeConfig {
         };
         let consensus = self.consensus_args.consensus(authorized_signer)?;
 
-        let (l1_watcher_mock, l1_watcher_handle) = if let Some(provider) =
-            l1_provider.filter(|_| !self.test)
-        {
-            tracing::info!(target: "scroll::node::args", ?l1_block_startup_info, "Starting L1 watcher");
-            (
-                None,
-                Some(
-                    L1Watcher::spawn(
-                        provider,
-                        l1_block_startup_info,
-                        node_config,
-                        self.l1_provider_args.logs_query_block_range,
-                    )
-                    .await,
-                ),
-            )
-        } else {
-            // Create a channel for L1 notifications that we can use to inject L1 messages for
-            // testing
-            #[cfg(feature = "test-utils")]
-            {
-                let (notification_tx, notification_rx) = tokio::sync::mpsc::channel(1000);
-                let (command_tx, command_rx) = tokio::sync::mpsc::unbounded_channel();
-                let handle = L1WatcherHandle::new(command_tx, notification_rx);
-                let watcher_mock = L1WatcherMock {
-                    command_rx: Arc::new(tokio::sync::Mutex::new(command_rx)),
-                    notification_tx,
-                };
-                (Some(watcher_mock), Some(handle))
-            }
+        // Define some types to support definitions of return type of following function in no_std.
+        #[cfg(feature = "test-utils")]
+        type L1WatcherMockOpt = Option<rollup_node_watcher::test_utils::L1WatcherMock>;
 
-            #[cfg(not(feature = "test-utils"))]
-            {
-                (None, None)
-            }
-        };
+        #[cfg(not(feature = "test-utils"))]
+        type L1WatcherMockOpt = Option<std::convert::Infallible>;
+
+        let (_l1_watcher_mock, l1_watcher_handle): (L1WatcherMockOpt, Option<L1WatcherHandle>) =
+            if let Some(provider) = l1_provider.filter(|_| !self.test) {
+                tracing::info!(target: "scroll::node::args", ?l1_block_startup_info, "Starting L1 watcher");
+                (
+                    None,
+                    Some(
+                        L1Watcher::spawn(
+                            provider,
+                            l1_block_startup_info,
+                            node_config,
+                            self.l1_provider_args.logs_query_block_range,
+                        )
+                        .await,
+                    ),
+                )
+            } else {
+                // Create a channel for L1 notifications that we can use to inject L1 messages for
+                // testing
+                #[cfg(feature = "test-utils")]
+                {
+                    let (notification_tx, notification_rx) = tokio::sync::mpsc::channel(1000);
+                    let (command_tx, command_rx) = tokio::sync::mpsc::unbounded_channel();
+                    let handle =
+                        rollup_node_watcher::L1WatcherHandle::new(command_tx, notification_rx);
+                    let watcher_mock = rollup_node_watcher::test_utils::L1WatcherMock {
+                        command_rx: Arc::new(tokio::sync::Mutex::new(command_rx)),
+                        notification_tx,
+                    };
+                    (Some(watcher_mock), Some(handle))
+                }
+
+                #[cfg(not(feature = "test-utils"))]
+                {
+                    (None, None)
+                }
+            };
 
         // Construct the l1 provider.
         let l1_messages_provider = db.clone();
@@ -475,7 +480,10 @@ impl ScrollRollupNodeConfig {
         )
         .await?;
 
-        Ok((chain_orchestrator, handle, l1_watcher_mock))
+        #[cfg(feature = "test-utils")]
+        let handle = handle.with_l1_watcher_mock(_l1_watcher_mock);
+
+        Ok((chain_orchestrator, handle))
     }
 }
 

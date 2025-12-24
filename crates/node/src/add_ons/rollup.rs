@@ -1,4 +1,4 @@
-use crate::{args::ScrollRollupNodeConfig, test_utils::l1_helpers::L1WatcherMock};
+use crate::args::ScrollRollupNodeConfig;
 
 use reth_chainspec::NamedChain;
 use reth_network::NetworkProtocols;
@@ -53,13 +53,13 @@ impl RollupManagerAddOn {
         self,
         ctx: AddOnsContext<'_, N>,
         rpc: RpcHandle<N, EthApi>,
-    ) -> eyre::Result<(ChainOrchestratorHandle<N::Network>, Option<L1WatcherMock>)>
+    ) -> eyre::Result<ChainOrchestratorHandle<N::Network>>
     where
         <<N as FullNodeTypes>::Types as NodeTypes>::ChainSpec:
             ChainConfig<Config = ScrollChainConfig> + ScrollHardforks + IsDevChain,
         N::Network: NetworkProtocols + FullNetwork<Primitives = ScrollNetworkPrimitives>,
     {
-        let (chain_orchestrator, handle, l1_watcher_mock) = self
+        let (chain_orchestrator, handle) = self
             .config
             .build((&ctx).into(), self.scroll_wire_event, rpc.rpc_server_handles)
             .await?;
@@ -68,6 +68,6 @@ impl RollupManagerAddOn {
             .spawn_critical_with_shutdown_signal("rollup_node_manager", |shutdown| {
                 chain_orchestrator.run_until_shutdown(shutdown)
             });
-        Ok((handle, l1_watcher_mock))
+        Ok(handle)
     }
 }

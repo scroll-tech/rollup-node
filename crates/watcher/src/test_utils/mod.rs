@@ -1,11 +1,25 @@
-use crate::{random, Header};
+use crate::{random, Header, L1Notification, L1WatcherCommand};
 use arbitrary::Arbitrary;
+use std::sync::Arc;
+use tokio::sync::{mpsc, Mutex};
 
 /// Test utils for arbitrary.
 pub mod arbitrary;
 
 /// Test utils for provider.
 pub mod provider;
+
+/// Mock for the L1 Watcher.
+///
+/// This allows tests to simulate L1 watcher behavior by sending commands and receiving
+/// notifications.
+#[derive(Clone, Debug)]
+pub struct L1WatcherMock {
+    /// Receiver for L1 watcher commands.
+    pub command_rx: Arc<Mutex<mpsc::UnboundedReceiver<L1WatcherCommand>>>,
+    /// Sender for L1 notifications.
+    pub notification_tx: mpsc::Sender<Arc<L1Notification>>,
+}
 
 /// Returns a chain of random headers of size `len`.
 pub fn chain(len: usize) -> (Header, Header, Vec<Header>) {

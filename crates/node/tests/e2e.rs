@@ -322,9 +322,14 @@ async fn can_forward_tx_to_sequencer() -> eyre::Result<()> {
         .unwrap();
 
     // Send a notification to set the L1 to synced
-    let sequencer_l1_watcher_tx =
-        sequencer_node[0].inner.add_ons_handle.l1_watcher_tx.clone().unwrap();
-    sequencer_l1_watcher_tx.notification_tx.send(Arc::new(L1Notification::Synced)).await.unwrap();
+    let sequencer_l1_watcher_mock = sequencer_node[0]
+        .inner
+        .add_ons_handle
+        .rollup_manager_handle
+        .l1_watcher_mock
+        .clone()
+        .unwrap();
+    sequencer_l1_watcher_mock.notification_tx.send(Arc::new(L1Notification::Synced)).await.unwrap();
     sequencer_events.next().await;
     sequencer_events.next().await;
 
@@ -463,7 +468,8 @@ async fn can_bridge_blocks() -> eyre::Result<()> {
             .await?;
     let mut bridge_node = nodes.pop().unwrap();
     let bridge_peer_id = bridge_node.network.record().id;
-    let bridge_node_l1_watcher_tx = bridge_node.inner.add_ons_handle.l1_watcher_tx.clone().unwrap();
+    let bridge_node_l1_watcher_tx =
+        bridge_node.inner.add_ons_handle.rollup_manager_handle.l1_watcher_mock.clone().unwrap();
 
     // Send a notification to set the L1 to synced
     bridge_node_l1_watcher_tx.notification_tx.send(Arc::new(L1Notification::Synced)).await.unwrap();
@@ -573,7 +579,7 @@ async fn shutdown_consolidates_most_recent_batch_on_startup() -> eyre::Result<()
     config.hydrate(node.inner.config.clone()).await?;
 
     let (_, events) = ScrollWireProtocolHandler::new(ScrollWireConfig::new(true));
-    let (chain_orchestrator, handle, l1_notification_tx) = config
+    let (chain_orchestrator, handle) = config
         .clone()
         .build(
             RollupNodeContext::new(
@@ -605,7 +611,7 @@ async fn shutdown_consolidates_most_recent_batch_on_startup() -> eyre::Result<()
     let mut rnm_events = handle.get_event_listener().await?;
 
     // Extract the L1 notification sender
-    let l1_notification_tx = l1_notification_tx.unwrap();
+    let l1_notification_tx = handle.l1_watcher_mock.unwrap();
 
     // Load test batches
     let block_0_info = BlockInfo { number: 18318207, hash: B256::random() };
@@ -733,7 +739,7 @@ async fn shutdown_consolidates_most_recent_batch_on_startup() -> eyre::Result<()
 
     // Start the RNM again.
     let (_, events) = ScrollWireProtocolHandler::new(ScrollWireConfig::new(true));
-    let (chain_orchestrator, handle, l1_notification_tx) = config
+    let (chain_orchestrator, handle) = config
         .clone()
         .build(
             RollupNodeContext::new(
@@ -747,7 +753,7 @@ async fn shutdown_consolidates_most_recent_batch_on_startup() -> eyre::Result<()
             node.inner.add_ons_handle.rpc_handle.rpc_server_handles.clone(),
         )
         .await?;
-    let l1_notification_tx = l1_notification_tx.unwrap();
+    let l1_notification_tx = handle.l1_watcher_mock.clone().unwrap();
 
     // Spawn a task that constantly polls the rnm to make progress.
     let (_signal, shutdown) = shutdown_signal();
@@ -851,7 +857,7 @@ async fn graceful_shutdown_sets_fcs_to_latest_signed_block_in_db_on_start_up() -
     config.hydrate(node.inner.config.clone()).await?;
 
     let (_, events) = ScrollWireProtocolHandler::new(ScrollWireConfig::new(true));
-    let (rnm, handle, l1_watcher_tx) = config
+    let (rnm, handle) = config
         .clone()
         .build(
             RollupNodeContext::new(
@@ -867,7 +873,7 @@ async fn graceful_shutdown_sets_fcs_to_latest_signed_block_in_db_on_start_up() -
         .await?;
     let (_signal, shutdown) = shutdown_signal();
     let mut rnm = Box::pin(rnm.run_until_shutdown(shutdown));
-    let l1_watcher_tx = l1_watcher_tx.unwrap();
+    let l1_watcher_mock = handle.l1_watcher_mock.clone().unwrap();
 
     // Poll the rnm until we get an event stream listener.
     let mut rnm_events_fut = pin!(handle.get_event_listener());
@@ -882,7 +888,7 @@ async fn graceful_shutdown_sets_fcs_to_latest_signed_block_in_db_on_start_up() -
     };
 
     // Poll the rnm until we receive the consolidate event
-    l1_watcher_tx.notification_tx.send(Arc::new(L1Notification::Synced)).await?;
+    l1_watcher_mock.notification_tx.send(Arc::new(L1Notification::Synced)).await?;
     loop {
         let _ = rnm.poll_unpin(&mut Context::from_waker(noop_waker_ref()));
         if let Poll::Ready(Some(ChainOrchestratorEvent::ChainConsolidated { from: _, to: _ })) =
@@ -925,7 +931,7 @@ async fn graceful_shutdown_sets_fcs_to_latest_signed_block_in_db_on_start_up() -
 
     // Start the RNM again.
     let (_, events) = ScrollWireProtocolHandler::new(ScrollWireConfig::new(true));
-    let (rnm, handle, _) = config
+    let (rnm, handle) = config
         .clone()
         .build(
             RollupNodeContext::new(
