@@ -407,12 +407,15 @@ impl<
 
                 // Check if the unwind impacts the fcs safe head.
                 if let Some(block_info) = unwind_result.l2_safe_block_info {
-                    // If the safe head was unwound and is above or equal to the finalized head,
-                    // update the fcs.
-                    if block_info.number != self.engine.fcs().safe_block_info().number &&
-                        block_info.number >= self.engine.fcs().finalized_block_info().number
-                    {
+                    // If the new safe head is above the current finalized head, update the fcs safe
+                    // head to the new safe head.
+                    if block_info.number >= self.engine.fcs().finalized_block_info().number {
                         self.engine.update_fcs(None, Some(block_info), None).await?;
+                    } else {
+                        // Otherwise, update the fcs safe head to the finalized head.
+                        self.engine
+                            .update_fcs(None, Some(*self.engine.fcs().finalized_block_info()), None)
+                            .await?;
                     }
                 }
 
