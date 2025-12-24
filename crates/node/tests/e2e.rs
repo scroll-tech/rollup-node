@@ -1025,6 +1025,16 @@ async fn can_revert_to_l1_block() -> eyre::Result<()> {
     // Wait for the chain to be unwound
     fixture.expect_event().revert_to_l1_block().await?;
 
+    // Now have the L1 watcher mock handle the command to rewind the L1 head.
+    fixture
+        .follower(0)
+        .rollup_manager_handle
+        .l1_watcher_mock
+        .as_mut()
+        .unwrap()
+        .handle_command()
+        .await;
+
     // Get the node status
     let status = fixture.get_status(0).await?;
 

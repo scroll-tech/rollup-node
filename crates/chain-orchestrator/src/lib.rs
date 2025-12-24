@@ -415,6 +415,10 @@ impl<
                         self.engine.update_fcs(None, Some(block_info), None).await?;
                     }
                 }
+
+                // Revert the L1 watcher to the specified block.
+                self.l1_watcher.revert_to_l1_block(block_number);
+
                 self.notify(ChainOrchestratorEvent::UnwoundToL1Block(block_number));
                 let _ = tx.send(true);
             }

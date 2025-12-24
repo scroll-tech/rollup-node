@@ -21,6 +21,22 @@ pub struct L1WatcherMock {
     pub notification_tx: mpsc::Sender<Arc<L1Notification>>,
 }
 
+impl L1WatcherMock {
+    /// Handle commands sent to the L1 watcher mock.
+    pub async fn handle_command(&mut self) {
+        let mut commands = self.command_rx.lock().await;
+        if let Some(command) = commands.recv().await {
+            match command {
+                L1WatcherCommand::ResetToBlock { block, tx } => {
+                    // For testing purposes, we can just log the reset action.
+                    tracing::info!(target: "scroll::watcher::test_utils", "L1 Watcher Mock resetting to block {}", block);
+                    self.notification_tx = tx;
+                }
+            }
+        }
+    }
+}
+
 /// Returns a chain of random headers of size `len`.
 pub fn chain(len: usize) -> (Header, Header, Vec<Header>) {
     assert!(len >= 2, "chain should have a minimal length of two");

@@ -34,13 +34,15 @@ impl L1WatcherHandle {
     }
 
     /// Reset the L1 Watcher to a specific block number with a fresh notification channel.
-    pub fn revert_to_l1_block(&self, block: u64) -> mpsc::Receiver<Arc<L1Notification>> {
+    pub fn revert_to_l1_block(&mut self, block: u64) {
         // Create a fresh notification channel with the same capacity as the original channel
         let capacity = self.l1_notification_rx.max_capacity();
         let (tx, rx) = mpsc::channel(capacity);
 
+        // Send the reset command to the watcher
         self.send_command(L1WatcherCommand::ResetToBlock { block, tx });
 
-        rx
+        // Replace the old receiver with the new one
+        self.l1_notification_rx = rx;
     }
 }

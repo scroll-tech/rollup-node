@@ -338,7 +338,6 @@ where
 
                 // reset the state.
                 self.current_block_number = block;
-                self.unfinalized_blocks.clear();
                 self.is_synced = false;
 
                 // replace the notification sender.
