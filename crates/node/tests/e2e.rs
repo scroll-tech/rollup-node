@@ -24,7 +24,7 @@ use rollup_node::{
     },
     RollupNodeAdminApiClient, RollupNodeContext,
 };
-use rollup_node_chain_orchestrator::ChainOrchestratorEvent;
+use rollup_node_chain_orchestrator::{ChainOrchestratorEvent, SyncMode};
 use rollup_node_primitives::{sig_encode_hash, BatchCommitData, BlockInfo};
 use rollup_node_watcher::L1Notification;
 use scroll_db::{test_utils::setup_test_db, L1MessageKey};
@@ -322,9 +322,14 @@ async fn can_forward_tx_to_sequencer() -> eyre::Result<()> {
         .unwrap();
 
     // Send a notification to set the L1 to synced
-    let sequencer_l1_watcher_tx =
-        sequencer_node[0].inner.add_ons_handle.l1_watcher_tx.clone().unwrap();
-    sequencer_l1_watcher_tx.send(Arc::new(L1Notification::Synced)).await.unwrap();
+    let sequencer_l1_watcher_mock = sequencer_node[0]
+        .inner
+        .add_ons_handle
+        .rollup_manager_handle
+        .l1_watcher_mock
+        .clone()
+        .unwrap();
+    sequencer_l1_watcher_mock.notification_tx.send(Arc::new(L1Notification::Synced)).await.unwrap();
     sequencer_events.next().await;
     sequencer_events.next().await;
 
@@ -463,10 +468,11 @@ async fn can_bridge_blocks() -> eyre::Result<()> {
             .await?;
     let mut bridge_node = nodes.pop().unwrap();
     let bridge_peer_id = bridge_node.network.record().id;
-    let bridge_node_l1_watcher_tx = bridge_node.inner.add_ons_handle.l1_watcher_tx.clone().unwrap();
+    let bridge_node_l1_watcher_tx =
+        bridge_node.inner.add_ons_handle.rollup_manager_handle.l1_watcher_mock.clone().unwrap();
 
     // Send a notification to set the L1 to synced
-    bridge_node_l1_watcher_tx.send(Arc::new(L1Notification::Synced)).await.unwrap();
+    bridge_node_l1_watcher_tx.notification_tx.send(Arc::new(L1Notification::Synced)).await.unwrap();
 
     // Instantiate the scroll NetworkManager.
     let network_config = NetworkConfigBuilder::<ScrollNetworkPrimitives>::with_rng_secret_key()
@@ -573,7 +579,7 @@ async fn shutdown_consolidates_most_recent_batch_on_startup() -> eyre::Result<()
     config.hydrate(node.inner.config.clone()).await?;
 
     let (_, events) = ScrollWireProtocolHandler::new(ScrollWireConfig::new(true));
-    let (chain_orchestrator, handle, l1_notification_tx) = config
+    let (chain_orchestrator, handle) = config
         .clone()
         .build(
             RollupNodeContext::new(
@@ -605,8 +611,7 @@ async fn shutdown_consolidates_most_recent_batch_on_startup() -> eyre::Result<()
     let mut rnm_events = handle.get_event_listener().await?;
 
     // Extract the L1 notification sender
-    let l1_notification_tx: tokio::sync::mpsc::Sender<Arc<L1Notification>> =
-        l1_notification_tx.unwrap();
+    let l1_notification_tx = handle.l1_watcher_mock.unwrap();
 
     // Load test batches
     let block_0_info = BlockInfo { number: 18318207, hash: B256::random() };
@@ -636,12 +641,14 @@ async fn shutdown_consolidates_most_recent_batch_on_startup() -> eyre::Result<()
 
     // Send the first batch commit to the rollup node manager and finalize it.
     l1_notification_tx
+        .notification_tx
         .send(Arc::new(L1Notification::BatchCommit {
             block_info: block_0_info,
             data: batch_0_data.clone(),
         }))
         .await?;
     l1_notification_tx
+        .notification_tx
         .send(Arc::new(L1Notification::BatchFinalization {
             hash: batch_0_data.hash,
             index: batch_0_data.index,
@@ -650,7 +657,10 @@ async fn shutdown_consolidates_most_recent_batch_on_startup() -> eyre::Result<()
         .await?;
 
     // Lets finalize the first batch
-    l1_notification_tx.send(Arc::new(L1Notification::Finalized(block_0_info.number))).await?;
+    l1_notification_tx
+        .notification_tx
+        .send(Arc::new(L1Notification::Finalized(block_0_info.number)))
+        .await?;
 
     // Lets iterate over all blocks expected to be derived from the first batch commit.
     let consolidation_outcome = loop {
@@ -664,12 +674,14 @@ async fn shutdown_consolidates_most_recent_batch_on_startup() -> eyre::Result<()
 
     // Now we send the second batch commit and finalize it.
     l1_notification_tx
+        .notification_tx
         .send(Arc::new(L1Notification::BatchCommit {
             block_info: block_1_info,
             data: batch_1_data.clone(),
         }))
         .await?;
     l1_notification_tx
+        .notification_tx
         .send(Arc::new(L1Notification::BatchFinalization {
             hash: batch_1_data.hash,
             index: batch_1_data.index,
@@ -678,7 +690,10 @@ async fn shutdown_consolidates_most_recent_batch_on_startup() -> eyre::Result<()
         .await?;
 
     // Lets finalize the second batch.
-    l1_notification_tx.send(Arc::new(L1Notification::Finalized(block_1_info.number))).await?;
+    l1_notification_tx
+        .notification_tx
+        .send(Arc::new(L1Notification::Finalized(block_1_info.number)))
+        .await?;
 
     // The second batch commit contains 42 blocks (5-57), lets iterate until the rnm has
     // consolidated up to block 40.
@@ -724,7 +739,7 @@ async fn shutdown_consolidates_most_recent_batch_on_startup() -> eyre::Result<()
 
     // Start the RNM again.
     let (_, events) = ScrollWireProtocolHandler::new(ScrollWireConfig::new(true));
-    let (chain_orchestrator, handle, l1_notification_tx) = config
+    let (chain_orchestrator, handle) = config
         .clone()
         .build(
             RollupNodeContext::new(
@@ -738,7 +753,7 @@ async fn shutdown_consolidates_most_recent_batch_on_startup() -> eyre::Result<()
             node.inner.add_ons_handle.rpc_handle.rpc_server_handles.clone(),
         )
         .await?;
-    let l1_notification_tx = l1_notification_tx.unwrap();
+    let l1_notification_tx = handle.l1_watcher_mock.clone().unwrap();
 
     // Spawn a task that constantly polls the rnm to make progress.
     let (_signal, shutdown) = shutdown_signal();
@@ -756,11 +771,12 @@ async fn shutdown_consolidates_most_recent_batch_on_startup() -> eyre::Result<()
     // Request an event stream from the rollup node manager.
     let mut rnm_events = handle.get_event_listener().await?;
 
-    println!("im here");
-
     // Send the second batch again to mimic the watcher behaviour.
     let block_1_info = BlockInfo { number: 18318215, hash: B256::random() };
-    l1_notification_tx.send(Arc::new(L1Notification::Finalized(block_1_info.number))).await?;
+    l1_notification_tx
+        .notification_tx
+        .send(Arc::new(L1Notification::Finalized(block_1_info.number)))
+        .await?;
 
     // Lets fetch the first consolidated block event - this should be the first block of the batch.
     let l2_block = loop {
@@ -841,7 +857,7 @@ async fn graceful_shutdown_sets_fcs_to_latest_signed_block_in_db_on_start_up() -
     config.hydrate(node.inner.config.clone()).await?;
 
     let (_, events) = ScrollWireProtocolHandler::new(ScrollWireConfig::new(true));
-    let (rnm, handle, l1_watcher_tx) = config
+    let (rnm, handle) = config
         .clone()
         .build(
             RollupNodeContext::new(
@@ -857,7 +873,7 @@ async fn graceful_shutdown_sets_fcs_to_latest_signed_block_in_db_on_start_up() -
         .await?;
     let (_signal, shutdown) = shutdown_signal();
     let mut rnm = Box::pin(rnm.run_until_shutdown(shutdown));
-    let l1_watcher_tx: tokio::sync::mpsc::Sender<Arc<L1Notification>> = l1_watcher_tx.unwrap();
+    let l1_watcher_mock = handle.l1_watcher_mock.clone().unwrap();
 
     // Poll the rnm until we get an event stream listener.
     let mut rnm_events_fut = pin!(handle.get_event_listener());
@@ -872,7 +888,7 @@ async fn graceful_shutdown_sets_fcs_to_latest_signed_block_in_db_on_start_up() -
     };
 
     // Poll the rnm until we receive the consolidate event
-    l1_watcher_tx.send(Arc::new(L1Notification::Synced)).await?;
+    l1_watcher_mock.notification_tx.send(Arc::new(L1Notification::Synced)).await?;
     loop {
         let _ = rnm.poll_unpin(&mut Context::from_waker(noop_waker_ref()));
         if let Poll::Ready(Some(ChainOrchestratorEvent::ChainConsolidated { from: _, to: _ })) =
@@ -915,7 +931,7 @@ async fn graceful_shutdown_sets_fcs_to_latest_signed_block_in_db_on_start_up() -
 
     // Start the RNM again.
     let (_, events) = ScrollWireProtocolHandler::new(ScrollWireConfig::new(true));
-    let (rnm, handle, _) = config
+    let (rnm, handle) = config
         .clone()
         .build(
             RollupNodeContext::new(
@@ -941,6 +957,116 @@ async fn graceful_shutdown_sets_fcs_to_latest_signed_block_in_db_on_start_up() -
 
     // The fcs should be set to the database head.
     assert_eq!(status.l2.fcs.head_block_info(), &db_head_block_info);
+
+    Ok(())
+}
+
+#[tokio::test]
+async fn can_revert_to_l1_block() -> eyre::Result<()> {
+    reth_tracing::init_test_tracing();
+
+    // Create a follower test fixture using SCROLL_MAINNET chain spec
+    let mut fixture = TestFixture::builder()
+        .followers(1)
+        .with_chain_spec(SCROLL_MAINNET.clone())
+        .with_memory_db()
+        .build()
+        .await?;
+
+    // Load test batches
+    let batch_0_block_info = BlockInfo { number: 18318207, hash: B256::random() };
+    let raw_calldata_0 = read_to_bytes("./tests/testdata/batch_0_calldata.bin")?;
+    let batch_0_hash = b256!("5AAEB6101A47FC16866E80D77FFE090B6A7B3CF7D988BE981646AB6AEDFA2C42");
+
+    let batch_1_block_info = BlockInfo { number: 18318215, hash: B256::random() };
+    let raw_calldata_1 = read_to_bytes("./tests/testdata/batch_1_calldata.bin")?;
+    let batch_1_hash = b256!("AA8181F04F8E305328A6117FA6BC13FA2093A3C4C990C5281DF95A1CB85CA18F");
+
+    // Send a Synced notification to the chain orchestrator
+    fixture.l1().sync().await?;
+
+    // Send the first batch
+    let _ = fixture
+        .l1()
+        .commit_batch()
+        .at_block(batch_0_block_info)
+        .hash(batch_0_hash)
+        .index(1)
+        .calldata(raw_calldata_0)
+        .send()
+        .await?;
+
+    // Wait for the batch consolidated event
+    fixture.expect_event().batch_consolidated().await?;
+
+    // Send the second batch
+    let _ = fixture
+        .l1()
+        .commit_batch()
+        .at_block(batch_1_block_info)
+        .hash(batch_1_hash)
+        .index(2)
+        .calldata(raw_calldata_1.clone())
+        .send()
+        .await?;
+
+    // Wait for the second batch to be consolidated
+    fixture.expect_event().batch_consolidated().await?;
+
+    // Get the node status
+    let status = fixture.get_status(0).await?;
+
+    // Validate the safe block number is 57
+    assert_eq!(status.l2.fcs.safe_block_info().number, 57);
+
+    // Now send a revert to L1 block 18318210
+    fixture.follower(0).rollup_manager_handle.revert_to_l1_block(18318210).await?;
+
+    // Wait for the chain to be unwound
+    fixture.expect_event().revert_to_l1_block().await?;
+
+    // Now have the L1 watcher mock handle the command to rewind the L1 head.
+    fixture
+        .follower(0)
+        .rollup_manager_handle
+        .l1_watcher_mock
+        .as_mut()
+        .unwrap()
+        .handle_command()
+        .await;
+
+    // Get the node status
+    let status = fixture.get_status(0).await?;
+
+    // Assert that the safe block number is now 4
+    assert_eq!(status.l2.fcs.safe_block_info().number, 4);
+
+    // Assert that the L1 status is now syncing
+    assert_eq!(status.l1.status, SyncMode::Syncing);
+
+    // Now send a Synced notification to the chain orchestrator to resume eager processing
+    fixture.l1().sync().await?;
+
+    // Send the second batch again
+    let _ = fixture
+        .l1()
+        .commit_batch()
+        .at_block(batch_1_block_info)
+        .hash(batch_1_hash)
+        .index(2)
+        .calldata(raw_calldata_1)
+        .send()
+        .await?;
+
+    // Wait for the second batch to be consolidated
+    fixture.expect_event().batch_consolidated().await?;
+
+    // Get the node status
+    let status = fixture.get_status(0).await?;
+
+    // Validate the safe block number is 57
+    assert_eq!(status.l2.fcs.safe_block_info().number, 57);
+    assert_eq!(status.l1.status, SyncMode::Synced);
 
     Ok(())
 }
@@ -1074,7 +1200,7 @@ async fn can_handle_batch_revert_with_reorg() -> eyre::Result<()> {
         .at_block(batch_0_block_info)
         .hash(batch_0_hash)
         .index(1)
-        .block_number(18318207)
+        .at_block(batch_0_block_info)
         .block_timestamp(1696935971)
         .calldata(raw_calldata_0)
         .send()
@@ -1090,7 +1216,7 @@ async fn can_handle_batch_revert_with_reorg() -> eyre::Result<()> {
         .at_block(batch_1_block_info)
         .hash(batch_1_hash)
         .index(2)
-        .block_number(18318215)
+        .at_block(batch_1_block_info)
         .block_timestamp(1696936000)
         .calldata(raw_calldata_1)
         .send()

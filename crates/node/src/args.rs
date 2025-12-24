@@ -38,7 +38,7 @@ use rollup_node_providers::{
 use rollup_node_sequencer::{
     L1MessageInclusionMode, PayloadBuildingConfig, Sequencer, SequencerConfig,
 };
-use rollup_node_watcher::{L1Notification, L1Watcher};
+use rollup_node_watcher::{L1Watcher, L1WatcherHandle};
 use scroll_alloy_hardforks::ScrollHardforks;
 use scroll_alloy_network::Scroll;
 use scroll_alloy_provider::{ScrollAuthApiEngineClient, ScrollEngineApi};
@@ -51,7 +51,7 @@ use scroll_engine::{Engine, ForkchoiceState};
 use scroll_migration::traits::ScrollMigrator;
 use scroll_network::ScrollNetworkManager;
 use scroll_wire::ScrollWireEvent;
-use tokio::sync::mpsc::{Sender, UnboundedReceiver};
+use tokio::sync::mpsc::UnboundedReceiver;
 
 /// A struct that represents the arguments for the rollup node.
 #[derive(Debug, Clone, clap::Args)]
@@ -166,7 +166,6 @@ impl ScrollRollupNodeConfig {
             impl ScrollEngineApi,
         >,
         ChainOrchestratorHandle<N>,
-        Option<Sender<Arc<L1Notification>>>,
     )>
     where
         N: FullNetwork<Primitives = ScrollNetworkPrimitives> + NetworkProtocols,
@@ -350,7 +349,14 @@ impl ScrollRollupNodeConfig {
         };
         let consensus = self.consensus_args.consensus(authorized_signer)?;
 
-        let (l1_notification_tx, l1_notification_rx): (Option<Sender<Arc<L1Notification>>>, _) =
+        // Define some types to support definitions of return type of following function in no_std.
+        #[cfg(feature = "test-utils")]
+        type L1WatcherMockOpt = Option<rollup_node_watcher::test_utils::L1WatcherMock>;
+
+        #[cfg(not(feature = "test-utils"))]
+        type L1WatcherMockOpt = Option<std::convert::Infallible>;
+
+        let (_l1_watcher_mock, l1_watcher_handle): (L1WatcherMockOpt, Option<L1WatcherHandle>) =
             if let Some(provider) = l1_provider.filter(|_| !self.test) {
                 tracing::info!(target: "scroll::node::args", ?l1_block_startup_info, "Starting L1 watcher");
                 (
@@ -370,8 +376,15 @@ impl ScrollRollupNodeConfig {
                 // testing
                 #[cfg(feature = "test-utils")]
                 {
-                    let (tx, rx) = tokio::sync::mpsc::channel(1000);
-                    (Some(tx), Some(rx))
+                    let (notification_tx, notification_rx) = tokio::sync::mpsc::channel(1000);
+                    let (command_tx, command_rx) = tokio::sync::mpsc::unbounded_channel();
+                    let handle =
+                        rollup_node_watcher::L1WatcherHandle::new(command_tx, notification_rx);
+                    let watcher_mock = rollup_node_watcher::test_utils::L1WatcherMock {
+                        command_rx: Arc::new(tokio::sync::Mutex::new(command_rx)),
+                        notification_tx,
+                    };
+                    (Some(watcher_mock), Some(handle))
                 }
 
                 #[cfg(not(feature = "test-utils"))]
@@ -457,7 +470,7 @@ impl ScrollRollupNodeConfig {
             config,
             Arc::new(block_client),
             l2_provider,
-            l1_notification_rx.expect("L1 notification receiver should be set"),
+            l1_watcher_handle.expect("L1 notification receiver should be set"),
             scroll_network_handle.into_scroll_network().await,
             consensus,
             engine,
@@ -467,7 +480,10 @@ impl ScrollRollupNodeConfig {
         )
         .await?;
 
-        Ok((chain_orchestrator, handle, l1_notification_tx))
+        #[cfg(feature = "test-utils")]
+        let handle = handle.with_l1_watcher_mock(_l1_watcher_mock);
+
+        Ok((chain_orchestrator, handle))
     }
 }
 

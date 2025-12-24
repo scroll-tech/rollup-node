@@ -130,6 +130,15 @@ impl<'a> EventWaiter<'a> {
         Ok(())
     }
 
+    /// Wait for chain unwound event on all specified nodes.
+    pub async fn revert_to_l1_block(self) -> eyre::Result<()> {
+        self.wait_for_event_on_all(|e| {
+            matches!(e, ChainOrchestratorEvent::UnwoundToL1Block(_)).then_some(())
+        })
+        .await?;
+        Ok(())
+    }
+
     /// Wait for block consolidated event on all specified nodes.
     pub async fn block_consolidated(self, target_block: u64) -> eyre::Result<()> {
         self.wait_for_event_on_all(|e| {
