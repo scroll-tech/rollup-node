@@ -1166,14 +1166,12 @@ impl<
         }
 
         // Update the FCS to the new head.
-        let result = self
-            .engine
-            .update_fcs(
-                Some(BlockInfo { number: chain_head_number, hash: chain_head_hash }),
-                None,
-                None,
-            )
-            .await?;
+        let head = BlockInfo { number: chain_head_number, hash: chain_head_hash };
+        let result = if self.sync_state.l2().is_syncing() {
+            self.engine.optimistic_sync(head).await?
+        } else {
+            self.engine.update_fcs(Some(head), None, None).await?
+        };
 
         // If the FCS update resulted in an invalid state, we return an error.
         if result.is_invalid() {
