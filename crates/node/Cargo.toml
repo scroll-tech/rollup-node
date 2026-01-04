@@ -84,6 +84,7 @@ alloy-rpc-types-anvil = { workspace = true, optional = true }
 reth-db = { workspace = true, optional = true, features = ["test-utils"] }
 reth-e2e-test-utils = { workspace = true, optional = true }
 reth-engine-local = { workspace = true, optional = true }
+reth-fs-util = { workspace = true, optional = true }
 reth-provider = { workspace = true, optional = true }
 reth-rpc-layer = { workspace = true, optional = true }
 reth-rpc-server-types = { workspace = true, optional = true }
@@ -136,6 +137,7 @@ js-tracer = ["reth-scroll-node/js-tracer", "reth-scroll-rpc/js-tracer"]
 test-utils = [
     "reth-db",
     "reth-engine-local",
+    "reth-fs-util",
     "reth-trie-db/test-utils",
     "reth-chainspec/test-utils",
     "reth-evm/test-utils",

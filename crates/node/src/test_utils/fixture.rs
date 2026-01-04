@@ -21,6 +21,7 @@ use alloy_transport::layers::RetryBackoffLayer;
 use reth_chainspec::EthChainSpec;
 use reth_e2e_test_utils::{wallet::Wallet, NodeHelperType, TmpDB};
 use reth_eth_wire_types::BasicNetworkPrimitives;
+use reth_fs_util::remove_dir_all;
 use reth_network::NetworkHandle;
 use reth_node_builder::NodeTypes;
 use reth_node_types::NodeTypesWithDBAdapter;
@@ -73,6 +74,21 @@ impl Debug for TestFixture {
             .field("anvil", &self.anvil.is_some())
             .field("_tasks", &"<TaskManager>")
             .finish()
+    }
+}
+
+impl Drop for TestFixture {
+    fn drop(&mut self) {
+        // Manually cleanup test directories.
+        // TempDatabase's automatic drop only removes the database file itself,
+        // but the parent directory also contains other files (static files, blob store, etc.)
+        // that need to be cleaned up to avoid accumulating test artifacts.
+        let parent_paths: Vec<_> =
+            self.dbs.iter().filter_map(|db| db.path().parent().map(|p| p.to_path_buf())).collect();
+        // Delete parent directories containing all database files
+        for path in parent_paths {
+            let _ = remove_dir_all(&path);
+        }
     }
 }
 
@@ -616,7 +632,7 @@ impl TestFixtureBuilder {
             &tasks,
             self.config.clone(),
             self.num_nodes,
-            Vec::new(), // Empty dbs for initial setup
+            None,
             chain_spec.clone(),
             self.is_dev,
             self.no_local_transactions_propagation,

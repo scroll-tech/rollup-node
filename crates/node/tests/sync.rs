@@ -82,7 +82,7 @@ async fn test_should_consolidate_to_block_15k() -> eyre::Result<()> {
     let chain_spec = (*SCROLL_SEPOLIA).clone();
     let tasks = TaskManager::current();
     let (mut nodes, _, _) =
-        setup_engine(&tasks, node_config, 1, Vec::new(), chain_spec.clone(), false, false).await?;
+        setup_engine(&tasks, node_config, 1, None, chain_spec.clone(), false, false).await?;
     let node = nodes.pop().unwrap();
 
     // We perform consolidation up to block 15k. This allows us to capture a batch revert event at
@@ -557,7 +557,7 @@ async fn test_chain_orchestrator_l1_reorg() -> eyre::Result<()> {
         &tasks,
         sequencer_node_config.clone(),
         1,
-        Vec::new(),
+        None,
         chain_spec.clone(),
         false,
         false,
@@ -570,7 +570,7 @@ async fn test_chain_orchestrator_l1_reorg() -> eyre::Result<()> {
     let sequencer_l1_watcher_tx = sequencer.inner.add_ons_handle.l1_watcher_tx.clone().unwrap();
 
     let (mut nodes, _, _) =
-        setup_engine(&tasks, node_config.clone(), 1, Vec::new(), chain_spec.clone(), false, false)
+        setup_engine(&tasks, node_config.clone(), 1, None, chain_spec.clone(), false, false)
             .await
             .unwrap();
     let mut follower = nodes.pop().unwrap();

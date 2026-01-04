@@ -12804,6 +12804,7 @@ dependencies = [
  "reth-engine-local",
  "reth-eth-wire-types",
  "reth-evm",
+ "reth-fs-util",
  "reth-network",
  "reth-network-api",
  "reth-network-p2p",

@@ -105,7 +105,11 @@ impl TestFixture {
     /// ```
     pub async fn shutdown_node(&mut self, node_index: usize) -> eyre::Result<()> {
         if node_index >= self.nodes.len() {
-            return Err(eyre::eyre!("Node index {} out of bounds (total nodes: {})", node_index, self.nodes.len()));
+            return Err(eyre::eyre!(
+                "Node index {} out of bounds (total nodes: {})",
+                node_index,
+                self.nodes.len()
+            ));
         }
 
         if self.nodes[node_index].is_none() {
@@ -115,7 +119,8 @@ impl TestFixture {
         tracing::info!("Shutting down node at index {}", node_index);
 
         // Step 1: Explicitly shutdown the ChainOrchestrator
-        // This sends a Shutdown command that will make the ChainOrchestrator exit its event loop immediately
+        // This sends a Shutdown command that will make the ChainOrchestrator exit its event loop
+        // immediately
         if let Some(node) = &self.nodes[node_index] {
             tracing::info!("Sending shutdown command to ChainOrchestrator...");
             if let Err(e) = node.rollup_manager_handle.shutdown().await {
@@ -175,12 +180,13 @@ impl TestFixture {
     /// fixture.l1().sync().await?;
     /// fixture.expect_event().l1_synced().await?;
     /// ```
-    pub async fn start_node(
-        &mut self,
-        node_index: usize,
-    ) -> eyre::Result<()> {
+    pub async fn start_node(&mut self, node_index: usize) -> eyre::Result<()> {
         if node_index >= self.nodes.len() {
-            return Err(eyre::eyre!("Node index {} out of bounds (total nodes: {})", node_index, self.nodes.len()));
+            return Err(eyre::eyre!(
+                "Node index {} out of bounds (total nodes: {})",
+                node_index,
+                self.nodes.len()
+            ));
         }
 
         if self.nodes[node_index].is_some() {
@@ -189,24 +195,17 @@ impl TestFixture {
 
         tracing::info!("Starting node at index {} (reusing database)", node_index);
 
-        // Step 1: Prepare database for reuse
-        // Pass only the database for this specific node (preserves all state)
-        let node_dbs = if node_index < self.dbs.len() {
-            vec![self.dbs[node_index].clone()]
-        } else {
-            Vec::new() // Should not happen, but handle gracefully
-        };
-
         // Step 2: Create a new node instance with the existing database
         let (mut new_nodes, _, _) = setup_engine(
             &self.tasks,
             self.config.clone(),
-            1, // Create just one node
-            node_dbs, // Reuse the database (state is preserved)
+            1,
+            Some(self.dbs[node_index].clone()), // reuse provided database
             self.chain_spec.clone(),
-            true, // is_dev
-            false, // no_local_transactions_propagation
-        ).await?;
+            true,
+            false,
+        )
+        .await?;
 
         if new_nodes.is_empty() {
             return Err(eyre::eyre!("Failed to create new node"));
@@ -240,9 +239,8 @@ impl TestFixture {
 
         // Step 6: Initialize Engine with the restored ForkchoiceState
         let engine = Engine::new(Arc::new(engine_client), fcs);
-        let chain_orchestrator_rx = new_node.inner.add_ons_handle.rollup_manager_handle
-            .get_event_listener()
-            .await?;
+        let chain_orchestrator_rx =
+            new_node.inner.add_ons_handle.rollup_manager_handle.get_event_listener().await?;
 
         // Step 7: Determine node type (sequencer vs follower)
         let was_sequencer = self.config.sequencer_args.sequencer_enabled && node_index == 0;

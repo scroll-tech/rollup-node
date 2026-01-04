@@ -113,7 +113,7 @@ pub async fn setup_engine(
     tasks: &TaskManager,
     mut scroll_node_config: ScrollRollupNodeConfig,
     num_nodes: usize,
-    mut dbs: Vec<Arc<reth_db::test_utils::TempDatabase<reth_db::DatabaseEnv>>>,
+    db_provided: Option<Arc<reth_db::test_utils::TempDatabase<reth_db::DatabaseEnv>>>,
     chain_spec: Arc<<ScrollRollupNode as NodeTypes>::ChainSpec>,
     is_dev: bool,
     no_local_transactions_propagation: bool,
@@ -144,6 +144,7 @@ where
 
     // Create nodes and peer them
     let mut nodes: Vec<NodeTestContext<_, _>> = Vec::with_capacity(num_nodes);
+    let mut dbs: Vec<Arc<reth_db::test_utils::TempDatabase<reth_db::DatabaseEnv>>> = Vec::new();
 
     for idx in 0..num_nodes {
         // disable sequencer nodes after the first one
@@ -164,22 +165,18 @@ where
             .set_dev(is_dev)
             .with_txpool(TxPoolArgs { no_local_transactions_propagation, ..Default::default() });
 
-        // Check if we already have a database for this index (reboot scenario)
-        let db: Arc<reth_db::test_utils::TempDatabase<reth_db::DatabaseEnv>> = if idx < dbs.len() {
+        // Check if we already have provided a database for a node (reboot scenario)
+        let db = if let Some(ref provided_db) = db_provided {
             // Reuse existing database for reboot
-            let existing_db = dbs[idx].clone();
-
-            // Get the existing datadir from the database path
-            let existing_db_path = existing_db.path();
-            let test_data_dir =
-                existing_db_path.parent().expect("db path should have a parent directory");
+            let db_path = provided_db.path();
+            let test_data_dir = db_path.parent().expect("db path should have a parent directory");
 
             // Set the datadir in node_config to reuse the same directory
             node_config.datadir.datadir =
                 reth_node_core::dirs::MaybePlatformPath::from(test_data_dir.to_path_buf());
 
             tracing::warn!("Reusing existing database for node {} at {:?}", idx, test_data_dir);
-            existing_db
+            provided_db.clone()
         } else {
             // Create a unique persistent test directory for both Reth and Scroll databases
             // Using process ID and node index to ensure uniqueness
@@ -241,7 +238,8 @@ where
             NodeTestContext::new(node, |_| panic!("should not build payloads using this method"))
                 .await?;
 
-        if idx >= dbs.len() {
+        // skip the forkchoice update when a database is provided (reboot scenario)
+        if !db_provided.is_some() {
             let genesis = node.block_hash(0);
             node.update_forkchoice(genesis, genesis).await?;
         }
