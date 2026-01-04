@@ -20,7 +20,7 @@ use rollup_node_primitives::{
 use rollup_node_providers::L1MessageProvider;
 use rollup_node_sequencer::{Sequencer, SequencerEvent};
 use rollup_node_signer::{SignatureAsBytes, SignerEvent, SignerHandle};
-use rollup_node_watcher::L1Notification;
+use rollup_node_watcher::{L1Notification, L1WatcherHandle};
 use scroll_alloy_consensus::{ScrollTxEnvelope, TxL1Message};
 use scroll_alloy_hardforks::ScrollHardforks;
 use scroll_alloy_network::Scroll;
@@ -35,7 +35,7 @@ use scroll_network::{
     BlockImportOutcome, NewBlockWithPeer, ScrollNetwork, ScrollNetworkManagerEvent,
 };
 use std::{collections::VecDeque, sync::Arc, time::Instant, vec};
-use tokio::sync::mpsc::{self, Receiver, UnboundedReceiver};
+use tokio::sync::mpsc::{self, UnboundedReceiver};
 
 mod config;
 pub use config::ChainOrchestratorConfig;
@@ -115,8 +115,8 @@ pub struct ChainOrchestrator<
     database: Arc<Database>,
     /// The current sync state of the [`ChainOrchestrator`].
     sync_state: SyncState,
-    /// A receiver for [`L1Notification`]s from the [`rollup_node_watcher::L1Watcher`].
-    l1_notification_rx: Receiver<Arc<L1Notification>>,
+    /// A handle for the [`rollup_node_watcher::L1Watcher`].
+    l1_watcher: L1WatcherHandle,
     /// The network manager that manages the scroll p2p network.
     network: ScrollNetwork<N>,
     /// The consensus algorithm used by the rollup node.
@@ -150,7 +150,7 @@ impl<
         config: ChainOrchestratorConfig<ChainSpec>,
         block_client: Arc<FullBlockClient<<N as BlockDownloaderProvider>::Client>>,
         l2_provider: L2P,
-        l1_notification_rx: Receiver<Arc<L1Notification>>,
+        l1_watcher: L1WatcherHandle,
         network: ScrollNetwork<N>,
         consensus: Box<dyn Consensus + 'static>,
         engine: Engine<EC>,
@@ -167,7 +167,7 @@ impl<
                 database,
                 config,
                 sync_state: SyncState::default(),
-                l1_notification_rx,
+                l1_watcher,
                 network,
                 consensus,
                 engine,
@@ -232,7 +232,7 @@ impl<
                     let res = self.handle_network_event(event).await;
                     self.handle_outcome(res);
                 }
-                Some(notification) = self.l1_notification_rx.recv(), if self.sync_state.l2().is_synced() && self.derivation_pipeline.is_empty() => {
+                Some(notification) = self.l1_watcher.l1_notification_receiver().recv(), if self.sync_state.l2().is_synced() && self.derivation_pipeline.is_empty() => {
                     let res = self.handle_l1_notification(notification).await;
                     self.handle_outcome(res);
                 }
@@ -409,6 +409,30 @@ impl<
                     let _ = sender.send(l1_message);
                 }
             },
+            ChainOrchestratorCommand::RevertToL1Block((block_number, tx)) => {
+                self.sync_state.l1_mut().set_syncing();
+                let unwind_result = self.database.unwind(block_number).await?;
+
+                // Check if the unwind impacts the fcs safe head.
+                if let Some(block_info) = unwind_result.l2_safe_block_info {
+                    // If the new safe head is above the current finalized head, update the fcs safe
+                    // head to the new safe head.
+                    if block_info.number >= self.engine.fcs().finalized_block_info().number {
+                        self.engine.update_fcs(None, Some(block_info), None).await?;
+                    } else {
+                        // Otherwise, update the fcs safe head to the finalized head.
+                        self.engine
+                            .update_fcs(None, Some(*self.engine.fcs().finalized_block_info()), None)
+                            .await?;
+                    }
+                }
+
+                // Revert the L1 watcher to the specified block.
+                self.l1_watcher.revert_to_l1_block(block_number);
+
+                self.notify(ChainOrchestratorEvent::UnwoundToL1Block(block_number));
+                let _ = tx.send(true);
+            }
             #[cfg(feature = "test-utils")]
             ChainOrchestratorCommand::SetGossip((enabled, tx)) => {
                 self.network.handle().set_gossip(enabled).await;
@@ -1157,14 +1181,12 @@ impl<
         }
 
         // Update the FCS to the new head.
-        let result = self
-            .engine
-            .update_fcs(
-                Some(BlockInfo { number: chain_head_number, hash: chain_head_hash }),
-                None,
-                None,
-            )
-            .await?;
+        let head = BlockInfo { number: chain_head_number, hash: chain_head_hash };
+        let result = if self.sync_state.l2().is_syncing() {
+            self.engine.optimistic_sync(head).await?
+        } else {
+            self.engine.update_fcs(Some(head), None, None).await?
+        };
 
         // If the FCS update resulted in an invalid state, we return an error.
         if result.is_invalid() {

@@ -27,6 +27,8 @@ pub enum ChainOrchestratorCommand<N: FullNetwork<Primitives = ScrollNetworkPrimi
     DisableAutomaticSequencing(oneshot::Sender<bool>),
     /// Send a database query to the rollup manager.
     DatabaseQuery(DatabaseQuery),
+    /// Revert the rollup node state to the specified L1 block number.
+    RevertToL1Block((u64, oneshot::Sender<bool>)),
     /// Enable gossiping of blocks to peers.
     #[cfg(feature = "test-utils")]
     SetGossip((bool, oneshot::Sender<()>)),

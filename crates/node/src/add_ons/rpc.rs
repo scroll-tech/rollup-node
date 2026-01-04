@@ -115,6 +115,10 @@ pub trait RollupNodeAdminApi {
     /// Disables automatic sequencing in the rollup node.
     #[method(name = "disableAutomaticSequencing")]
     async fn disable_automatic_sequencing(&self) -> RpcResult<bool>;
+
+    /// Reverts the rollup node state to a specified L1 block number.
+    #[method(name = "revertToL1Block")]
+    async fn revert_to_l1_block(&self, block_number: u64) -> RpcResult<bool>;
 }
 
 #[async_trait]
@@ -220,6 +224,24 @@ where
             )
         })
     }
+
+    async fn revert_to_l1_block(&self, block_number: u64) -> RpcResult<bool> {
+        let handle = self.rollup_manager_handle().await.map_err(|e| {
+            ErrorObjectOwned::owned(
+                error::INTERNAL_ERROR_CODE,
+                format!("Failed to get rollup manager handle: {}", e),
+                None::<()>,
+            )
+        })?;
+
+        handle.revert_to_l1_block(block_number).await.map_err(|e| {
+            ErrorObjectOwned::owned(
+                error::INTERNAL_ERROR_CODE,
+                format!("Failed to revert to L1 block {}: {}", block_number, e),
+                None::<()>,
+            )
+        })
+    }
 }
 
 // Implement RollupNodeApiServer for Arc<RollupNodeRpcExt<N>> to allow shared ownership
@@ -256,5 +278,9 @@ where
 
     async fn disable_automatic_sequencing(&self) -> RpcResult<bool> {
         (**self).disable_automatic_sequencing().await
+    }
+
+    async fn revert_to_l1_block(&self, block_number: u64) -> RpcResult<bool> {
+        (**self).revert_to_l1_block(block_number).await
     }
 }

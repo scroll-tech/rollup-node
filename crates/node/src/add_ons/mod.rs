@@ -152,7 +152,7 @@ where
         });
 
         let rpc_handle = rpc_add_ons.launch_add_ons_with(ctx.clone(), |_| Ok(())).await?;
-        let (rollup_manager_handle, l1_watcher_tx) =
+        let rollup_manager_handle =
             rollup_node_manager_addon.launch(ctx.clone(), rpc_handle.clone()).await?;
 
         // Only send handle if RPC is enabled
@@ -161,12 +161,7 @@ where
                 .map_err(|_| eyre::eyre!("failed to send rollup manager handle"))?;
         }
 
-        Ok(ScrollAddOnsHandle {
-            rollup_manager_handle,
-            rpc_handle,
-            #[cfg(feature = "test-utils")]
-            l1_watcher_tx,
-        })
+        Ok(ScrollAddOnsHandle { rollup_manager_handle, rpc_handle })
     }
 }
 

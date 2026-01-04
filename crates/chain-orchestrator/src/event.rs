@@ -77,6 +77,8 @@ pub enum ChainOrchestratorEvent {
         /// The L2 safe block info.
         l2_safe_block_info: Option<BlockInfo>,
     },
+    /// The chain has been unwound to the specified L1 block number.
+    UnwoundToL1Block(u64),
     /// The chain orchestrator has synced to the L1 head.
     L1Synced,
     /// An L2 block has been committed returning the [`L2BlockInfoWithL1Messages`] and an

@@ -39,6 +39,11 @@ impl SyncState {
     pub const fn is_synced(&self) -> bool {
         self.l1.is_synced() && self.l2.is_synced()
     }
+
+    /// Returns true if either L1 or L2 is syncing.
+    pub const fn is_syncing(&self) -> bool {
+        self.l1.is_syncing() || self.l2.is_syncing()
+    }
 }
 
 /// The sync mode of the chain orchestrator.
