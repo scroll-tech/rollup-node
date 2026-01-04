@@ -217,10 +217,10 @@ async fn can_build_blocks_with_delayed_l1_messages() {
         &tasks,
         default_test_scroll_rollup_node_config(),
         1,
-        None,
         chain_spec,
         false,
         false,
+        None,
     )
     .await
     .unwrap();
@@ -349,10 +349,10 @@ async fn can_build_blocks_with_finalized_l1_messages() {
         &TaskManager::current(),
         default_test_scroll_rollup_node_config(),
         1,
-        None,
         chain_spec,
         false,
         false,
+        None,
     )
     .await
     .unwrap();
@@ -531,7 +531,7 @@ async fn can_sequence_blocks_with_private_key_file() -> eyre::Result<()> {
 
     let tasks = TaskManager::current();
     let (nodes, _, wallet) =
-        setup_engine(&tasks, rollup_manager_args, 1, None, chain_spec, false, false).await?;
+        setup_engine(&tasks, rollup_manager_args, 1, chain_spec, false, false, None).await?;
     let wallet = Arc::new(Mutex::new(wallet));
 
     let sequencer_rnm_handle = nodes[0].inner.add_ons_handle.rollup_manager_handle.clone();
@@ -635,7 +635,7 @@ async fn can_sequence_blocks_with_hex_key_file_without_prefix() -> eyre::Result<
 
     let tasks = TaskManager::current();
     let (nodes, _, wallet) =
-        setup_engine(&tasks, rollup_manager_args, 1, None, chain_spec, false, false).await?;
+        setup_engine(&tasks, rollup_manager_args, 1, chain_spec, false, false, None).await?;
     let wallet = Arc::new(Mutex::new(wallet));
 
     let sequencer_rnm_handle = nodes[0].inner.add_ons_handle.rollup_manager_handle.clone();
@@ -703,10 +703,10 @@ async fn can_build_blocks_and_exit_at_gas_limit() {
             ..default_test_scroll_rollup_node_config()
         },
         1,
-        None,
         chain_spec,
         false,
         false,
+        None,
     )
     .await
     .unwrap();
@@ -792,10 +792,10 @@ async fn can_build_blocks_and_exit_at_time_limit() {
             ..default_test_scroll_rollup_node_config()
         },
         1,
-        None,
         chain_spec,
         false,
         false,
+        None,
     )
     .await
     .unwrap();
@@ -880,10 +880,10 @@ async fn should_limit_l1_message_cumulative_gas() {
         &tasks,
         default_test_scroll_rollup_node_config(),
         1,
-        None,
         chain_spec,
         false,
         false,
+        None,
     )
     .await
     .unwrap();
@@ -1005,10 +1005,10 @@ async fn should_not_add_skipped_messages() {
         &tasks,
         default_test_scroll_rollup_node_config(),
         1,
-        None,
         chain_spec,
         false,
         false,
+        None,
     )
     .await
     .unwrap();

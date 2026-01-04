@@ -403,7 +403,7 @@ impl TestFixtureBuilder {
     }
 
     /// Adds `count`s follower nodes to the test.
-    pub fn followers(mut self, count: usize) -> Self {
+    pub const fn followers(mut self, count: usize) -> Self {
         self.num_nodes += count;
         self
     }
@@ -632,10 +632,10 @@ impl TestFixtureBuilder {
             &tasks,
             self.config.clone(),
             self.num_nodes,
-            None,
             chain_spec.clone(),
             self.is_dev,
             self.no_local_transactions_propagation,
+            None,
         )
         .await?;
 

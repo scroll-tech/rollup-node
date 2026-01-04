@@ -712,14 +712,14 @@ async fn test_l1_reorg_batch_revert() -> eyre::Result<()> {
     Ok(())
 }
 
-/// Test: Node can correctly process BatchCommit events after reboot.
+/// Test: Node can correctly process `BatchCommit` events after reboot.
 ///
 /// # Test Flow
 /// 1. Setup and complete L1 sync.
-/// 2. Send BatchCommit transactions (batches 0-3) and wait for consolidation.
+/// 2. Send `BatchCommit` transactions (batches 0-3) and wait for consolidation.
 /// 3. Verify safe head advanced.
 /// 4. Shutdown the node.
-/// 5. Send more BatchCommit transactions (batches 4-6) while node is down.
+/// 5. Send more `BatchCommit` transactions (batches 4-6) while node is down.
 /// 6. Start the node and sync L1.
 /// 7. Wait for batch consolidation events (batches 4-6).
 /// 8. Verify safe head continues to advance correctly after reboot.
@@ -784,15 +784,15 @@ async fn test_l1_sync_commit_batch_after_reboot() -> eyre::Result<()> {
     Ok(())
 }
 
-/// Test: Node can correctly process BatchFinalized events after reboot.
+/// Test: Node can correctly process `BatchFinalized` events after reboot.
 ///
 /// # Test Flow
 /// 1. Setup and complete L1 sync.
-/// 2. Send BatchCommit transactions (batches 0-6) and wait for consolidation.
-/// 3. Send BatchFinalized transactions (batches 1-3) and wait for indexing.
+/// 2. Send `BatchCommit` transactions (batches 0-6) and wait for consolidation.
+/// 3. Send `BatchFinalized` transactions (batches 1-3) and wait for indexing.
 /// 4. Verify finalized head advanced.
 /// 5. Shutdown the node.
-/// 6. Send more BatchFinalized transactions (batches 4-6) while node is down.
+/// 6. Send more `BatchFinalized` transactions (batches 4-6) while node is down.
 /// 7. Start the node and sync L1.
 /// 8. Wait for batch finalize indexed events (batches 4-6).
 /// 9. Verify finalized head continues to advance correctly after reboot.
@@ -870,14 +870,14 @@ async fn test_l1_sync_finalize_batch_after_reboot() -> eyre::Result<()> {
     Ok(())
 }
 
-/// Test: Node can correctly process BatchRevert events after reboot.
+/// Test: Node can correctly process `BatchRevert` events after reboot.
 ///
 /// # Test Flow
 /// 1. Setup and complete L1 sync.
-/// 2. Send BatchCommit transactions (batches 0-6) and wait for consolidation.
+/// 2. Send `BatchCommit` transactions (batches 0-6) and wait for consolidation.
 /// 3. Record safe head.
 /// 4. Shutdown the node.
-/// 5. Send BatchRevert transaction while node is down.
+/// 5. Send `BatchRevert` transaction while node is down.
 /// 6. Start the node and sync L1.
 /// 7. Wait for batch reverted event.
 /// 8. Verify safe head decreased correctly.
@@ -937,14 +937,14 @@ async fn test_l1_sync_revert_batch_after_reboot() -> eyre::Result<()> {
     Ok(())
 }
 
-/// Test: Node can correctly process BatchCommit events after reboot + L1 reorg.
+/// Test: Node can correctly process `BatchCommit` events after reboot + L1 reorg.
 ///
 /// # Test Flow
 /// 1. Setup and complete L1 sync.
-/// 2. Send BatchCommit transactions (batches 0-3) and wait for consolidation.
+/// 2. Send `BatchCommit` transactions (batches 0-3) and wait for consolidation.
 /// 3. Record safe head.
 /// 4. Shutdown the node.
-/// 5. Trigger L1 reorg (depth 1) to remove some BatchCommit events.
+/// 5. Trigger L1 reorg (depth 1) to remove some `BatchCommit` events.
 /// 6. Start the node and sync L1.
 /// 7. Wait for L1 synced event.
 /// 8. Verify safe head rolled back correctly after L1 reorg.
@@ -1004,15 +1004,15 @@ async fn test_l1_reorg_commit_batch_after_reboot() -> eyre::Result<()> {
     Ok(())
 }
 
-/// Test: Node can correctly handle L1 reorg of BatchFinalized events after reboot.
+/// Test: Node can correctly handle L1 reorg of `BatchFinalized` events after reboot.
 ///
 /// # Test Flow
 /// 1. Setup and complete L1 sync.
-/// 2. Send BatchCommit transactions (batches 0-6) and wait for consolidation.
-/// 3. Send BatchFinalized transactions (batches 1-3) and wait for indexing.
+/// 2. Send `BatchCommit` transactions (batches 0-6) and wait for consolidation.
+/// 3. Send `BatchFinalized` transactions (batches 1-3) and wait for indexing.
 /// 4. Record finalized head.
 /// 5. Shutdown the node.
-/// 6. Trigger L1 reorg (depth 2) to remove BatchFinalized events.
+/// 6. Trigger L1 reorg (depth 2) to remove `BatchFinalized` events.
 /// 7. Expect L1 reorg event.
 /// 8. Start the node and sync L1.
 /// 9. Verify finalized head remains the same (reorg removed unfinalized L1 blocks).
@@ -1080,16 +1080,16 @@ async fn test_l1_reorg_finalize_batch_after_reboot() -> eyre::Result<()> {
     Ok(())
 }
 
-/// Test: Node can correctly handle L1 reorg of BatchRevert events after reboot.
+/// Test: Node can correctly handle L1 reorg of `BatchRevert` events after reboot.
 ///
 /// # Test Flow
 /// 1. Setup and complete L1 sync.
-/// 2. Send BatchCommit transactions (batches 0-6) and wait for consolidation.
+/// 2. Send `BatchCommit` transactions (batches 0-6) and wait for consolidation.
 /// 3. Record safe head after commits.
-/// 4. Send BatchRevert transaction and wait for batch reverted event.
+/// 4. Send `BatchRevert` transaction and wait for batch reverted event.
 /// 5. Verify safe head decreased after revert.
 /// 6. Shutdown the node.
-/// 7. Trigger L1 reorg (depth 1) to remove the BatchRevert event.
+/// 7. Trigger L1 reorg (depth 1) to remove the `BatchRevert` event.
 /// 8. Start the node and sync L1.
 /// 9. Verify safe head is restored to pre-revert state (reorg undid the revert).
 #[tokio::test]

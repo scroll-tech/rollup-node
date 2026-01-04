@@ -3,7 +3,7 @@
 //! This module provides functionality to safely shutdown and restart nodes in integration tests,
 //! enabling testing of:
 //! - State persistence across reboots
-//! - Correct restoration of ForkchoiceState (FCS) from database
+//! - Correct restoration of `ForkchoiceState` (FCS) from database
 //! - Continued L1 event processing after restart
 //! - Proper handling of L1 reorgs after node restarts
 //!
@@ -60,18 +60,18 @@ impl TestFixture {
     ///
     /// # Shutdown Process
     ///
-    /// 1. **Explicit ChainOrchestrator Shutdown**
+    /// 1. **Explicit `ChainOrchestrator` Shutdown**
     ///    - Sends a `Shutdown` command to the `ChainOrchestrator` via its handle
     ///    - This makes the orchestrator exit its event loop immediately
     ///    - Prevents lingering RPC errors (e.g., 502 errors) after shutdown
     ///
-    /// 2. **Drop NodeHandle**
+    /// 2. **Drop `NodeHandle`**
     ///    - Takes ownership of the `NodeHandle` and drops it
     ///    - Triggers cleanup of:
     ///      - Network connections
     ///      - RPC server (stops listening on port)
     ///      - Database connections (flushes pending writes)
-    ///      - Background tasks (via TaskManager shutdown signals)
+    ///      - Background tasks (via `TaskManager` shutdown signals)
     ///      - L1 watcher channels
     ///
     /// 3. **Wait for Cleanup**
@@ -145,7 +145,7 @@ impl TestFixture {
     /// Restart a previously shutdown node at the given index.
     ///
     /// This method restarts a node that was shut down, reusing its existing database
-    /// and restoring its state (including ForkchoiceState) from persisted data.
+    /// and restoring its state (including `ForkchoiceState`) from persisted data.
     ///
     /// # State Restoration
     ///
@@ -200,10 +200,10 @@ impl TestFixture {
             &self.tasks,
             self.config.clone(),
             1,
-            Some(self.dbs[node_index].clone()), // reuse provided database
             self.chain_spec.clone(),
             true,
             false,
+            Some((node_index, self.dbs[node_index].clone())),
         )
         .await?;
 
@@ -228,7 +228,6 @@ impl TestFixture {
         // resulting in "Syncing" errors when building payloads after reboot.
         let status = rollup_manager_handle.status().await?;
         let fcs: scroll_engine::ForkchoiceState = status.l2.fcs;
-        tracing::warn!(target: "scroll::test_utils::reboot", "fcs: {:?}", fcs);
 
         tracing::info!(
             "Restored FCS from database - head: {:?}, safe: {:?}, finalized: {:?}",

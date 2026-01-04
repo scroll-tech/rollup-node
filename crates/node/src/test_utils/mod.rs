@@ -113,10 +113,10 @@ pub async fn setup_engine(
     tasks: &TaskManager,
     mut scroll_node_config: ScrollRollupNodeConfig,
     num_nodes: usize,
-    db_provided: Option<Arc<reth_db::test_utils::TempDatabase<reth_db::DatabaseEnv>>>,
     chain_spec: Arc<<ScrollRollupNode as NodeTypes>::ChainSpec>,
     is_dev: bool,
     no_local_transactions_propagation: bool,
+    reboot_info: Option<(usize, Arc<reth_db::test_utils::TempDatabase<reth_db::DatabaseEnv>>)>,
 ) -> eyre::Result<(
     Vec<
         NodeHelperType<
@@ -146,9 +146,14 @@ where
     let mut nodes: Vec<NodeTestContext<_, _>> = Vec::with_capacity(num_nodes);
     let mut dbs: Vec<Arc<reth_db::test_utils::TempDatabase<reth_db::DatabaseEnv>>> = Vec::new();
 
+    // let (node_index, db_provided) = reboot_info.unwrap_or((0, None));
+
     for idx in 0..num_nodes {
-        // disable sequencer nodes after the first one
-        if idx != 0 {
+        // Determine the actual node index (for reboot use provided index, otherwise use idx)
+        let node_index = reboot_info.as_ref().map(|(node_idx, _)| *node_idx).unwrap_or(idx);
+
+        // Disable sequencer for all nodes except index 0
+        if node_index != 0 {
             scroll_node_config.sequencer_args.sequencer_enabled = false;
         }
 
@@ -166,7 +171,7 @@ where
             .with_txpool(TxPoolArgs { no_local_transactions_propagation, ..Default::default() });
 
         // Check if we already have provided a database for a node (reboot scenario)
-        let db = if let Some(ref provided_db) = db_provided {
+        let db = if let Some((_, provided_db)) = &reboot_info {
             // Reuse existing database for reboot
             let db_path = provided_db.path();
             let test_data_dir = db_path.parent().expect("db path should have a parent directory");
@@ -175,7 +180,11 @@ where
             node_config.datadir.datadir =
                 reth_node_core::dirs::MaybePlatformPath::from(test_data_dir.to_path_buf());
 
-            tracing::warn!("Reusing existing database for node {} at {:?}", idx, test_data_dir);
+            tracing::info!(
+                "Reusing existing database for node {} at {:?}",
+                node_index,
+                test_data_dir
+            );
             provided_db.clone()
         } else {
             // Create a unique persistent test directory for both Reth and Scroll databases
@@ -183,7 +192,7 @@ where
             let test_data_dir = std::env::temp_dir().join(format!(
                 "scroll-test-{}-node-{}-{}",
                 std::process::id(),
-                idx,
+                node_index,
                 std::time::SystemTime::now()
                     .duration_since(std::time::UNIX_EPOCH)
                     .unwrap()
@@ -196,20 +205,14 @@ where
                 reth_node_core::dirs::MaybePlatformPath::from(test_data_dir.clone());
 
             // Create Reth database in the test directory's db subdirectory
-            let new_db = create_test_rw_db_with_path(&node_config.datadir().db());
+            let new_db = create_test_rw_db_with_path(node_config.datadir().db());
 
-            tracing::info!("Created new database for node {} at {:?}", idx, test_data_dir);
+            tracing::info!("Created new database for node {} at {:?}", node_index, test_data_dir);
             dbs.push(new_db.clone());
             new_db
         };
 
-        // Set Scroll SQLite database path to the same directory
-        // This allows the node to be restarted with the same database state
-        // let scroll_db_path = test_data_dir.join("scroll.db");
-        // let scroll_db_url = format!("sqlite://{}?mode=rwc", scroll_db_path.display());
-        // scroll_node_config.database_args.rn_db_path = Some(PathBuf::from(scroll_db_url));
-
-        let span = span!(Level::INFO, "node", idx);
+        let span = span!(Level::INFO, "node", node_index);
         let _enter = span.enter();
         let testing_node = NodeBuilder::new(node_config.clone())
             .with_database(db.clone())
@@ -239,7 +242,7 @@ where
                 .await?;
 
         // skip the forkchoice update when a database is provided (reboot scenario)
-        if !db_provided.is_some() {
+        if reboot_info.is_none() {
             let genesis = node.block_hash(0);
             node.update_forkchoice(genesis, genesis).await?;
         }

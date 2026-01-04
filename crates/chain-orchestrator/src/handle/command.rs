@@ -33,7 +33,7 @@ pub enum ChainOrchestratorCommand<N: FullNetwork<Primitives = ScrollNetworkPrimi
     /// Returns a database handle for direct database access.
     #[cfg(feature = "test-utils")]
     DatabaseHandle(oneshot::Sender<std::sync::Arc<scroll_db::Database>>),
-    /// Request the ChainOrchestrator to shutdown immediately.
+    /// Request the `ChainOrchestrator` to shutdown immediately.
     #[cfg(feature = "test-utils")]
     Shutdown(oneshot::Sender<()>),
 }
