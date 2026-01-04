@@ -1499,7 +1499,8 @@ impl<T: ReadConnectionProvider + Sync + ?Sized> DatabaseReadOperations for T {
     async fn get_signature(&self, block_hash: B256) -> Result<Option<Signature>, DatabaseError> {
         tracing::trace!(target: "scroll::db", block_hash = ?block_hash, "Retrieving block signature from database.");
 
-        let block_signature = models::block_signature::Entity::find_by_id(block_hash.to_vec())
+        let block_signature = models::block_signature::Entity::find()
+            .filter(models::block_signature::Column::BlockHash.eq(block_hash.to_vec()))
             .one(self.get_connection())
             .await?;
 

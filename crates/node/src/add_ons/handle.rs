@@ -4,8 +4,6 @@ use reth_node_builder::rpc::{RpcHandle, RpcHandleProvider};
 use reth_rpc_eth_api::EthApiTypes;
 use reth_scroll_node::ScrollNetworkPrimitives;
 use rollup_node_chain_orchestrator::ChainOrchestratorHandle;
-#[cfg(feature = "test-utils")]
-use {rollup_node_watcher::L1Notification, std::sync::Arc, tokio::sync::mpsc::Sender};
 
 /// A handle for scroll addons, which includes handles for the rollup manager and RPC server.
 #[derive(Debug, Clone)]
@@ -17,9 +15,6 @@ pub struct ScrollAddOnsHandle<
     pub rollup_manager_handle: ChainOrchestratorHandle<Node::Network>,
     /// The handle used to send commands to the RPC server.
     pub rpc_handle: RpcHandle<Node, EthApi>,
-    /// An optional channel used to send `L1Watcher` notifications to the `RollupNodeManager`.
-    #[cfg(feature = "test-utils")]
-    pub l1_watcher_tx: Option<Sender<Arc<L1Notification>>>,
 }
 
 impl<

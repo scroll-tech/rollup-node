@@ -1,6 +1,7 @@
 use crate::L1Notification;
 use alloy_json_rpc::RpcError;
 use alloy_primitives::B256;
+use alloy_sol_types::Error;
 use alloy_transport::TransportErrorKind;
 use rollup_node_providers::L1ProviderError;
 use std::sync::Arc;
@@ -61,6 +62,14 @@ pub enum FilterLogError {
     /// Invalid extracted notification length.
     #[error("expected {0} notifications, got {1}")]
     InvalidNotificationCount(usize, usize),
+    /// Failed to decode log of expected type.
+    #[error("failed to decode log as {log_type} with error {error}")]
+    DecodeLogFailed {
+        /// The expected log type.
+        log_type: &'static str,
+        /// The decoding error.
+        error: Error,
+    },
 }
 
 /// An error that occurred when accessing data from the cache.

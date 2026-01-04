@@ -557,20 +557,22 @@ async fn test_chain_orchestrator_l1_reorg() -> eyre::Result<()> {
     let mut sequencer = nodes.pop().unwrap();
     let sequencer_handle = sequencer.inner.rollup_manager_handle.clone();
     let mut sequencer_events = sequencer_handle.get_event_listener().await?;
-    let sequencer_l1_watcher_tx = sequencer.inner.add_ons_handle.l1_watcher_tx.clone().unwrap();
+    let sequencer_l1_watcher_tx =
+        sequencer.inner.add_ons_handle.rollup_manager_handle.l1_watcher_mock.clone().unwrap();
 
     let (mut nodes, _tasks, _) =
         setup_engine(node_config.clone(), 1, chain_spec.clone(), false, false).await.unwrap();
     let mut follower = nodes.pop().unwrap();
     let mut follower_events = follower.inner.rollup_manager_handle.get_event_listener().await?;
-    let follower_l1_watcher_tx = follower.inner.add_ons_handle.l1_watcher_tx.clone().unwrap();
+    let follower_l1_watcher_tx =
+        follower.inner.add_ons_handle.rollup_manager_handle.l1_watcher_mock.clone().unwrap();
 
     // Connect the nodes together.
     sequencer.connect(&mut follower).await;
 
     // set both the sequencer and follower L1 watchers to synced
-    sequencer_l1_watcher_tx.send(Arc::new(L1Notification::Synced)).await.unwrap();
-    follower_l1_watcher_tx.send(Arc::new(L1Notification::Synced)).await.unwrap();
+    sequencer_l1_watcher_tx.notification_tx.send(Arc::new(L1Notification::Synced)).await.unwrap();
+    follower_l1_watcher_tx.notification_tx.send(Arc::new(L1Notification::Synced)).await.unwrap();
 
     // Initially the sequencer should build 100 blocks with 1 message in each and the follower
     // should follow them
@@ -589,16 +591,16 @@ async fn test_chain_orchestrator_l1_reorg() -> eyre::Result<()> {
             block_timestamp: i * 10,
         });
         let new_block = Arc::new(L1Notification::NewBlock(block_info));
-        sequencer_l1_watcher_tx.send(l1_message.clone()).await.unwrap();
-        sequencer_l1_watcher_tx.send(new_block.clone()).await.unwrap();
+        sequencer_l1_watcher_tx.notification_tx.send(l1_message.clone()).await.unwrap();
+        sequencer_l1_watcher_tx.notification_tx.send(new_block.clone()).await.unwrap();
         wait_n_events(
             &mut sequencer_events,
             |e| matches!(e, ChainOrchestratorEvent::NewL1Block(_)),
             1,
         )
         .await;
-        follower_l1_watcher_tx.send(l1_message).await.unwrap();
-        follower_l1_watcher_tx.send(new_block).await.unwrap();
+        follower_l1_watcher_tx.notification_tx.send(l1_message).await.unwrap();
+        follower_l1_watcher_tx.notification_tx.send(new_block).await.unwrap();
         wait_n_events(
             &mut follower_events,
             |e| matches!(e, ChainOrchestratorEvent::NewL1Block(_)),
@@ -622,7 +624,11 @@ async fn test_chain_orchestrator_l1_reorg() -> eyre::Result<()> {
     }
 
     // send a reorg notification to the sequencer
-    sequencer_l1_watcher_tx.send(Arc::new(L1Notification::Reorg(50))).await.unwrap();
+    sequencer_l1_watcher_tx
+        .notification_tx
+        .send(Arc::new(L1Notification::Reorg(50)))
+        .await
+        .unwrap();
     wait_n_events(
         &mut sequencer_events,
         |e| {
@@ -660,8 +666,8 @@ async fn test_chain_orchestrator_l1_reorg() -> eyre::Result<()> {
         });
         let new_block = Arc::new(L1Notification::NewBlock(block_info));
         l1_notifications.extend([l1_message.clone(), new_block.clone()]);
-        sequencer_l1_watcher_tx.send(l1_message.clone()).await.unwrap();
-        sequencer_l1_watcher_tx.send(new_block.clone()).await.unwrap();
+        sequencer_l1_watcher_tx.notification_tx.send(l1_message.clone()).await.unwrap();
+        sequencer_l1_watcher_tx.notification_tx.send(new_block.clone()).await.unwrap();
         wait_n_events(
             &mut sequencer_events,
             |e| matches!(e, ChainOrchestratorEvent::NewL1Block(_)),
@@ -694,9 +700,9 @@ async fn test_chain_orchestrator_l1_reorg() -> eyre::Result<()> {
     .await;
 
     // Now update the follower node with the new L1 data
-    follower_l1_watcher_tx.send(Arc::new(L1Notification::Reorg(50))).await.unwrap();
+    follower_l1_watcher_tx.notification_tx.send(Arc::new(L1Notification::Reorg(50))).await.unwrap();
     for notification in l1_notifications {
-        follower_l1_watcher_tx.send(notification).await.unwrap();
+        follower_l1_watcher_tx.notification_tx.send(notification).await.unwrap();
     }
     wait_n_events(&mut follower_events, |e| matches!(e, ChainOrchestratorEvent::NewL1Block(_)), 20)
         .await;
