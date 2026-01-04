@@ -152,9 +152,11 @@ scroll-alloy-rpc-types-engine = { git = "https://github.com/scroll-tech/reth.git
 
 # reth
 reth-chainspec = { git = "https://github.com/scroll-tech/reth.git", tag = "scroll-v91.3", default-features = false }
+reth-db = { git = "https://github.com/scroll-tech/reth.git", tag = "scroll-v91.3", default-features = false }
 reth-e2e-test-utils = { git = "https://github.com/scroll-tech/reth.git", tag = "scroll-v91.3" }
 reth-eth-wire = { git = "https://github.com/scroll-tech/reth.git", tag = "scroll-v91.3", default-features = false }
 reth-eth-wire-types = { git = "https://github.com/scroll-tech/reth.git", tag = "scroll-v91.3", default-features = false }
+reth-fs-util = { git = "https://github.com/scroll-tech/reth.git", tag = "scroll-v91.3", default-features = false }
 reth-network = { git = "https://github.com/scroll-tech/reth.git", tag = "scroll-v91.3", default-features = false }
 reth-network-api = { git = "https://github.com/scroll-tech/reth.git", tag = "scroll-v91.3", default-features = false }
 reth-network-p2p = { git = "https://github.com/scroll-tech/reth.git", tag = "scroll-v91.3", default-features = false }

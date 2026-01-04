@@ -81,8 +81,10 @@ anvil = { git = "https://github.com/foundry-rs/foundry.git", rev = "2c84e1c970d1
 alloy-rpc-types-eth = { workspace = true, optional = true }
 alloy-rpc-types-engine = { workspace = true, optional = true }
 alloy-rpc-types-anvil = { workspace = true, optional = true }
+reth-db = { workspace = true, optional = true, features = ["test-utils"] }
 reth-e2e-test-utils = { workspace = true, optional = true }
 reth-engine-local = { workspace = true, optional = true }
+reth-fs-util = { workspace = true, optional = true }
 reth-provider = { workspace = true, optional = true }
 reth-rpc-layer = { workspace = true, optional = true }
 reth-rpc-server-types = { workspace = true, optional = true }
@@ -112,6 +114,7 @@ console-subscriber = "0.5.0"
 alloy-chains.workspace = true
 alloy-eips.workspace = true
 futures.workspace = true
+reth-db = { workspace = true, features = ["test-utils"] }
 reth-e2e-test-utils.workspace = true
 reth-node-core.workspace = true
 reth-provider.workspace = true
@@ -132,7 +135,9 @@ alloy-rpc-types-eth = { workspace = true }
 [features]
 js-tracer = ["reth-scroll-node/js-tracer", "reth-scroll-rpc/js-tracer"]
 test-utils = [
+    "reth-db",
     "reth-engine-local",
+    "reth-fs-util",
     "reth-trie-db/test-utils",
     "reth-chainspec/test-utils",
     "reth-evm/test-utils",

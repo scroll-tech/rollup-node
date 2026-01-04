@@ -215,7 +215,10 @@ impl<'a> EventWaiter<'a> {
     ) -> eyre::Result<Vec<ChainOrchestratorEvent>> {
         let mut matched_events = Vec::new();
         for node in self.node_indices {
-            let events = &mut self.fixture.nodes[node].chain_orchestrator_rx;
+            let Some(node_handle) = &mut self.fixture.nodes[node] else {
+                continue; // Skip shutdown nodes
+            };
+            let events = &mut node_handle.chain_orchestrator_rx;
             let mut node_matched_events = Vec::new();
 
             let result = timeout(self.timeout_duration, async {
@@ -282,7 +285,10 @@ impl<'a> EventWaiter<'a> {
                         continue;
                     }
 
-                    let events = &mut self.fixture.nodes[node_index].chain_orchestrator_rx;
+                    let node_handle = self.fixture.nodes[node_index].as_mut().ok_or_else(|| {
+                        eyre::eyre!("Node at index {} has been shutdown", node_index)
+                    })?;
+                    let events = &mut node_handle.chain_orchestrator_rx;
 
                     // Try to get the next event (non-blocking with try_next)
                     if let Some(event) = events.next().now_or_never() {
