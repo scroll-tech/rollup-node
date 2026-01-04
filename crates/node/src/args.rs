@@ -369,7 +369,9 @@ impl ScrollRollupNodeConfig {
         type L1WatcherMockOpt = Option<std::convert::Infallible>;
 
         let (_l1_watcher_mock, l1_watcher_handle): (L1WatcherMockOpt, Option<L1WatcherHandle>) =
-            if let Some(provider) = l1_provider.filter(|_| !self.test_args.test || self.blob_provider_args.anvil_url.is_some()) {
+            if let Some(provider) = l1_provider
+                .filter(|_| !self.test_args.test || self.blob_provider_args.anvil_url.is_some())
+            {
                 tracing::info!(target: "scroll::node::args", ?l1_block_startup_info, "Starting L1 watcher");
 
                 #[cfg(feature = "test-utils")]
