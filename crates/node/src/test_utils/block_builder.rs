@@ -92,7 +92,8 @@ impl<'a> BlockBuilder<'a> {
 
     /// Build the block and validate against expectations.
     pub async fn build_and_await_block(self) -> eyre::Result<ScrollBlock> {
-        let sequencer_node = &self.fixture.nodes[0];
+        let sequencer_node =
+            self.fixture.nodes[0].as_ref().expect("sequencer node has been shutdown");
 
         // Get the sequencer from the rollup manager handle
         let handle = &sequencer_node.rollup_manager_handle;

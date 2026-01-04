@@ -115,9 +115,11 @@ impl<'a> L1Helper<'a> {
             self.fixture.nodes.iter().collect()
         };
 
-        for node in nodes {
-            if let Some(tx) = &node.l1_watcher_tx {
-                tx.send(notification.clone()).await?;
+        for node_opt in nodes {
+            if let Some(node) = node_opt {
+                if let Some(tx) = &node.l1_watcher_tx {
+                    tx.send(notification.clone()).await?;
+                }
             }
         }
 
@@ -221,9 +223,11 @@ impl<'a> L1MessageBuilder<'a> {
             self.l1_helper.fixture.nodes.iter().collect()
         };
 
-        for node in nodes {
-            if let Some(tx) = &node.l1_watcher_tx {
-                tx.send(notification.clone()).await?;
+        for node_opt in nodes {
+            if let Some(node) = node_opt {
+                if let Some(tx) = &node.l1_watcher_tx {
+                    tx.send(notification.clone()).await?;
+                }
             }
         }
 

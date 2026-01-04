@@ -47,7 +47,11 @@ use tokio::sync::{mpsc, Mutex};
 /// Main test fixture providing a high-level interface for testing rollup nodes.
 pub struct TestFixture {
     /// The list of nodes in the test setup.
-    pub nodes: Vec<NodeHandle>,
+    /// Using Option to allow nodes to be shutdown without changing indices.
+    /// A None value means the node at that index has been shutdown.
+    pub nodes: Vec<Option<NodeHandle>>,
+    /// Database references for each node, used for reboot scenarios.
+    pub dbs: Vec<Arc<reth_db::test_utils::TempDatabase<reth_db::DatabaseEnv>>>,
     /// Shared wallet for generating transactions.
     pub wallet: Arc<Mutex<Wallet>>,
     /// Chain spec used by the nodes.
@@ -55,7 +59,9 @@ pub struct TestFixture {
     /// Optional Anvil instance for L1 simulation.
     pub anvil: Option<anvil::NodeHandle>,
     /// The task manager. Held in order to avoid dropping the node.
-    _tasks: TaskManager,
+    pub tasks: TaskManager,
+    /// The configuration for the nodes.
+    pub config: ScrollRollupNodeConfig,
 }
 
 impl Debug for TestFixture {
@@ -132,19 +138,28 @@ impl TestFixture {
         TestFixtureBuilder::new()
     }
 
+    /// Get a node by index, returning an error if it has been shutdown.
+    fn get_node(&self, node_index: usize) -> eyre::Result<&NodeHandle> {
+        self.nodes
+            .get(node_index)
+            .ok_or_else(|| eyre::eyre!("Node index {} out of bounds", node_index))?
+            .as_ref()
+            .ok_or_else(|| eyre::eyre!("Node at index {} has been shutdown", node_index))
+    }
+
     /// Get the sequencer node (assumes first node is sequencer).
     pub fn sequencer(&mut self) -> &mut NodeHandle {
-        let handle = &mut self.nodes[0];
+        let handle = self.nodes[0].as_mut().expect("sequencer node has been shutdown");
         assert!(handle.is_sequencer(), "expected sequencer, got follower");
         handle
     }
 
     /// Get a follower node by index.
     pub fn follower(&mut self, index: usize) -> &mut NodeHandle {
-        if index == 0 && self.nodes[0].is_sequencer() {
-            return &mut self.nodes[index + 1];
+        if index == 0 && self.nodes[0].as_ref().map(|n| n.is_sequencer()).unwrap_or(false) {
+            return self.nodes[index + 1].as_mut().expect("follower node has been shutdown");
         }
-        &mut self.nodes[index]
+        self.nodes[index].as_mut().expect("follower node has been shutdown")
     }
 
     /// Get the wallet.
@@ -178,7 +193,10 @@ impl TestFixture {
         node_index: usize,
         tx: impl Into<alloy_primitives::Bytes>,
     ) -> eyre::Result<()> {
-        self.nodes[node_index].node.rpc.inject_tx(tx.into()).await?;
+        let node = self.nodes[node_index]
+            .as_ref()
+            .ok_or_else(|| eyre::eyre!("Node at index {} has been shutdown", node_index))?;
+        node.node.rpc.inject_tx(tx.into()).await?;
         Ok(())
     }
 
@@ -186,8 +204,10 @@ impl TestFixture {
     pub async fn get_block(&self, node_index: usize) -> eyre::Result<Block<Transaction>> {
         use reth_rpc_api::EthApiServer;
 
-        self.nodes[node_index]
-            .node
+        let node = self.nodes[node_index]
+            .as_ref()
+            .ok_or_else(|| eyre::eyre!("Node at index {} has been shutdown", node_index))?;
+        node.node
             .rpc
             .inner
             .eth_api()
@@ -206,8 +226,8 @@ impl TestFixture {
         &self,
         node_index: usize,
     ) -> eyre::Result<rollup_node_chain_orchestrator::ChainOrchestratorStatus> {
-        self.nodes[node_index]
-            .rollup_manager_handle
+        let node = self.get_node(node_index)?;
+        node.rollup_manager_handle
             .status()
             .await
             .map_err(|e| eyre::eyre!("Failed to get status: {}", e))
@@ -367,7 +387,7 @@ impl TestFixtureBuilder {
     }
 
     /// Adds `count`s follower nodes to the test.
-    pub const fn followers(mut self, count: usize) -> Self {
+    pub fn followers(mut self, count: usize) -> Self {
         self.num_nodes += count;
         self
     }
@@ -591,9 +611,12 @@ impl TestFixtureBuilder {
             None
         };
 
-        let (nodes, _tasks, wallet) = setup_engine(
+        let tasks = TaskManager::current();
+        let (nodes, dbs, wallet) = setup_engine(
+            &tasks,
             self.config.clone(),
             self.num_nodes,
+            Vec::new(), // Empty dbs for initial setup
             chain_spec.clone(),
             self.is_dev,
             self.no_local_transactions_propagation,
@@ -621,7 +644,7 @@ impl TestFixtureBuilder {
             let chain_orchestrator_rx =
                 node.inner.add_ons_handle.rollup_manager_handle.get_event_listener().await?;
 
-            node_handles.push(NodeHandle {
+            node_handles.push(Some(NodeHandle {
                 node,
                 engine,
                 chain_orchestrator_rx,
@@ -632,15 +655,17 @@ impl TestFixtureBuilder {
                 } else {
                     NodeType::Follower
                 },
-            });
+            }));
         }
 
         Ok(TestFixture {
             nodes: node_handles,
+            dbs,
             wallet: Arc::new(Mutex::new(wallet)),
             chain_spec,
-            _tasks,
+            tasks,
             anvil,
+            config: self.config,
         })
     }
 

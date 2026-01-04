@@ -85,6 +85,7 @@ use crate::{
 };
 use alloy_primitives::Bytes;
 use reth_chainspec::EthChainSpec;
+use reth_db::test_utils::create_test_rw_db_with_path;
 use reth_e2e_test_utils::{
     node::NodeTestContext, transaction::TransactionTestContext, wallet::Wallet, Adapter,
     NodeHelperType, TmpDB, TmpNodeAddOnsHandle, TmpNodeEthApi,
@@ -109,8 +110,10 @@ use tracing::{span, Level};
 /// This is the legacy setup function that's used by existing tests.
 /// For new tests, consider using the `TestFixture` API instead.
 pub async fn setup_engine(
+    tasks: &TaskManager,
     mut scroll_node_config: ScrollRollupNodeConfig,
     num_nodes: usize,
+    mut dbs: Vec<Arc<reth_db::test_utils::TempDatabase<reth_db::DatabaseEnv>>>,
     chain_spec: Arc<<ScrollRollupNode as NodeTypes>::ChainSpec>,
     is_dev: bool,
     no_local_transactions_propagation: bool,
@@ -121,7 +124,7 @@ pub async fn setup_engine(
             BlockchainProvider<NodeTypesWithDBAdapter<ScrollRollupNode, TmpDB>>,
         >,
     >,
-    TaskManager,
+    Vec<Arc<reth_db::test_utils::TempDatabase<reth_db::DatabaseEnv>>>,
     Wallet,
 )>
 where
@@ -132,7 +135,6 @@ where
     TmpNodeAddOnsHandle<ScrollRollupNode>:
         RpcHandleProvider<Adapter<ScrollRollupNode>, TmpNodeEthApi<ScrollRollupNode>>,
 {
-    let tasks = TaskManager::current();
     let exec = tasks.executor();
 
     let network_config = NetworkArgs {
@@ -148,7 +150,9 @@ where
         if idx != 0 {
             scroll_node_config.sequencer_args.sequencer_enabled = false;
         }
-        let node_config = NodeConfig::new(chain_spec.clone())
+
+        // Configure node with the test data directory
+        let mut node_config = NodeConfig::new(chain_spec.clone())
             .with_network(network_config.clone())
             .with_unused_ports()
             .with_rpc(
@@ -160,9 +164,59 @@ where
             .set_dev(is_dev)
             .with_txpool(TxPoolArgs { no_local_transactions_propagation, ..Default::default() });
 
+        // Check if we already have a database for this index (reboot scenario)
+        let db: Arc<reth_db::test_utils::TempDatabase<reth_db::DatabaseEnv>> = if idx < dbs.len() {
+            // Reuse existing database for reboot
+            let existing_db = dbs[idx].clone();
+
+            // Get the existing datadir from the database path
+            let existing_db_path = existing_db.path();
+            let test_data_dir =
+                existing_db_path.parent().expect("db path should have a parent directory");
+
+            // Set the datadir in node_config to reuse the same directory
+            node_config.datadir.datadir =
+                reth_node_core::dirs::MaybePlatformPath::from(test_data_dir.to_path_buf());
+
+            tracing::warn!("Reusing existing database for node {} at {:?}", idx, test_data_dir);
+            existing_db
+        } else {
+            // Create a unique persistent test directory for both Reth and Scroll databases
+            // Using process ID and node index to ensure uniqueness
+            let test_data_dir = std::env::temp_dir().join(format!(
+                "scroll-test-{}-node-{}-{}",
+                std::process::id(),
+                idx,
+                std::time::SystemTime::now()
+                    .duration_since(std::time::UNIX_EPOCH)
+                    .unwrap()
+                    .as_nanos()
+            ));
+            std::fs::create_dir_all(&test_data_dir).expect("failed to create test data directory");
+
+            // Set the datadir in node_config (critical for proper initialization)
+            node_config.datadir.datadir =
+                reth_node_core::dirs::MaybePlatformPath::from(test_data_dir.clone());
+
+            // Create Reth database in the test directory's db subdirectory
+            let new_db = create_test_rw_db_with_path(&node_config.datadir().db());
+
+            tracing::info!("Created new database for node {} at {:?}", idx, test_data_dir);
+            dbs.push(new_db.clone());
+            new_db
+        };
+
+        // Set Scroll SQLite database path to the same directory
+        // This allows the node to be restarted with the same database state
+        // let scroll_db_path = test_data_dir.join("scroll.db");
+        // let scroll_db_url = format!("sqlite://{}?mode=rwc", scroll_db_path.display());
+        // scroll_node_config.database_args.rn_db_path = Some(PathBuf::from(scroll_db_url));
+
         let span = span!(Level::INFO, "node", idx);
         let _enter = span.enter();
-        let testing_node = NodeBuilder::new(node_config.clone()).testing_node_with_datadir(exec.clone(), "/Users/yiweichi/Scroll/rollup-node/crates/node/tests/testdata/node_data");
+        let testing_node = NodeBuilder::new(node_config.clone())
+            .with_database(db.clone())
+            .with_launch_context(exec.clone());
         let testing_config = testing_node.config().clone();
         let node = ScrollRollupNode::new(scroll_node_config.clone(), testing_config).await;
         let RethNodeHandle { node, node_exit_future: _ } = testing_node
@@ -187,8 +241,10 @@ where
             NodeTestContext::new(node, |_| panic!("should not build payloads using this method"))
                 .await?;
 
-        let genesis = node.block_hash(0);
-        node.update_forkchoice(genesis, genesis).await?;
+        if idx >= dbs.len() {
+            let genesis = node.block_hash(0);
+            node.update_forkchoice(genesis, genesis).await?;
+        }
 
         // Connect each node in a chain.
         if let Some(previous_node) = nodes.last_mut() {
@@ -203,9 +259,10 @@ where
         }
 
         nodes.push(node);
+        // Note: db is already added to dbs in the creation logic above
     }
 
-    Ok((nodes, tasks, Wallet::default().with_chain_id(chain_spec.chain().into())))
+    Ok((nodes, dbs, Wallet::default().with_chain_id(chain_spec.chain().into())))
 }
 
 /// Generate a transfer transaction with the given wallet.

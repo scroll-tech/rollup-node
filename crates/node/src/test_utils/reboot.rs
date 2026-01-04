@@ -1,17 +1,15 @@
 //! Reboot utilities for the rollup node.
 
 use crate::test_utils::{setup_engine, NodeHandle, TestFixture};
-use crate::ScrollRollupNodeConfig;
-use rollup_node_primitives::BlockInfo;
 use scroll_alloy_provider::{ScrollAuthApiEngineClient, ScrollEngineApi};
-use scroll_engine::{Engine, ForkchoiceState};
+use scroll_engine::Engine;
 use std::sync::Arc;
 
 impl TestFixture {
     /// Shutdown a node by index, dropping its handle and cleaning up all resources.
     ///
     /// This will:
-    /// - Remove the node from the fixture
+    /// - Set the node slot to None (preserving indices of other nodes)
     /// - Immediately drop the NodeHandle, triggering cleanup of:
     ///   - Network connections
     ///   - RPC server
@@ -19,85 +17,114 @@ impl TestFixture {
     ///   - Background tasks
     ///   - All other resources
     ///
+    /// The node can later be restarted using `start_node()`.
+    ///
     /// # Arguments
     /// * `node_index` - Index of the node to shutdown (0 = sequencer if enabled)
     ///
     /// # Example
     /// ```ignore
     /// let mut fixture = TestFixture::builder().sequencer().followers(2).build().await?;
-    /// 
+    ///
     /// // Shutdown follower node at index 1
     /// fixture.shutdown_node(1).await?;
-    /// 
-    /// // Now only 2 nodes remain
-    /// assert_eq!(fixture.nodes.len(), 2);
+    ///
+    /// // Node indices remain the same, but node 1 is now None
+    /// assert!(fixture.nodes[1].is_none());
+    ///
+    /// // Later, restart the node
+    /// fixture.start_node(1, config).await?;
     /// ```
     pub async fn shutdown_node(&mut self, node_index: usize) -> eyre::Result<()> {
         if node_index >= self.nodes.len() {
             return Err(eyre::eyre!("Node index {} out of bounds (total nodes: {})", node_index, self.nodes.len()));
         }
 
+        if self.nodes[node_index].is_none() {
+            return Err(eyre::eyre!("Node at index {} is already shutdown", node_index));
+        }
+
         tracing::info!("Shutting down node at index {}", node_index);
 
-        // Remove and immediately drop the node handle
-        let node_handle = self.nodes.remove(node_index);
-        drop(node_handle);
-        // All resources are cleaned up here
+        // Step 1: Explicitly shutdown the ChainOrchestrator
+        // This sends a Shutdown command that will make the ChainOrchestrator exit its event loop immediately
+        if let Some(node) = &self.nodes[node_index] {
+            tracing::info!("Sending shutdown command to ChainOrchestrator...");
+            if let Err(e) = node.rollup_manager_handle.shutdown().await {
+                tracing::warn!("Failed to send shutdown command to ChainOrchestrator: {}", e);
+            } else {
+                tracing::info!("ChainOrchestrator shutdown command acknowledged");
+            }
+        }
 
+        // Step 2: Wait for ChainOrchestrator to complete any in-flight operations
+        // This is critical to ensure all database transactions are committed
+        // and WAL data is properly flushed before we close connections
+        tokio::time::sleep(tokio::time::Duration::from_millis(1000)).await;
+
+
+        // Step 4: Take ownership and drop the node handle
+        // This will close all channels and release resources
+        let node_handle = self.nodes[node_index].take();
+        drop(node_handle);
+
+        // Step 5: Brief wait to ensure all async cleanup completes
+        tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
+
+        tracing::info!("Node at index {} shutdown complete", node_index);
         Ok(())
     }
 
-    /// Reboot a node by shutting it down and recreating it.
+    /// Start a previously shutdown node or create a new node at the given index.
     ///
-    /// **Note:** This is a complex operation with limitations:
-    /// - The rebooted node will be a fresh instance
-    /// - Database state will be lost (uses TmpDB)
-    /// - Network connections need to be re-established
-    /// - The node will start from genesis
-    ///
-    /// For most test scenarios, consider creating a new TestFixture instead.
+    /// This allows you to restart a node that was shutdown, potentially with
+    /// different configuration or to test node restart scenarios.
     ///
     /// # Arguments
-    /// * `node_index` - Index of the node to reboot
-    /// * `config` - Configuration for the new node
+    /// * `node_index` - Index of the node to start
+    /// * `config` - Configuration for the node
     ///
     /// # Example
     /// ```ignore
     /// let mut fixture = TestFixture::builder().sequencer().build().await?;
     /// let config = default_test_scroll_rollup_node_config();
     ///
-    /// // Reboot the sequencer
-    /// fixture.reboot_node(0, config).await?;
+    /// // Shutdown the sequencer
+    /// fixture.shutdown_node(0).await?;
+    ///
+    /// // Wait for some condition...
+    /// tokio::time::sleep(Duration::from_secs(1)).await;
+    ///
+    /// // Restart the sequencer
+    /// fixture.start_node(0, config).await?;
     /// ```
-    pub async fn reboot_node(
+    pub async fn start_node(
         &mut self,
         node_index: usize,
-        config: ScrollRollupNodeConfig,
     ) -> eyre::Result<()> {
         if node_index >= self.nodes.len() {
             return Err(eyre::eyre!("Node index {} out of bounds (total nodes: {})", node_index, self.nodes.len()));
         }
 
-        // Determine if this was a sequencer
-        let was_sequencer = self.nodes[node_index].is_sequencer();
-        tracing::info!(
-            "Rebooting node at index {} (type: {})",
-            node_index,
-            if was_sequencer { "sequencer" } else { "follower" }
-        );
+        if self.nodes[node_index].is_some() {
+            return Err(eyre::eyre!("Node at index {} is already running", node_index));
+        }
 
-        // Step 1: Shutdown the node (this drops it and cleans up resources)
-        self.shutdown_node(node_index).await?;
+        tracing::info!("Starting node at index {} (reusing database)", node_index);
 
-        tracing::info!("Node shutdown complete, waiting for cleanup...");
-        // Give some time for resources to be fully released
-        tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
+        // Create a new node, reusing the existing database
+        // Pass a vector containing only the database for this specific node
+        let node_dbs = if node_index < self.dbs.len() {
+            vec![self.dbs[node_index].clone()]
+        } else {
+            Vec::new() // Should not happen, but handle gracefully
+        };
 
-        // Step 2: Create a new node
-        tracing::info!("Creating new node...");
         let (mut new_nodes, _, _) = setup_engine(
-            config.clone(),
+            &self.tasks,
+            self.config.clone(),
             1, // Create just one node
+            node_dbs, // Reuse the database
             self.chain_spec.clone(),
             true, // is_dev
             false, // no_local_transactions_propagation
@@ -108,25 +135,37 @@ impl TestFixture {
         }
 
         let new_node = new_nodes.remove(0);
-        let genesis_hash = new_node.inner.chain_spec().genesis_hash();
 
         // Create engine for the new node
         let auth_client = new_node.inner.engine_http_client();
         let engine_client = Arc::new(ScrollAuthApiEngineClient::new(auth_client))
             as Arc<dyn ScrollEngineApi + Send + Sync + 'static>;
-        let fcs = ForkchoiceState::new(
-            BlockInfo { hash: genesis_hash, number: 0 },
-            Default::default(),
-            Default::default(),
-        );
-        let engine = Engine::new(Arc::new(engine_client), fcs);
 
         // Get handles
         let l1_watcher_tx = new_node.inner.add_ons_handle.l1_watcher_tx.clone();
         let rollup_manager_handle = new_node.inner.add_ons_handle.rollup_manager_handle.clone();
+
+        // CRITICAL: Restore ForkchoiceState from the rebooted ChainOrchestrator's status
+        // instead of resetting to genesis. This ensures the FCS matches the execution client's
+        // actual state and prevents "Syncing" status errors when building payloads.
+        let status = rollup_manager_handle.status().await?;
+        let fcs: scroll_engine::ForkchoiceState = status.l2.fcs;
+        tracing::warn!(target: "scroll::test_utils::reboot", "fcs: {:?}", fcs);
+
+        tracing::info!(
+            "Restored FCS from database - head: {:?}, safe: {:?}, finalized: {:?}",
+            fcs.head_block_info(),
+            fcs.safe_block_info(),
+            fcs.finalized_block_info()
+        );
+        
+        let engine = Engine::new(Arc::new(engine_client), fcs);
         let chain_orchestrator_rx = new_node.inner.add_ons_handle.rollup_manager_handle
             .get_event_listener()
             .await?;
+
+        // Determine node type based on config and index
+        let was_sequencer = self.config.sequencer_args.sequencer_enabled && node_index == 0;
 
         let new_node_handle = NodeHandle {
             node: new_node,
@@ -141,25 +180,10 @@ impl TestFixture {
             },
         };
 
-        // Step 3: Insert the new node back at the same index
-        self.nodes.insert(node_index, new_node_handle);
-        tracing::info!("Node rebooted successfully at index {}", node_index);
+        // Set the node at the index
+        self.nodes[node_index] = Some(new_node_handle);
+        tracing::info!("Node started successfully at index {}", node_index);
 
-        Ok(())
-    }
-
-    /// Shutdown all nodes in the fixture.
-    ///
-    /// This is equivalent to dropping the entire TestFixture, but allows
-    /// you to do it explicitly while keeping the fixture structure intact.
-    pub async fn shutdown_all(&mut self) -> eyre::Result<()> {
-        tracing::info!("Shutting down all {} nodes", self.nodes.len());
-        // Remove and drop all nodes
-        while !self.nodes.is_empty() {
-            let node = self.nodes.remove(0);
-            drop(node);
-        }
-        tracing::info!("All nodes shut down");
         Ok(())
     }
 }
