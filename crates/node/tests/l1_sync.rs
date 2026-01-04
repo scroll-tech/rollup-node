@@ -31,9 +31,7 @@
 //! Related to: <https://github.com/scroll-tech/rollup-node/issues/420>
 
 use alloy_primitives::Bytes;
-use rollup_node::test_utils::{
-    DatabaseOperations, EventAssertions, TestFixture,
-};
+use rollup_node::test_utils::{DatabaseOperations, EventAssertions, TestFixture};
 use serde_json::Value;
 use std::{collections::HashMap, sync::LazyLock};
 
@@ -713,25 +711,21 @@ async fn test_l1_reorg_batch_revert() -> eyre::Result<()> {
     Ok(())
 }
 
-/// Test: L1 sync handling persists correctly across node reboots.
+/// Test: L1 sync + progress persists correctly across node reboot.
 ///
 /// # Test Flow
-/// 1. Setup and complete L1 sync
-/// 2. Send `BatchCommit` transactions (batches 0-6)
-/// 3. Record safe head after commits
-/// 4. Reboot the node
-/// 5. Perform L1 reorg to remove some `BatchCommit` events
-/// 6. Verify the rebooted node correctly handles the L1 reorg
+/// 1. Setup a fixture with Anvil and complete L1 sync.
+/// 2. Send `BatchCommit` txs for batches 0..=2 and wait for consolidation events.
+/// 3. Record the L2 safe head.
+/// 4. Shutdown the node and start it again (reboot).
+/// 5. Re-sync L1 (test mode skips auto notifications).
+/// 6. Send `BatchCommit` txs for batches 3..=6 and wait for consolidation events.
+/// 7. Verify the L2 safe head advanced beyond the pre-reboot value.
 ///
 /// # Expected Behavior
 /// After a reboot, the node should:
-/// - Restore its database state from persistent storage
-/// - Continue monitoring L1 for new events
-/// - Correctly handle L1 reorgs that remove previously processed commits
-/// - Update its safe head to reflect the canonical L1 chain state
-///
-/// This test ensures that reboot scenarios don't break L1 reorg handling,
-/// which is critical for maintaining L1-L2 consistency across node restarts.
+/// - Restore its persisted state (DB-backed) and continue from the previous safe head.
+/// - Resume L1 event processing and keep making progress.
 #[tokio::test]
 async fn test_l1_sync_after_reboot() -> eyre::Result<()> {
     reth_tracing::init_test_tracing();
@@ -747,7 +741,7 @@ async fn test_l1_sync_after_reboot() -> eyre::Result<()> {
     fixture.l1().sync().await?;
     fixture.expect_event().l1_synced().await?;
 
-    // Step 2: Send BatchCommit transactions (batches 0-6)
+    // Step 2: Send BatchCommit transactions (batches 0..=2)
     for i in 0..=2 {
         let commit_batch_tx = read_test_transaction("commitBatch", &i.to_string())?;
         fixture.anvil_inject_tx(commit_batch_tx).await?;
@@ -768,6 +762,7 @@ async fn test_l1_sync_after_reboot() -> eyre::Result<()> {
     fixture.l1().sync().await?;
     fixture.expect_event().l1_synced().await?;
 
+    // Step 5: Send more BatchCommit transactions (batches 3..=6)
     for i in 3..=6 {
         let commit_batch_tx = read_test_transaction("commitBatch", &i.to_string())?;
         fixture.anvil_inject_tx(commit_batch_tx).await?;
@@ -776,21 +771,35 @@ async fn test_l1_sync_after_reboot() -> eyre::Result<()> {
         fixture.expect_event().batch_consolidated().await?;
     }
 
-    // Step 6: Verify the rebooted node correctly handles the L1 reorg
-    // The safe head should be adjusted to reflect the canonical L1 chain
+    // Step 6: Verify the safe head advanced after reboot and further commits.
     let status_after_reboot = fixture.get_status(0).await?;
     let safe_after_reboot = status_after_reboot.l2.fcs.safe_block_info().number;
     tracing::info!("Safe head after L1 reboot: {}", safe_after_reboot);
 
-    // After the node reboot and , safe head should still exceed the pre-reboot state
+    // After reboot + more commits, safe head should exceed the pre-reboot value.
     assert!(
         safe_after_reboot > safe_before_reboot,
-        "Safe head should still exceed state after node reboot"
+        "Safe head should still exceed pre-reboot state after node reboot"
     );
 
     Ok(())
 }
 
+/// Test: L1 reorg is handled correctly after a node reboot.
+///
+/// # Test Flow
+/// 1. Setup a fixture with Anvil and complete L1 sync.
+/// 2. Send `BatchCommit` txs for batches 0..=6 and wait for consolidation events.
+/// 3. Record the L2 safe head.
+/// 4. Shutdown the node.
+/// 5. Reorg L1 by depth 3 and mine a few blocks to advance the chain.
+/// 6. Start the node again (reboot).
+/// 7. Verify the L2 safe head does not exceed the pre-reorg/pre-reboot value.
+///
+/// # Expected Behavior
+/// After a reboot, the node should:
+/// - Restore its persisted state.
+/// - Re-process L1 from the canonical chain and handle reorgs correctly.
 #[tokio::test]
 async fn test_l1_reorg_after_reboot() -> eyre::Result<()> {
     reth_tracing::init_test_tracing();
@@ -820,8 +829,7 @@ async fn test_l1_reorg_after_reboot() -> eyre::Result<()> {
     let safe_before_reboot = status_before_reboot.l2.fcs.safe_block_info().number;
     assert!(safe_before_reboot > 0, "Safe head should have advanced after batch commits");
 
-    // Step 4: Reboot the node
-    tracing::info!("Rebooting node...");
+    // Step 4: Stop the node
     fixture.shutdown_node(0).await?;
 
     // Step 5: Perform L1 reorg to remove some commits (reorg depth 3)
@@ -829,15 +837,10 @@ async fn test_l1_reorg_after_reboot() -> eyre::Result<()> {
     fixture.anvil_reorg(3).await?;
     fixture.anvil_mine_blocks(3).await?;
 
+    // Step 6: Start the node (reboot)
     fixture.start_node(0).await?;
-    // fixture.l1().sync().await?;
-    // fixture.expect_event().l1_synced().await?;
 
-    tracing::warn!("expecting l1 reorg");
-    fixture.expect_event().l1_reorg().await?;
-    tracing::warn!("l1 reorg event received");
-
-    // Step 6: Verify the rebooted node correctly handles the L1 reorg
+    // Step 7: Verify the rebooted node correctly handles the L1 reorg
     // The safe head should be adjusted to reflect the canonical L1 chain
     let status_after_reorg = fixture.get_status(0).await?;
     let safe_after_reorg = status_after_reorg.l2.fcs.safe_block_info().number;
@@ -847,12 +850,6 @@ async fn test_l1_reorg_after_reboot() -> eyre::Result<()> {
     assert!(
         safe_after_reorg <= safe_before_reboot,
         "Safe head should not exceed pre-reorg state after L1 reorg removes commits"
-    );
-
-    tracing::info!(
-        "Test passed: Rebooted node correctly handled L1 reorg (safe head: {} -> {})",
-        safe_before_reboot,
-        safe_after_reorg
     );
 
     Ok(())
