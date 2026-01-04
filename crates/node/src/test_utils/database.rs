@@ -19,7 +19,10 @@ impl<'a> DatabaseHelper<'a> {
 
     /// Get the database for this node.
     async fn database(&self) -> eyre::Result<Arc<Database>> {
-        Ok(self.fixture.nodes[self.node_index].rollup_manager_handle.get_database_handle().await?)
+        let node = self.fixture.nodes[self.node_index]
+            .as_ref()
+            .ok_or_else(|| eyre::eyre!("Node at index {} has been shutdown", self.node_index))?;
+        Ok(node.rollup_manager_handle.get_database_handle().await?)
     }
 
     /// Get the finalized block number of a batch by its index.

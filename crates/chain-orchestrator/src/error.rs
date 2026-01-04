@@ -92,6 +92,10 @@ pub enum ChainOrchestratorError {
     /// An error occurred while handling rollup node primitives.
     #[error("An error occurred while handling rollup node primitives: {0}")]
     RollupNodePrimitiveError(rollup_node_primitives::RollupNodePrimitiveError),
+    /// Shutdown requested - this is not a real error but used to signal graceful shutdown.
+    #[cfg(feature = "test-utils")]
+    #[error("Shutdown requested")]
+    Shutdown,
 }
 
 impl CanRetry for ChainOrchestratorError {

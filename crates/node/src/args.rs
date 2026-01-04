@@ -147,6 +147,7 @@ impl ScrollRollupNodeConfig {
     ) -> eyre::Result<()> {
         // Instantiate the database
         let db_path = node_config.datadir().db();
+        tracing::warn!(target: "scroll::node::args", "db_path: {:?}", db_path);
         let database_path = if let Some(database_path) = &self.database_args.rn_db_path {
             database_path.to_string_lossy().to_string()
         } else {
