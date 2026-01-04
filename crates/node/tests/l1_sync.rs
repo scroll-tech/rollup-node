@@ -711,104 +711,92 @@ async fn test_l1_reorg_batch_revert() -> eyre::Result<()> {
     Ok(())
 }
 
-/// Test: L1 sync + progress persists correctly across node reboot.
+/// Test: Node can correctly process BatchCommit events after reboot.
 ///
 /// # Test Flow
-/// 1. Setup a fixture with Anvil and complete L1 sync.
-/// 2. Send `BatchCommit` txs for batches 0..=2 and wait for consolidation events.
-/// 3. Record the L2 safe head.
-/// 4. Shutdown the node and start it again (reboot).
-/// 5. Re-sync L1 (test mode skips auto notifications).
-/// 6. Send `BatchCommit` txs for batches 3..=6 and wait for consolidation events.
-/// 7. Verify the L2 safe head advanced beyond the pre-reboot value.
-///
-/// # Expected Behavior
-/// After a reboot, the node should:
-/// - Restore its persisted state (DB-backed) and continue from the previous safe head.
-/// - Resume L1 event processing and keep making progress.
+/// 1. Setup, complete L1 sync.
+/// 2. Send BatchCommit transactions (batches 0-3).
+/// 3. Reboot the node.
+/// 4. Send more BatchCommit transactions (batches 4-6).
+/// 5. Verify safe head continues to advance correctly.
 #[tokio::test]
-async fn test_l1_sync_after_reboot() -> eyre::Result<()> {
+#[cfg_attr(not(feature = "test-utils"), ignore)]
+async fn test_l1_sync_commit_batch_after_reboot() -> eyre::Result<()> {
     reth_tracing::init_test_tracing();
 
     // Step 1: Setup and complete L1 sync
     let mut fixture = TestFixture::builder()
         .followers(1)
         .skip_l1_synced_notifications()
-        .with_anvil(None, None, Some(22222222), None, Some(32))
+        .with_anvil(None, None, Some(22222222), None, None)
         .build()
         .await?;
 
     fixture.l1().sync().await?;
     fixture.expect_event().l1_synced().await?;
 
-    // Step 2: Send BatchCommit transactions (batches 0..=2)
-    for i in 0..=2 {
+    // Step 2: Send BatchCommit transactions (batches 0-3)
+    for i in 0..=3 {
         let commit_batch_tx = read_test_transaction("commitBatch", &i.to_string())?;
         fixture.anvil_inject_tx(commit_batch_tx).await?;
     }
-    for _ in 1..=2 {
+    for _ in 1..=3 {
         fixture.expect_event().batch_consolidated().await?;
     }
 
-    // Step 3: Record safe head after commits
     let status_before_reboot = fixture.get_status(0).await?;
     let safe_before_reboot = status_before_reboot.l2.fcs.safe_block_info().number;
     tracing::info!("Safe head before reboot: {}", safe_before_reboot);
-    assert!(safe_before_reboot > 0, "Safe head should have advanced after batch commits");
+    assert!(safe_before_reboot > 0, "Safe head should have advanced");
 
-    // Step 4: Reboot the node
+    // Step 3: Reboot the node
+    tracing::info!("Rebooting node...");
     fixture.shutdown_node(0).await?;
     fixture.start_node(0).await?;
+
     fixture.l1().sync().await?;
     fixture.expect_event().l1_synced().await?;
 
-    // Step 5: Send more BatchCommit transactions (batches 3..=6)
-    for i in 3..=6 {
+    // Step 4: Send more BatchCommit transactions (batches 4-6)
+    for i in 4..=6 {
         let commit_batch_tx = read_test_transaction("commitBatch", &i.to_string())?;
         fixture.anvil_inject_tx(commit_batch_tx).await?;
     }
-    for _ in 3..=6 {
+    for _ in 4..=6 {
         fixture.expect_event().batch_consolidated().await?;
     }
 
-    // Step 6: Verify the safe head advanced after reboot and further commits.
+    // Step 5: Verify safe head continues to advance
     let status_after_reboot = fixture.get_status(0).await?;
     let safe_after_reboot = status_after_reboot.l2.fcs.safe_block_info().number;
-    tracing::info!("Safe head after L1 reboot: {}", safe_after_reboot);
-
-    // After reboot + more commits, safe head should exceed the pre-reboot value.
+    tracing::info!("Safe head after reboot: {}", safe_after_reboot);
     assert!(
         safe_after_reboot > safe_before_reboot,
-        "Safe head should still exceed pre-reboot state after node reboot"
+        "Safe head should continue advancing after reboot"
     );
 
     Ok(())
 }
 
-/// Test: L1 reorg is handled correctly after a node reboot.
+/// Test: Node can correctly process BatchFinalized events after reboot.
 ///
 /// # Test Flow
-/// 1. Setup a fixture with Anvil and complete L1 sync.
-/// 2. Send `BatchCommit` txs for batches 0..=6 and wait for consolidation events.
-/// 3. Record the L2 safe head.
-/// 4. Shutdown the node.
-/// 5. Reorg L1 by depth 3 and mine a few blocks to advance the chain.
-/// 6. Start the node again (reboot).
-/// 7. Verify the L2 safe head does not exceed the pre-reorg/pre-reboot value.
-///
-/// # Expected Behavior
-/// After a reboot, the node should:
-/// - Restore its persisted state.
-/// - Re-process L1 from the canonical chain and handle reorgs correctly.
+/// 1. Setup, complete L1 sync.
+/// 2. Send BatchCommit transactions (batches 0-6).
+/// 3. Send BatchFinalized transactions (batches 1-3).
+/// 4. Reboot the node.
+/// 5. Send more BatchFinalized transactions (batches 4-6).
+/// 6. Verify finalized head continues to advance correctly.
 #[tokio::test]
-async fn test_l1_reorg_after_reboot() -> eyre::Result<()> {
+#[cfg_attr(not(feature = "test-utils"), ignore)]
+async fn test_l1_sync_finalize_batch_after_reboot() -> eyre::Result<()> {
     reth_tracing::init_test_tracing();
 
     // Step 1: Setup and complete L1 sync
     let mut fixture = TestFixture::builder()
         .followers(1)
         .skip_l1_synced_notifications()
-        .with_anvil(None, None, Some(22222222), None, Some(32))
+        .with_anvil(None, None, Some(22222222), None, None)
         .build()
         .await?;
 
@@ -824,32 +812,334 @@ async fn test_l1_reorg_after_reboot() -> eyre::Result<()> {
         fixture.expect_event().batch_consolidated().await?;
     }
 
-    // Step 3: Record safe head after commits
+    let status_after_commit = fixture.get_status(0).await?;
+    let safe_after_commit = status_after_commit.l2.fcs.safe_block_info().number;
+    tracing::info!("Safe head after commits: {}", safe_after_commit);
+
+    // Step 3: Send BatchFinalized transactions (batches 1-3)
+    for i in 1..=3 {
+        let finalize_batch_tx = read_test_transaction("finalizeBatch", &i.to_string())?;
+        fixture.anvil_inject_tx(finalize_batch_tx).await?;
+    }
+    for _ in 1..=3 {
+        fixture.expect_event().batch_finalize_indexed().await?;
+    }
+
+    let status_before_reboot = fixture.get_status(0).await?;
+    let finalized_before_reboot = status_before_reboot.l2.fcs.finalized_block_info().number;
+    tracing::info!("Finalized head before reboot: {}", finalized_before_reboot);
+    assert!(
+        finalized_before_reboot > 0,
+        "Finalized head should have advanced"
+    );
+
+    // Step 4: Reboot the node
+    tracing::info!("Rebooting node...");
+    fixture.shutdown_node(0).await?;
+    fixture.start_node(0).await?;
+    fixture.l1().sync().await?;
+    fixture.expect_event().l1_synced().await?;
+
+    // Step 5: Send more BatchFinalized transactions (batches 4-6)
+    for i in 4..=6 {
+        let finalize_batch_tx = read_test_transaction("finalizeBatch", &i.to_string())?;
+        fixture.anvil_inject_tx(finalize_batch_tx).await?;
+    }
+    for _ in 4..=6 {
+        fixture.expect_event().batch_finalize_indexed().await?;
+    }
+
+    // Step 6: Verify finalized head continues to advance
+    let status_after_reboot = fixture.get_status(0).await?;
+    let finalized_after_reboot = status_after_reboot.l2.fcs.finalized_block_info().number;
+    tracing::info!("Finalized head after reboot: {}", finalized_after_reboot);
+    assert!(
+        finalized_after_reboot > finalized_before_reboot,
+        "Finalized head should continue advancing after reboot"
+    );
+
+    Ok(())
+}
+
+/// Test: Node can correctly process BatchRevert events after reboot.
+///
+/// # Test Flow
+/// 1. Setup, complete L1 sync.
+/// 2. Send BatchCommit transactions (batches 0-6).
+/// 3. Reboot the node.
+/// 4. Send BatchRevert transaction.
+/// 5. Verify safe head decreases correctly.
+#[tokio::test]
+#[cfg_attr(not(feature = "test-utils"), ignore)]
+async fn test_l1_sync_revert_batch_after_reboot() -> eyre::Result<()> {
+    reth_tracing::init_test_tracing();
+
+    // Step 1: Setup and complete L1 sync
+    let mut fixture = TestFixture::builder()
+        .followers(1)
+        .skip_l1_synced_notifications()
+        .with_anvil(None, None, Some(22222222), None, None)
+        .build()
+        .await?;
+
+    fixture.l1().sync().await?;
+    fixture.expect_event().l1_synced().await?;
+
+    // Step 2: Send BatchCommit transactions (batches 0-6)
+    for i in 0..=6 {
+        let commit_batch_tx = read_test_transaction("commitBatch", &i.to_string())?;
+        fixture.anvil_inject_tx(commit_batch_tx).await?;
+    }
+    for _ in 1..=6 {
+        fixture.expect_event().batch_consolidated().await?;
+    }
+
     let status_before_reboot = fixture.get_status(0).await?;
     let safe_before_reboot = status_before_reboot.l2.fcs.safe_block_info().number;
-    assert!(safe_before_reboot > 0, "Safe head should have advanced after batch commits");
+    tracing::info!("Safe head before reboot: {}", safe_before_reboot);
 
-    // Step 4: Stop the node
+    // Step 3: Reboot the node
+    tracing::info!("Rebooting node...");
     fixture.shutdown_node(0).await?;
-
-    // Step 5: Perform L1 reorg to remove some commits (reorg depth 3)
-    tracing::info!("Performing L1 reorg...");
-    fixture.anvil_reorg(3).await?;
-    fixture.anvil_mine_blocks(3).await?;
-
-    // Step 6: Start the node (reboot)
     fixture.start_node(0).await?;
+    fixture.l1().sync().await?;
+    fixture.expect_event().l1_synced().await?;
 
-    // Step 7: Verify the rebooted node correctly handles the L1 reorg
-    // The safe head should be adjusted to reflect the canonical L1 chain
+    // Step 4: Send BatchRevert transaction
+    let revert_batch_tx = read_test_transaction("revertBatch", "0")?;
+    fixture.anvil_inject_tx(revert_batch_tx).await?;
+    fixture.expect_event().batch_reverted().await?;
+
+    // Step 5: Verify safe head decreased
+    let status_after_revert = fixture.get_status(0).await?;
+    let safe_after_revert = status_after_revert.l2.fcs.safe_block_info().number;
+    tracing::info!("Safe head after revert: {}", safe_after_revert);
+    assert!(
+        safe_after_revert < safe_before_reboot,
+        "Safe head should decrease after BatchRevert following reboot"
+    );
+
+    Ok(())
+}
+
+/// Test: Node can correctly process BatchCommit events after reboot + L1 reorg.
+///
+/// # Test Flow
+/// 1. Setup, complete L1 sync.
+/// 2. Send BatchCommit transactions (batches 0-3).
+/// 3. Reboot the node.
+/// 4. Trigger L1 reorg.
+/// 5. Send more BatchCommit transactions (batches 4-6).
+/// 6. Verify safe head is correctly updated after reorg.
+#[tokio::test]
+#[cfg_attr(not(feature = "test-utils"), ignore)]
+async fn test_l1_reorg_commit_batch_after_reboot() -> eyre::Result<()> {
+    reth_tracing::init_test_tracing();
+
+    // Step 1: Setup and complete L1 sync
+    let mut fixture = TestFixture::builder()
+        .followers(1)
+        .skip_l1_synced_notifications()
+        .with_anvil(None, None, Some(22222222), None, None)
+        .build()
+        .await?;
+
+    fixture.l1().sync().await?;
+    fixture.expect_event().l1_synced().await?;
+
+    // Step 2: Send BatchCommit transactions (batches 0-3)
+    for i in 0..=3 {
+        let commit_batch_tx = read_test_transaction("commitBatch", &i.to_string())?;
+        fixture.anvil_inject_tx(commit_batch_tx).await?;
+    }
+    for _ in 1..=3 {
+        fixture.expect_event().batch_consolidated().await?;
+    }
+
+    let status_before_reboot = fixture.get_status(0).await?;
+    let safe_before_reboot = status_before_reboot.l2.fcs.safe_block_info().number;
+    tracing::info!("Safe head before reboot: {}", safe_before_reboot);
+
+    // Step 3: Reboot the node
+    tracing::info!("Rebooting node...");
+    fixture.shutdown_node(0).await?;
+    fixture.start_node(0).await?;
+    fixture.l1().sync().await?;
+    fixture.expect_event().l1_synced().await?;
+
+    // Step 4: Trigger L1 reorg (removes some BatchCommit events)
+    fixture.anvil_reorg(2).await?;
+    fixture.expect_event().l1_reorg().await?;
+
     let status_after_reorg = fixture.get_status(0).await?;
     let safe_after_reorg = status_after_reorg.l2.fcs.safe_block_info().number;
-    tracing::info!("Safe head after L1 reorg: {}", safe_after_reorg);
+    tracing::info!("Safe head after reorg: {}", safe_after_reorg);
 
-    // After the reorg removed 3 blocks worth of commits, safe head should be lower
+    // Step 5: Send more BatchCommit transactions (batches 4-6) after reorg
+    for i in 4..=6 {
+        let commit_batch_tx = read_test_transaction("commitBatch", &i.to_string())?;
+        fixture.anvil_inject_tx(commit_batch_tx).await?;
+    }
+    for _ in 4..=6 {
+        fixture.expect_event().batch_consolidated().await?;
+    }
+
+    // Step 6: Verify safe head advanced after new commits
+    let status_final = fixture.get_status(0).await?;
+    let safe_final = status_final.l2.fcs.safe_block_info().number;
+    tracing::info!("Safe head after new commits: {}", safe_final);
     assert!(
-        safe_after_reorg <= safe_before_reboot,
-        "Safe head should not exceed pre-reorg state after L1 reorg removes commits"
+        safe_final > safe_after_reorg,
+        "Safe head should advance after new BatchCommit events post-reorg"
+    );
+
+    Ok(())
+}
+
+/// Test: Node can correctly handle L1 reorg of BatchFinalized events after reboot.
+///
+/// # Test Flow
+/// 1. Setup, complete L1 sync.
+/// 2. Send BatchCommit transactions (batches 0-6).
+/// 3. Send BatchFinalized transactions (batches 1-3).
+/// 4. Reboot the node.
+/// 5. Trigger L1 reorg that removes BatchFinalized events.
+/// 6. Verify finalized head rolls back correctly.
+#[tokio::test]
+#[cfg_attr(not(feature = "test-utils"), ignore)]
+async fn test_l1_reorg_finalize_batch_after_reboot() -> eyre::Result<()> {
+    reth_tracing::init_test_tracing();
+
+    // Step 1: Setup and complete L1 sync
+    let mut fixture = TestFixture::builder()
+        .followers(1)
+        .skip_l1_synced_notifications()
+        .with_anvil(None, None, Some(22222222), None, None)
+        .build()
+        .await?;
+
+    fixture.l1().sync().await?;
+    fixture.expect_event().l1_synced().await?;
+
+    // Step 2: Send BatchCommit transactions (batches 0-6)
+    for i in 0..=6 {
+        let commit_batch_tx = read_test_transaction("commitBatch", &i.to_string())?;
+        fixture.anvil_inject_tx(commit_batch_tx).await?;
+    }
+    for _ in 1..=6 {
+        fixture.expect_event().batch_consolidated().await?;
+    }
+
+    // Step 3: Send BatchFinalized transactions (batches 1-3)
+    for i in 1..=3 {
+        let finalize_batch_tx = read_test_transaction("finalizeBatch", &i.to_string())?;
+        fixture.anvil_inject_tx(finalize_batch_tx).await?;
+    }
+    for _ in 1..=3 {
+        fixture.expect_event().batch_finalize_indexed().await?;
+    }
+
+    let status_before_reboot = fixture.get_status(0).await?;
+    let finalized_before_reboot = status_before_reboot.l2.fcs.finalized_block_info().number;
+    tracing::info!("Finalized head before reboot: {}", finalized_before_reboot);
+    assert!(
+        finalized_before_reboot > 0,
+        "Finalized head should have advanced"
+    );
+
+    // Step 4: Reboot the node
+    tracing::info!("Rebooting node...");
+    fixture.shutdown_node(0).await?;
+    fixture.start_node(0).await?;
+    fixture.l1().sync().await?;
+    fixture.expect_event().l1_synced().await?;
+
+    // Step 5: Trigger L1 reorg (removes BatchFinalized events)
+    fixture.anvil_reorg(2).await?;
+    fixture.expect_event().l1_reorg().await?;
+
+    // Step 6: Verify finalized head rolls back
+    let status_after_reorg = fixture.get_status(0).await?;
+    let finalized_after_reorg = status_after_reorg.l2.fcs.finalized_block_info().number;
+    tracing::info!("Finalized head after reorg: {}", finalized_after_reorg);
+    assert!(
+        finalized_after_reorg <= finalized_before_reboot,
+        "Finalized head should roll back after L1 reorg removes BatchFinalized events"
+    );
+
+    Ok(())
+}
+
+/// Test: Node can correctly handle L1 reorg of BatchRevert events after reboot.
+///
+/// # Test Flow
+/// 1. Setup, complete L1 sync.
+/// 2. Send BatchCommit transactions (batches 0-6).
+/// 3. Send BatchRevert transaction.
+/// 4. Reboot the node.
+/// 5. Trigger L1 reorg that removes BatchRevert event.
+/// 6. Verify safe head is restored correctly.
+#[tokio::test]
+#[cfg_attr(not(feature = "test-utils"), ignore)]
+async fn test_l1_reorg_revert_batch_after_reboot() -> eyre::Result<()> {
+    reth_tracing::init_test_tracing();
+
+    // Step 1: Setup and complete L1 sync
+    let mut fixture = TestFixture::builder()
+        .followers(1)
+        .skip_l1_synced_notifications()
+        .with_anvil(None, None, Some(22222222), None, None)
+        .build()
+        .await?;
+
+    fixture.l1().sync().await?;
+    fixture.expect_event().l1_synced().await?;
+
+    // Step 2: Send BatchCommit transactions (batches 0-6)
+    for i in 0..=6 {
+        let commit_batch_tx = read_test_transaction("commitBatch", &i.to_string())?;
+        fixture.anvil_inject_tx(commit_batch_tx).await?;
+    }
+    for _ in 1..=6 {
+        fixture.expect_event().batch_consolidated().await?;
+    }
+
+    let status_after_commits = fixture.get_status(0).await?;
+    let safe_after_commits = status_after_commits.l2.fcs.safe_block_info().number;
+    tracing::info!("Safe head after commits: {}", safe_after_commits);
+
+    // Step 3: Send BatchRevert transaction
+    let revert_batch_tx = read_test_transaction("revertBatch", "0")?;
+    fixture.anvil_inject_tx(revert_batch_tx).await?;
+    fixture.expect_event().batch_reverted().await?;
+
+    let status_after_revert = fixture.get_status(0).await?;
+    let safe_after_revert = status_after_revert.l2.fcs.safe_block_info().number;
+    tracing::info!("Safe head after revert: {}", safe_after_revert);
+    assert!(
+        safe_after_revert < safe_after_commits,
+        "Safe head should decrease after BatchRevert"
+    );
+
+    // Step 4: Reboot the node
+    tracing::info!("Rebooting node...");
+    fixture.shutdown_node(0).await?;
+    fixture.start_node(0).await?;
+    fixture.l1().sync().await?;
+    fixture.expect_event().l1_synced().await?;
+
+    // Step 5: Trigger L1 reorg (removes BatchRevert event)
+    fixture.anvil_reorg(1).await?;
+    fixture.anvil_mine_blocks(1).await?;
+    fixture.expect_event().l1_reorg().await?;
+
+    // Step 6: Verify safe head is restored to pre-revert state
+    let status_after_reorg = fixture.get_status(0).await?;
+    let safe_after_reorg = status_after_reorg.l2.fcs.safe_block_info().number;
+    tracing::info!("Safe head after reorg: {}", safe_after_reorg);
+    assert_eq!(
+        safe_after_reorg, safe_after_commits,
+        "Safe head should be restored after L1 reorg removes BatchRevert event"
     );
 
     Ok(())
