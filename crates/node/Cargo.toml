@@ -169,4 +169,5 @@ test-utils = [
     "alloy-rpc-types-anvil",
     "alloy-provider/anvil-api",
     "alloy-provider/anvil-node",
+    "reth-db?/test-utils",
 ]

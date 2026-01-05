@@ -219,7 +219,6 @@ impl TestFixture {
             as Arc<dyn ScrollEngineApi + Send + Sync + 'static>;
 
         // Step 4: Get necessary handles from the new node
-        let l1_watcher_handle = new_node.inner.add_ons_handle.l1_watcher_handle.clone();
         let rollup_manager_handle = new_node.inner.add_ons_handle.rollup_manager_handle.clone();
 
         // Step 5: Restore ForkchoiceState from persisted ChainOrchestrator status
@@ -249,7 +248,6 @@ impl TestFixture {
             node: new_node,
             engine,
             chain_orchestrator_rx,
-            l1_watcher_tx,
             rollup_manager_handle,
             typ: if was_sequencer {
                 crate::test_utils::fixture::NodeType::Sequencer

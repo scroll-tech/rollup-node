@@ -210,7 +210,7 @@ where
         config: Arc<NodeConfig>,
         log_query_block_range: u64,
         #[cfg(feature = "test-utils")] test_mode_skip_synced_notification: bool,
-    ) -> L1WatcherHandle {
+    ) -> (mpsc::Sender<Arc<L1Notification>>, L1WatcherHandle) {
         tracing::trace!(target: "scroll::watcher", ?l1_block_startup_info, ?config, "spawning L1 watcher");
 
         let (notification_tx, notification_rx) = mpsc::channel(log_query_block_range as usize);
@@ -270,7 +270,7 @@ where
             current_block_number: start_block.saturating_sub(1),
             l1_state,
             command_rx,
-            sender: notification_tx,
+            sender: notification_tx.clone(),
             config,
             metrics: WatcherMetrics::default(),
             is_synced: false,
@@ -297,7 +297,7 @@ where
 
         tokio::spawn(watcher.run());
 
-        handle
+        (notification_tx, handle)
     }
 
     /// Main execution loop for the [`L1Watcher`].

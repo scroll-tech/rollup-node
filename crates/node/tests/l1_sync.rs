@@ -851,12 +851,11 @@ async fn test_l1_sync_finalize_batch_after_reboot() -> eyre::Result<()> {
 
     // Step 6: Start the node and sync
     fixture.start_node(0).await?;
-    fixture.l1().sync().await?;
-    fixture.expect_event().l1_synced().await?;
-
     for _ in 4..=6 {
         fixture.expect_event().batch_finalize_indexed().await?;
     }
+    fixture.l1().sync().await?;
+    fixture.expect_event().l1_synced().await?;
 
     // Step 6: Verify finalized head continues to advance
     let status_after_reboot = fixture.get_status(0).await?;
@@ -877,8 +876,8 @@ async fn test_l1_sync_finalize_batch_after_reboot() -> eyre::Result<()> {
 /// 2. Send `BatchCommit` transactions (batches 0-6) and wait for consolidation.
 /// 3. Record safe head.
 /// 4. Shutdown the node.
-/// 5. Send `BatchRevert` transaction while node is down.
-/// 6. Start the node and sync L1.
+/// 5. Start the node and sync L1.
+/// 6. Send `BatchRevert` transaction
 /// 7. Wait for batch reverted event.
 /// 8. Verify safe head decreased correctly.
 #[tokio::test]
@@ -914,18 +913,17 @@ async fn test_l1_sync_revert_batch_after_reboot() -> eyre::Result<()> {
     tracing::info!("Rebooting node...");
     fixture.shutdown_node(0).await?;
 
-    // Step 4: Send BatchRevert transaction
-    let revert_batch_tx = read_test_transaction("revertBatch", "0")?;
-    fixture.anvil_inject_tx(revert_batch_tx).await?;
-
-    // Step 5: Start the node and sync
+    // Step 4: Start the node and sync
     fixture.start_node(0).await?;
     fixture.l1().sync().await?;
     fixture.expect_event().l1_synced().await?;
 
+    // Step 5: Send BatchRevert transaction
+    let revert_batch_tx = read_test_transaction("revertBatch", "0")?;
+    fixture.anvil_inject_tx(revert_batch_tx).await?;
     fixture.expect_event().batch_reverted().await?;
 
-    // Step 5: Verify safe head decreased
+    // Step 6: Verify safe head decreased
     let status_after_revert = fixture.get_status(0).await?;
     let safe_after_revert = status_after_revert.l2.fcs.safe_block_info().number;
     tracing::info!("Safe head after revert: {}", safe_after_revert);

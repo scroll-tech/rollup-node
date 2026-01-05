@@ -16,7 +16,7 @@ pub mod provider;
 #[derive(Clone, Debug)]
 pub struct L1WatcherMock {
     /// Receiver for L1 watcher commands.
-    pub command_rx: Arc<Mutex<mpsc::UnboundedReceiver<L1WatcherCommand>>>,
+    pub command_rx: Option<Arc<Mutex<mpsc::UnboundedReceiver<L1WatcherCommand>>>>,
     /// Sender for L1 notifications.
     pub notification_tx: mpsc::Sender<Arc<L1Notification>>,
 }
@@ -24,13 +24,15 @@ pub struct L1WatcherMock {
 impl L1WatcherMock {
     /// Handle commands sent to the L1 watcher mock.
     pub async fn handle_command(&mut self) {
-        let mut commands = self.command_rx.lock().await;
-        if let Some(command) = commands.recv().await {
-            match command {
-                L1WatcherCommand::ResetToBlock { block, tx } => {
-                    // For testing purposes, we can just log the reset action.
-                    tracing::info!(target: "scroll::watcher::test_utils", "L1 Watcher Mock resetting to block {}", block);
-                    self.notification_tx = tx;
+        if let Some(command_rx) = &self.command_rx {
+            let mut commands = command_rx.lock().await;
+            if let Some(command) = commands.recv().await {
+                match command {
+                    L1WatcherCommand::ResetToBlock { block, tx } => {
+                        // For testing purposes, we can just log the reset action.
+                        tracing::info!(target: "scroll::watcher::test_utils", "L1 Watcher Mock resetting to block {}", block);
+                        self.notification_tx = tx;
+                    }
                 }
             }
         }
