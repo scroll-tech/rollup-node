@@ -117,7 +117,7 @@ jobs:
         with:
           cache-on-failure: true
       - name: Run feature check
-        run: cargo hack check --feature-powerset
+        run: cargo hack check --feature-powerset --mutually-exclusive-features "zstd,ruzstd" --at-least-one-of "zstd,ruzstd"
 
   no_std:
     runs-on: ubuntu-latest
