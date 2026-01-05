@@ -49,7 +49,7 @@ pub fn decode_v7(blob: &[u8]) -> Result<Batch, DecodingError> {
 
     // uncompress if necessary.
     let buf = if is_compressed == 1 {
-        heap_blob = decompress_blob_data(buf);
+        heap_blob = decompress_blob_data(buf)?;
         &mut heap_blob.as_slice()
     } else {
         buf

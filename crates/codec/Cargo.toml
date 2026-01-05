@@ -20,7 +20,7 @@ derive_more = { version = "2.0", default-features = false }
 eyre = { workspace = true, optional = true }
 thiserror = { version = "2.0", default-features = false }
 zstd = { version = "=0.13.3", optional = true }
-ruzstd = "0.8"
+ruzstd = { version = "0.8", optional = true }
 
 [dev-dependencies]
 eyre.workspace = true
@@ -30,3 +30,4 @@ serde_json = "1.0"
 default = ["zstd"]
 test-utils = ["dep:eyre", "scroll-l1/test-utils"]
 zstd = ["dep:zstd"]
+ruzstd = ["dep:ruzstd"]

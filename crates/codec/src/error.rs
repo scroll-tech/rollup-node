@@ -30,6 +30,8 @@ pub enum DecodingError {
     InvalidCommitBatchCall(#[from] InvalidCommitBatchCall),
     #[error("end of file")]
     Eof,
+    #[error("zstd decompression error occurred: {0}")]
+    ZstdDecompression(Box<dyn std::error::Error + Send + Sync + 'static>),
     #[error("decoding error occurred: {0}")]
     Other(Box<dyn std::error::Error + Send + Sync + 'static>),
 }
@@ -44,5 +46,11 @@ impl DecodingError {
 impl From<String> for DecodingError {
     fn from(value: String) -> Self {
         DecodingError::Other(value.into())
+    }
+}
+
+impl From<crate::decoding::v2::zstd::ZstdError> for DecodingError {
+    fn from(e: crate::decoding::v2::zstd::ZstdError) -> Self {
+        DecodingError::ZstdDecompression(e.into_inner())
     }
 }
