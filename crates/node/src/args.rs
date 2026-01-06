@@ -363,7 +363,9 @@ impl ScrollRollupNodeConfig {
 
         let is_anvil_provider = self.blob_provider_args.anvil_url.is_some();
 
-        let (_l1_notification_tx, _l1_command_rx, l1_watcher_handle): (_, _, _) = if let Some(provider) =
+        let (_l1_notification_tx, _l1_command_rx, l1_watcher_handle): (_, _, _) = if let Some(
+            provider,
+        ) =
             l1_provider.filter(|_| !self.test_args.test || is_anvil_provider)
         {
             tracing::info!(target: "scroll::node::args", ?l1_block_startup_info, "Starting L1 watcher");
@@ -491,7 +493,7 @@ impl ScrollRollupNodeConfig {
         {
             let command_rx = _l1_command_rx.map(|rx| Arc::new(tokio::sync::Mutex::new(rx)));
             let l1_watcher_mock = rollup_node_watcher::test_utils::L1WatcherMock {
-                command_rx: command_rx,
+                command_rx,
                 notification_tx: _l1_notification_tx.expect("L1 notification sender should be set"),
             };
             handle = handle.with_l1_watcher_mock(Some(l1_watcher_mock));
