@@ -13,11 +13,9 @@ This repository is a modular Rust workspace for the Scroll rollup node. It is de
 
 ```
 .
-├── bin/
-│   └── rollup/           # Main binary crate (the node)
-│       ├── src/
-│       └── assets/
+├── book/                 # mdBook documentation (published to GitHub Pages)
 ├── crates/               # Internal library crates
+│   ├── node/             # Main binary crate (the node)
 │   ├── codec/
 │   ├── database/
 │   │   ├── db/
@@ -27,20 +25,21 @@ This repository is a modular Rust workspace for the Scroll rollup node. It is de
 │   ├── chain-orchestrator/
 │   ├── l1/
 │   ├── network/
-│   ├── node/
 │   ├── primitives/
 │   ├── providers/
 │   ├── scroll-wire/
 │   ├── signer/
 │   ├── sequencer/
 │   └── watcher/
+├── sequencer-migration/  # Migration tooling from l2geth to l2reth
+├── tests/                # Integration tests
 ├── Cargo.toml            # Workspace manifest
 └── ...
 ```
 
 ## Crate Descriptions
 
-- **bin/rollup/**: The main binary crate. This is the entry point for running the rollup node.
+- **crates/node/**: The main binary crate. This is the entry point for running the rollup node.
 - **crates/codec/**: Implements encoding/decoding logic for rollup data and payloads.
 - **crates/database/db/**: Database abstraction and storage logic for batches, blocks, and messages.
 - **crates/database/migration/**: Database schema migrations using SeaORM.
@@ -56,6 +55,9 @@ This repository is a modular Rust workspace for the Scroll rollup node. It is de
 - **crates/scroll-wire/**: Wire protocol definitions for Scroll-specific networking.
 - **crates/sequencer/**: Sequencer logic for ordering and batching transactions.
 - **crates/watcher/**: Monitors L1 chain state and handles reorgs and notifications.
+- **book/**: mdBook documentation published to [https://scroll-tech.github.io/rollup-node/](https://scroll-tech.github.io/rollup-node/)
+- **tests/**: Integration tests for the rollup node, including E2E and sequencer migration tests
+- **sequencer-migration/**: Scripts and tooling for migrating from l2geth to rollup-node (l2reth)
 
 ## Building the Project
 
@@ -70,19 +72,20 @@ cargo build --bin rollup-node
 Or, from the binary crate directory:
 
 ```sh
-cd bin/rollup
+cd crates/node
 cargo build
 ```
 
 ## Running the Node
 
-After building, run the node with:
+For comprehensive instructions on running a node, including:
+- Hardware requirements
+- Configuration options
+- Example configurations for mainnet and sepolia
+- Logging and debugging
+- Troubleshooting
 
-```sh
-cargo run --workspace --bin rollup-node -- [ARGS]
-```
-
-Replace `[ARGS]` with any runtime arguments you require.
+Please refer to the official documentation: **[https://scroll-tech.github.io/rollup-node/](https://scroll-tech.github.io/rollup-node/)**
 
 ## Running Tests
 
@@ -116,61 +119,10 @@ cargo build --release --bin rollup-node
 
 The release binary will be located at `target/release/rollup-node`.
 
-## Running a Sequencer Node
+## Documentation
 
-To run a sequencer node you should build the binary in release mode using the instructions defined above.
-
-Then, you can run the sequencer node with the following command:
-
-### Using Private Key File
-```sh
-./target/release/rollup-node node --chain dev -d --sequencer.enabled --signer.key-file /path/to/your/private.key --http --http.api admin,debug,eth,net,trace,txpool,web3,rpc,reth,ots,flashbots,miner,mev
-```
-
-**Note**: The private key file should contain a hex-encoded private key (`64` characters, optionally prefixed with `0x`).
-
-### Using AWS KMS
-```sh
-./target/release/rollup-node node --chain dev -d --sequencer.enabled --signer.aws-kms-key-id arn:aws:kms:REGION:ACCOUNT:key/KEY-ID --http --http.api admin,debug,eth,net,trace,txpool,web3,rpc,reth,ots,flashbots,miner,mev
-```
-
-### Signer Configuration Notes
-
-When running a sequencer, a signer is required unless the `--test` flag is specified. The two signing methods are mutually exclusive - use either `--signer.key-file` or `--signer.aws-kms-key-id`, but not both.
-
-**Private Key File**: Keep your private key file secure and never commit it to version control.
-
-**AWS KMS**: Requires KMS permissions `kms:GetPublicKey` and `kms:Sign` for the specified key.
-
-### General Information
-
-The above commands will start a dev node in sequencer mode with all rpc apis enabled. You can adjust the `--http.api` flag to include or exclude specific APIs as needed.
-
-The chain will be configured with a genesis that funds 20 addresses derived from the mnemonic:
-```
-test test test test test test test test test test test junk
-```
-
-### Configuration Options
-
-A list of sequencer specific configuration options can be seen below:
-
-```sh
-      --scroll-sequencer-enabled
-          Enable the scroll block sequencer
-      --scroll-block-time <SCROLL_BLOCK_TIME>
-          The block time for the sequencer [default: 2000]
-      --payload-building-duration <PAYLOAD_BUILDING_DURATION>
-          The payload building duration for the sequencer (milliseconds) [default: 500]
-      --max-l1-messages-per-block <MAX_L1_MESSAGES_PER_BLOCK>
-          The max L1 messages per block for the sequencer [default: 4]
-      --fee-recipient <FEE_RECIPIENT>
-          The fee recipient for the sequencer [default: 0x5300000000000000000000000000000000000005]
-      --signer.key-file <FILE_PATH>
-          Path to the hex-encoded private key file for the signer (optional 0x prefix). Mutually exclusive with AWS KMS key ID
-      --signer.aws-kms-key-id <KEY_ID>
-          AWS KMS Key ID or ARN for signing transactions. Mutually exclusive with key file
-```
+- **[Official Documentation Book](https://scroll-tech.github.io/rollup-node/)** - Comprehensive guide for running follower and sequencer nodes
+- **[Sequencer Migration Guide](./sequencer-migration/README.md)** - Documentation for migrating from l2geth to rollup-node
 
 ## Contributing
 
