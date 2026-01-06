@@ -87,9 +87,6 @@ For comprehensive instructions on running a node, including:
 
 Please refer to the official documentation: **[https://scroll-tech.github.io/rollup-node/](https://scroll-tech.github.io/rollup-node/)**
 
-For development and testing, you can run the node with test configuration:
-
-
 ## Running Tests
 
 To run all tests across the workspace:
