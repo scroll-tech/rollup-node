@@ -958,7 +958,7 @@ impl<
 
         // If we are still syncing then we just import the block directly without any further
         // checks.
-        if self.sync_state.is_syncing() {
+        if self.sync_state.l2().is_syncing() {
             tracing::trace!(target: "scroll::chain_orchestrator", ?block_hash, "Node is syncing - importing block directly");
             let chain_import =
                 self.import_chain(vec![block_with_peer.block.clone()], block_with_peer).await?;
