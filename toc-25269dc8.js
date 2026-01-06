@@ -8,7 +8,7 @@ class MDBookSidebarScrollbox extends HTMLElement {
         super();
     }
     connectedCallback() {
-        this.innerHTML = '<ol class="chapter"><li class="chapter-item expanded "><span class="chapter-link-wrapper"><a href="chapter_1.html"><strong aria-hidden="true">1.</strong> Introduction</a></span></li><li class="chapter-item expanded "><span class="chapter-link-wrapper"><a href="running-a-node.html"><strong aria-hidden="true">2.</strong> Running a Node</a></span></li><li class="chapter-item expanded "><span class="chapter-link-wrapper"><a href="docker-operations.html"><strong aria-hidden="true">3.</strong> Running with Docker Compose</a></span></li></ol>';
+        this.innerHTML = '<ol class="chapter"><li class="chapter-item expanded "><span class="chapter-link-wrapper"><a href="chapter_1.html"><strong aria-hidden="true">1.</strong> Introduction</a></span></li><li class="chapter-item expanded "><span class="chapter-link-wrapper"><a href="running-a-node.html"><strong aria-hidden="true">2.</strong> Running a Node</a></span></li><li class="chapter-item expanded "><span class="chapter-link-wrapper"><a href="running-a-sequencer.html"><strong aria-hidden="true">3.</strong> Running a Sequencer</a></span></li><li class="chapter-item expanded "><span class="chapter-link-wrapper"><a href="docker-operations.html"><strong aria-hidden="true">4.</strong> Running with Docker Compose</a></span></li></ol>';
         // Set the current, active page, and reveal it if it's hidden
         let current_page = document.location.href.toString().split('#')[0].split('?')[0];
         if (current_page.endsWith('/')) {

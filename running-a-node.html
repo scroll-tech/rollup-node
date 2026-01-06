@@ -35,10 +35,10 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-6dee36f6.js";
+            window.path_to_searchindex_js = "searchindex-438e0800.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="toc-abe0f0b0.js"></script>
+        <script src="toc-25269dc8.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -225,10 +225,10 @@ a follower node.</p>
 <h4 id="l1-provider-configuration"><a class="header" href="#l1-provider-configuration">L1 Provider Configuration</a></h4>
 <ul>
 <li><code>--l1.url &lt;URL&gt;</code>: L1 Ethereum RPC endpoint URL (required for follower nodes)</li>
-<li><code>--l1.cups &lt;NUMBER&gt;</code>: Compute units per second for rate limiting (default: 1000)</li>
+<li><code>--l1.cups &lt;NUMBER&gt;</code>: Compute units per second for rate limiting (default: 10000)</li>
 <li><code>--l1.max-retries &lt;NUMBER&gt;</code>: Maximum retry attempts for L1 requests (default: 10)</li>
 <li><code>--l1.initial-backoff &lt;MS&gt;</code>: Initial backoff duration for retries in milliseconds (default: 100)</li>
-<li><code>--l1.query-range &lt;BLOCKS&gt;</code>: Block range for querying L1 logs (default: 2000)</li>
+<li><code>--l1.query-range &lt;BLOCKS&gt;</code>: Block range for querying L1 logs (default: 500)</li>
 </ul>
 <h4 id="blob-provider-configuration"><a class="header" href="#blob-provider-configuration">Blob Provider Configuration</a></h4>
 <p>The node requires access to blob data for derivation. Configure one or more blob sources:</p>
@@ -268,8 +268,8 @@ provider)</li>
 </ul>
 <h4 id="chain-orchestrator-configuration"><a class="header" href="#chain-orchestrator-configuration">Chain Orchestrator Configuration</a></h4>
 <ul>
-<li><code>--chain.optimistic-sync-trigger &lt;BLOCKS&gt;</code>: Block gap that triggers optimistic sync (default: 100)</li>
-<li><code>--chain.chain-buffer-size &lt;SIZE&gt;</code>: In-memory chain buffer size (default: 100)</li>
+<li><code>--chain.optimistic-sync-trigger &lt;BLOCKS&gt;</code>: Block gap that triggers optimistic sync (default: 1000)</li>
+<li><code>--chain.chain-buffer-size &lt;SIZE&gt;</code>: In-memory chain buffer size (default: 2000)</li>
 </ul>
 <h4 id="engine-configuration"><a class="header" href="#engine-configuration">Engine Configuration</a></h4>
 <ul>
@@ -282,7 +282,7 @@ provider)</li>
 <li><code>--http.port &lt;PORT&gt;</code>: HTTP server port (default: 8545)</li>
 <li><code>--http.api &lt;APIS&gt;</code>: Enabled RPC API namespaces (comma-separated)
 <ul>
-<li>Available: <code>admin</code>, <code>debug</code>, <code>eth</code>, <code>net</code>, <code>trace</code>, <code>txpool</code>, <code>web3</code>, <code>rpc</code>, <code>reth</code>, <code>ots</code></li>
+<li>Available: <code>admin</code>, <code>debug</code>, <code>eth</code>, <code>net</code>, <code>trace</code>, <code>txpool</code>, <code>web3</code>, <code>rpc</code>, <code>reth</code>, <code>ots</code>, <code>flashbots</code>, <code>miner</code>, <code>mev</code></li>
 </ul>
 </li>
 <li><code>--http.corsdomain &lt;ORIGINS&gt;</code>: CORS allowed origins (comma-separated)</li>
@@ -366,7 +366,7 @@ variable.</p>
 <h3 id="combined-example-with-logging"><a class="header" href="#combined-example-with-logging">Combined Example with Logging</a></h3>
 <pre><code class="language-bash">RUST_LOG=info,scroll=debug,rollup=debug,sqlx=off \
 ./target/release/rollup-node node \
-  --chain scroll \
+  --chain scroll-mainnet \
   --datadir /var/lib/scroll-node \
   --l1.url https://eth-mainnet.g.alchemy.com/v2/YOUR_API_KEY \
   --blob.s3_url https://scroll-mainnet-blob-data.s3.us-west-2.amazonaws.com/ \
@@ -443,7 +443,7 @@ documentation.</p>
                                 <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M41.4 233.4c-12.5 12.5-12.5 32.8 0 45.3l160 160c12.5 12.5 32.8 12.5 45.3 0s12.5-32.8 0-45.3L109.3 256 246.6 118.6c12.5-12.5 12.5-32.8 0-45.3s-32.8-12.5-45.3 0l-160 160z"/></svg></span>
                             </a>
 
-                            <a rel="next prefetch" href="docker-operations.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                            <a rel="next prefetch" href="running-a-sequencer.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
                                 <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M278.6 233.4c12.5 12.5 12.5 32.8 0 45.3l-160 160c-12.5 12.5-32.8 12.5-45.3 0s-12.5-32.8 0-45.3L210.7 256 73.4 118.6c-12.5-12.5-12.5-32.8 0-45.3s32.8-12.5 45.3 0l160 160z"/></svg></span>
                             </a>
 
@@ -457,7 +457,7 @@ documentation.</p>
                         <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M41.4 233.4c-12.5 12.5-12.5 32.8 0 45.3l160 160c12.5 12.5 32.8 12.5 45.3 0s12.5-32.8 0-45.3L109.3 256 246.6 118.6c12.5-12.5 12.5-32.8 0-45.3s-32.8-12.5-45.3 0l-160 160z"/></svg></span>
                     </a>
 
-                    <a rel="next prefetch" href="docker-operations.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                    <a rel="next prefetch" href="running-a-sequencer.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
                         <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M278.6 233.4c12.5 12.5 12.5 32.8 0 45.3l-160 160c-12.5 12.5-32.8 12.5-45.3 0s-12.5-32.8 0-45.3L210.7 256 73.4 118.6c-12.5-12.5-12.5-32.8 0-45.3s32.8-12.5 45.3 0l160 160z"/></svg></span>
                     </a>
             </nav>

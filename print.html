@@ -36,10 +36,10 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-6dee36f6.js";
+            window.path_to_searchindex_js = "searchindex-438e0800.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="toc-abe0f0b0.js"></script>
+        <script src="toc-25269dc8.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -267,10 +267,10 @@ a follower node.</p>
 <h4 id="l1-provider-configuration"><a class="header" href="#l1-provider-configuration">L1 Provider Configuration</a></h4>
 <ul>
 <li><code>--l1.url &lt;URL&gt;</code>: L1 Ethereum RPC endpoint URL (required for follower nodes)</li>
-<li><code>--l1.cups &lt;NUMBER&gt;</code>: Compute units per second for rate limiting (default: 1000)</li>
+<li><code>--l1.cups &lt;NUMBER&gt;</code>: Compute units per second for rate limiting (default: 10000)</li>
 <li><code>--l1.max-retries &lt;NUMBER&gt;</code>: Maximum retry attempts for L1 requests (default: 10)</li>
 <li><code>--l1.initial-backoff &lt;MS&gt;</code>: Initial backoff duration for retries in milliseconds (default: 100)</li>
-<li><code>--l1.query-range &lt;BLOCKS&gt;</code>: Block range for querying L1 logs (default: 2000)</li>
+<li><code>--l1.query-range &lt;BLOCKS&gt;</code>: Block range for querying L1 logs (default: 500)</li>
 </ul>
 <h4 id="blob-provider-configuration"><a class="header" href="#blob-provider-configuration">Blob Provider Configuration</a></h4>
 <p>The node requires access to blob data for derivation. Configure one or more blob sources:</p>
@@ -310,8 +310,8 @@ provider)</li>
 </ul>
 <h4 id="chain-orchestrator-configuration"><a class="header" href="#chain-orchestrator-configuration">Chain Orchestrator Configuration</a></h4>
 <ul>
-<li><code>--chain.optimistic-sync-trigger &lt;BLOCKS&gt;</code>: Block gap that triggers optimistic sync (default: 100)</li>
-<li><code>--chain.chain-buffer-size &lt;SIZE&gt;</code>: In-memory chain buffer size (default: 100)</li>
+<li><code>--chain.optimistic-sync-trigger &lt;BLOCKS&gt;</code>: Block gap that triggers optimistic sync (default: 1000)</li>
+<li><code>--chain.chain-buffer-size &lt;SIZE&gt;</code>: In-memory chain buffer size (default: 2000)</li>
 </ul>
 <h4 id="engine-configuration"><a class="header" href="#engine-configuration">Engine Configuration</a></h4>
 <ul>
@@ -324,7 +324,7 @@ provider)</li>
 <li><code>--http.port &lt;PORT&gt;</code>: HTTP server port (default: 8545)</li>
 <li><code>--http.api &lt;APIS&gt;</code>: Enabled RPC API namespaces (comma-separated)
 <ul>
-<li>Available: <code>admin</code>, <code>debug</code>, <code>eth</code>, <code>net</code>, <code>trace</code>, <code>txpool</code>, <code>web3</code>, <code>rpc</code>, <code>reth</code>, <code>ots</code></li>
+<li>Available: <code>admin</code>, <code>debug</code>, <code>eth</code>, <code>net</code>, <code>trace</code>, <code>txpool</code>, <code>web3</code>, <code>rpc</code>, <code>reth</code>, <code>ots</code>, <code>flashbots</code>, <code>miner</code>, <code>mev</code></li>
 </ul>
 </li>
 <li><code>--http.corsdomain &lt;ORIGINS&gt;</code>: CORS allowed origins (comma-separated)</li>
@@ -408,7 +408,7 @@ variable.</p>
 <h3 id="combined-example-with-logging"><a class="header" href="#combined-example-with-logging">Combined Example with Logging</a></h3>
 <pre><code class="language-bash">RUST_LOG=info,scroll=debug,rollup=debug,sqlx=off \
 ./target/release/rollup-node node \
-  --chain scroll \
+  --chain scroll-mainnet \
   --datadir /var/lib/scroll-node \
   --l1.url https://eth-mainnet.g.alchemy.com/v2/YOUR_API_KEY \
   --blob.s3_url https://scroll-mainnet-blob-data.s3.us-west-2.amazonaws.com/ \
@@ -477,6 +477,296 @@ variable.</p>
 <p>For additional support and detailed implementation information, refer to the project’s CLAUDE.md and source code
 documentation.</p>
 <div style="break-before: page; page-break-before: always;"></div>
+<h1 id="running-a-scroll-sequencer-node"><a class="header" href="#running-a-scroll-sequencer-node">Running a Scroll Sequencer Node</a></h1>
+<p>This guide covers how to run a Scroll rollup node in sequencer mode. A sequencer node is responsible for ordering transactions, building new blocks, and proposing them to the network.</p>
+<h2 id="what-is-a-sequencer-node"><a class="header" href="#what-is-a-sequencer-node">What is a Sequencer Node?</a></h2>
+<p>A sequencer node actively produces new blocks for the Scroll L2 chain. Unlike follower nodes that listen for blocks gossiped over L2 P2P and derive blocks from L1 data, sequencer nodes:</p>
+<ul>
+<li>Accept transactions from the mempool</li>
+<li>Order transactions and build new blocks</li>
+<li>Include L1 messages in blocks according to configured inclusion strategy</li>
+<li>Sign blocks with a configured signer (private key or AWS KMS)</li>
+<li>Broadcast blocks to the network</li>
+</ul>
+<p><strong>Note:</strong> Running a sequencer requires authorization. The sequencer’s address must be registered as the authorized signer in the L1 system contract for blocks to be accepted by the network.</p>
+<h2 id="prerequisites-1"><a class="header" href="#prerequisites-1">Prerequisites</a></h2>
+<h3 id="hardware-requirements-1"><a class="header" href="#hardware-requirements-1">Hardware Requirements</a></h3>
+<p>Sequencer nodes have similar requirements to follower nodes:</p>
+<ul>
+<li><strong>CPU</strong>: 2+ cores @ 3 GHz</li>
+<li><strong>Memory</strong>: 16 GB RAM</li>
+</ul>
+<h3 id="building-the-binary"><a class="header" href="#building-the-binary">Building the Binary</a></h3>
+<p>Build the rollup node binary in release mode for production use:</p>
+<pre><code class="language-bash">cargo build --release --bin rollup-node
+</code></pre>
+<p>The release binary will be located at <code>target/release/rollup-node</code>.</p>
+<h2 id="signer-configuration"><a class="header" href="#signer-configuration">Signer Configuration</a></h2>
+<p>A sequencer node requires a signer to sign blocks. There are two signing methods available:</p>
+<h3 id="option-1-private-key-file"><a class="header" href="#option-1-private-key-file">Option 1: Private Key File</a></h3>
+<p>Store your private key in a file and reference it with the <code>--signer.key-file</code> flag.</p>
+<p><strong>Private Key File Format:</strong></p>
+<ul>
+<li>Hex-encoded private key (64 characters)</li>
+<li>Optional <code>0x</code> prefix</li>
+<li>No additional formatting or whitespace</li>
+</ul>
+<p><strong>Example private key file (<code>/secure/path/sequencer.key</code>):</strong></p>
+<pre><code>0x1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef
+</code></pre>
+<p><strong>Security Best Practices:</strong></p>
+<ul>
+<li>Store the key file in a secure location with restricted permissions (<code>chmod 600</code>)</li>
+<li>Never commit private keys to version control</li>
+<li>Use file system encryption for the key file</li>
+<li>Regularly rotate sequencer keys</li>
+<li>Consider using hardware security modules (HSM) for production</li>
+</ul>
+<h3 id="option-2-aws-kms-not-thoroughly-tested"><a class="header" href="#option-2-aws-kms-not-thoroughly-tested">Option 2: AWS KMS (not thoroughly tested!!)</a></h3>
+<p>Use AWS Key Management Service (KMS) to manage your sequencer’s signing key. This is the recommended approach for production deployments.</p>
+<p><strong>Requirements:</strong></p>
+<ul>
+<li>AWS account with KMS access</li>
+<li>KMS key created with signing capabilities</li>
+<li>IAM permissions for the sequencer node:
+<ul>
+<li><code>kms:GetPublicKey</code> - Retrieve the public key</li>
+<li><code>kms:Sign</code> - Sign block hashes</li>
+</ul>
+</li>
+</ul>
+<p><strong>KMS Key Format:</strong></p>
+<pre><code>arn:aws:kms:REGION:ACCOUNT_ID:key/KEY_ID
+</code></pre>
+<p><strong>Example:</strong></p>
+<pre><code>arn:aws:kms:us-west-2:123456789012:key/12345678-1234-1234-1234-123456789012
+</code></pre>
+<p><strong>Benefits of AWS KMS:</strong></p>
+<ul>
+<li>Keys never leave AWS infrastructure</li>
+<li>Centralized key management and rotation</li>
+<li>Audit logging of signing operations</li>
+<li>Fine-grained access control via IAM</li>
+</ul>
+<h3 id="test-mode-development-only"><a class="header" href="#test-mode-development-only">Test Mode (Development Only)</a></h3>
+<p>For development and testing, you can bypass signer requirements with the <code>--test</code> flag:</p>
+<pre><code class="language-bash">--test
+</code></pre>
+<p><strong>Warning:</strong> Never use test mode in production. It disables signature verification and is only suitable for local development.</p>
+<h2 id="sequencer-configuration-flags"><a class="header" href="#sequencer-configuration-flags">Sequencer Configuration Flags</a></h2>
+<h3 id="core-sequencer-flags"><a class="header" href="#core-sequencer-flags">Core Sequencer Flags</a></h3>
+<ul>
+<li><code>--sequencer.enabled</code>: Enable sequencer mode (default: <code>false</code>)</li>
+<li><code>--sequencer.auto-start</code>: Automatically start sequencing on node startup (default: <code>false</code>)</li>
+</ul>
+<h3 id="block-production-configuration"><a class="header" href="#block-production-configuration">Block Production Configuration</a></h3>
+<ul>
+<li><code>--sequencer.block-time &lt;MS&gt;</code>: Time between blocks in milliseconds (default: <code>1000</code>)</li>
+<li><code>--sequencer.payload-building-duration &lt;MS&gt;</code>: Time allocated for building each payload in milliseconds (default: <code>800</code>)</li>
+<li><code>--sequencer.allow-empty-blocks</code>: Allow production of empty blocks when no transactions are available (default: <code>false</code>)</li>
+</ul>
+<h3 id="fee-configuration"><a class="header" href="#fee-configuration">Fee Configuration</a></h3>
+<ul>
+<li><code>--sequencer.fee-recipient &lt;ADDRESS&gt;</code>: Address to receive block rewards and transaction fees (default: <code>0x5300000000000000000000000000000000000005</code> - Scroll fee vault)</li>
+</ul>
+<h3 id="l1-message-inclusion"><a class="header" href="#l1-message-inclusion">L1 Message Inclusion</a></h3>
+<p>The sequencer can include L1 messages in blocks using different strategies:</p>
+<ul>
+<li><code>--sequencer.l1-inclusion-mode &lt;MODE&gt;</code>: Strategy for including L1 messages (default: <code>"finalized:2"</code>)</li>
+</ul>
+<p><strong>Available modes:</strong></p>
+<ul>
+<li><code>finalized:N</code> - Include messages from finalized L1 blocks which have a block number &lt;= current finalized - N (e.g., <code>finalized:2</code>)</li>
+<li><code>depth:N</code> - Include messages from L1 blocks with a block number &lt;= current head - N (e.g., <code>depth:10</code>)</li>
+</ul>
+<p><strong>Example:</strong></p>
+<pre><code class="language-bash">--sequencer.l1-inclusion-mode finalized:2
+</code></pre>
+<ul>
+<li><code>--sequencer.max-l1-messages &lt;N&gt;</code>: Override maximum L1 messages per block (optional)</li>
+</ul>
+<h3 id="signer-configuration-1"><a class="header" href="#signer-configuration-1">Signer Configuration</a></h3>
+<p><strong>Mutually exclusive options (choose one):</strong></p>
+<ul>
+<li><code>--signer.key-file &lt;PATH&gt;</code>: Path to hex-encoded private key file</li>
+<li><code>--signer.aws-kms-key-id &lt;ARN&gt;</code>: AWS KMS key ID or ARN</li>
+</ul>
+<h2 id="example-configurations-1"><a class="header" href="#example-configurations-1">Example Configurations</a></h2>
+<h3 id="development-sequencer-test-mode"><a class="header" href="#development-sequencer-test-mode">Development Sequencer (Test Mode)</a></h3>
+<p>For local development and testing:</p>
+<pre><code class="language-bash">./target/release/rollup-node node \
+  --chain dev \
+  --datadir ./data/sequencer \
+  --test \
+  --sequencer.enabled \
+  --sequencer.auto-start \
+  --sequencer.block-time 1000 \
+  --http \
+  --http.addr 0.0.0.0 \
+  --http.port 8545 \
+  --http.api admin,debug,eth,net,trace,txpool,web3,rpc,reth,ots,flashbots,miner,mev
+</code></pre>
+<p><strong>Notes:</strong></p>
+<ul>
+<li>Uses <code>--test</code> flag to bypass signer requirement</li>
+<li>Suitable for local development only</li>
+<li>Genesis funds available for testing</li>
+</ul>
+<h3 id="production-sequencer-with-private-key"><a class="header" href="#production-sequencer-with-private-key">Production Sequencer with Private Key</a></h3>
+<p>For production deployment with private key file:</p>
+<pre><code class="language-bash">./target/release/rollup-node node \
+  --chain scroll-mainnet \
+  --datadir /var/lib/scroll-sequencer \
+  --l1.url https://eth-mainnet.g.alchemy.com/v2/YOUR_API_KEY \
+  --blob.s3_url https://scroll-mainnet-blob-data.s3.us-west-2.amazonaws.com/ \
+  --sequencer.enabled \
+  --sequencer.auto-start \
+  --sequencer.block-time 1000 \
+  --sequencer.payload-building-duration 800 \
+  --sequencer.l1-inclusion-mode finalized:2 \
+  --sequencer.fee-recipient 0x5300000000000000000000000000000000000005 \
+  --signer.key-file /secure/path/sequencer.key \
+  --http \
+  --http.addr 0.0.0.0 \
+  --http.port 8545 \
+  --http.api eth,net,web3,debug,trace
+</code></pre>
+<h3 id="production-sequencer-with-aws-kms"><a class="header" href="#production-sequencer-with-aws-kms">Production Sequencer with AWS KMS</a></h3>
+<p>For production deployment with AWS KMS:</p>
+<pre><code class="language-bash">./target/release/rollup-node node \
+  --chain scroll-mainnet \
+  --datadir /var/lib/scroll-sequencer \
+  --l1.url https://eth-mainnet.g.alchemy.com/v2/YOUR_API_KEY \
+  --blob.s3_url https://scroll-mainnet-blob-data.s3.us-west-2.amazonaws.com/ \
+  --sequencer.enabled \
+  --sequencer.auto-start \
+  --sequencer.block-time 1000 \
+  --sequencer.payload-building-duration 800 \
+  --sequencer.l1-inclusion-mode finalized:2 \
+  --sequencer.fee-recipient 0x5300000000000000000000000000000000000005 \
+  --signer.aws-kms-key-id arn:aws:kms:us-west-2:123456789012:key/YOUR-KEY-ID \
+  --http \
+  --http.addr 0.0.0.0 \
+  --http.port 8545 \
+  --http.api eth,net,web3,debug,trace
+</code></pre>
+<h3 id="sepolia-testnet-sequencer"><a class="header" href="#sepolia-testnet-sequencer">Sepolia Testnet Sequencer</a></h3>
+<p>For testing on Sepolia testnet:</p>
+<pre><code class="language-bash">./target/release/rollup-node node \
+  --chain scroll-sepolia \
+  --datadir /var/lib/scroll-sequencer-sepolia \
+  --l1.url https://eth-sepolia.g.alchemy.com/v2/YOUR_API_KEY \
+  --blob.s3_url https://scroll-sepolia-blob-data.s3.us-west-2.amazonaws.com/ \
+  --sequencer.enabled \
+  --sequencer.auto-start \
+  --signer.key-file /path/to/sepolia-sequencer.key \
+  --http \
+  --http.addr 0.0.0.0 \
+  --http.port 8545 \
+  --http.api eth,net,web3
+</code></pre>
+<h2 id="verifying-sequencer-operation"><a class="header" href="#verifying-sequencer-operation">Verifying Sequencer Operation</a></h2>
+<h3 id="check-sequencer-is-producing-blocks"><a class="header" href="#check-sequencer-is-producing-blocks">Check Sequencer is Producing Blocks</a></h3>
+<p>Monitor the logs for block production:</p>
+<pre><code class="language-bash"># Look for sequencer-related log entries
+RUST_LOG=info,scroll=debug,rollup=debug ./target/release/rollup-node node ...
+</code></pre>
+<p>Expected log patterns:</p>
+<ul>
+<li><code>Built payload</code> - Payload construction</li>
+<li><code>Signed block</code> - Block signing</li>
+<li><code>Broadcast block</code> - Block propagation</li>
+</ul>
+<h3 id="query-latest-block"><a class="header" href="#query-latest-block">Query Latest Block</a></h3>
+<p>Verify the sequencer is producing new blocks:</p>
+<pre><code class="language-bash"># Check block number is incrementing
+curl -X POST http://localhost:8545 \
+  -H "Content-Type: application/json" \
+  -d '{
+    "jsonrpc": "2.0",
+    "method": "eth_blockNumber",
+    "params": [],
+    "id": 1
+  }'
+</code></pre>
+<p>Run this command multiple times (with <code>--sequencer.block-time</code> interval) to confirm blocks are being produced.</p>
+<h2 id="logging-and-debugging-1"><a class="header" href="#logging-and-debugging-1">Logging and Debugging</a></h2>
+<h3 id="recommended-log-configuration-for-sequencer"><a class="header" href="#recommended-log-configuration-for-sequencer">Recommended Log Configuration for Sequencer</a></h3>
+<p>For production sequencer operation with detailed logging:</p>
+<pre><code class="language-bash">RUST_LOG=info,scroll=debug,rollup_node::sequencer=trace,scroll::engine=debug
+</code></pre>
+<h3 id="sequencer-specific-log-targets"><a class="header" href="#sequencer-specific-log-targets">Sequencer-Specific Log Targets</a></h3>
+<p><strong>Sequencer Operations:</strong></p>
+<pre><code class="language-bash">RUST_LOG=rollup_node::sequencer=trace
+</code></pre>
+<p>Monitor payload building, transaction selection, and block production.</p>
+<p><strong>Block Signing:</strong></p>
+<pre><code class="language-bash">RUST_LOG=rollup_node::signer=debug
+</code></pre>
+<p>Track signing operations and signer interactions.</p>
+<p><strong>L1 Message Processing:</strong></p>
+<pre><code class="language-bash">RUST_LOG=scroll::watcher=debug
+</code></pre>
+<p>Monitor L1 message detection and inclusion.</p>
+<h2 id="troubleshooting-1"><a class="header" href="#troubleshooting-1">Troubleshooting</a></h2>
+<h3 id="sequencer-not-producing-blocks"><a class="header" href="#sequencer-not-producing-blocks">Sequencer Not Producing Blocks</a></h3>
+<p><strong>Symptoms:</strong> No new blocks appearing, logs show no sequencer activity</p>
+<p><strong>Possible causes:</strong></p>
+<ol>
+<li><code>--sequencer.auto-start</code> not enabled - Start sequencing manually via RPC</li>
+<li>Signer configuration error - Check <code>--signer.*</code> flags</li>
+<li>Not authorized on L1 - Verify sequencer address is registered in system contract</li>
+<li>Insufficient gas for transactions - Check mempool has valid transactions</li>
+<li><code>--sequencer.allow-empty-blocks</code> not set and no transactions available</li>
+</ol>
+<p><strong>Solutions:</strong></p>
+<ul>
+<li>Enable auto-start: <code>--sequencer.auto-start</code></li>
+<li>Verify signer configuration in logs</li>
+<li>Check authorization on L1 system contract</li>
+<li>Review logs with <code>RUST_LOG=rollup_node::sequencer=trace</code></li>
+</ul>
+<h3 id="signer-errors"><a class="header" href="#signer-errors">Signer Errors</a></h3>
+<p><strong>Symptoms:</strong> Errors mentioning “signer”, “signature”, or “key”</p>
+<p><strong>With <code>--signer.key-file</code>:</strong></p>
+<ul>
+<li>Verify file exists and is readable</li>
+<li>Check file permissions (<code>chmod 600</code>)</li>
+<li>Validate hex format (64 characters, optional <code>0x</code> prefix)</li>
+<li>Ensure no extra whitespace or newlines</li>
+</ul>
+<p><strong>With <code>--signer.aws-kms-key-id</code>:</strong></p>
+<ul>
+<li>Verify AWS credentials are configured</li>
+<li>Check IAM permissions (<code>kms:GetPublicKey</code>, <code>kms:Sign</code>)</li>
+<li>Confirm KMS key ARN is correct</li>
+<li>Check network connectivity to AWS</li>
+<li>Review AWS CloudTrail logs for KMS denials</li>
+</ul>
+<h3 id="block-signing-failed"><a class="header" href="#block-signing-failed">Block Signing Failed</a></h3>
+<p><strong>Symptoms:</strong> Logs show “failed to sign”</p>
+<p><strong>Solutions:</strong></p>
+<ol>
+<li>Check signer configuration is correct</li>
+<li>For AWS KMS, verify network connectivity and IAM permissions</li>
+<li>Ensure the signing key has not been disabled or deleted</li>
+<li>Check system time is synchronized (important for KMS)</li>
+</ol>
+<h3 id="l1-message-inclusion-errors"><a class="header" href="#l1-message-inclusion-errors">L1 Message Inclusion Errors</a></h3>
+<p><strong>Symptoms:</strong> Errors related to L1 messages, blocks rejected</p>
+<p><strong>Solutions:</strong></p>
+<ul>
+<li>Verify <code>--l1.url</code> is accessible and synced</li>
+<li>Check <code>--sequencer.l1-inclusion-mode</code> configuration appropriately</li>
+<li>Ensure L1 messages are being detected (check L1 watcher logs): <code>RUST_LOG=scroll::watcher=debug</code></li>
+</ul>
+<h2 id="additional-resources"><a class="header" href="#additional-resources">Additional Resources</a></h2>
+<ul>
+<li><a href="#running-a-scroll-rollup-node">Running a Follower Node</a> - Configuration for non-sequencer nodes</li>
+<li><a href="#running-with-docker-compose">Docker Operations</a> - Running node in Docker</li>
+<li><a href="../sequencer-migration/README.html">Sequencer Migration Guide</a> - Migrating from l2geth to rollup-node</li>
+</ul>
+<div style="break-before: page; page-break-before: always;"></div>
 <h1 id="running-with-docker-compose"><a class="header" href="#running-with-docker-compose">Running with Docker Compose</a></h1>
 <p>This guide covers how to run the Scroll rollup node using Docker Compose. The Docker setup provides a complete
 environment including the rollup node, monitoring infrastructure, and optional L1 devnet for shadow-fork testing.</p>
@@ -488,7 +778,7 @@ environment including the rollup node, monitoring infrastructure, and optional L
 <li><strong>grafana</strong>: Visualization dashboard for metrics</li>
 <li><strong>l1-devnet</strong> (optional): Local L1 Ethereum node for shadow-fork mode</li>
 </ul>
-<h2 id="prerequisites-1"><a class="header" href="#prerequisites-1">Prerequisites</a></h2>
+<h2 id="prerequisites-2"><a class="header" href="#prerequisites-2">Prerequisites</a></h2>
 <ul>
 <li><a href="https://docs.docker.com/get-docker/">Docker</a> installed (version 20.10 or later)</li>
 <li><a href="https://docs.docker.com/compose/install/">Docker Compose</a> installed (version 1.28 or later)</li>
@@ -653,7 +943,7 @@ BEACON_URL=https://eth-sepolia.g.alchemy.com/v2/YOUR_API_KEY
 your URLs and API keys are correct.</p>
 <h2 id="service-details"><a class="header" href="#service-details">Service Details</a></h2>
 <h3 id="rollup-node-service"><a class="header" href="#rollup-node-service">Rollup Node Service</a></h3>
-<p><strong>Image</strong>: <code>scrolltech/rollup-node:v0.0.1-rc67</code></p>
+<p><strong>Image</strong>: <code>scrolltech/rollup-node:v1.0.5</code></p>
 <p><strong>Port Mappings</strong>:</p>
 <ul>
 <li><code>8545</code>: JSON-RPC interface</li>
@@ -876,7 +1166,7 @@ docker compose up -d
 </tbody>
 </table>
 </div>
-<h2 id="troubleshooting-1"><a class="header" href="#troubleshooting-1">Troubleshooting</a></h2>
+<h2 id="troubleshooting-2"><a class="header" href="#troubleshooting-2">Troubleshooting</a></h2>
 <h3 id="rollup-node-not-syncing"><a class="header" href="#rollup-node-not-syncing">Rollup Node Not Syncing</a></h3>
 <p><strong>Check L1 connectivity:</strong></p>
 <p>For shadow-fork mode, ensure l1-devnet is running:</p>
