@@ -956,6 +956,15 @@ impl<
         let block_hash = block_with_peer.block.header.hash_slow();
         self.database.insert_signature(block_hash, block_with_peer.signature).await?;
 
+        // If we are still syncing then we just import the block directly without any further
+        // checks.
+        if self.sync_state.is_syncing() {
+            tracing::trace!(target: "scroll::chain_orchestrator", ?block_hash, "Node is syncing - importing block directly");
+            let chain_import =
+                self.import_chain(vec![block_with_peer.block.clone()], block_with_peer).await?;
+            return Ok(Some(ChainOrchestratorEvent::ChainExtended(chain_import)));
+        }
+
         let received_block_number = block_with_peer.block.number;
         let received_block_hash = block_with_peer.block.header.hash_slow();
         let current_head_block_number = self.engine.fcs().head_block_info().number;
