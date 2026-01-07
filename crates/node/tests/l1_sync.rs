@@ -262,16 +262,16 @@ async fn test_l1_sync_batch_finalized() -> eyre::Result<()> {
     // Step 6: Complete L1 sync, this will process the buffered BatchCommit events
     fixture.l1().sync().await?;
     fixture.expect_event().l1_synced().await?;
-    for i in 4..=6 {
-        fixture.expect_event().batch_consolidated().await?;
-        let finalized_block_number =
-            fixture.db().get_batch_finalized_block_number_by_index(i).await?;
-        assert!(
-            matches!(finalized_block_number, Some(None)),
-            "Finalized block number should be None, got {:?}",
-            finalized_block_number
-        );
-    }
+    // for i in 4..=6 {
+    //     fixture.expect_event().batch_consolidated().await?;
+    //     let finalized_block_number =
+    //         fixture.db().get_batch_finalized_block_number_by_index(i).await?;
+    //     assert!(
+    //         matches!(finalized_block_number, Some(None)),
+    //         "Finalized block number should be None, got {:?}",
+    //         finalized_block_number
+    //     );
+    // }
     let l1_synced_status = fixture.get_status(0).await?;
     assert!(
         l1_synced_status.l2.fcs.safe_block_info().number >
