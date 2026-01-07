@@ -272,6 +272,7 @@ async fn test_l1_sync_batch_finalized() -> eyre::Result<()> {
     //         finalized_block_number
     //     );
     // }
+    tokio::time::sleep(Duration::from_secs(10)).await;
     let l1_synced_status = fixture.get_status(0).await?;
     assert!(
         l1_synced_status.l2.fcs.safe_block_info().number >
