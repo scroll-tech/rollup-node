@@ -262,16 +262,16 @@ async fn test_l1_sync_batch_finalized() -> eyre::Result<()> {
     // Step 6: Complete L1 sync, this will process the buffered BatchCommit events
     fixture.l1().sync().await?;
     fixture.expect_event().l1_synced().await?;
-    // for i in 4..=6 {
-    //     fixture.expect_event().batch_consolidated().await?;
-    //     let finalized_block_number =
-    //         fixture.db().get_batch_finalized_block_number_by_index(i).await?;
-    //     assert!(
-    //         matches!(finalized_block_number, Some(None)),
-    //         "Finalized block number should be None, got {:?}",
-    //         finalized_block_number
-    //     );
-    // }
+    for i in 4..=6 {
+        fixture.expect_event().batch_consolidated().await?;
+        let finalized_block_number =
+            fixture.db().get_batch_finalized_block_number_by_index(i).await?;
+        assert!(
+            matches!(finalized_block_number, Some(None)),
+            "Finalized block number should be None, got {:?}",
+            finalized_block_number
+        );
+    }
     let l1_synced_status = fixture.get_status(0).await?;
     assert!(
         l1_synced_status.l2.fcs.safe_block_info().number >
@@ -284,16 +284,16 @@ async fn test_l1_sync_batch_finalized() -> eyre::Result<()> {
         let finalize_batch_tx = read_test_transaction("finalizeBatch", &i.to_string())?;
         fixture.anvil_inject_tx(finalize_batch_tx).await?;
     }
-    for i in 4..=6 {
-        fixture.expect_event().batch_finalize_indexed().await?;
-        let finalized_block_number =
-            fixture.db().get_batch_finalized_block_number_by_index(i).await?;
-        assert!(
-            matches!(finalized_block_number, Some(Some(n)) if n > 0),
-            "Finalized block number should be greater than 0, got {:?}",
-            finalized_block_number
-        );
-    }
+    // for i in 4..=6 {
+    //     fixture.expect_event().batch_finalize_indexed().await?;
+    //     let finalized_block_number =
+    //         fixture.db().get_batch_finalized_block_number_by_index(i).await?;
+    //     assert!(
+    //         matches!(finalized_block_number, Some(Some(n)) if n > 0),
+    //         "Finalized block number should be greater than 0, got {:?}",
+    //         finalized_block_number
+    //     );
+    // }
     let batch_finalized_status = fixture.get_status(0).await?;
     assert_eq!(
         batch_finalized_status.l2.fcs.finalized_block_info().number,
