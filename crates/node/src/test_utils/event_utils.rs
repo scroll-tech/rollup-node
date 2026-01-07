@@ -9,8 +9,16 @@ use rollup_node_chain_orchestrator::ChainOrchestratorEvent;
 use rollup_node_primitives::ChainImport;
 use tokio::time::timeout;
 
-/// The default event wait time.
-pub const DEFAULT_EVENT_WAIT_TIMEOUT: Duration = Duration::from_secs(180);
+/// Get the default event wait timeout.
+/// Checks the `CI_EVENT_TIMEOUT` environment variable at runtime.
+/// Defaults to 30 seconds if not set.
+pub fn default_event_wait_timeout() -> Duration {
+    std::env::var("CI_EVENT_TIMEOUT")
+        .ok()
+        .and_then(|s| s.parse::<u64>().ok())
+        .map(Duration::from_secs)
+        .unwrap_or(Duration::from_secs(30))
+}
 
 /// Builder for waiting for events on multiple nodes.
 #[derive(Debug)]
@@ -22,8 +30,8 @@ pub struct EventWaiter<'a> {
 
 impl<'a> EventWaiter<'a> {
     /// Create a new multi-node event waiter.
-    pub const fn new(fixture: &'a mut TestFixture, node_indices: Vec<usize>) -> Self {
-        Self { fixture, node_indices, timeout_duration: Duration::from_secs(30) }
+    pub fn new(fixture: &'a mut TestFixture, node_indices: Vec<usize>) -> Self {
+        Self { fixture, node_indices, timeout_duration: default_event_wait_timeout() }
     }
 
     /// Set a custom timeout for waiting.
