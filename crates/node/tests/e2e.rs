@@ -22,7 +22,7 @@ use rollup_node::{
         generate_tx, setup_engine, EventAssertions, NetworkHelperProvider, ReputationChecks,
         TestFixture,
     },
-    PprofArgs, RollupNodeAdminApiClient, RollupNodeContext,
+    RollupNodeAdminApiClient, RollupNodeContext,
 };
 use rollup_node_chain_orchestrator::{ChainOrchestratorEvent, SyncMode};
 use rollup_node_primitives::{sig_encode_hash, BatchCommitData, BlockInfo};
