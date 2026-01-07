@@ -161,7 +161,7 @@ async fn can_build_blocks() {
     assert_eq!(block.header.parent_hash, genesis_hash);
 
     // check the base fee has been set for the block.
-    assert_eq!(block.header.base_fee_per_gas.unwrap(), 1015680000);
+    assert_eq!(block.header.base_fee_per_gas.unwrap(), 876960000);
 
     // now lets add an L1 message to the database
     let wallet_lock = wallet.lock().await;
@@ -517,10 +517,11 @@ async fn can_sequence_blocks_with_private_key_file() -> eyre::Result<()> {
 
     let sequencer_rnm_handle = nodes[0].inner.add_ons_handle.rollup_manager_handle.clone();
     let mut sequencer_events = sequencer_rnm_handle.get_event_listener().await?;
-    let sequencer_l1_watcher_tx = nodes[0].inner.add_ons_handle.l1_watcher_tx.clone().unwrap();
+    let sequencer_l1_watcher_tx =
+        nodes[0].inner.add_ons_handle.rollup_manager_handle.l1_watcher_mock.clone().unwrap();
 
     // Send a notification to set the L1 to synced
-    sequencer_l1_watcher_tx.send(Arc::new(L1Notification::Synced)).await?;
+    sequencer_l1_watcher_tx.notification_tx.send(Arc::new(L1Notification::Synced)).await?;
 
     // skip the L1 synced event and consolidated events
     sequencer_events.next().await;
@@ -618,10 +619,11 @@ async fn can_sequence_blocks_with_hex_key_file_without_prefix() -> eyre::Result<
 
     let sequencer_rnm_handle = nodes[0].inner.add_ons_handle.rollup_manager_handle.clone();
     let mut sequencer_events = sequencer_rnm_handle.get_event_listener().await?;
-    let sequencer_l1_watcher_tx = nodes[0].inner.add_ons_handle.l1_watcher_tx.clone().unwrap();
+    let sequencer_l1_watcher_tx =
+        nodes[0].inner.add_ons_handle.rollup_manager_handle.l1_watcher_mock.clone().unwrap();
 
     // Send a notification to set the L1 to synced
-    sequencer_l1_watcher_tx.send(Arc::new(L1Notification::Synced)).await?;
+    sequencer_l1_watcher_tx.notification_tx.send(Arc::new(L1Notification::Synced)).await?;
 
     // skip the L1 synced event and consolidated events
     sequencer_events.next().await;

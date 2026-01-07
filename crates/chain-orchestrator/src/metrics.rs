@@ -68,6 +68,10 @@ pub(crate) enum Task {
     BatchCommit,
     /// Batch finalization event handling.
     BatchFinalization,
+    /// Batch revert event handling.
+    BatchRevert,
+    /// Batch revert range event handling.
+    BatchRevertRange,
 }
 
 impl Task {
@@ -79,6 +83,8 @@ impl Task {
             Self::L1Message => "l1_message",
             Self::BatchCommit => "batch_commit",
             Self::BatchFinalization => "batch_finalization",
+            Self::BatchRevert => "batch_revert",
+            Self::BatchRevertRange => "batch_revert_range",
             Self::BatchReconciliation => "batch_reconciliation",
             Self::ChainConsolidation => "chain_consolidation",
             Self::L2BlockImport => "l2_block_import",

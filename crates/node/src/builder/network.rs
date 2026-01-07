@@ -95,7 +95,7 @@ where
         let config = ctx.network_config()?;
         let config = NetworkConfig {
             network_mode: NetworkMode::Work,
-            header_transform: Box::new(transform),
+            header_transform: Arc::new(transform),
             extra_protocols: self.scroll_sub_protocols,
             ..config
         };
@@ -141,7 +141,7 @@ impl std::error::Error for HeaderTransformError {}
 #[derive(Debug, Clone)]
 #[non_exhaustive]
 pub(crate) struct ScrollHeaderTransform<ChainSpec> {
-    chain_spec: ChainSpec,
+    chain_spec: Arc<ChainSpec>,
     db: Arc<Database>,
     signer: Option<Address>,
 }
@@ -151,7 +151,7 @@ impl<ChainSpec: EthChainSpec + ScrollHardforks + Debug + Send + Sync + 'static>
 {
     /// Returns a new instance of the [`ScrollHeaderTransform`] from the provider chain spec.
     pub(crate) const fn new(
-        chain_spec: ChainSpec,
+        chain_spec: Arc<ChainSpec>,
         db: Arc<Database>,
         signer: Option<Address>,
     ) -> Self {
@@ -159,45 +159,68 @@ impl<ChainSpec: EthChainSpec + ScrollHardforks + Debug + Send + Sync + 'static>
     }
 }
 
-impl<H: BlockHeader, ChainSpec: EthChainSpec + ScrollHardforks + Debug + Send + Sync>
+#[async_trait::async_trait]
+impl<H: BlockHeader, ChainSpec: EthChainSpec + ScrollHardforks + Debug + Send + Sync + 'static>
     HeaderTransform<H> for ScrollHeaderTransform<ChainSpec>
 {
-    fn map(&self, mut header: H) -> H {
-        if !self.chain_spec.is_euclid_v2_active_at_timestamp(header.timestamp()) {
-            return header;
-        }
-
+    async fn map(&self, mut headers: Vec<H>) -> Vec<H> {
         // TODO: remove this once we deprecated l2geth
-        // Validate and process signature
-        if let Err(err) = self.validate_and_store_signature(&mut header, self.signer) {
-            debug!(
-                target: "scroll::network::response_header_transform",
-                "Header signature persistence failed, block number: {:?}, header hash: {:?}, error: {}",
-                header.number(),
-                header.hash_slow(), err
-            );
+        let signer = self.signer;
+        let chain_spec = self.chain_spec.clone();
+
+        // Process headers in a blocking task to avoid blocking the async runtime
+        let (headers, signatures) = tokio::task::spawn_blocking(move || {
+            use rayon::prelude::*;
+
+            let signatures: Vec<(B256, Signature)> = headers.par_iter_mut().filter_map(|header| {
+                if !chain_spec.is_euclid_v2_active_at_timestamp(header.timestamp()) {
+                    return None
+                }
+
+                let signature_bytes = std::mem::take(header.extra_data_mut());
+                let signature = if let Ok(sig) = parse_65b_signature(&signature_bytes) {
+                    sig
+                } else {
+                    debug!(
+                            target: "scroll::network::header_transform",
+                            "Header signature persistence skipped due to invalid signature, block number: {:?}, header hash: {:?}",
+                            header.number(),
+                            header.hash_slow(),
+
+                    );
+                    return None
+                };
+
+                // Recover and verify signer
+                let hash = header.hash_slow();
+                if let Err(err) = recover_and_verify_signer(&signature, header, signer) {
+                    debug!(
+                        target: "scroll::network::header_transform",
+                        "Header signature persistence failed, block number: {:?}, header hash: {:?}, error: {}",
+                        header.number(),
+                        hash, err
+                    );
+                    return None;
+                }
+
+                Some((hash, signature))
+            }
+            ).collect();
+
+            (headers, signatures)
+        }).await.expect("header transform task panicked");
+
+        // Store signatures in database
+        trace!(
+            target: "scroll::network::header_transform",
+            count = signatures.len(),
+            "Persisting block signatures to database",
+        );
+        if let Err(e) = self.db.insert_signatures(signatures).await {
+            warn!(target: "scroll::network::header_transform", "Failed to store signatures in database: {:?}", e);
         }
 
-        header
-    }
-}
-
-impl<ChainSpec: ScrollHardforks + Debug + Send + Sync> ScrollHeaderTransform<ChainSpec> {
-    fn validate_and_store_signature<H: BlockHeader>(
-        &self,
-        header: &mut H,
-        authorized_signer: Option<Address>,
-    ) -> Result<(), HeaderTransformError> {
-        let signature_bytes = std::mem::take(header.extra_data_mut());
-        let signature = parse_65b_signature(&signature_bytes)?;
-
-        // Recover and verify signer
-        recover_and_verify_signer(&signature, header, authorized_signer)?;
-
-        // Store signature in database
-        persist_signature(self.db.clone(), header.hash_slow(), signature);
-
-        Ok(())
+        headers
     }
 }
 
@@ -305,20 +328,6 @@ fn parse_65b_signature(bytes: &[u8]) -> Result<Signature, HeaderTransformError> 
         Signature::from_raw(bytes).map_err(|_| HeaderTransformError::InvalidSignature)?;
 
     Ok(signature)
-}
-
-/// Run the async DB insert from sync code safely.
-fn persist_signature(db: Arc<Database>, hash: B256, signature: Signature) {
-    tokio::spawn(async move {
-        trace!(
-            "Persisting block signature to database, block hash: {:?}, sig: {:?}",
-            hash,
-            signature.to_string()
-        );
-        if let Err(e) = db.insert_signature(hash, signature).await {
-            warn!(target: "scroll::network::header_transform", "Failed to store signature in database: {:?}", e);
-        }
-    });
 }
 
 /// Convert a generic `BlockHeader` to `alloy_consensus::Header`

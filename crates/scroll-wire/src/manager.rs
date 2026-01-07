@@ -61,7 +61,7 @@ impl ScrollWireManager {
     }
 
     /// Returns a mutable reference to the state of the `ScrollWire` protocol.
-    pub fn state_mut(&mut self) -> &mut HashMap<PeerId, LruCache<B256>> {
+    pub const fn state_mut(&mut self) -> &mut HashMap<PeerId, LruCache<B256>> {
         &mut self.state
     }
 }

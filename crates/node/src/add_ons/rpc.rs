@@ -13,9 +13,12 @@ use tokio::sync::{oneshot, Mutex, OnceCell};
 
 /// RPC extension for rollup node management operations.
 ///
-/// This struct provides a custom JSON-RPC namespace (`rollupNode`) that exposes
-/// rollup management functionality to RPC clients. It manages a connection to the
+/// This struct provides custom JSON-RPC namespaces (`rollupNode` and `rollupNodeAdmin`)
+/// that expose rollup management functionality to RPC clients. It manages a connection to the
 /// rollup manager through a handle that is initialized lazily via a oneshot channel.
+///
+/// Both `RollupNodeApiServer` and `RollupNodeAdminApiServer` traits are implemented.
+/// You can control which APIs to expose by selectively registering them in the RPC modules.
 #[derive(Debug)]
 pub struct RollupNodeRpcExt<N>
 where
@@ -32,6 +35,9 @@ where
     N: FullNetwork<Primitives = ScrollNetworkPrimitives>,
 {
     /// Creates a new RPC extension with a receiver for the rollup manager handle.
+    ///
+    /// This struct implements both `RollupNodeApiServer` and `RollupNodeAdminApiServer`.
+    /// Control which APIs are exposed by selectively registering them when extending RPC modules.
     pub fn new(rx: oneshot::Receiver<ChainOrchestratorHandle<N>>) -> Self {
         Self { rx: Mutex::new(Some(rx)), handle: OnceCell::new() }
     }
@@ -53,31 +59,22 @@ where
     }
 }
 
-/// Defines the `rollupNode` JSON-RPC namespace for rollup management operations.
+/// Defines the `rollupNode` JSON-RPC namespace for basic operations.
 ///
-/// This trait provides a custom RPC namespace that exposes rollup node management
-/// functionality to external clients. The namespace is exposed as `rollupNode` and
-/// provides methods for controlling automatic sequencing behavior.
+/// This trait provides a custom RPC namespace that exposes rollup node status
+/// and query functionality to external clients. The namespace is exposed as `rollupNode`.
 ///
 /// # Usage
 /// These methods can be called via JSON-RPC using the `rollupNode` namespace:
 /// ```json
-/// {"jsonrpc": "2.0", "method": "rollupNode_enableAutomaticSequencing", "params": [], "id": 1}
+/// {"jsonrpc": "2.0", "method": "rollupNode_status", "params": [], "id": 1}
 /// ```
 /// or using cast:
 /// ```bash
-/// cast rpc rollupNode_enableAutomaticSequencing
+/// cast rpc rollupNode_status
 /// ```
 #[rpc(server, client, namespace = "rollupNode")]
-pub trait RollupNodeExtApi {
-    /// Enables automatic sequencing in the rollup node.
-    #[method(name = "enableAutomaticSequencing")]
-    async fn enable_automatic_sequencing(&self) -> RpcResult<bool>;
-
-    /// Disables automatic sequencing in the rollup node.
-    #[method(name = "disableAutomaticSequencing")]
-    async fn disable_automatic_sequencing(&self) -> RpcResult<bool>;
-
+pub trait RollupNodeApi {
     /// Returns the current status of the rollup node.
     #[method(name = "status")]
     async fn status(&self) -> RpcResult<ChainOrchestratorStatus>;
@@ -94,47 +91,41 @@ pub trait RollupNodeExtApi {
     ) -> RpcResult<Option<L1MessageEnvelope>>;
 }
 
+/// Defines the `rollupNodeAdmin` JSON-RPC namespace for administrative operations.
+///
+/// This trait provides a custom RPC namespace that exposes rollup node administrative
+/// functionality to external clients. The namespace is exposed as `rollupNodeAdmin` and
+/// requires the `--rpc.rollup-node-admin` flag to be enabled.
+///
+/// # Usage
+/// These methods can be called via JSON-RPC using the `rollupNodeAdmin` namespace:
+/// ```json
+/// {"jsonrpc": "2.0", "method": "rollupNodeAdmin_enableAutomaticSequencing", "params": [], "id": 1}
+/// ```
+/// or using cast:
+/// ```bash
+/// cast rpc rollupNodeAdmin_enableAutomaticSequencing
+/// ```
+#[rpc(server, client, namespace = "rollupNodeAdmin")]
+pub trait RollupNodeAdminApi {
+    /// Enables automatic sequencing in the rollup node.
+    #[method(name = "enableAutomaticSequencing")]
+    async fn enable_automatic_sequencing(&self) -> RpcResult<bool>;
+
+    /// Disables automatic sequencing in the rollup node.
+    #[method(name = "disableAutomaticSequencing")]
+    async fn disable_automatic_sequencing(&self) -> RpcResult<bool>;
+
+    /// Reverts the rollup node state to a specified L1 block number.
+    #[method(name = "revertToL1Block")]
+    async fn revert_to_l1_block(&self, block_number: u64) -> RpcResult<bool>;
+}
+
 #[async_trait]
-impl<N> RollupNodeExtApiServer for RollupNodeRpcExt<N>
+impl<N> RollupNodeApiServer for RollupNodeRpcExt<N>
 where
     N: FullNetwork<Primitives = ScrollNetworkPrimitives>,
 {
-    async fn enable_automatic_sequencing(&self) -> RpcResult<bool> {
-        let handle = self.rollup_manager_handle().await.map_err(|e| {
-            ErrorObjectOwned::owned(
-                error::INTERNAL_ERROR_CODE,
-                format!("Failed to get rollup manager handle: {}", e),
-                None::<()>,
-            )
-        })?;
-
-        handle.enable_automatic_sequencing().await.map_err(|e| {
-            ErrorObjectOwned::owned(
-                error::INTERNAL_ERROR_CODE,
-                format!("Failed to enable automatic sequencing: {}", e),
-                None::<()>,
-            )
-        })
-    }
-
-    async fn disable_automatic_sequencing(&self) -> RpcResult<bool> {
-        let handle = self.rollup_manager_handle().await.map_err(|e| {
-            ErrorObjectOwned::owned(
-                error::INTERNAL_ERROR_CODE,
-                format!("Failed to get rollup manager handle: {}", e),
-                None::<()>,
-            )
-        })?;
-
-        handle.disable_automatic_sequencing().await.map_err(|e| {
-            ErrorObjectOwned::owned(
-                error::INTERNAL_ERROR_CODE,
-                format!("Failed to disable automatic sequencing: {}", e),
-                None::<()>,
-            )
-        })
-    }
-
     async fn status(&self) -> RpcResult<ChainOrchestratorStatus> {
         let handle = self.rollup_manager_handle().await.map_err(|e| {
             ErrorObjectOwned::owned(
@@ -190,5 +181,106 @@ where
                 None::<()>,
             )
         })
+    }
+}
+
+#[async_trait]
+impl<N> RollupNodeAdminApiServer for RollupNodeRpcExt<N>
+where
+    N: FullNetwork<Primitives = ScrollNetworkPrimitives>,
+{
+    async fn enable_automatic_sequencing(&self) -> RpcResult<bool> {
+        let handle = self.rollup_manager_handle().await.map_err(|e| {
+            ErrorObjectOwned::owned(
+                error::INTERNAL_ERROR_CODE,
+                format!("Failed to get rollup manager handle: {}", e),
+                None::<()>,
+            )
+        })?;
+
+        handle.enable_automatic_sequencing().await.map_err(|e| {
+            ErrorObjectOwned::owned(
+                error::INTERNAL_ERROR_CODE,
+                format!("Failed to enable automatic sequencing: {}", e),
+                None::<()>,
+            )
+        })
+    }
+
+    async fn disable_automatic_sequencing(&self) -> RpcResult<bool> {
+        let handle = self.rollup_manager_handle().await.map_err(|e| {
+            ErrorObjectOwned::owned(
+                error::INTERNAL_ERROR_CODE,
+                format!("Failed to get rollup manager handle: {}", e),
+                None::<()>,
+            )
+        })?;
+
+        handle.disable_automatic_sequencing().await.map_err(|e| {
+            ErrorObjectOwned::owned(
+                error::INTERNAL_ERROR_CODE,
+                format!("Failed to disable automatic sequencing: {}", e),
+                None::<()>,
+            )
+        })
+    }
+
+    async fn revert_to_l1_block(&self, block_number: u64) -> RpcResult<bool> {
+        let handle = self.rollup_manager_handle().await.map_err(|e| {
+            ErrorObjectOwned::owned(
+                error::INTERNAL_ERROR_CODE,
+                format!("Failed to get rollup manager handle: {}", e),
+                None::<()>,
+            )
+        })?;
+
+        handle.revert_to_l1_block(block_number).await.map_err(|e| {
+            ErrorObjectOwned::owned(
+                error::INTERNAL_ERROR_CODE,
+                format!("Failed to revert to L1 block {}: {}", block_number, e),
+                None::<()>,
+            )
+        })
+    }
+}
+
+// Implement RollupNodeApiServer for Arc<RollupNodeRpcExt<N>> to allow shared ownership
+#[async_trait]
+impl<N> RollupNodeApiServer for std::sync::Arc<RollupNodeRpcExt<N>>
+where
+    N: FullNetwork<Primitives = ScrollNetworkPrimitives>,
+{
+    async fn status(&self) -> RpcResult<ChainOrchestratorStatus> {
+        (**self).status().await
+    }
+
+    async fn get_l1_message_by_index(&self, index: u64) -> RpcResult<Option<L1MessageEnvelope>> {
+        (**self).get_l1_message_by_index(index).await
+    }
+
+    async fn get_l1_message_by_key(
+        &self,
+        l1_message_key: L1MessageKey,
+    ) -> RpcResult<Option<L1MessageEnvelope>> {
+        (**self).get_l1_message_by_key(l1_message_key).await
+    }
+}
+
+// Implement RollupNodeAdminApiServer for Arc<RollupNodeRpcExt<N>> to allow shared ownership
+#[async_trait]
+impl<N> RollupNodeAdminApiServer for std::sync::Arc<RollupNodeRpcExt<N>>
+where
+    N: FullNetwork<Primitives = ScrollNetworkPrimitives>,
+{
+    async fn enable_automatic_sequencing(&self) -> RpcResult<bool> {
+        (**self).enable_automatic_sequencing().await
+    }
+
+    async fn disable_automatic_sequencing(&self) -> RpcResult<bool> {
+        (**self).disable_automatic_sequencing().await
+    }
+
+    async fn revert_to_l1_block(&self, block_number: u64) -> RpcResult<bool> {
+        (**self).revert_to_l1_block(block_number).await
     }
 }

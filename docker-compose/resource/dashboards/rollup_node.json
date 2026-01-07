@@ -18,140 +18,132 @@
   "editable": true,
   "fiscalYearStartMonth": 0,
   "graphTooltip": 0,
-  "id": 1,
+  "id": 180,
   "links": [],
   "panels": [
+    {
+      "collapsed": false,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 0
+      },
+      "id": 16,
+      "panels": [],
+      "title": "General",
+      "type": "row"
+    },
     {
       "datasource": {
         "type": "prometheus",
         "uid": "PBFA97CFB590B2093"
       },
-      "description": "Duration of engine driver tasks.",
+      "description": "The current sync height comparison between l2geth and the Rollup node.",
       "fieldConfig": {
         "defaults": {
           "color": {
-            "mode": "palette-classic"
-          },
-          "custom": {
-            "axisBorderShow": false,
-            "axisCenteredZero": false,
-            "axisColorMode": "text",
-            "axisLabel": "",
-            "axisPlacement": "auto",
-            "barAlignment": 0,
-            "barWidthFactor": 0.6,
-            "drawStyle": "line",
-            "fillOpacity": 0,
-            "gradientMode": "none",
-            "hideFrom": {
-              "legend": false,
-              "tooltip": false,
-              "viz": false
-            },
-            "insertNulls": false,
-            "lineInterpolation": "linear",
-            "lineWidth": 1,
-            "pointSize": 5,
-            "scaleDistribution": {
-              "type": "linear"
-            },
-            "showPoints": "auto",
-            "spanNulls": false,
-            "stacking": {
-              "group": "A",
-              "mode": "none"
-            },
-            "thresholdsStyle": {
-              "mode": "off"
-            }
+            "mode": "continuous-RdYlGr"
           },
           "mappings": [],
+          "min": 0,
           "thresholds": {
             "mode": "absolute",
             "steps": [
               {
                 "color": "green"
-              },
-              {
-                "color": "red",
-                "value": 80
               }
             ]
-          },
-          "unit": "s"
+          }
         },
         "overrides": []
       },
       "gridPos": {
-        "h": 8,
+        "h": 4,
         "w": 12,
-        "x": 0,
-        "y": 0
+        "x": 6,
+        "y": 1
       },
-      "id": 12,
+      "id": 15,
       "options": {
+        "displayMode": "lcd",
         "legend": {
           "calcs": [],
           "displayMode": "list",
           "placement": "bottom",
-          "showLegend": true
+          "showLegend": false
         },
-        "tooltip": {
-          "hideZeros": false,
-          "mode": "single",
-          "sort": "none"
-        }
+        "maxVizHeight": 27,
+        "minVizHeight": 0,
+        "minVizWidth": 8,
+        "namePlacement": "auto",
+        "orientation": "horizontal",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "showUnfilled": true,
+        "sizing": "manual",
+        "text": {},
+        "valueMode": "color"
       },
       "pluginVersion": "12.0.1",
       "targets": [
         {
           "disableTextWrap": false,
-          "editorMode": "code",
-          "expr": "reth_engine_driver_block_import_duration{quantile=~\"(0.5|0.9|0.99)\"}",
+          "editorMode": "builder",
+          "exemplar": false,
+          "expr": "reth_blockchain_tree_canonical_chain_height{service=\"$service\", namespace=\"$env\"}",
           "fullMetaSearch": false,
           "includeNullMetadata": true,
-          "legendFormat": "Block import p{{quantile}}",
-          "range": true,
+          "instant": true,
+          "legendFormat": "{{service}}",
+          "range": false,
           "refId": "A",
           "useBackend": false
         },
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "PBFA97CFB590B2093"
+            "uid": "o59qe-zVz"
           },
           "disableTextWrap": false,
           "editorMode": "code",
-          "expr": "reth_engine_driver_l1_consolidation_duration{quantile=~\"(0.5|0.9|0.99)\"}",
+          "exemplar": false,
+          "expr": "rpc_height{namespace=\"$env\",node=\"$l2geth\"}",
           "fullMetaSearch": false,
           "hide": false,
           "includeNullMetadata": true,
-          "instant": false,
-          "legendFormat": "L1 consolidation p{{quantile}}",
-          "range": true,
+          "instant": true,
+          "legendFormat": "l2geth-{{node}}",
+          "range": false,
           "refId": "B",
           "useBackend": false
         },
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "PBFA97CFB590B2093"
+            "uid": "o59qe-zVz"
           },
           "disableTextWrap": false,
           "editorMode": "code",
-          "expr": "reth_engine_driver_build_new_payload_duration{quantile=~\"(0.5|0.9|0.99)\"}",
+          "expr": "reth_blockchain_tree_canonical_chain_height{namespace=\"$env\",service=\"l2reth-rpc-0\"}",
           "fullMetaSearch": false,
           "hide": false,
           "includeNullMetadata": true,
           "instant": false,
-          "legendFormat": "Build new payload p{{quantile}}",
+          "legendFormat": "{{service}}",
           "range": true,
           "refId": "C",
           "useBackend": false
         }
       ],
-      "title": "Engine driver tasks",
-      "type": "timeseries"
+      "title": "Sync height",
+      "transparent": true,
+      "type": "bargauge"
     },
     {
       "datasource": {
@@ -230,8 +222,8 @@
       "gridPos": {
         "h": 8,
         "w": 12,
-        "x": 12,
-        "y": 0
+        "x": 0,
+        "y": 5
       },
       "id": 13,
       "options": {
@@ -252,30 +244,13 @@
         {
           "disableTextWrap": false,
           "editorMode": "code",
-          "expr": "reth_sequencer_payload_attributes_building_duration{quantile=\"1.0\"} + reth_engine_driver_build_new_payload_duration{quantile=\"1.0\"}",
+          "expr": "reth_chain_orchestrator_block_building_duration{quantile=\"1.0\"}",
           "fullMetaSearch": false,
           "hide": false,
           "includeNullMetadata": true,
           "legendFormat": "Block building duration",
           "range": true,
           "refId": "A",
-          "useBackend": false
-        },
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "PBFA97CFB590B2093"
-          },
-          "disableTextWrap": false,
-          "editorMode": "code",
-          "expr": "reth_engine_driver_gas_per_block{quantile=\"1.0\"} / (reth_sequencer_payload_attributes_building_duration{quantile=\"1.0\"} + reth_engine_driver_build_new_payload_duration{quantile=\"1.0\"})",
-          "fullMetaSearch": false,
-          "hide": false,
-          "includeNullMetadata": true,
-          "instant": false,
-          "legendFormat": "Gas/s",
-          "range": true,
-          "refId": "B",
           "useBackend": false
         }
       ],
@@ -287,7 +262,7 @@
         "type": "prometheus",
         "uid": "PBFA97CFB590B2093"
       },
-      "description": "The average duration of handling chain orchestrator tasks.",
+      "description": "The duration for the sequencer to assemble the payload attributes for the block. This should not include the payload building duration allocated to the EN.",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -301,7 +276,7 @@
             "axisPlacement": "auto",
             "barAlignment": 0,
             "barWidthFactor": 0.6,
-            "drawStyle": "points",
+            "drawStyle": "line",
             "fillOpacity": 0,
             "gradientMode": "none",
             "hideFrom": {
@@ -346,10 +321,10 @@
       "gridPos": {
         "h": 8,
         "w": 12,
-        "x": 0,
-        "y": 8
+        "x": 12,
+        "y": 5
       },
-      "id": 7,
+      "id": 17,
       "options": {
         "legend": {
           "calcs": [],
@@ -368,16 +343,117 @@
         {
           "disableTextWrap": false,
           "editorMode": "code",
-          "expr": "sum(rate(reth_indexer_task_duration_sum{item!=\"\"}[$__rate_interval]) / rate(reth_indexer_task_duration_count{item!=\"\"}[$__rate_interval])) by (item)",
+          "expr": "reth_sequencer_payload_attributes_building_duration{quantile=~\"0.5|0.95|1.0\"}",
           "fullMetaSearch": false,
           "includeNullMetadata": true,
-          "legendFormat": "{{item}}",
+          "legendFormat": "Payload building duration - p{{quantile}}",
           "range": true,
           "refId": "A",
           "useBackend": false
         }
       ],
-      "title": "Indexer task handling duration",
+      "title": "Payload attributes building duration",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "PBFA97CFB590B2093"
+      },
+      "description": "The average duration for tasks handled by the chain orchestrator.",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "axisBorderShow": false,
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "barWidthFactor": 0.6,
+            "drawStyle": "points",
+            "fillOpacity": 0,
+            "gradientMode": "none",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "insertNulls": false,
+            "lineInterpolation": "linear",
+            "lineWidth": 1,
+            "pointSize": 7,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "auto",
+            "spanNulls": false,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green"
+              },
+              {
+                "color": "red",
+                "value": 80
+              }
+            ]
+          },
+          "unit": "s"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 24,
+        "x": 0,
+        "y": 13
+      },
+      "id": 7,
+      "interval": "1m",
+      "options": {
+        "legend": {
+          "calcs": [],
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "hideZeros": false,
+          "mode": "single",
+          "sort": "none"
+        }
+      },
+      "pluginVersion": "12.0.1",
+      "targets": [
+        {
+          "disableTextWrap": false,
+          "editorMode": "code",
+          "exemplar": false,
+          "expr": "reth_chain_orchestrator_task_duration{quantile=~\"0.5|0.95|0.99\"}",
+          "fullMetaSearch": false,
+          "includeNullMetadata": true,
+          "instant": false,
+          "legendFormat": "{{task}} - p{{quantile}}",
+          "range": true,
+          "refId": "A",
+          "useBackend": false
+        }
+      ],
+      "title": "Chain orchestrator task handling duration",
       "type": "timeseries"
     },
     {
@@ -444,8 +520,8 @@
       "gridPos": {
         "h": 8,
         "w": 12,
-        "x": 12,
-        "y": 8
+        "x": 0,
+        "y": 21
       },
       "id": 10,
       "options": {
@@ -465,11 +541,11 @@
       "targets": [
         {
           "disableTextWrap": false,
-          "editorMode": "builder",
-          "expr": "reth_signer_signing_duration",
+          "editorMode": "code",
+          "expr": "reth_signer_signing_duration{quantile=~\"0.5|0.95|1.0\"}",
           "fullMetaSearch": false,
           "includeNullMetadata": true,
-          "legendFormat": "Duration",
+          "legendFormat": "Duration p{{quantile}} ",
           "range": true,
           "refId": "A",
           "useBackend": false
@@ -484,7 +560,348 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 16
+        "y": 29
+      },
+      "id": 18,
+      "panels": [],
+      "title": "Database",
+      "type": "row"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "PBFA97CFB590B2093"
+      },
+      "description": "Duration of database read operations.",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "axisBorderShow": false,
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "barWidthFactor": 0.6,
+            "drawStyle": "points",
+            "fillOpacity": 0,
+            "gradientMode": "none",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "insertNulls": false,
+            "lineInterpolation": "linear",
+            "lineWidth": 1,
+            "pointSize": 7,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "auto",
+            "spanNulls": false,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green"
+              },
+              {
+                "color": "red",
+                "value": 80
+              }
+            ]
+          },
+          "unit": "s"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 9,
+        "w": 24,
+        "x": 0,
+        "y": 30
+      },
+      "id": 20,
+      "options": {
+        "legend": {
+          "calcs": [],
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "hideZeros": false,
+          "mode": "single",
+          "sort": "none"
+        }
+      },
+      "pluginVersion": "12.0.1",
+      "targets": [
+        {
+          "editorMode": "code",
+          "expr": "reth_database_task_duration{quantile=\"0.99\",item!~\".*(?i)get.*\"}",
+          "legendFormat": "{{item}} - p{{quantile}}",
+          "range": true,
+          "refId": "A"
+        }
+      ],
+      "title": "Database write operations",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "PBFA97CFB590B2093"
+      },
+      "description": "Duration of database read operations.",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "axisBorderShow": false,
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "barWidthFactor": 0.6,
+            "drawStyle": "points",
+            "fillOpacity": 0,
+            "gradientMode": "none",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "insertNulls": false,
+            "lineInterpolation": "linear",
+            "lineWidth": 1,
+            "pointSize": 6,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "auto",
+            "spanNulls": false,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green"
+              },
+              {
+                "color": "red",
+                "value": 80
+              }
+            ]
+          },
+          "unit": "s"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 24,
+        "x": 0,
+        "y": 39
+      },
+      "id": 19,
+      "options": {
+        "legend": {
+          "calcs": [],
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "hideZeros": false,
+          "mode": "single",
+          "sort": "none"
+        }
+      },
+      "pluginVersion": "12.0.1",
+      "targets": [
+        {
+          "disableTextWrap": false,
+          "editorMode": "code",
+          "expr": "reth_database_task_duration{quantile=\"0.99\",item=~\".*(?i)get.*\"}",
+          "fullMetaSearch": false,
+          "includeNullMetadata": true,
+          "legendFormat": "{{item}} - p{{quantile}}",
+          "range": true,
+          "refId": "A",
+          "useBackend": false
+        }
+      ],
+      "title": "Database read operations",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "PBFA97CFB590B2093"
+      },
+      "description": "The duration for the database to acquire read and write locks.",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "axisBorderShow": false,
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "barWidthFactor": 0.6,
+            "drawStyle": "points",
+            "fillOpacity": 0,
+            "gradientMode": "none",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "insertNulls": false,
+            "lineInterpolation": "linear",
+            "lineWidth": 1,
+            "pointSize": 7,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "auto",
+            "spanNulls": false,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green"
+              },
+              {
+                "color": "red",
+                "value": 80
+              }
+            ]
+          },
+          "unit": "ms"
+        },
+        "overrides": [
+          {
+            "__systemRef": "hideSeriesFrom",
+            "matcher": {
+              "id": "byNames",
+              "options": {
+                "mode": "exclude",
+                "names": [
+                  "Write lock acquisition - p1.0"
+                ],
+                "prefix": "All except:",
+                "readOnly": true
+              }
+            },
+            "properties": [
+              {
+                "id": "custom.hideFrom",
+                "value": {
+                  "legend": false,
+                  "tooltip": false,
+                  "viz": true
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 24,
+        "x": 0,
+        "y": 47
+      },
+      "id": 21,
+      "options": {
+        "legend": {
+          "calcs": [],
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "hideZeros": false,
+          "mode": "single",
+          "sort": "none"
+        }
+      },
+      "pluginVersion": "12.0.1",
+      "targets": [
+        {
+          "disableTextWrap": false,
+          "editorMode": "code",
+          "expr": "reth_database_read_lock_acquire_duration{quantile=~\"0.5|0.9|1.0\"}",
+          "fullMetaSearch": false,
+          "includeNullMetadata": true,
+          "legendFormat": "Read lock acquisition - p{{quantile}}",
+          "range": true,
+          "refId": "A",
+          "useBackend": false
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "PBFA97CFB590B2093"
+          },
+          "editorMode": "code",
+          "expr": "reth_database_write_lock_acquire_duration{quantile=~\"0.5|0.9|1.0\"}",
+          "hide": false,
+          "instant": false,
+          "legendFormat": "Write lock acquisition - p{{quantile}}",
+          "range": true,
+          "refId": "B"
+        }
+      ],
+      "title": "Locks acquisition duration",
+      "type": "timeseries"
+    },
+    {
+      "collapsed": false,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 55
       },
       "id": 5,
       "panels": [],
@@ -569,7 +986,7 @@
         "h": 8,
         "w": 12,
         "x": 0,
-        "y": 17
+        "y": 56
       },
       "id": 6,
       "options": {
@@ -634,8 +1051,10 @@
             "axisBorderShow": false,
             "axisCenteredZero": false,
             "axisColorMode": "text",
+            "axisLabel": "",
             "axisPlacement": "auto",
             "barAlignment": 0,
+            "barWidthFactor": 0.6,
             "drawStyle": "line",
             "fillOpacity": 10,
             "gradientMode": "none",
@@ -644,6 +1063,7 @@
               "tooltip": false,
               "viz": false
             },
+            "insertNulls": false,
             "lineInterpolation": "linear",
             "lineWidth": 2,
             "pointSize": 3,
@@ -681,11 +1101,12 @@
         "h": 8,
         "w": 12,
         "x": 12,
-        "y": 17
+        "y": 56
       },
       "id": 14,
       "options": {
         "legend": {
+          "calcs": [],
           "displayMode": "list",
           "placement": "bottom",
           "showLegend": true
@@ -722,7 +1143,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 25
+        "y": 64
       },
       "id": 2,
       "panels": [],
@@ -774,7 +1195,7 @@
         "h": 8,
         "w": 12,
         "x": 0,
-        "y": 26
+        "y": 65
       },
       "id": 4,
       "options": {
@@ -899,7 +1320,7 @@
         "h": 8,
         "w": 12,
         "x": 12,
-        "y": 26
+        "y": 65
       },
       "id": 1,
       "options": {
@@ -1034,7 +1455,7 @@
         "h": 8,
         "w": 12,
         "x": 0,
-        "y": 34
+        "y": 73
       },
       "id": 3,
       "options": {
@@ -1075,12 +1496,12 @@
     "list": []
   },
   "time": {
-    "from": "now-5m",
+    "from": "now-12h",
     "to": "now"
   },
   "timepicker": {},
   "timezone": "browser",
   "title": "Rollup node",
   "uid": "bd2ec756-e1b0-48e0-88ee-371daf18b8fd",
-  "version": 7
+  "version": 50
 }

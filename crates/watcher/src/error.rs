@@ -1,6 +1,7 @@
 use crate::L1Notification;
 use alloy_json_rpc::RpcError;
 use alloy_primitives::B256;
+use alloy_sol_types::Error;
 use alloy_transport::TransportErrorKind;
 use rollup_node_providers::L1ProviderError;
 use std::sync::Arc;
@@ -27,6 +28,9 @@ pub enum L1WatcherError {
     /// The L1 nofication channel was closed.
     #[error("l1 notification channel closed")]
     SendError(#[from] SendError<Arc<L1Notification>>),
+    /// An error that occurred when accessing data from the cache.
+    #[error(transparent)]
+    Cache(#[from] CacheError),
 }
 
 /// An error occurred during a request to the Ethereum JSON RPC provider.
@@ -46,10 +50,32 @@ pub enum FilterLogError {
     /// The log is missing a block number.
     #[error("missing block number for log")]
     MissingBlockNumber,
+    /// The log is missing a block hash.
+    #[error("missing block hash for log")]
+    MissingBlockHash,
     /// The log is missing a block timestamp.
     #[error("missing block timestamp for log")]
     MissingBlockTimestamp,
     /// The log is missing a transaction hash.
     #[error("unknown transaction hash for log")]
     MissingTransactionHash,
+    /// Invalid extracted notification length.
+    #[error("expected {0} notifications, got {1}")]
+    InvalidNotificationCount(usize, usize),
+    /// Failed to decode log of expected type.
+    #[error("failed to decode log as {log_type} with error {error}")]
+    DecodeLogFailed {
+        /// The expected log type.
+        log_type: &'static str,
+        /// The decoding error.
+        error: Error,
+    },
+}
+
+/// An error that occurred when accessing data from the cache.
+#[derive(Debug, thiserror::Error)]
+pub enum CacheError {
+    /// The transaction for which the next blob versioned hash was requested is not in the cache.
+    #[error("transaction {0} not found in cache when requesting next blob versioned hash")]
+    MissingTransactionInCacheForBlobVersionedHash(B256),
 }

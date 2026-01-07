@@ -1,7 +1,9 @@
 use super::ChainOrchestratorError;
 use alloy_provider::Provider;
 use futures::{stream::FuturesOrdered, TryStreamExt};
-use rollup_node_primitives::{BatchConsolidationOutcome, BatchInfo, L2BlockInfoWithL1Messages};
+use rollup_node_primitives::{
+    BatchConsolidationOutcome, BatchInfo, BatchStatus, L2BlockInfoWithL1Messages,
+};
 use scroll_alloy_network::Scroll;
 use scroll_derivation_pipeline::{BatchDerivationResult, DerivedAttributes};
 use scroll_engine::{block_matches_attributes, ForkchoiceState};
@@ -34,15 +36,14 @@ pub(crate) async fn reconcile_batch<L2P: Provider<Scroll>>(
                 // Extract the block info with L1 messages.
                 let block_info: L2BlockInfoWithL1Messages = (&current_block).into();
 
-                // The block matches the derived attributes and the block is below or equal to the
-                // safe current safe head.
-                if attributes.block_number <= fcs.safe_block_info().number {
+                // The derived attributes match the L2 chain but are associated with a block
+                // number less than or equal to the finalized block, so skip.
+                if attributes.block_number <= fcs.finalized_block_info().number {
                     Ok::<_, ChainOrchestratorError>(BlockConsolidationAction::Skip(block_info))
                 } else {
-                    // The block matches the derived attributes, no action is needed.
-                    Ok::<_, ChainOrchestratorError>(BlockConsolidationAction::UpdateSafeHead(
-                        block_info,
-                    ))
+                    // The block matches the derived attributes but is above the finalized block,
+                    // so we need to update the fcs.
+                    Ok::<_, ChainOrchestratorError>(BlockConsolidationAction::UpdateFcs(block_info))
                 }
             } else {
                 // The block does not match the derived attributes, a reorg is needed.
@@ -53,7 +54,11 @@ pub(crate) async fn reconcile_batch<L2P: Provider<Scroll>>(
     }
 
     let actions: Vec<BlockConsolidationAction> = futures.try_collect().await?;
-    Ok(BatchReconciliationResult { batch_info: batch.batch_info, actions })
+    Ok(BatchReconciliationResult {
+        batch_info: batch.batch_info,
+        actions,
+        target_status: batch.target_status,
+    })
 }
 
 /// The result of reconciling a batch with the L2 chain.
@@ -63,6 +68,8 @@ pub(crate) struct BatchReconciliationResult {
     pub batch_info: BatchInfo,
     /// The actions that must be performed on the L2 chain to consolidate the batch.
     pub actions: Vec<BlockConsolidationAction>,
+    /// The target status of the batch after consolidation.
+    pub target_status: BatchStatus,
 }
 
 impl BatchReconciliationResult {
@@ -73,7 +80,7 @@ impl BatchReconciliationResult {
         for next in &self.actions {
             if let Some(last) = actions.last_mut() {
                 match (last, next) {
-                    (last, next) if last.is_update_safe_head() && next.is_update_safe_head() => {
+                    (last, next) if last.is_update_fcs() && next.is_update_fcs() => {
                         *last = next.clone();
                     }
                     _ => {
@@ -93,7 +100,8 @@ impl BatchReconciliationResult {
         self,
         reorg_results: Vec<L2BlockInfoWithL1Messages>,
     ) -> Result<BatchConsolidationOutcome, ChainOrchestratorError> {
-        let mut consolidate_chain = BatchConsolidationOutcome::new(self.batch_info);
+        let mut consolidate_chain =
+            BatchConsolidationOutcome::new(self.batch_info, self.target_status);
 
         // First append all non-reorg results to the consolidated chain.
         self.actions.into_iter().filter(|action| !action.is_reorg()).for_each(|action| {
@@ -119,8 +127,8 @@ pub(crate) struct AggregatedBatchConsolidationActions {
 /// An action that must be performed on the L2 chain to consolidate a block.
 #[derive(Debug, Clone)]
 pub(crate) enum BlockConsolidationAction {
-    /// Update the safe head to the given block.
-    UpdateSafeHead(L2BlockInfoWithL1Messages),
+    /// Update the fcs to the given block.
+    UpdateFcs(L2BlockInfoWithL1Messages),
     /// The derived attributes match the L2 chain and the safe head is already at or beyond the
     /// block, so no action is needed.
     Skip(L2BlockInfoWithL1Messages),
@@ -129,9 +137,9 @@ pub(crate) enum BlockConsolidationAction {
 }
 
 impl BlockConsolidationAction {
-    /// Returns true if the action is to update the safe head.
-    pub(crate) const fn is_update_safe_head(&self) -> bool {
-        matches!(self, Self::UpdateSafeHead(_))
+    /// Returns true if the action is to update the fcs.
+    pub(crate) const fn is_update_fcs(&self) -> bool {
+        matches!(self, Self::UpdateFcs(_))
     }
 
     /// Returns true if the action is to skip the block.
@@ -148,7 +156,7 @@ impl BlockConsolidationAction {
     /// skip, returns None for reorg.
     pub(crate) fn into_block_info(self) -> Option<L2BlockInfoWithL1Messages> {
         match self {
-            Self::UpdateSafeHead(info) | Self::Skip(info) => Some(info),
+            Self::UpdateFcs(info) | Self::Skip(info) => Some(info),
             Self::Reorg(_attrs) => None,
         }
     }
@@ -157,7 +165,7 @@ impl BlockConsolidationAction {
 impl std::fmt::Display for BlockConsolidationAction {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Self::UpdateSafeHead(info) => {
+            Self::UpdateFcs(info) => {
                 write!(f, "UpdateSafeHead to block {}", info.block_info.number)
             }
             Self::Skip(info) => write!(f, "Skip block {}", info.block_info.number),

@@ -8,7 +8,7 @@ use std::{fs, path::PathBuf, sync::Arc};
 
 use alloy_chains::NamedChain;
 use alloy_primitives::{hex, Address, U128};
-use alloy_provider::{Provider, ProviderBuilder};
+use alloy_provider::{layers::CacheLayer, Provider, ProviderBuilder};
 use alloy_rpc_client::RpcClient;
 use alloy_signer::Signer;
 use alloy_signer_aws::AwsSigner;
@@ -38,20 +38,20 @@ use rollup_node_providers::{
 use rollup_node_sequencer::{
     L1MessageInclusionMode, PayloadBuildingConfig, Sequencer, SequencerConfig,
 };
-use rollup_node_watcher::{L1Notification, L1Watcher};
+use rollup_node_watcher::{L1Watcher, L1WatcherHandle};
 use scroll_alloy_hardforks::ScrollHardforks;
 use scroll_alloy_network::Scroll;
 use scroll_alloy_provider::{ScrollAuthApiEngineClient, ScrollEngineApi};
 use scroll_db::{
-    Database, DatabaseConnectionProvider, DatabaseError, DatabaseReadOperations,
-    DatabaseWriteOperations,
+    Database, DatabaseConnectionProvider, DatabaseError, DatabaseMaintenance,
+    DatabaseReadOperations, DatabaseWriteOperations,
 };
 use scroll_derivation_pipeline::DerivationPipeline;
 use scroll_engine::{Engine, ForkchoiceState};
 use scroll_migration::traits::ScrollMigrator;
 use scroll_network::ScrollNetworkManager;
 use scroll_wire::ScrollWireEvent;
-use tokio::sync::mpsc::{Sender, UnboundedReceiver};
+use tokio::sync::mpsc::UnboundedReceiver;
 
 /// A struct that represents the arguments for the rollup node.
 #[derive(Debug, Clone, clap::Args)]
@@ -169,7 +169,6 @@ impl ScrollRollupNodeConfig {
             impl ScrollEngineApi,
         >,
         ChainOrchestratorHandle<N>,
-        Option<Sender<Arc<L1Notification>>>,
     )>
     where
         N: FullNetwork<Primitives = ScrollNetworkPrimitives> + NetworkProtocols,
@@ -194,8 +193,13 @@ impl ScrollRollupNodeConfig {
 
         // Get a provider
         let l1_provider = self.l1_provider_args.url.clone().map(|url| {
-            let L1ProviderArgs { max_retries, initial_backoff, compute_units_per_second, .. } =
-                self.l1_provider_args;
+            let L1ProviderArgs {
+                max_retries,
+                initial_backoff,
+                compute_units_per_second,
+                cache_max_items,
+                ..
+            } = self.l1_provider_args;
             let client = RpcClient::builder()
                 .layer(RetryBackoffLayer::new(
                     max_retries,
@@ -203,7 +207,8 @@ impl ScrollRollupNodeConfig {
                     compute_units_per_second,
                 ))
                 .http(url);
-            ProviderBuilder::new().connect_client(client)
+            let cache_layer = CacheLayer::new(cache_max_items);
+            ProviderBuilder::new().layer(cache_layer).connect_client(client)
         });
 
         // Init a retry provider to the execution layer.
@@ -220,11 +225,15 @@ impl ScrollRollupNodeConfig {
                 .parse()
                 .expect("invalid l2 rpc url"),
         );
-        let l2_provider = ProviderBuilder::<_, _, Scroll>::default().connect_client(client);
+        let l2_provider = ProviderBuilder::<_, _, Scroll>::default()
+            .layer(CacheLayer::new(constants::L2_PROVIDER_CACHE_MAX_ITEMS))
+            .connect_client(client);
         let l2_provider = Arc::new(l2_provider);
 
         // Fetch the database from the hydrated config.
         let db = self.database.clone().expect("should hydrate config before build");
+        let db_maintenance = DatabaseMaintenance::new(db.clone());
+        ctx.task_executor.spawn(db_maintenance.run());
 
         // Run the database migrations
         if let Some(named) = chain_spec.chain().named() {
@@ -261,18 +270,16 @@ impl ScrollRollupNodeConfig {
         let mut fcs =
             ForkchoiceState::from_provider(&l2_provider).await.unwrap_or_else(chain_spec_fcs);
 
-        let genesis_hash = chain_spec.genesis_hash();
-        let (l1_start_block_number, mut l2_head_block_number) = db
+        let (l1_block_startup_info, mut l2_head_block_number) = db
             .tx_mut(move |tx| async move {
                 // On startup we replay the latest batch of blocks from the database as such we set
                 // the safe block hash to the latest block hash associated with the
                 // previous consolidated batch in the database.
-                let (_startup_safe_block, l1_start_block_number) =
-                    tx.prepare_on_startup(genesis_hash).await?;
+                let l1_block_startup_info = tx.prepare_l1_watcher_start_info().await?;
 
                 let l2_head_block_number = tx.get_l2_head_block_number().await?;
 
-                Ok::<_, DatabaseError>((l1_start_block_number, l2_head_block_number))
+                Ok::<_, DatabaseError>((l1_block_startup_info, l2_head_block_number))
             })
             .await?;
 
@@ -328,7 +335,7 @@ impl ScrollRollupNodeConfig {
             td_constant(chain_spec.chain().named()),
             authorized_signer,
         );
-        tokio::spawn(scroll_network_manager);
+        ctx.task_executor.spawn(scroll_network_manager);
 
         tracing::info!(target: "scroll::node::args", fcs = ?fcs, payload_building_duration = ?self.sequencer_args.payload_building_duration, "Starting engine driver");
         let engine = Engine::new(Arc::new(engine_api), fcs);
@@ -345,15 +352,22 @@ impl ScrollRollupNodeConfig {
         };
         let consensus = self.consensus_args.consensus(authorized_signer)?;
 
-        let (l1_notification_tx, l1_notification_rx): (Option<Sender<Arc<L1Notification>>>, _) =
+        // Define some types to support definitions of return type of following function in no_std.
+        #[cfg(feature = "test-utils")]
+        type L1WatcherMockOpt = Option<rollup_node_watcher::test_utils::L1WatcherMock>;
+
+        #[cfg(not(feature = "test-utils"))]
+        type L1WatcherMockOpt = Option<std::convert::Infallible>;
+
+        let (_l1_watcher_mock, l1_watcher_handle): (L1WatcherMockOpt, Option<L1WatcherHandle>) =
             if let Some(provider) = l1_provider.filter(|_| !self.test) {
-                tracing::info!(target: "scroll::node::args", ?l1_start_block_number, "Starting L1 watcher");
+                tracing::info!(target: "scroll::node::args", ?l1_block_startup_info, "Starting L1 watcher");
                 (
                     None,
                     Some(
                         L1Watcher::spawn(
                             provider,
-                            l1_start_block_number,
+                            l1_block_startup_info,
                             node_config,
                             self.l1_provider_args.logs_query_block_range,
                         )
@@ -365,8 +379,15 @@ impl ScrollRollupNodeConfig {
                 // testing
                 #[cfg(feature = "test-utils")]
                 {
-                    let (tx, rx) = tokio::sync::mpsc::channel(1000);
-                    (Some(tx), Some(rx))
+                    let (notification_tx, notification_rx) = tokio::sync::mpsc::channel(1000);
+                    let (command_tx, command_rx) = tokio::sync::mpsc::unbounded_channel();
+                    let handle =
+                        rollup_node_watcher::L1WatcherHandle::new(command_tx, notification_rx);
+                    let watcher_mock = rollup_node_watcher::test_utils::L1WatcherMock {
+                        command_rx: Arc::new(tokio::sync::Mutex::new(command_rx)),
+                        notification_tx,
+                    };
+                    (Some(watcher_mock), Some(handle))
                 }
 
                 #[cfg(not(feature = "test-utils"))]
@@ -452,7 +473,7 @@ impl ScrollRollupNodeConfig {
             config,
             Arc::new(block_client),
             l2_provider,
-            l1_notification_rx.expect("L1 notification receiver should be set"),
+            l1_watcher_handle.expect("L1 notification receiver should be set"),
             scroll_network_handle.into_scroll_network().await,
             consensus,
             engine,
@@ -462,7 +483,10 @@ impl ScrollRollupNodeConfig {
         )
         .await?;
 
-        Ok((chain_orchestrator, handle, l1_notification_tx))
+        #[cfg(feature = "test-utils")]
+        let handle = handle.with_l1_watcher_mock(_l1_watcher_mock);
+
+        Ok((chain_orchestrator, handle))
     }
 }
 
@@ -639,6 +663,9 @@ pub struct L1ProviderArgs {
     /// The logs query block range.
     #[arg(long = "l1.query-range", id = "l1_query_range", value_name = "L1_QUERY_RANGE", default_value_t = constants::LOGS_QUERY_BLOCK_RANGE)]
     pub logs_query_block_range: u64,
+    /// The maximum number of items to be stored in the cache layer.
+    #[arg(long = "l1.cache-max-items", id = "l1_cache_max_items", value_name = "L1_CACHE_MAX_ITEMS", default_value_t = constants::L1_PROVIDER_CACHE_MAX_ITEMS)]
+    pub cache_max_items: u32,
 }
 
 /// The arguments for the Beacon provider.
@@ -743,9 +770,12 @@ pub struct SignerArgs {
 /// The arguments for the rpc.
 #[derive(Debug, Default, Clone, clap::Args)]
 pub struct RpcArgs {
-    /// A boolean to represent if the rollup node rpc should be enabled.
-    #[arg(long = "rpc.rollup-node", help = "Enable the rollup node RPC namespace")]
-    pub enabled: bool,
+    /// A boolean to represent if the rollup node basic rpc should be enabled.
+    #[arg(long = "rpc.rollup-node", default_value_t = true, action = ArgAction::Set, help = "Enable the rollup node basic RPC namespace(default: true)")]
+    pub basic_enabled: bool,
+    /// A boolean to represent if the rollup node admin rpc should be enabled.
+    #[arg(long = "rpc.rollup-node-admin", help = "Enable the rollup node admin RPC namespace")]
+    pub admin_enabled: bool,
 }
 
 impl SignerArgs {

@@ -31,7 +31,10 @@ pub fn decode_v7(blob: &[u8]) -> Result<Batch, DecodingError> {
 
     // check version.
     let version = from_be_bytes_slice_and_advance_buf!(u8, buf);
-    debug_assert!((version == 7) | (version == 8), "incorrect blob version");
+    debug_assert!(
+        (version == 7) || (version == 8) || (version == 9) || (version == 10),
+        "incorrect blob version"
+    );
 
     let blob_payload_size = from_be_bytes_slice_and_advance_buf!(u32, 3, buf) as usize;
 
@@ -53,11 +56,16 @@ pub fn decode_v7(blob: &[u8]) -> Result<Batch, DecodingError> {
     };
 
     // decode the payload.
-    decode_v7_payload(buf)
+    decode_payload(version, buf)
+}
+
+pub(crate) fn decode_payload(version: u8, blob: &[u8]) -> Result<Batch, DecodingError> {
+    let payload = decode_v7_payload(blob)?;
+    Ok(Batch::new(version, None, payload))
 }
 
 /// Decode the blob data into a [`Batch`].
-pub(crate) fn decode_v7_payload(blob: &[u8]) -> Result<Batch, DecodingError> {
+pub(crate) fn decode_v7_payload(blob: &[u8]) -> Result<PayloadData, DecodingError> {
     let buf = &mut (&*blob);
 
     // check buf len.
@@ -94,13 +102,11 @@ pub(crate) fn decode_v7_payload(blob: &[u8]) -> Result<Batch, DecodingError> {
             .push(L2Block::new(transactions, (context, initial_block_number + i as u64).into()));
     }
 
-    let payload = PayloadData {
+    Ok(PayloadData {
         blocks: l2_blocks,
         l1_message_queue_info: (prev_message_queue_hash, post_message_queue_hash).into(),
         skipped_l1_message_bitmap: None,
-    };
-
-    Ok(Batch::new(7, None, payload))
+    })
 }
 
 #[cfg(test)]
@@ -288,6 +294,24 @@ mod tests {
         };
 
         assert_eq!(last_block, &expected_block);
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_should_decode_v8_mock() -> eyre::Result<()> {
+        let blob = read_to_bytes("./testdata/blob_v7_uncompressed.bin")?;
+        let mut blob = blob.to_vec();
+        // Manually patch the version byte to 8 to simulate a v8 blob.
+        // BlobSliceIter skips the first byte (index 0) of every 32-byte chunk.
+        // So the first data byte (version) is at index 1.
+        blob[1] = 8;
+
+        let batch = decode_v7(&blob)?;
+        assert_eq!(batch.version, 8);
+
+        let blocks = batch.data.l2_blocks();
+        assert_eq!(blocks.len(), 4);
 
         Ok(())
     }

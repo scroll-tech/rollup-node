@@ -3,8 +3,8 @@ use crate::{ReadConnectionProvider, WriteConnectionProvider};
 
 use alloy_primitives::{Signature, B256};
 use rollup_node_primitives::{
-    BatchCommitData, BatchConsolidationOutcome, BatchInfo, BlockInfo, L1MessageEnvelope,
-    L2BlockInfoWithL1Messages, Metadata,
+    BatchCommitData, BatchConsolidationOutcome, BatchInfo, BatchStatus, BlockInfo,
+    L1BlockStartupInfo, L1MessageEnvelope, L2BlockInfoWithL1Messages, Metadata,
 };
 use scroll_alloy_rpc_types_engine::BlockDataHint;
 use sea_orm::{
@@ -18,6 +18,17 @@ use std::fmt;
 #[async_trait::async_trait]
 #[auto_impl::auto_impl(Arc)]
 pub trait DatabaseWriteOperations {
+    /// Insert a [`BlockInfo`] representing an L1 block into the database.
+    async fn insert_l1_block_info(&self, block_info: BlockInfo) -> Result<(), DatabaseError>;
+
+    /// Remove all [`BlockInfo`]s representing L1 blocks with block numbers less than or equal to
+    /// the provided block number.
+    async fn remove_l1_block_info_leq(&self, block_info: u64) -> Result<(), DatabaseError>;
+
+    /// Remove all [`BlockInfo`]s representing L1 blocks with block numbers greater than the
+    /// provided block number.
+    async fn remove_l1_block_info_gt(&self, block_number: u64) -> Result<(), DatabaseError>;
+
     /// Insert a [`BatchCommitData`] into the database.
     async fn insert_batch(&self, batch_commit: BatchCommitData) -> Result<(), DatabaseError>;
 
@@ -42,15 +53,59 @@ pub trait DatabaseWriteOperations {
     async fn set_l2_head_block_number(&self, number: u64) -> Result<(), DatabaseError>;
 
     /// Fetches unprocessed batches up to the provided finalized L1 block number and updates their
-    /// status.
+    /// status to processing.
     async fn fetch_and_update_unprocessed_finalized_batches(
         &self,
         finalized_l1_block_number: u64,
     ) -> Result<Vec<BatchInfo>, DatabaseError>;
 
+    /// Fetches unprocessed committed batches and updates their status to processing.
+    async fn fetch_and_update_unprocessed_committed_batches(
+        &self,
+    ) -> Result<Vec<BatchInfo>, DatabaseError>;
+
     /// Delete all [`BatchCommitData`]s with a block number greater than the provided block number.
     async fn delete_batches_gt_block_number(&self, block_number: u64)
         -> Result<u64, DatabaseError>;
+
+    /// Delete all effects of `BatchFinalization` events with a block number greater than the
+    /// provided block number.
+    async fn delete_batch_finalization_gt_block_number(
+        &self,
+        block_number: u64,
+    ) -> Result<(), DatabaseError>;
+
+    /// Sets the L1 block number of the batch revert associated with the provided batch index range.
+    async fn set_batch_revert_block_number_for_batch_range(
+        &self,
+        start_index: u64,
+        end_index: u64,
+        block_info: BlockInfo,
+    ) -> Result<(), DatabaseError>;
+
+    /// Delete all batch reverts with a block number greater than the provided block number and
+    /// returns the number of deleted reverts.
+    async fn delete_batch_revert_gt_block_number(
+        &self,
+        block_number: u64,
+    ) -> Result<u64, DatabaseError>;
+
+    /// Finalize consolidated batches by updating their status in the database and returning the new
+    /// finalized head.
+    async fn finalize_consolidated_batches(
+        &self,
+        finalized_l1_block_number: u64,
+    ) -> Result<Option<BlockInfo>, DatabaseError>;
+
+    /// Set batches with processing status to committed status.
+    async fn change_batch_processing_to_committed_status(&self) -> Result<(), DatabaseError>;
+
+    /// Update the status of a batch identified by its hash.
+    async fn update_batch_status(
+        &self,
+        batch_hash: B256,
+        status: BatchStatus,
+    ) -> Result<(), DatabaseError>;
 
     /// Delete all [`BatchCommitData`]s with a batch index greater than the provided index.
     async fn delete_batches_gt_batch_index(&self, batch_index: u64) -> Result<u64, DatabaseError>;
@@ -68,19 +123,8 @@ pub trait DatabaseWriteOperations {
         l1_block_number: u64,
     ) -> Result<Vec<L1MessageEnvelope>, DatabaseError>;
 
-    /// Prepare the database on startup and return metadata used for other components in the
-    /// rollup-node.
-    ///
-    /// This method first unwinds the database to the finalized L1 block. It then fetches the batch
-    /// info for the latest safe L2 block. It takes note of the L1 block number at which
-    /// this batch was produced (currently the finalized block for the batch until we implement
-    /// issue #273). It then retrieves the latest block for the previous batch (i.e., the batch
-    /// before the latest safe block). It returns a tuple of this latest fetched block and the
-    /// L1 block number of the batch.
-    async fn prepare_on_startup(
-        &self,
-        genesis_hash: B256,
-    ) -> Result<(Option<BlockInfo>, Option<u64>), DatabaseError>;
+    /// Returns the L1 block info required to start the L1 watcher on startup.
+    async fn prepare_l1_watcher_start_info(&self) -> Result<L1BlockStartupInfo, DatabaseError>;
 
     /// Delete all L2 blocks with a block number greater than the provided block number.
     async fn delete_l2_blocks_gt_block_number(
@@ -130,11 +174,13 @@ pub trait DatabaseWriteOperations {
 
     /// Unwinds the chain orchestrator by deleting all indexed data greater than the provided L1
     /// block number.
-    async fn unwind(
+    async fn unwind(&self, l1_block_number: u64) -> Result<UnwindResult, DatabaseError>;
+
+    /// Store multiple block signatures in the database.
+    async fn insert_signatures(
         &self,
-        genesis_hash: B256,
-        l1_block_number: u64,
-    ) -> Result<UnwindResult, DatabaseError>;
+        signatures: Vec<(B256, Signature)>,
+    ) -> Result<(), DatabaseError>;
 
     /// Store a block signature in the database.
     /// TODO: remove this once we deprecated l2geth.
@@ -147,14 +193,52 @@ pub trait DatabaseWriteOperations {
 
 #[async_trait::async_trait]
 impl<T: WriteConnectionProvider + ?Sized + Sync> DatabaseWriteOperations for T {
+    async fn insert_l1_block_info(&self, block_info: BlockInfo) -> Result<(), DatabaseError> {
+        tracing::trace!(target: "scroll::db", %block_info, "Inserting L1 block info into database.");
+        let finalized_l1_block_number = self.get_finalized_l1_block_number().await?;
+        if block_info.number <= finalized_l1_block_number {
+            tracing::trace!(target: "scroll::db", %block_info, %finalized_l1_block_number, "L1 block info is less than or equal to finalized L1 block number, skipping insertion.");
+            return Ok(());
+        }
+
+        let l1_block: models::l1_block::ActiveModel = block_info.into();
+        Ok(models::l1_block::Entity::insert(l1_block)
+            .on_conflict(
+                OnConflict::column(models::l1_block::Column::BlockNumber)
+                    .update_column(models::l1_block::Column::BlockHash)
+                    .to_owned(),
+            )
+            .exec(self.get_connection())
+            .await
+            .map(|_| ())?)
+    }
+
+    async fn remove_l1_block_info_leq(&self, block_number: u64) -> Result<(), DatabaseError> {
+        tracing::trace!(target: "scroll::db", %block_number, "Removing L1 block info less than or equal to provided block number from database.");
+        Ok(models::l1_block::Entity::delete_many()
+            .filter(models::l1_block::Column::BlockNumber.lte(block_number as i64))
+            .exec(self.get_connection())
+            .await
+            .map(|_| ())?)
+    }
+
+    async fn remove_l1_block_info_gt(&self, block_number: u64) -> Result<(), DatabaseError> {
+        tracing::trace!(target: "scroll::db", block_number = block_number, "Removing L1 block info greater than provided block number from database.");
+        Ok(models::l1_block::Entity::delete_many()
+            .filter(models::l1_block::Column::BlockNumber.gt(block_number as i64))
+            .exec(self.get_connection())
+            .await
+            .map(|_| ())?)
+    }
+
     async fn insert_batch(&self, batch_commit: BatchCommitData) -> Result<(), DatabaseError> {
         tracing::trace!(target: "scroll::db", batch_hash = ?batch_commit.hash, batch_index = batch_commit.index, "Inserting batch input into database.");
         let batch_commit: models::batch_commit::ActiveModel = batch_commit.into();
         Ok(models::batch_commit::Entity::insert(batch_commit)
             .on_conflict(
-                OnConflict::column(models::batch_commit::Column::Index)
+                OnConflict::column(models::batch_commit::Column::Hash)
                     .update_columns(vec![
-                        models::batch_commit::Column::Hash,
+                        models::batch_commit::Column::Index,
                         models::batch_commit::Column::BlockNumber,
                         models::batch_commit::Column::BlockTimestamp,
                         models::batch_commit::Column::Calldata,
@@ -163,9 +247,139 @@ impl<T: WriteConnectionProvider + ?Sized + Sync> DatabaseWriteOperations for T {
                     ])
                     .to_owned(),
             )
-            .exec(self.get_connection())
+            .exec_without_returning(self.get_connection())
             .await
             .map(|_| ())?)
+    }
+
+    async fn delete_batch_finalization_gt_block_number(
+        &self,
+        block_number: u64,
+    ) -> Result<(), DatabaseError> {
+        tracing::trace!(
+            target: "scroll::db",
+            block_number,
+            "Deleting batch finalization effects greater than block number."
+        );
+
+        models::batch_commit::Entity::update_many()
+            .filter(models::batch_commit::Column::FinalizedBlockNumber.gt(block_number as i64))
+            .col_expr(models::batch_commit::Column::FinalizedBlockNumber, Expr::value(None::<i64>))
+            .exec(self.get_connection())
+            .await
+            .map(|_| ())
+            .map_err(Into::into)
+    }
+
+    async fn set_batch_revert_block_number_for_batch_range(
+        &self,
+        start_index: u64,
+        end_index: u64,
+        block_info: BlockInfo,
+    ) -> Result<(), DatabaseError> {
+        tracing::trace!(target: "scroll::db", ?start_index, ?end_index, %block_info, "Setting batch revert block number for batch index range in database.");
+
+        // Define the filter to select the appropriate batches.
+        let filter = Condition::all()
+            .add(models::batch_commit::Column::Index.gte(start_index as i64))
+            .add(models::batch_commit::Column::Index.lte(end_index as i64))
+            .add(models::batch_commit::Column::RevertedBlockNumber.is_null());
+
+        // Fetch the batch hashes
+        let batch_hashes = models::batch_commit::Entity::find()
+            .select_only()
+            .column(models::batch_commit::Column::Hash)
+            .filter(filter.clone())
+            .into_tuple::<Vec<u8>>()
+            .all(self.get_connection())
+            .await?;
+
+        models::batch_commit::Entity::update_many()
+            .filter(models::batch_commit::Column::Hash.is_in(batch_hashes.iter().cloned()))
+            .col_expr(
+                models::batch_commit::Column::RevertedBlockNumber,
+                Expr::value(Some(block_info.number as i64)),
+            )
+            .col_expr(
+                models::batch_commit::Column::Status,
+                Expr::value(BatchStatus::Reverted.as_str()),
+            )
+            .exec(self.get_connection())
+            .await?;
+
+        models::l2_block::Entity::update_many()
+            .filter(models::l2_block::Column::BatchHash.is_in(batch_hashes.iter().cloned()))
+            .col_expr(models::l2_block::Column::Reverted, Expr::value(true))
+            .exec(self.get_connection())
+            .await?;
+
+        Ok(())
+    }
+
+    async fn delete_batch_revert_gt_block_number(
+        &self,
+        block_number: u64,
+    ) -> Result<u64, DatabaseError> {
+        tracing::trace!(
+            target: "scroll::db", block_number, "Deleting batch reverts greater than block number.");
+
+        let batch_hashes = models::batch_commit::Entity::find()
+            .select_only()
+            .column(models::batch_commit::Column::Hash)
+            .filter(models::batch_commit::Column::RevertedBlockNumber.gt(block_number as i64))
+            .into_tuple::<Vec<u8>>()
+            .all(self.get_connection())
+            .await?;
+        let num_batches = batch_hashes.len() as u64;
+
+        models::batch_commit::Entity::update_many()
+            .filter(models::batch_commit::Column::Hash.is_in(batch_hashes.iter().cloned()))
+            .col_expr(models::batch_commit::Column::RevertedBlockNumber, Expr::value(None::<i64>))
+            .col_expr(
+                models::batch_commit::Column::Status,
+                Expr::value(BatchStatus::Consolidated.as_str()),
+            )
+            .exec(self.get_connection())
+            .await?;
+
+        models::l2_block::Entity::update_many()
+            .filter(models::l2_block::Column::BatchHash.is_in(batch_hashes.iter().cloned()))
+            .col_expr(models::l2_block::Column::Reverted, Expr::value(false))
+            .exec(self.get_connection())
+            .await?;
+
+        Ok(num_batches)
+    }
+
+    async fn change_batch_processing_to_committed_status(&self) -> Result<(), DatabaseError> {
+        tracing::trace!(target: "scroll::db", "Changing batch status from processing to committed in database.");
+
+        models::batch_commit::Entity::update_many()
+            .filter(models::batch_commit::Column::Status.eq(BatchStatus::Processing.as_str()))
+            .col_expr(
+                models::batch_commit::Column::Status,
+                Expr::value(BatchStatus::Committed.as_str()),
+            )
+            .exec(self.get_connection())
+            .await?;
+
+        Ok(())
+    }
+
+    async fn update_batch_status(
+        &self,
+        batch_hash: B256,
+        status: BatchStatus,
+    ) -> Result<(), DatabaseError> {
+        tracing::trace!(target: "scroll::db", ?batch_hash, ?status, "Updating batch status in database.");
+
+        models::batch_commit::Entity::update_many()
+            .filter(models::batch_commit::Column::Hash.eq(batch_hash.to_vec()))
+            .col_expr(models::batch_commit::Column::Status, Expr::value(status.as_str()))
+            .exec(self.get_connection())
+            .await?;
+
+        Ok(())
     }
 
     async fn finalize_batches_up_to_index(
@@ -179,7 +393,8 @@ impl<T: WriteConnectionProvider + ?Sized + Sync> DatabaseWriteOperations for T {
             .filter(
                 models::batch_commit::Column::Index
                     .lte(batch_index)
-                    .and(models::batch_commit::Column::FinalizedBlockNumber.is_null()),
+                    .and(models::batch_commit::Column::FinalizedBlockNumber.is_null())
+                    .and(models::batch_commit::Column::RevertedBlockNumber.is_null()),
             )
             .col_expr(
                 models::batch_commit::Column::FinalizedBlockNumber,
@@ -208,6 +423,11 @@ impl<T: WriteConnectionProvider + ?Sized + Sync> DatabaseWriteOperations for T {
 
     async fn set_finalized_l1_block_number(&self, block_number: u64) -> Result<(), DatabaseError> {
         tracing::trace!(target: "scroll::db", block_number, "Updating the finalized L1 block number in the database.");
+
+        // Remove all finalized L1 block infos less than or equal to the provided block number.
+        self.remove_l1_block_info_leq(block_number).await?;
+
+        // Insert or update the finalized L1 block number in metadata.
         let metadata: models::metadata::ActiveModel =
             Metadata { key: "l1_finalized_block".to_string(), value: block_number.to_string() }
                 .into();
@@ -253,6 +473,44 @@ impl<T: WriteConnectionProvider + ?Sized + Sync> DatabaseWriteOperations for T {
             .map(|_| ())?)
     }
 
+    async fn finalize_consolidated_batches(
+        &self,
+        finalized_l1_block_number: u64,
+    ) -> Result<Option<BlockInfo>, DatabaseError> {
+        tracing::trace!(target: "scroll::db", finalized_l1_block_number, "Finalizing consolidated batches in the database.");
+        let filter = Condition::all()
+            .add(models::batch_commit::Column::FinalizedBlockNumber.is_not_null())
+            .add(models::batch_commit::Column::FinalizedBlockNumber.lte(finalized_l1_block_number))
+            .add(models::batch_commit::Column::Status.eq(BatchStatus::Consolidated.as_str()));
+        let batch = models::batch_commit::Entity::find()
+            .filter(filter.clone())
+            .order_by_desc(models::batch_commit::Column::Index)
+            .one(self.get_connection())
+            .await?;
+
+        if let Some(batch) = batch {
+            let finalized_block_info = models::l2_block::Entity::find()
+                .filter(models::l2_block::Column::BatchHash.eq(batch.hash.clone()))
+                .order_by_desc(models::l2_block::Column::BlockNumber)
+                .one(self.get_connection())
+                .await?
+                .map(|block| block.block_info())
+                .expect("Finalized batch must have at least one L2 block.");
+            models::batch_commit::Entity::update_many()
+                .filter(filter)
+                .col_expr(
+                    models::batch_commit::Column::Status,
+                    Expr::value(BatchStatus::Finalized.as_str()),
+                )
+                .exec(self.get_connection())
+                .await?;
+
+            Ok(Some(finalized_block_info))
+        } else {
+            Ok(None)
+        }
+    }
+
     async fn fetch_and_update_unprocessed_finalized_batches(
         &self,
         finalized_l1_block_number: u64,
@@ -260,7 +518,7 @@ impl<T: WriteConnectionProvider + ?Sized + Sync> DatabaseWriteOperations for T {
         let conditions = Condition::all()
             .add(models::batch_commit::Column::FinalizedBlockNumber.is_not_null())
             .add(models::batch_commit::Column::FinalizedBlockNumber.lte(finalized_l1_block_number))
-            .add(models::batch_commit::Column::Processed.eq(false));
+            .add(models::batch_commit::Column::Status.eq(BatchStatus::Committed.as_str()));
 
         let batches = models::batch_commit::Entity::find()
             .filter(conditions.clone())
@@ -278,7 +536,43 @@ impl<T: WriteConnectionProvider + ?Sized + Sync> DatabaseWriteOperations for T {
             })?;
 
         models::batch_commit::Entity::update_many()
-            .col_expr(models::batch_commit::Column::Processed, Expr::value(true))
+            .col_expr(
+                models::batch_commit::Column::Status,
+                Expr::value(BatchStatus::Processing.as_str()),
+            )
+            .filter(conditions)
+            .exec(self.get_connection())
+            .await?;
+
+        Ok(batches)
+    }
+
+    async fn fetch_and_update_unprocessed_committed_batches(
+        &self,
+    ) -> Result<Vec<BatchInfo>, DatabaseError> {
+        let conditions = Condition::all()
+            .add(models::batch_commit::Column::Status.eq(BatchStatus::Committed.as_str()));
+
+        let batches = models::batch_commit::Entity::find()
+            .filter(conditions.clone())
+            .order_by_asc(models::batch_commit::Column::Index)
+            .select_only()
+            .column(models::batch_commit::Column::Index)
+            .column(models::batch_commit::Column::Hash)
+            .into_tuple::<(i64, Vec<u8>)>()
+            .all(self.get_connection())
+            .await
+            .map(|x| {
+                x.into_iter()
+                    .map(|(index, hash)| BatchInfo::new(index as u64, B256::from_slice(&hash)))
+                    .collect()
+            })?;
+
+        models::batch_commit::Entity::update_many()
+            .col_expr(
+                models::batch_commit::Column::Status,
+                Expr::value(BatchStatus::Processing.as_str()),
+            )
             .filter(conditions)
             .exec(self.get_connection())
             .await?;
@@ -356,35 +650,17 @@ impl<T: WriteConnectionProvider + ?Sized + Sync> DatabaseWriteOperations for T {
         Ok(removed_messages.into_iter().map(Into::into).collect())
     }
 
-    async fn prepare_on_startup(
-        &self,
-        genesis_hash: B256,
-    ) -> Result<(Option<BlockInfo>, Option<u64>), DatabaseError> {
+    async fn prepare_l1_watcher_start_info(&self) -> Result<L1BlockStartupInfo, DatabaseError> {
         tracing::trace!(target: "scroll::db", "Fetching startup safe block from database.");
 
-        // Unwind the database to the last finalized L1 block saved in database.
-        let finalized_block_number = self.get_finalized_l1_block_number().await?;
-        self.unwind(genesis_hash, finalized_block_number).await?;
+        // set all batches with processing status back to committed
+        self.change_batch_processing_to_committed_status().await?;
 
-        // Delete all unprocessed batches from the database and return starting l2 safe head and l1
-        // head.
-        if let Some(batch_info) = self
-            .get_latest_safe_l2_info()
-            .await?
-            .map(|(_, batch_info)| batch_info)
-            .filter(|b| b.index > 1)
-        {
-            let batch = self.get_batch_by_index(batch_info.index).await?.expect("batch must exist");
-            self.delete_batches_gt_block_number(batch.block_number.saturating_sub(1)).await?;
-        };
+        // Get all L1 block infos from the database.
+        let l1_block_infos = self.get_l1_block_info().await?;
+        let latest_l1_block_info = self.get_latest_indexed_event_l1_block_number().await?;
 
-        let Some((block_info, batch_info)) =
-            self.get_latest_safe_l2_info().await?.filter(|(block_info, _)| block_info.number > 0)
-        else {
-            return Ok((None, None));
-        };
-        let batch = self.get_batch_by_index(batch_info.index).await?.expect("batch must exist");
-        Ok((Some(block_info), Some(batch.block_number.saturating_add(1))))
+        Ok(L1BlockStartupInfo::new(l1_block_infos, latest_l1_block_info))
     }
 
     async fn delete_l2_blocks_gt_block_number(
@@ -432,16 +708,18 @@ impl<T: WriteConnectionProvider + ?Sized + Sync> DatabaseWriteOperations for T {
             blocks.into_iter().map(|b| (b, batch_info).into()).collect();
         models::l2_block::Entity::insert_many(l2_blocks)
             .on_conflict(
-                OnConflict::column(models::l2_block::Column::BlockNumber)
-                    .update_columns([
-                        models::l2_block::Column::BlockHash,
-                        models::l2_block::Column::BatchHash,
-                        models::l2_block::Column::BatchIndex,
-                    ])
-                    .to_owned(),
+                OnConflict::columns([
+                    models::l2_block::Column::BlockHash,
+                    models::l2_block::Column::BatchHash,
+                ])
+                .update_columns([
+                    models::l2_block::Column::BlockNumber,
+                    models::l2_block::Column::BatchIndex,
+                ])
+                .to_owned(),
             )
             .on_empty_do_nothing()
-            .exec(self.get_connection())
+            .exec_without_returning(self.get_connection())
             .await?;
 
         Ok(())
@@ -536,9 +814,8 @@ impl<T: WriteConnectionProvider + ?Sized + Sync> DatabaseWriteOperations for T {
         let filter = if let Some(block_number) = block_number {
             models::l1_message::Column::L2BlockNumber.gte(block_number as i64)
         } else {
-            let safe_block_number = self.get_latest_safe_l2_info().await?;
-            models::l1_message::Column::L2BlockNumber
-                .gt(safe_block_number.map(|(block_info, _)| block_info.number as i64).unwrap_or(0))
+            let (safe_block_info, _batch_info) = self.get_latest_safe_l2_info().await?;
+            models::l1_message::Column::L2BlockNumber.gt(safe_block_info.number as i64)
         };
 
         models::l1_message::Entity::update_many()
@@ -561,20 +838,24 @@ impl<T: WriteConnectionProvider + ?Sized + Sync> DatabaseWriteOperations for T {
         .await?;
         self.update_l1_messages_with_l2_blocks(outcome.blocks).await?;
         self.update_skipped_l1_messages(outcome.skipped_l1_messages).await?;
+        self.update_batch_status(outcome.batch_info.hash, outcome.target_status).await?;
         Ok(())
     }
 
-    async fn unwind(
-        &self,
-        genesis_hash: B256,
-        l1_block_number: u64,
-    ) -> Result<UnwindResult, DatabaseError> {
+    async fn unwind(&self, l1_block_number: u64) -> Result<UnwindResult, DatabaseError> {
         // Set the latest L1 block number
         self.set_latest_l1_block_number(l1_block_number).await?;
 
-        // delete batch inputs and l1 messages
+        // remove the L1 block infos greater than the provided l1 block number
+        self.remove_l1_block_info_gt(l1_block_number).await?;
+
+        // delete batch commits, l1 messages and batch finalization effects greater than the
+        // provided l1 block number
         let batches_removed = self.delete_batches_gt_block_number(l1_block_number).await?;
         let deleted_messages = self.delete_l1_messages_gt(l1_block_number).await?;
+        self.delete_batch_finalization_gt_block_number(l1_block_number).await?;
+        let batch_reverts_removed: u64 =
+            self.delete_batch_revert_gt_block_number(l1_block_number).await?;
 
         // filter and sort the executed L1 messages
         let mut removed_executed_l1_messages: Vec<_> =
@@ -596,12 +877,9 @@ impl<T: WriteConnectionProvider + ?Sized + Sync> DatabaseWriteOperations for T {
             };
 
         // check if we need to reorg the L2 safe block
-        let l2_safe_block_info = if batches_removed > 0 {
-            if let Some(x) = self.get_latest_safe_l2_info().await? {
-                Some(x.0)
-            } else {
-                Some(BlockInfo::new(0, genesis_hash))
-            }
+        let l2_safe_block_info = if batches_removed > 0 || batch_reverts_removed > 0 {
+            let (safe_block_info, _batch_info) = self.get_latest_safe_l2_info().await?;
+            Some(safe_block_info)
         } else {
             None
         };
@@ -615,6 +893,34 @@ impl<T: WriteConnectionProvider + ?Sized + Sync> DatabaseWriteOperations for T {
 
         // commit the transaction
         Ok(UnwindResult { l1_block_number, queue_index, l2_head_block_number, l2_safe_block_info })
+    }
+
+    async fn insert_signatures(
+        &self,
+        signatures: Vec<(B256, Signature)>,
+    ) -> Result<(), DatabaseError> {
+        tracing::trace!(target: "scroll::db", num_signatures = signatures.len(), "Inserting block signatures into database.");
+
+        if signatures.is_empty() {
+            tracing::debug!(target: "scroll::db", "No signatures to insert.");
+            return Ok(());
+        }
+
+        models::block_signature::Entity::insert_many(
+            signatures
+                .into_iter()
+                .map(|(block_hash, signature)| (block_hash, signature).into())
+                .collect::<Vec<models::block_signature::ActiveModel>>(),
+        )
+        .on_conflict(
+            OnConflict::column(models::block_signature::Column::BlockHash)
+                .update_column(models::block_signature::Column::Signature)
+                .to_owned(),
+        )
+        .exec_without_returning(self.get_connection())
+        .await?;
+
+        Ok(())
     }
 
     async fn insert_signature(
@@ -651,6 +957,25 @@ pub trait DatabaseReadOperations {
         batch_index: u64,
     ) -> Result<Option<BatchCommitData>, DatabaseError>;
 
+    /// Get a [`BatchCommitData`] from the database by its batch hash.
+    async fn get_batch_by_hash(
+        &self,
+        batch_hash: B256,
+    ) -> Result<Option<BatchCommitData>, DatabaseError>;
+
+    /// Get the status of a batch by its hash.
+    #[cfg(test)]
+    async fn get_batch_status_by_hash(
+        &self,
+        batch_hash: B256,
+    ) -> Result<Option<rollup_node_primitives::BatchStatus>, DatabaseError>;
+
+    /// Get all L1 block infos from the database ordered by block number ascending.
+    async fn get_l1_block_info(&self) -> Result<Vec<BlockInfo>, DatabaseError>;
+
+    /// Get the latest indexed event L1 block number from the database.
+    async fn get_latest_indexed_event_l1_block_number(&self) -> Result<Option<u64>, DatabaseError>;
+
     /// Get the latest L1 block number from the database.
     async fn get_latest_l1_block_number(&self) -> Result<u64, DatabaseError>;
 
@@ -670,6 +995,9 @@ pub trait DatabaseReadOperations {
         start: Option<L1MessageKey>,
         n: usize,
     ) -> Result<Vec<L1MessageEnvelope>, DatabaseError>;
+
+    /// Get the maximum block number for which we have stored extra data hints.
+    async fn get_max_block_data_hint_block_number(&self) -> Result<u64, DatabaseError>;
 
     /// Get the extra data for n block, starting at the provided block number.
     async fn get_n_l2_block_data_hint(
@@ -693,9 +1021,7 @@ pub trait DatabaseReadOperations {
     /// Get the latest safe/finalized L2 ([`BlockInfo`], [`BatchInfo`]) from the database. Until we
     /// update the batch handling logic with issue #273, we don't differentiate between safe and
     /// finalized l2 blocks.
-    async fn get_latest_safe_l2_info(
-        &self,
-    ) -> Result<Option<(BlockInfo, BatchInfo)>, DatabaseError>;
+    async fn get_latest_safe_l2_info(&self) -> Result<(BlockInfo, BatchInfo), DatabaseError>;
 
     /// Returns the highest L2 block originating from the provided `batch_hash` or the highest block
     /// for the batch's index.
@@ -722,12 +1048,111 @@ impl<T: ReadConnectionProvider + Sync + ?Sized> DatabaseReadOperations for T {
         &self,
         batch_index: u64,
     ) -> Result<Option<BatchCommitData>, DatabaseError> {
-        Ok(models::batch_commit::Entity::find_by_id(
-            TryInto::<i64>::try_into(batch_index).expect("index should fit in i64"),
-        )
-        .one(self.get_connection())
-        .await
-        .map(|x| x.map(Into::into))?)
+        Ok(models::batch_commit::Entity::find()
+            .filter(
+                models::batch_commit::Column::Index
+                    .eq(TryInto::<i64>::try_into(batch_index).expect("index should fit in i64"))
+                    .and(models::batch_commit::Column::RevertedBlockNumber.is_null()),
+            )
+            .one(self.get_connection())
+            .await
+            .map(|x| x.map(Into::into))?)
+    }
+
+    async fn get_batch_by_hash(
+        &self,
+        batch_hash: B256,
+    ) -> Result<Option<BatchCommitData>, DatabaseError> {
+        Ok(models::batch_commit::Entity::find()
+            .filter(models::batch_commit::Column::Hash.eq(batch_hash.to_vec()))
+            .one(self.get_connection())
+            .await
+            .map(|x| x.map(Into::into))?)
+    }
+
+    #[cfg(test)]
+    async fn get_batch_status_by_hash(
+        &self,
+        batch_hash: B256,
+    ) -> Result<Option<rollup_node_primitives::BatchStatus>, DatabaseError> {
+        use std::str::FromStr;
+
+        Ok(models::batch_commit::Entity::find()
+            .filter(models::batch_commit::Column::Hash.eq(batch_hash.to_vec()))
+            .select_only()
+            .column(models::batch_commit::Column::Status)
+            .into_tuple::<String>()
+            .one(self.get_connection())
+            .await?
+            .map(|status_str| {
+                rollup_node_primitives::BatchStatus::from_str(&status_str)
+                    .expect("Invalid batch status in database")
+            }))
+    }
+
+    async fn get_l1_block_info(&self) -> Result<Vec<BlockInfo>, DatabaseError> {
+        let l1_blocks = models::l1_block::Entity::find()
+            .order_by_asc(models::l1_block::Column::BlockNumber)
+            .all(self.get_connection())
+            .await?;
+
+        Ok(l1_blocks.into_iter().map(Into::into).collect())
+    }
+
+    async fn get_latest_indexed_event_l1_block_number(&self) -> Result<Option<u64>, DatabaseError> {
+        let latest_l1_message = models::l1_message::Entity::find()
+            .select_only()
+            .column_as(models::l1_message::Column::L1BlockNumber.max(), "max_l1_block_number")
+            .into_tuple::<Option<i64>>()
+            .one(self.get_connection())
+            .await?
+            .flatten();
+
+        // Split the following lookups into three separate queries for better index utilization.
+        // Each query can use its respective index efficiently instead of doing a table scan.
+        let max_block_number = models::batch_commit::Entity::find()
+            .select_only()
+            .filter(models::batch_commit::Column::Index.gt(0))
+            .column_as(models::batch_commit::Column::BlockNumber.max(), "max_block_number")
+            .into_tuple::<Option<i64>>()
+            .one(self.get_connection())
+            .await?
+            .flatten();
+
+        let max_finalized_block_number = models::batch_commit::Entity::find()
+            .select_only()
+            .filter(models::batch_commit::Column::Index.gt(0))
+            .column_as(
+                models::batch_commit::Column::FinalizedBlockNumber.max(),
+                "max_finalized_block_number",
+            )
+            .into_tuple::<Option<i64>>()
+            .one(self.get_connection())
+            .await?
+            .flatten();
+
+        let max_reverted_block_number = models::batch_commit::Entity::find()
+            .select_only()
+            .filter(models::batch_commit::Column::Index.gt(0))
+            .column_as(
+                models::batch_commit::Column::RevertedBlockNumber.max(),
+                "max_reverted_block_number",
+            )
+            .into_tuple::<Option<i64>>()
+            .one(self.get_connection())
+            .await?
+            .flatten();
+
+        let latest_batch_event =
+            [max_block_number, max_finalized_block_number, max_reverted_block_number]
+                .into_iter()
+                .flatten()
+                .max();
+
+        let latest_l1_block_number =
+            [latest_l1_message, latest_batch_event].into_iter().flatten().max();
+
+        Ok(latest_l1_block_number.map(|n| n as u64))
     }
 
     async fn get_latest_l1_block_number(&self) -> Result<u64, DatabaseError> {
@@ -965,12 +1390,25 @@ impl<T: ReadConnectionProvider + Sync + ?Sized> DatabaseReadOperations for T {
     ) -> Result<Vec<BlockDataHint>, DatabaseError> {
         Ok(models::block_data::Entity::find()
             .filter(models::block_data::Column::Number.gte(block_number as i64))
+            .order_by_asc(models::block_data::Column::Number)
             .limit(Some(n as u64))
             .all(self.get_connection())
             .await?
             .into_iter()
             .map(Into::into)
             .collect())
+    }
+
+    async fn get_max_block_data_hint_block_number(&self) -> Result<u64, DatabaseError> {
+        Ok(models::block_data::Entity::find()
+            .select_only()
+            .column_as(models::block_data::Column::Number.max(), "max_number")
+            .into_tuple::<Option<i64>>()
+            .one(self.get_connection())
+            .await?
+            .flatten()
+            .map(|n| n as u64)
+            .unwrap_or(0))
     }
 
     async fn get_l2_block_and_batch_info_by_hash(
@@ -1006,16 +1444,20 @@ impl<T: ReadConnectionProvider + Sync + ?Sized> DatabaseReadOperations for T {
             })?)
     }
 
-    async fn get_latest_safe_l2_info(
-        &self,
-    ) -> Result<Option<(BlockInfo, BatchInfo)>, DatabaseError> {
+    async fn get_latest_safe_l2_info(&self) -> Result<(BlockInfo, BatchInfo), DatabaseError> {
         tracing::trace!(target: "scroll::db", "Fetching latest safe L2 block from database.");
-        Ok(models::l2_block::Entity::find()
-            .filter(models::l2_block::Column::BatchIndex.is_not_null())
+        let filter = Condition::all()
+            .add(models::l2_block::Column::BatchIndex.is_not_null())
+            .add(models::l2_block::Column::Reverted.eq(false));
+
+        let safe_block = models::l2_block::Entity::find()
+            .filter(filter)
             .order_by_desc(models::l2_block::Column::BlockNumber)
             .one(self.get_connection())
-            .await
-            .map(|x| x.map(|x| (x.block_info(), x.batch_info())))?)
+            .await?
+            .expect("there should always be at least the genesis block in the database");
+
+        Ok((safe_block.block_info(), safe_block.batch_info()))
     }
 
     async fn get_highest_block_for_batch_hash(
@@ -1057,7 +1499,8 @@ impl<T: ReadConnectionProvider + Sync + ?Sized> DatabaseReadOperations for T {
     async fn get_signature(&self, block_hash: B256) -> Result<Option<Signature>, DatabaseError> {
         tracing::trace!(target: "scroll::db", block_hash = ?block_hash, "Retrieving block signature from database.");
 
-        let block_signature = models::block_signature::Entity::find_by_id(block_hash.to_vec())
+        let block_signature = models::block_signature::Entity::find()
+            .filter(models::block_signature::Column::BlockHash.eq(block_hash.to_vec()))
             .one(self.get_connection())
             .await?;
 

@@ -69,10 +69,10 @@ Replace:
 #### L1 Provider Configuration
 
 - `--l1.url <URL>`: L1 Ethereum RPC endpoint URL (required for follower nodes)
-- `--l1.cups <NUMBER>`: Compute units per second for rate limiting (default: 1000)
+- `--l1.cups <NUMBER>`: Compute units per second for rate limiting (default: 10000)
 - `--l1.max-retries <NUMBER>`: Maximum retry attempts for L1 requests (default: 10)
 - `--l1.initial-backoff <MS>`: Initial backoff duration for retries in milliseconds (default: 100)
-- `--l1.query-range <BLOCKS>`: Block range for querying L1 logs (default: 2000)
+- `--l1.query-range <BLOCKS>`: Block range for querying L1 logs (default: 500)
 
 #### Blob Provider Configuration
 
@@ -112,8 +112,8 @@ These can be used as reliable blob sources without requiring your own beacon nod
 
 #### Chain Orchestrator Configuration
 
-- `--chain.optimistic-sync-trigger <BLOCKS>`: Block gap that triggers optimistic sync (default: 100)
-- `--chain.chain-buffer-size <SIZE>`: In-memory chain buffer size (default: 100)
+- `--chain.optimistic-sync-trigger <BLOCKS>`: Block gap that triggers optimistic sync (default: 1000)
+- `--chain.chain-buffer-size <SIZE>`: In-memory chain buffer size (default: 2000)
 
 #### Engine Configuration
 
@@ -125,12 +125,13 @@ These can be used as reliable blob sources without requiring your own beacon nod
 - `--http.addr <ADDRESS>`: HTTP server listening address (default: 127.0.0.1)
 - `--http.port <PORT>`: HTTP server port (default: 8545)
 - `--http.api <APIS>`: Enabled RPC API namespaces (comma-separated)
-    - Available: `admin`, `debug`, `eth`, `net`, `trace`, `txpool`, `web3`, `rpc`, `reth`, `ots`
+    - Available: `admin`, `debug`, `eth`, `net`, `trace`, `txpool`, `web3`, `rpc`, `reth`, `ots`, `flashbots`, `miner`, `mev`
 - `--http.corsdomain <ORIGINS>`: CORS allowed origins (comma-separated)
 
 #### Rollup Node RPC
 
-- `--rpc.rollup-node`: Enable the rollup node RPC namespace (provides rollup-specific methods)
+- `--rpc.rollup-node=false`: Disable the rollup node basic RPC namespace(default: enabled) (provides rollup-specific methods)
+- `--rpc.rollup-node-admin`: Enable the rollup node admin RPC namespace (provides rollup-specific methods)
 
 ### Example Configurations
 
@@ -246,7 +247,7 @@ Available log levels (from least to most verbose):
 ```bash
 RUST_LOG=info,scroll=debug,rollup=debug,sqlx=off \
 ./target/release/rollup-node node \
-  --chain scroll \
+  --chain scroll-mainnet \
   --datadir /var/lib/scroll-node \
   --l1.url https://eth-mainnet.g.alchemy.com/v2/YOUR_API_KEY \
   --blob.s3_url https://scroll-mainnet-blob-data.s3.us-west-2.amazonaws.com/ \

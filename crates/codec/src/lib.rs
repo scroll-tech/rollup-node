@@ -41,7 +41,7 @@ pub enum Codec {
 
 impl Codec {
     /// Decodes the input data and returns the decoded [`Batch`].
-    pub fn decode<T: CommitDataSource>(input: &T) -> Result<Batch, CodecError> {
+    pub fn decode<T: CommitDataSource>(input: T) -> Result<Batch, CodecError> {
         let calldata = input.calldata();
         let version = get_codec_version(calldata)?;
 
@@ -59,7 +59,7 @@ impl Codec {
                 let blob = input.blob().ok_or(DecodingError::MissingBlob)?;
                 decode_v4(calldata, blob.as_ref())?
             }
-            7..=8 => {
+            7..=10 => {
                 let blob = input.blob().ok_or(DecodingError::MissingBlob)?;
                 decode_v7(blob.as_ref())?
             }
