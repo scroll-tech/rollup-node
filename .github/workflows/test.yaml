@@ -60,7 +60,6 @@ jobs:
     timeout-minutes: 60
     env:
       RUST_BACKTRACE: 1
-      CI_EVENT_TIMEOUT: 180
     steps:
       - uses: actions/checkout@v6
       - uses: rui314/setup-mold@v1

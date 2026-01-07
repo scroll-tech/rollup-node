@@ -9,16 +9,8 @@ use rollup_node_chain_orchestrator::ChainOrchestratorEvent;
 use rollup_node_primitives::ChainImport;
 use tokio::time::timeout;
 
-/// Get the default event wait timeout.
-/// Checks the `CI_EVENT_TIMEOUT` environment variable at runtime.
-/// Defaults to 30 seconds if not set.
-pub fn default_event_wait_timeout() -> Duration {
-    std::env::var("CI_EVENT_TIMEOUT")
-        .ok()
-        .and_then(|s| s.parse::<u64>().ok())
-        .map(Duration::from_secs)
-        .unwrap_or(Duration::from_secs(30))
-}
+/// The default event wait time.
+pub const DEFAULT_EVENT_WAIT_TIMEOUT: Duration = Duration::from_secs(30);
 
 /// Builder for waiting for events on multiple nodes.
 #[derive(Debug)]
@@ -26,12 +18,18 @@ pub struct EventWaiter<'a> {
     fixture: &'a mut TestFixture,
     node_indices: Vec<usize>,
     timeout_duration: Duration,
+    event_description: Option<String>,
 }
 
 impl<'a> EventWaiter<'a> {
     /// Create a new multi-node event waiter.
-    pub fn new(fixture: &'a mut TestFixture, node_indices: Vec<usize>) -> Self {
-        Self { fixture, node_indices, timeout_duration: default_event_wait_timeout() }
+    pub const fn new(fixture: &'a mut TestFixture, node_indices: Vec<usize>) -> Self {
+        Self {
+            fixture,
+            node_indices,
+            timeout_duration: DEFAULT_EVENT_WAIT_TIMEOUT,
+            event_description: None,
+        }
     }
 
     /// Set a custom timeout for waiting.
@@ -42,7 +40,7 @@ impl<'a> EventWaiter<'a> {
 
     /// Wait for block sequenced event on all specified nodes.
     pub async fn block_sequenced(self, target: u64) -> eyre::Result<ScrollBlock> {
-        self.wait_for_event_on_all(|e| {
+        self.wait_for_event_on_all(&format!("BlockSequenced(target={})", target), |e| {
             if let ChainOrchestratorEvent::BlockSequenced(block) = e {
                 (block.header.number == target).then(|| block.clone())
             } else {
@@ -55,7 +53,7 @@ impl<'a> EventWaiter<'a> {
 
     /// Wait for chain consolidated event on all specified nodes.
     pub async fn chain_consolidated(self) -> eyre::Result<Vec<(u64, u64)>> {
-        self.wait_for_event_on_all(|e| {
+        self.wait_for_event_on_all("ChainConsolidated", |e| {
             if let ChainOrchestratorEvent::ChainConsolidated { from, to } = e {
                 Some((*from, *to))
             } else {
@@ -67,7 +65,7 @@ impl<'a> EventWaiter<'a> {
 
     /// Wait for chain extended event on all specified nodes.
     pub async fn chain_extended(self, target: u64) -> eyre::Result<()> {
-        self.wait_for_event_on_all(|e| {
+        self.wait_for_event_on_all(&format!("ChainExtended(target={})", target), |e| {
             matches!(e, ChainOrchestratorEvent::ChainExtended(ChainImport{chain,..}) if chain.last().map(|b| b.header.number) >= Some(target)).then_some(())
         })
         .await?;
@@ -76,7 +74,7 @@ impl<'a> EventWaiter<'a> {
 
     /// Wait for chain reorged event on all specified nodes.
     pub async fn chain_reorged(self) -> eyre::Result<()> {
-        self.wait_for_event_on_all(|e| {
+        self.wait_for_event_on_all("ChainReorged", |e| {
             matches!(e, ChainOrchestratorEvent::ChainReorged(_)).then_some(())
         })
         .await?;
@@ -85,14 +83,16 @@ impl<'a> EventWaiter<'a> {
 
     /// Wait for L1 synced event on all specified nodes.
     pub async fn l1_synced(self) -> eyre::Result<()> {
-        self.wait_for_event_on_all(|e| matches!(e, ChainOrchestratorEvent::L1Synced).then_some(()))
-            .await?;
+        self.wait_for_event_on_all("L1Synced", |e| {
+            matches!(e, ChainOrchestratorEvent::L1Synced).then_some(())
+        })
+        .await?;
         Ok(())
     }
 
     /// Wait for optimistic sync event on all specified nodes.
     pub async fn optimistic_sync(self) -> eyre::Result<()> {
-        self.wait_for_event_on_all(|e| {
+        self.wait_for_event_on_all("OptimisticSync", |e| {
             matches!(e, ChainOrchestratorEvent::OptimisticSync(_)).then_some(())
         })
         .await?;
@@ -101,7 +101,7 @@ impl<'a> EventWaiter<'a> {
 
     /// Wait for new L1 block event on all specified nodes.
     pub async fn new_l1_block(self) -> eyre::Result<Vec<u64>> {
-        self.wait_for_event_on_all(|e| {
+        self.wait_for_event_on_all("NewL1Block", |e| {
             if let ChainOrchestratorEvent::NewL1Block(block_number) = e {
                 Some(*block_number)
             } else {
@@ -113,7 +113,7 @@ impl<'a> EventWaiter<'a> {
 
     /// Wait for L1 message committed event on all specified nodes.
     pub async fn l1_message_committed(self) -> eyre::Result<()> {
-        self.wait_for_event_on_all(|e| {
+        self.wait_for_event_on_all("L1MessageCommitted", |e| {
             matches!(e, ChainOrchestratorEvent::L1MessageCommitted(_)).then_some(())
         })
         .await?;
@@ -122,7 +122,7 @@ impl<'a> EventWaiter<'a> {
 
     /// Wait for L1 reorg event to be received by all.
     pub async fn l1_reorg(self) -> eyre::Result<()> {
-        self.wait_for_event_on_all(|e| {
+        self.wait_for_event_on_all("L1Reorg", |e| {
             matches!(e, ChainOrchestratorEvent::L1Reorg { .. }).then_some(())
         })
         .await?;
@@ -131,7 +131,7 @@ impl<'a> EventWaiter<'a> {
 
     /// Wait for batch commit indexed event on all specified nodes.
     pub async fn batch_commit_indexed(self) -> eyre::Result<()> {
-        self.wait_for_event_on_all(|e| {
+        self.wait_for_event_on_all("BatchCommitIndexed", |e| {
             matches!(e, ChainOrchestratorEvent::BatchCommitIndexed { .. }).then_some(())
         })
         .await?;
@@ -140,7 +140,7 @@ impl<'a> EventWaiter<'a> {
 
     /// Wait for batch consolidated event on all specified nodes.
     pub async fn batch_consolidated(self) -> eyre::Result<()> {
-        self.wait_for_event_on_all(|e| {
+        self.wait_for_event_on_all("BatchConsolidated", |e| {
             matches!(e, ChainOrchestratorEvent::BatchConsolidated(_)).then_some(())
         })
         .await?;
@@ -149,7 +149,7 @@ impl<'a> EventWaiter<'a> {
 
     /// Wait for chain unwound event on all specified nodes.
     pub async fn revert_to_l1_block(self) -> eyre::Result<()> {
-        self.wait_for_event_on_all(|e| {
+        self.wait_for_event_on_all("UnwoundToL1Block", |e| {
             matches!(e, ChainOrchestratorEvent::UnwoundToL1Block(_)).then_some(())
         })
         .await?;
@@ -158,7 +158,7 @@ impl<'a> EventWaiter<'a> {
 
     /// Wait for block consolidated event on all specified nodes.
     pub async fn block_consolidated(self, target_block: u64) -> eyre::Result<()> {
-        self.wait_for_event_on_all(|e| {
+        self.wait_for_event_on_all(&format!("BlockConsolidated(target={})", target_block), |e| {
             if let ChainOrchestratorEvent::BlockConsolidated(outcome) = e {
                 (outcome.block_info().block_info.number == target_block).then_some(())
             } else {
@@ -171,7 +171,7 @@ impl<'a> EventWaiter<'a> {
 
     /// Wait for batch finalize indexed event on all specified nodes.
     pub async fn batch_finalize_indexed(self) -> eyre::Result<()> {
-        self.wait_for_event_on_all(|e| {
+        self.wait_for_event_on_all("BatchFinalizeIndexed", |e| {
             matches!(e, ChainOrchestratorEvent::BatchFinalizeIndexed { .. }).then_some(())
         })
         .await?;
@@ -180,7 +180,7 @@ impl<'a> EventWaiter<'a> {
 
     /// Wait for batch reverted event on all specified nodes.
     pub async fn batch_reverted(self) -> eyre::Result<()> {
-        self.wait_for_event_on_all(|e| {
+        self.wait_for_event_on_all("BatchReverted", |e| {
             matches!(e, ChainOrchestratorEvent::BatchReverted { .. }).then_some(())
         })
         .await?;
@@ -195,7 +195,7 @@ impl<'a> EventWaiter<'a> {
     /// Wait for L1 block finalized event on all specified nodes where the block number
     /// is at least the specified target.
     pub async fn l1_block_finalized_at_least(self, target_block_number: u64) -> eyre::Result<()> {
-        self.wait_for_event_on_all(|e| {
+        self.wait_for_event_on_all(&format!("L1BlockFinalized(>= {})", target_block_number), |e| {
             matches!(e, ChainOrchestratorEvent::L1BlockFinalized(n, _) if n >= &target_block_number)
                 .then_some(())
         })
@@ -205,7 +205,7 @@ impl<'a> EventWaiter<'a> {
 
     /// Wait for new block received event on all specified nodes.
     pub async fn new_block_received(self) -> eyre::Result<ScrollBlock> {
-        self.wait_for_event_on_all(|e| {
+        self.wait_for_event_on_all("NewBlockReceived", |e| {
             if let ChainOrchestratorEvent::NewBlockReceived(block_with_peer) = e {
                 Some(block_with_peer.block.clone())
             } else {
@@ -221,7 +221,8 @@ impl<'a> EventWaiter<'a> {
         self,
         predicate: impl Fn(&ChainOrchestratorEvent) -> bool,
     ) -> eyre::Result<Vec<ChainOrchestratorEvent>> {
-        self.wait_for_event_on_all(move |e| predicate(e).then(|| e.clone())).await
+        self.wait_for_event_on_all("CustomPredicate", move |e| predicate(e).then(|| e.clone()))
+            .await
     }
 
     /// Wait for N events matching a predicate.
@@ -274,12 +275,13 @@ impl<'a> EventWaiter<'a> {
     where
         T: Send + Clone + 'static,
     {
-        self.wait_for_event_on_all(extractor).await
+        self.wait_for_event_on_all("CustomExtractor", extractor).await
     }
 
     /// Internal helper to wait for a specific event on all nodes.
     async fn wait_for_event_on_all<T>(
         self,
+        event_description: &str,
         extractor: impl Fn(&ChainOrchestratorEvent) -> Option<T>,
     ) -> eyre::Result<Vec<T>>
     where
@@ -288,6 +290,7 @@ impl<'a> EventWaiter<'a> {
         let timeout_duration = self.timeout_duration;
         let node_indices = self.node_indices;
         let node_count = node_indices.len();
+        let event_desc = self.event_description.unwrap_or_else(|| event_description.to_string());
 
         // Track which nodes have found their event
         let mut results: Vec<Option<T>> = vec![None; node_count];
@@ -342,7 +345,9 @@ impl<'a> EventWaiter<'a> {
 
         result.unwrap_or_else(|_| {
             Err(eyre::eyre!(
-                "Timeout waiting for event on {} nodes (completed {}/{})",
+                "Timeout ({:.1}s) waiting for event '{}' on {} nodes (completed {}/{})",
+                timeout_duration.as_secs_f64(),
+                event_desc,
                 node_count,
                 completed,
                 node_count
