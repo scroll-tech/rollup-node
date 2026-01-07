@@ -174,10 +174,10 @@ async fn test_l1_sync_batch_commit() -> eyre::Result<()> {
 /// # Test Flow
 /// 1. Start node in syncing state, send `BatchCommit` transactions (batches 0-6)
 /// 2. Verify safe head remains at genesis during syncing
-/// 3. Send `BatchFinalized` transactions (batches 1-3) while still syncing
+/// 3. Send `BatchFinalized` transactions (batches 1) while still syncing
 /// 4. Verify both safe and finalized heads advance (special handling for finalized events)
 /// 5. Trigger `L1Synced` to complete initial sync
-/// 6. Send more `BatchFinalized` transactions (batches 4-6) after sync
+/// 6. Send more `BatchFinalized` transactions (batches 2-6) after sync
 /// 7. Verify only finalized head advances (safe head already set by commits)
 ///
 /// # Expected Behavior
@@ -193,7 +193,7 @@ async fn test_l1_sync_batch_finalized() -> eyre::Result<()> {
     let mut fixture = TestFixture::builder()
         .followers(1)
         .skip_l1_synced_notifications()
-        .with_anvil(None, None, Some(22222222), None, Some(2))
+        .with_anvil(None, None, Some(22222222), None, Some(4))
         .build()
         .await?;
 
@@ -224,18 +224,18 @@ async fn test_l1_sync_batch_finalized() -> eyre::Result<()> {
         "Safe head should not change during syncing"
     );
 
-    // Step 4: Send BatchFinalized transactions (batches 1-3) while syncing
+    // Step 4: Send BatchFinalized transactions (batches 1) while syncing
     // Mine blocks to ensure the BatchFinalized events are themselves finalized on L1
     // This should trigger all unprocessed BatchCommit events up to the finalized batch
-    for i in 1..=2 {
+    for i in 1..=1 {
         let finalize_batch_tx = read_test_transaction("finalizeBatch", &i.to_string())?;
         fixture.anvil_inject_tx(finalize_batch_tx).await?;
     }
     let anvil_block_number = fixture.anvil_get_block_number().await?;
-    fixture.anvil_mine_blocks(4).await?;
+    fixture.anvil_mine_blocks(8).await?;
     fixture.expect_event().l1_block_finalized_at_least(anvil_block_number).await?;
 
-    for i in 1..=2 {
+    for i in 1..=1 {
         fixture.expect_event().batch_consolidated().await?;
         // Verify batch now has a finalized block number in database
         let finalized_block_number =
@@ -262,7 +262,7 @@ async fn test_l1_sync_batch_finalized() -> eyre::Result<()> {
     // Step 6: Complete L1 sync, this will process the buffered BatchCommit events
     fixture.l1().sync().await?;
     fixture.expect_event().l1_synced().await?;
-    for i in 3..=6 {
+    for i in 2..=6 {
         fixture.expect_event().batch_consolidated().await?;
         let finalized_block_number =
             fixture.db().get_batch_finalized_block_number_by_index(i).await?;
@@ -279,12 +279,12 @@ async fn test_l1_sync_batch_finalized() -> eyre::Result<()> {
         "Safe head should advance after L1 Synced when processing buffered BatchCommit events"
     );
 
-    // Step 7: Send more BatchFinalized transactions (batches 4-6) after L1Synced
-    for i in 3..=6 {
+    // Step 7: Send more BatchFinalized transactions (batches 2-6) after L1Synced
+    for i in 2..=6 {
         let finalize_batch_tx = read_test_transaction("finalizeBatch", &i.to_string())?;
         fixture.anvil_inject_tx(finalize_batch_tx).await?;
     }
-    for i in 3..=6 {
+    for i in 2..=6 {
         fixture.expect_event().batch_finalize_indexed().await?;
         let finalized_block_number =
             fixture.db().get_batch_finalized_block_number_by_index(i).await?;
