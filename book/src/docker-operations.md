@@ -247,7 +247,7 @@ your URLs and API keys are correct.
 
 ### Rollup Node Service
 
-**Image**: `scrolltech/rollup-node:v0.0.1-rc67`
+**Image**: `scrolltech/rollup-node:v1.0.5`
 
 **Port Mappings**:
 
