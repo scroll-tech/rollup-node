@@ -227,7 +227,7 @@ async fn test_l1_sync_batch_finalized() -> eyre::Result<()> {
     // Step 4: Send BatchFinalized transactions (batches 1-3) while syncing
     // Mine blocks to ensure the BatchFinalized events are themselves finalized on L1
     // This should trigger all unprocessed BatchCommit events up to the finalized batch
-    for i in 1..=3 {
+    for i in 1..=2 {
         let finalize_batch_tx = read_test_transaction("finalizeBatch", &i.to_string())?;
         fixture.anvil_inject_tx(finalize_batch_tx).await?;
     }
@@ -235,7 +235,7 @@ async fn test_l1_sync_batch_finalized() -> eyre::Result<()> {
     fixture.anvil_mine_blocks(4).await?;
     fixture.expect_event().l1_block_finalized_at_least(anvil_block_number).await?;
 
-    for i in 1..=3 {
+    for i in 1..=2 {
         fixture.expect_event().batch_consolidated().await?;
         // Verify batch now has a finalized block number in database
         let finalized_block_number =
@@ -262,17 +262,16 @@ async fn test_l1_sync_batch_finalized() -> eyre::Result<()> {
     // Step 6: Complete L1 sync, this will process the buffered BatchCommit events
     fixture.l1().sync().await?;
     fixture.expect_event().l1_synced().await?;
-    // for i in 4..=6 {
-    //     fixture.expect_event().batch_consolidated().await?;
-    //     let finalized_block_number =
-    //         fixture.db().get_batch_finalized_block_number_by_index(i).await?;
-    //     assert!(
-    //         matches!(finalized_block_number, Some(None)),
-    //         "Finalized block number should be None, got {:?}",
-    //         finalized_block_number
-    //     );
-    // }
-    tokio::time::sleep(tokio::time::Duration::from_secs(10)).await;
+    for i in 3..=6 {
+        fixture.expect_event().batch_consolidated().await?;
+        let finalized_block_number =
+            fixture.db().get_batch_finalized_block_number_by_index(i).await?;
+        assert!(
+            matches!(finalized_block_number, Some(None)),
+            "Finalized block number should be None, got {:?}",
+            finalized_block_number
+        );
+    }
     let l1_synced_status = fixture.get_status(0).await?;
     assert!(
         l1_synced_status.l2.fcs.safe_block_info().number >
@@ -281,11 +280,11 @@ async fn test_l1_sync_batch_finalized() -> eyre::Result<()> {
     );
 
     // Step 7: Send more BatchFinalized transactions (batches 4-6) after L1Synced
-    for i in 4..=6 {
+    for i in 3..=6 {
         let finalize_batch_tx = read_test_transaction("finalizeBatch", &i.to_string())?;
         fixture.anvil_inject_tx(finalize_batch_tx).await?;
     }
-    for i in 4..=6 {
+    for i in 3..=6 {
         fixture.expect_event().batch_finalize_indexed().await?;
         let finalized_block_number =
             fixture.db().get_batch_finalized_block_number_by_index(i).await?;
