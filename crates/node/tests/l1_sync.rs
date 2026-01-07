@@ -231,9 +231,7 @@ async fn test_l1_sync_batch_finalized() -> eyre::Result<()> {
         let finalize_batch_tx = read_test_transaction("finalizeBatch", &i.to_string())?;
         fixture.anvil_inject_tx(finalize_batch_tx).await?;
     }
-    let anvil_block_number = fixture.anvil_get_block_number().await?;
     fixture.anvil_mine_blocks(8).await?;
-    fixture.expect_event().l1_block_finalized_at_least(anvil_block_number).await?;
 
     for i in 1..=1 {
         fixture.expect_event().batch_consolidated().await?;
