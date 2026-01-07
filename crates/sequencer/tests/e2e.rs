@@ -345,8 +345,9 @@ async fn can_build_blocks_with_finalized_l1_messages() {
 
     let chain_spec = SCROLL_DEV.clone();
     // setup a test node
+    let tasks = TaskManager::current();
     let (mut nodes, _, wallet) = setup_engine(
-        &TaskManager::current(),
+        &tasks,
         default_test_scroll_rollup_node_config(),
         1,
         chain_spec,
