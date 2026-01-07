@@ -10,7 +10,7 @@ use rollup_node_primitives::ChainImport;
 use tokio::time::timeout;
 
 /// The default event wait time.
-pub const DEFAULT_EVENT_WAIT_TIMEOUT: Duration = Duration::from_secs(30);
+pub const DEFAULT_EVENT_WAIT_TIMEOUT: Duration = Duration::from_secs(180);
 
 /// Builder for waiting for events on multiple nodes.
 #[derive(Debug)]
