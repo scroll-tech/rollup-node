@@ -149,13 +149,4 @@ impl<N: FullNetwork<Primitives = ScrollNetworkPrimitives>> ChainOrchestratorHand
         self.send_command(ChainOrchestratorCommand::DatabaseHandle(tx));
         rx.await
     }
-
-    /// Sends a command to shutdown the `ChainOrchestrator` immediately.
-    /// This will cause the `ChainOrchestrator`'s event loop to exit gracefully.
-    #[cfg(feature = "test-utils")]
-    pub async fn shutdown(&self) -> Result<(), oneshot::error::RecvError> {
-        let (tx, rx) = oneshot::channel();
-        self.send_command(ChainOrchestratorCommand::Shutdown(tx));
-        rx.await
-    }
 }
