@@ -962,8 +962,6 @@ async fn test_l1_reorg_commit_batch_after_reboot() -> eyre::Result<()> {
     fixture.l1().sync().await?;
     fixture.expect_event().l1_synced().await?;
 
-    println!("im here 1");
-
     // Step 2: Send BatchCommit transactions (batches 0-3)
     for i in 0..=3 {
         let commit_batch_tx = read_test_transaction("commitBatch", &i.to_string())?;
@@ -973,20 +971,14 @@ async fn test_l1_reorg_commit_batch_after_reboot() -> eyre::Result<()> {
         fixture.expect_event().batch_consolidated().await?;
     }
 
-    println!("im here 2");
-
     let status_before_reorg = fixture.get_status(0).await?;
     let safe_before_reorg = status_before_reorg.l2.fcs.safe_block_info().number;
     assert!(safe_before_reorg > 0, "Safe head should have advanced");
     tracing::info!("Safe head before reboot: {}", safe_before_reorg);
 
-    println!("ime here 2.5");
-
     // Step 3: Shutdown the node
     tracing::info!("Rebooting node...");
     fixture.shutdown_node(0).await?;
-
-    println!("ime here 3");
 
     // Step 4: Trigger L1 reorg (removes some BatchCommit events)
     fixture.anvil_reorg(1).await?;
