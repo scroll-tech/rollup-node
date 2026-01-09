@@ -645,7 +645,6 @@ impl TestFixtureBuilder {
         // Start Anvil if requested
         let anvil = if self.anvil_config.enabled {
             let handle = Self::spawn_anvil(
-                self.anvil_config.port,
                 self.anvil_config.state_path.as_deref(),
                 self.anvil_config.chain_id,
                 self.anvil_config.block_time,
@@ -707,13 +706,12 @@ impl TestFixtureBuilder {
 
     /// Spawn an Anvil instance with the given configuration.
     async fn spawn_anvil(
-        port: u16,
         state_path: Option<&std::path::Path>,
         chain_id: Option<u64>,
         block_time: Option<u64>,
         slots_in_an_epoch: u64,
     ) -> eyre::Result<anvil::NodeHandle> {
-        let mut config = anvil::NodeConfig { port, ..Default::default() };
+        let mut config = anvil::NodeConfig { port: 0, ..Default::default() };
 
         if let Some(id) = chain_id {
             config.chain_id = Some(id);

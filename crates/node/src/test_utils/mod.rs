@@ -149,13 +149,8 @@ where
         // Configure node with the test data directory
         let mut node_config = NodeConfig::new(chain_spec.clone())
             .with_network(network_config.clone())
+            .with_rpc(RpcServerArgs::default().with_http().with_http_api(RpcModuleSelection::All))
             .with_unused_ports()
-            .with_rpc(
-                RpcServerArgs::default()
-                    .with_unused_ports()
-                    .with_http()
-                    .with_http_api(RpcModuleSelection::All),
-            )
             .set_dev(is_dev)
             .with_txpool(TxPoolArgs { no_local_transactions_propagation, ..Default::default() });
 
