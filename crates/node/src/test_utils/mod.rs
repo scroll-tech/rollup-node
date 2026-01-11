@@ -167,13 +167,10 @@ where
             .with_components(node.components_builder())
             .with_add_ons(node.add_ons())
             .launch_with_fn(|builder| {
-                // NOTE: We enforce legacy state root processor (by setting state_root_task_executor to None)
-                // due to performance issues with the default state root processor in reth.
                 let tree_config = TreeConfig::default()
                     .with_always_process_payload_attributes_on_canonical_head(true)
                     .with_unwind_canonical_header(true)
-                    .with_persistence_threshold(0)
-                    .with_state_root_task_executor(None);
+                    .with_persistence_threshold(0);
                 let launcher = EngineNodeLauncher::new(
                     builder.task_executor().clone(),
                     builder.config().datadir(),
