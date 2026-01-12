@@ -73,7 +73,8 @@ async fn test_should_not_miss_logs_on_reorg() -> eyre::Result<()> {
     .await;
     let mut received_logs = Vec::new();
     loop {
-        let notification = l1_watcher.recv().await.map(|notif| (*notif).clone());
+        let notification =
+            l1_watcher.l1_notification_receiver().recv().await.map(|notif| (*notif).clone());
         if let Some(L1Notification::L1Message { block_timestamp, message, .. }) = notification {
             received_logs.push(message);
             if block_timestamp == last_log.block_timestamp.unwrap() {

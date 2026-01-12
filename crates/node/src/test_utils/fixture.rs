@@ -27,7 +27,6 @@ use reth_tokio_util::EventStream;
 use rollup_node_chain_orchestrator::{ChainOrchestratorEvent, ChainOrchestratorHandle};
 use rollup_node_primitives::BlockInfo;
 use rollup_node_sequencer::L1MessageInclusionMode;
-use rollup_node_watcher::L1Notification;
 use scroll_alloy_consensus::ScrollPooledTransaction;
 use scroll_alloy_provider::{ScrollAuthApiEngineClient, ScrollEngineApi};
 use scroll_alloy_rpc_types::Transaction;
@@ -37,7 +36,7 @@ use std::{
     path::PathBuf,
     sync::Arc,
 };
-use tokio::sync::{mpsc, Mutex};
+use tokio::sync::Mutex;
 
 /// Main test fixture providing a high-level interface for testing rollup nodes.
 #[derive(Debug)]
@@ -75,8 +74,6 @@ pub struct NodeHandle {
     pub node: NodeHelperType<ScrollRollupNode, TestBlockChainProvider>,
     /// Engine instance for this node.
     pub engine: Engine<Arc<dyn ScrollEngineApi + Send + Sync + 'static>>,
-    /// L1 watcher notification channel.
-    pub l1_watcher_tx: Option<mpsc::Sender<Arc<L1Notification>>>,
     /// Chain orchestrator listener.
     pub chain_orchestrator_rx: EventStream<ChainOrchestratorEvent>,
     /// Chain orchestrator handle.
@@ -102,7 +99,6 @@ impl Debug for NodeHandle {
         f.debug_struct("NodeHandle")
             .field("node", &"NodeHelper")
             .field("engine", &"Box<dyn ScrollEngineApi>")
-            .field("l1_watcher_tx", &self.l1_watcher_tx)
             .field("rollup_manager_handle", &self.rollup_manager_handle)
             .finish()
     }
@@ -451,7 +447,6 @@ impl TestFixtureBuilder {
             let engine = Engine::new(Arc::new(engine_client), fcs);
 
             // Get handles if available
-            let l1_watcher_tx = node.inner.add_ons_handle.l1_watcher_tx.clone();
             let rollup_manager_handle = node.inner.add_ons_handle.rollup_manager_handle.clone();
             let chain_orchestrator_rx =
                 node.inner.add_ons_handle.rollup_manager_handle.get_event_listener().await?;
@@ -460,7 +455,6 @@ impl TestFixtureBuilder {
                 node,
                 engine,
                 chain_orchestrator_rx,
-                l1_watcher_tx,
                 rollup_manager_handle,
                 typ: if config.sequencer_args.sequencer_enabled && index == 0 {
                     NodeType::Sequencer
