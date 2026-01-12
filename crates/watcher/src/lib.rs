@@ -97,6 +97,9 @@ pub struct L1Watcher<EP> {
     is_synced: bool,
     /// The log query block range.
     log_query_block_range: u64,
+    /// Test mode: skip sending `L1Notification::Synced` events.
+    #[cfg(feature = "test-utils")]
+    test_mode_skip_synced_notification: bool,
 }
 
 /// The L1 notification type yielded by the [`L1Watcher`].
@@ -206,7 +209,8 @@ where
         l1_block_startup_info: L1BlockStartupInfo,
         config: Arc<NodeConfig>,
         log_query_block_range: u64,
-    ) -> L1WatcherHandle {
+        #[cfg(feature = "test-utils")] test_mode_skip_synced_notification: bool,
+    ) -> (mpsc::Sender<Arc<L1Notification>>, L1WatcherHandle) {
         tracing::trace!(target: "scroll::watcher", ?l1_block_startup_info, ?config, "spawning L1 watcher");
 
         let (notification_tx, notification_rx) = mpsc::channel(log_query_block_range as usize);
@@ -266,11 +270,13 @@ where
             current_block_number: start_block.saturating_sub(1),
             l1_state,
             command_rx,
-            sender: notification_tx,
+            sender: notification_tx.clone(),
             config,
             metrics: WatcherMetrics::default(),
             is_synced: false,
             log_query_block_range,
+            #[cfg(feature = "test-utils")]
+            test_mode_skip_synced_notification,
         };
 
         // notify at spawn.
@@ -291,7 +297,7 @@ where
 
         tokio::spawn(watcher.run());
 
-        handle
+        (notification_tx, handle)
     }
 
     /// Main execution loop for the [`L1Watcher`].
@@ -320,10 +326,18 @@ where
             } else if self.current_block_number == self.l1_state.head {
                 // if we have synced to the head of the L1, notify the channel and set the
                 // `is_synced`` flag.
-                if let Err(L1WatcherError::SendError(_)) = self.notify(L1Notification::Synced).await
-                {
-                    tracing::warn!(target: "scroll::watcher", "L1 watcher channel closed, stopping the watcher");
-                    break;
+                #[cfg(feature = "test-utils")]
+                let should_skip = self.test_mode_skip_synced_notification;
+                #[cfg(not(feature = "test-utils"))]
+                let should_skip = false;
+
+                if !should_skip {
+                    if let Err(L1WatcherError::SendError(_)) =
+                        self.notify(L1Notification::Synced).await
+                    {
+                        tracing::warn!(target: "scroll::watcher", "L1 watcher channel closed, stopping the watcher");
+                        break;
+                    }
                 }
                 self.is_synced = true;
             }
@@ -832,11 +846,31 @@ where
 
     /// Returns the finalized L1 block.
     async fn finalized_block(&self) -> L1WatcherResult<Block> {
-        Ok(self
-            .execution_provider
-            .get_block(BlockNumberOrTag::Finalized.into())
-            .await?
-            .expect("finalized block should always exist"))
+        #[cfg(not(feature = "test-utils"))]
+        {
+            Ok(self
+                .execution_provider
+                .get_block(BlockNumberOrTag::Finalized.into())
+                .await?
+                .expect("finalized block should always exist"))
+        }
+
+        #[cfg(feature = "test-utils")]
+        {
+            // We do not use BlockNumberOrTag::Finalized directly because there is an issue with
+            // Anvil. See https://github.com/foundry-rs/foundry/issues/12645.
+            let block = self
+                .execution_provider
+                .get_block(BlockNumberOrTag::Finalized.into())
+                .await?
+                .expect("finalized block should always exist");
+
+            Ok(self
+                .execution_provider
+                .get_block(block.number().into())
+                .await?
+                .expect("finalized block should always exist"))
+        }
     }
 
     /// Returns the next range of logs, for the block range in
@@ -923,6 +957,8 @@ mod tests {
                 metrics: WatcherMetrics::default(),
                 is_synced: false,
                 log_query_block_range: LOG_QUERY_BLOCK_RANGE,
+                #[cfg(feature = "test-utils")]
+                test_mode_skip_synced_notification: false,
             },
             handle,
         )
