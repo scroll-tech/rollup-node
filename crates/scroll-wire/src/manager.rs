@@ -24,7 +24,7 @@ pub struct ScrollWireManager {
     /// A map of connections to peers.
     connections: HashMap<PeerId, UnboundedSender<ScrollMessage>>,
     /// A map of the state of the scroll wire protocol. Currently the state for each peer
-    /// is just a cache of the last 100 blocks seen by each peer.
+    /// is just a cache of the last 100 blocks received from each peer.
     block_received_state: HashMap<PeerId, LruCache<B256>>,
 }
 
@@ -32,11 +32,15 @@ impl ScrollWireManager {
     /// Creates a new [`ScrollWireManager`] instance.
     pub fn new(events: UnboundedReceiver<ScrollWireEvent>) -> Self {
         trace!(target: "scroll::wire::manager", "Creating new ScrollWireManager instance");
-        Self { events: events.into(), connections: HashMap::new(), block_received_state: HashMap::new() }
+        Self {
+            events: events.into(),
+            connections: HashMap::new(),
+            block_received_state: HashMap::new(),
+        }
     }
 
     /// Announces a new block to the specified peer.
-    pub fn announce_block(&mut self, peer_id: PeerId, block: &NewBlock, hash: B256) {
+    pub fn announce_block(&mut self, peer_id: PeerId, block: &NewBlock) {
         if let Entry::Occupied(to_connection) = self.connections.entry(peer_id) {
             // We send the block to the peer. If we receive an error we remove the peer from the
             // connections map and delete its state as the connection is no longer valid.

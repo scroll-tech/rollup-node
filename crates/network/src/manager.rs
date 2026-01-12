@@ -227,7 +227,7 @@ impl<
         // Announce block to the filtered set of peers
         for peer_id in peers {
             trace!(target: "scroll::network::manager", peer_id = %peer_id, block_number = %block.block.header.number, block_hash = %hash, "Announcing new block to peer");
-            self.scroll_wire.announce_block(peer_id, &block, hash);
+            self.scroll_wire.announce_block(peer_id, &block);
         }
     }
 
@@ -250,10 +250,17 @@ impl<
 
                 if self.blocks_seen.contains(&(block_hash, signature)) {
                     // Check if this peer has already sent this block to us, if so penalize it.
-                    if self.scroll_wire.block_received_state().get(&peer_id).map_or(false, |cache| cache.contains(&block_hash)) {
+                    if self
+                        .scroll_wire
+                        .block_received_state()
+                        .get(&peer_id)
+                        .is_some_and(|cache| cache.contains(&block_hash))
+                    {
                         trace!(target: "scroll::network::manager", peer_id = ?peer_id, block = ?block_hash, "Peer sent duplicate block, penalizing");
-                        self.inner_network_handle
-                            .reputation_change(peer_id, reth_network_api::ReputationChangeKind::BadBlock);
+                        self.inner_network_handle.reputation_change(
+                            peer_id,
+                            reth_network_api::ReputationChangeKind::BadBlock,
+                        );
                     }
                     None
                 } else {
@@ -357,10 +364,17 @@ impl<
 
             if self.blocks_seen.contains(&(block_hash, signature)) {
                 // Check if this peer has already sent this block to us, if so penalize it.
-                if self.scroll_wire.block_received_state().get(&peer_id).map_or(false, |cache| cache.contains(&block_hash)) {
+                if self
+                    .scroll_wire
+                    .block_received_state()
+                    .get(&peer_id)
+                    .is_some_and(|cache| cache.contains(&block_hash))
+                {
                     trace!(target: "scroll::bridge::import", peer_id = ?peer_id, block = ?block_hash, "Peer sent duplicate block, penalizing");
-                    self.inner_network_handle
-                        .reputation_change(peer_id, reth_network_api::ReputationChangeKind::BadBlock);
+                    self.inner_network_handle.reputation_change(
+                        peer_id,
+                        reth_network_api::ReputationChangeKind::BadBlock,
+                    );
                 }
                 return None;
             }
