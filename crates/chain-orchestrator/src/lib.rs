@@ -189,19 +189,12 @@ impl<
                 biased;
 
                 _guard = &mut shutdown => {
+                    self.notify(ChainOrchestratorEvent::Shutdown);
                     break;
                 }
                 Some(command) = self.handle_rx.recv() => {
-                    match self.handle_command(command).await {
-                        #[cfg(feature = "test-utils")]
-                        Err(ChainOrchestratorError::Shutdown) => {
-                            tracing::info!(target: "scroll::chain_orchestrator", "Shutdown requested, exiting gracefully");
-                            break;
-                        }
-                        Err(err) => {
-                            tracing::error!(target: "scroll::chain_orchestrator", ?err, "Error handling command");
-                        }
-                        Ok(_) => {}
+                    if let Err(err) = self.handle_command(command).await {
+                        tracing::error!(target: "scroll::chain_orchestrator", ?err, "Error handling command");
                     }
                 }
                 Some(event) = async {
@@ -441,13 +434,6 @@ impl<
             #[cfg(feature = "test-utils")]
             ChainOrchestratorCommand::DatabaseHandle(tx) => {
                 let _ = tx.send(self.database.clone());
-            }
-            #[cfg(feature = "test-utils")]
-            ChainOrchestratorCommand::Shutdown(tx) => {
-                tracing::info!(target: "scroll::chain_orchestrator", "Received shutdown command, exiting event loop");
-                let _ = tx.send(());
-                // Return an error to signal shutdown
-                return Err(ChainOrchestratorError::Shutdown);
             }
         }
 

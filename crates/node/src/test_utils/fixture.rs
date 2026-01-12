@@ -18,12 +18,12 @@ use alloy_rpc_types_anvil::ReorgOptions;
 use alloy_rpc_types_eth::Block;
 use alloy_signer_local::PrivateKeySigner;
 use alloy_transport::layers::RetryBackoffLayer;
-use reth_chainspec::EthChainSpec;
 use reth_e2e_test_utils::{wallet::Wallet, NodeHelperType, TmpDB};
 use reth_eth_wire_types::BasicNetworkPrimitives;
 use reth_fs_util::remove_dir_all;
 use reth_network::NetworkHandle;
 use reth_node_builder::NodeTypes;
+use reth_node_core::exit::NodeExitFuture;
 use reth_node_types::NodeTypesWithDBAdapter;
 use reth_provider::providers::BlockchainProvider;
 use reth_scroll_chainspec::SCROLL_DEV;
@@ -31,14 +31,12 @@ use reth_scroll_primitives::ScrollPrimitives;
 use reth_tasks::TaskManager;
 use reth_tokio_util::EventStream;
 use rollup_node_chain_orchestrator::{ChainOrchestratorEvent, ChainOrchestratorHandle};
-use rollup_node_primitives::BlockInfo;
 use rollup_node_sequencer::L1MessageInclusionMode;
 use scroll_alloy_consensus::ScrollPooledTransaction;
-use scroll_alloy_provider::{ScrollAuthApiEngineClient, ScrollEngineApi};
 use scroll_alloy_rpc_types::Transaction;
-use scroll_engine::{Engine, ForkchoiceState};
 use std::{
     fmt::{Debug, Formatter},
+    ops::{Deref, DerefMut},
     path::PathBuf,
     sync::Arc,
 };
@@ -58,8 +56,6 @@ pub struct TestFixture {
     pub chain_spec: Arc<<ScrollRollupNode as NodeTypes>::ChainSpec>,
     /// Optional Anvil instance for L1 simulation.
     pub anvil: Option<anvil::NodeHandle>,
-    /// The task manager. Held in order to avoid dropping the node.
-    pub tasks: TaskManager,
     /// The configuration for the nodes.
     pub config: ScrollRollupNodeConfig,
 }
@@ -99,6 +95,9 @@ pub type ScrollNetworkHandle =
 pub type TestBlockChainProvider =
     BlockchainProvider<NodeTypesWithDBAdapter<ScrollRollupNode, TmpDB>>;
 
+/// The test node type for Scroll nodes.
+pub type ScrollTestNode = NodeHelperType<ScrollRollupNode, TestBlockChainProvider>;
+
 /// The node type (sequencer or follower).
 #[derive(Debug)]
 pub enum NodeType {
@@ -108,12 +107,51 @@ pub enum NodeType {
     Follower,
 }
 
+/// Components of a test node.
+pub struct ScrollNodeTestComponents {
+    /// The node helper type for the test node.
+    pub node: ScrollTestNode,
+    /// The task manager for the test node.
+    pub task_manager: TaskManager,
+    /// The exit future for the test node.
+    pub exit_future: NodeExitFuture,
+}
+
+impl ScrollNodeTestComponents {
+    /// Create new test node components.
+    pub async fn new(
+        node: ScrollTestNode,
+        task_manager: TaskManager,
+        exit_future: NodeExitFuture,
+    ) -> Self {
+        Self { node, task_manager, exit_future }
+    }
+}
+
+impl std::fmt::Debug for ScrollNodeTestComponents {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("ScrollNodeTestComponents").finish()
+    }
+}
+
+impl DerefMut for ScrollNodeTestComponents {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.node
+    }
+}
+
+impl Deref for ScrollNodeTestComponents {
+    type Target = ScrollTestNode;
+
+    fn deref(&self) -> &Self::Target {
+        &self.node
+    }
+}
+
 /// Handle to a single test node with its components.
 pub struct NodeHandle {
     /// The underlying node context.
-    pub node: NodeHelperType<ScrollRollupNode, TestBlockChainProvider>,
-    /// Engine instance for this node.
-    pub engine: Engine<Arc<dyn ScrollEngineApi + Send + Sync + 'static>>,
+    pub node: ScrollNodeTestComponents,
     /// Chain orchestrator listener.
     pub chain_orchestrator_rx: EventStream<ChainOrchestratorEvent>,
     /// Chain orchestrator handle.
@@ -123,6 +161,15 @@ pub struct NodeHandle {
 }
 
 impl NodeHandle {
+    /// Create a new node handle.
+    pub async fn new(node: ScrollNodeTestComponents, typ: NodeType) -> eyre::Result<Self> {
+        let rollup_manager_handle = node.inner.add_ons_handle.rollup_manager_handle.clone();
+        let chain_orchestrator_rx =
+            node.inner.add_ons_handle.rollup_manager_handle.get_event_listener().await?;
+
+        Ok(Self { node, chain_orchestrator_rx, rollup_manager_handle, typ })
+    }
+
     /// Returns true if this is a handle to the sequencer.
     pub const fn is_sequencer(&self) -> bool {
         matches!(self.typ, NodeType::Sequencer)
@@ -598,7 +645,6 @@ impl TestFixtureBuilder {
         // Start Anvil if requested
         let anvil = if self.anvil_config.enabled {
             let handle = Self::spawn_anvil(
-                self.anvil_config.port,
                 self.anvil_config.state_path.as_deref(),
                 self.anvil_config.chain_id,
                 self.anvil_config.block_time,
@@ -623,9 +669,7 @@ impl TestFixtureBuilder {
             None
         };
 
-        let tasks = TaskManager::current();
-        let (nodes, dbs, wallet) = setup_engine(
-            &tasks,
+        let (node_components, dbs, wallet) = setup_engine(
             self.config.clone(),
             self.num_nodes,
             chain_spec.clone(),
@@ -635,45 +679,26 @@ impl TestFixtureBuilder {
         )
         .await?;
 
-        let mut node_handles = Vec::with_capacity(nodes.len());
-        for (index, node) in nodes.into_iter().enumerate() {
-            let genesis_hash = node.inner.chain_spec().genesis_hash();
-
-            // Create engine for the node
-            let auth_client = node.inner.engine_http_client();
-            let engine_client = Arc::new(ScrollAuthApiEngineClient::new(auth_client))
-                as Arc<dyn ScrollEngineApi + Send + Sync + 'static>;
-            let fcs = ForkchoiceState::new(
-                BlockInfo { hash: genesis_hash, number: 0 },
-                Default::default(),
-                Default::default(),
-            );
-            let engine = Engine::new(Arc::new(engine_client), fcs);
-
-            // Get handles if available
-            let rollup_manager_handle = node.inner.add_ons_handle.rollup_manager_handle.clone();
-            let chain_orchestrator_rx =
-                node.inner.add_ons_handle.rollup_manager_handle.get_event_listener().await?;
-
-            node_handles.push(Some(NodeHandle {
+        let mut nodes = Vec::with_capacity(node_components.len());
+        for (index, node) in node_components.into_iter().enumerate() {
+            let handle = NodeHandle::new(
                 node,
-                engine,
-                chain_orchestrator_rx,
-                rollup_manager_handle,
-                typ: if self.config.sequencer_args.sequencer_enabled && index == 0 {
+                if self.config.sequencer_args.sequencer_enabled && index == 0 {
                     NodeType::Sequencer
                 } else {
                     NodeType::Follower
                 },
-            }));
+            )
+            .await?;
+
+            nodes.push(Some(handle));
         }
 
         Ok(TestFixture {
-            nodes: node_handles,
+            nodes,
             dbs,
             wallet: Arc::new(Mutex::new(wallet)),
             chain_spec,
-            tasks,
             anvil,
             config: self.config,
         })
@@ -681,13 +706,12 @@ impl TestFixtureBuilder {
 
     /// Spawn an Anvil instance with the given configuration.
     async fn spawn_anvil(
-        port: u16,
         state_path: Option<&std::path::Path>,
         chain_id: Option<u64>,
         block_time: Option<u64>,
         slots_in_an_epoch: u64,
     ) -> eyre::Result<anvil::NodeHandle> {
-        let mut config = anvil::NodeConfig { port, ..Default::default() };
+        let mut config = anvil::NodeConfig { port: 0, ..Default::default() };
 
         if let Some(id) = chain_id {
             config.chain_id = Some(id);

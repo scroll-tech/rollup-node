@@ -78,7 +78,6 @@ test-l1-sync:
 	--locked \
 	--all-features \
 	--no-fail-fast \
-	--test-threads=1 \
 	--failure-output immediate \
 	-E 'binary(l1_sync)'
 

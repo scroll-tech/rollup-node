@@ -50,10 +50,11 @@
 //! fixture.expect_event().l1_synced().await?;
 //! ```
 
-use crate::test_utils::{setup_engine, NodeHandle, TestFixture};
-use scroll_alloy_provider::{ScrollAuthApiEngineClient, ScrollEngineApi};
-use scroll_engine::Engine;
-use std::sync::Arc;
+use std::time::Duration;
+
+use futures::StreamExt;
+
+use crate::test_utils::{fixture::ScrollNodeTestComponents, setup_engine, NodeHandle, TestFixture};
 
 impl TestFixture {
     /// Shutdown a node by index, performing a graceful shutdown of all components.
@@ -117,23 +118,37 @@ impl TestFixture {
         }
 
         tracing::info!("Shutting down node at index {}", node_index);
+        let NodeHandle { node, mut chain_orchestrator_rx, rollup_manager_handle: _r_h, typ: _ } =
+            self.nodes
+                .get_mut(node_index)
+                .and_then(|opt| opt.take())
+                .expect("Node existence checked above");
+        let ScrollNodeTestComponents { node, task_manager, exit_future } = node;
 
-        // Step 1: Explicitly shutdown the ChainOrchestrator
-        // This sends a Shutdown command that will make the ChainOrchestrator exit its event loop
-        // immediately
-        if let Some(node) = &self.nodes[node_index] {
-            tracing::info!("Sending shutdown command to ChainOrchestrator...");
-            if let Err(e) = node.rollup_manager_handle.shutdown().await {
-                tracing::warn!("Failed to send shutdown command to ChainOrchestrator: {}", e);
-            } else {
-                tracing::info!("ChainOrchestrator shutdown command acknowledged");
+        tokio::task::spawn_blocking(|| {
+            if !task_manager.graceful_shutdown_with_timeout(Duration::from_secs(10)) {
+                return Err(eyre::eyre!("Failed to shutdown tasks within timeout"));
             }
-        }
+            eyre::Ok(())
+        })
+        .await??;
 
-        // Step 2: Take ownership and drop the node handle
-        // This closes all channels (RPC, network, DB) and releases resources
-        let node_handle = self.nodes[node_index].take();
-        drop(node_handle);
+        // wait for the exit future to resolve - i.e. the consensus engine has shut down
+        let _ = exit_future.await;
+
+        // Wait for shutdown event from ChainOrchestrator
+        tokio::time::timeout(Duration::from_secs(10), async {
+            while let Some(event) = chain_orchestrator_rx.next().await {
+                if matches!(event, rollup_node_chain_orchestrator::ChainOrchestratorEvent::Shutdown)
+                {
+                    return Ok::<(), eyre::ErrReport>(());
+                }
+            }
+            Err(eyre::eyre!("Shutdown event not received"))
+        })
+        .await??;
+
+        drop(node);
 
         // Step 3: Wait for async cleanup to complete
         tokio::time::sleep(tokio::time::Duration::from_secs(1)).await;
@@ -197,7 +212,6 @@ impl TestFixture {
 
         // Step 2: Create a new node instance with the existing database
         let (mut new_nodes, _, _) = setup_engine(
-            &self.tasks,
             self.config.clone(),
             1,
             self.chain_spec.clone(),
@@ -212,51 +226,13 @@ impl TestFixture {
         }
 
         let new_node = new_nodes.remove(0);
-
-        // Step 3: Setup Engine API client
-        let auth_client = new_node.inner.engine_http_client();
-        let engine_client = Arc::new(ScrollAuthApiEngineClient::new(auth_client))
-            as Arc<dyn ScrollEngineApi + Send + Sync + 'static>;
-
-        // Step 4: Get necessary handles from the new node
-        let rollup_manager_handle = new_node.inner.add_ons_handle.rollup_manager_handle.clone();
-
-        // Step 5: Restore ForkchoiceState from persisted ChainOrchestrator status
-        // CRITICAL: This must NOT be reset to genesis. The execution client's state
-        // is at a later block, and resetting FCS to genesis would cause a mismatch,
-        // resulting in "Syncing" errors when building payloads after reboot.
-        let status = rollup_manager_handle.status().await?;
-        let fcs: scroll_engine::ForkchoiceState = status.l2.fcs;
-
-        tracing::info!(
-            "Restored FCS from database - head: {:?}, safe: {:?}, finalized: {:?}",
-            fcs.head_block_info(),
-            fcs.safe_block_info(),
-            fcs.finalized_block_info()
-        );
-
-        // Step 6: Initialize Engine with the restored ForkchoiceState
-        let engine = Engine::new(Arc::new(engine_client), fcs);
-        let chain_orchestrator_rx =
-            new_node.inner.add_ons_handle.rollup_manager_handle.get_event_listener().await?;
-
-        // Step 7: Determine node type (sequencer vs follower)
-        let was_sequencer = self.config.sequencer_args.sequencer_enabled && node_index == 0;
-
-        // Step 8: Create the new NodeHandle with all components
-        let new_node_handle = NodeHandle {
-            node: new_node,
-            engine,
-            chain_orchestrator_rx,
-            rollup_manager_handle,
-            typ: if was_sequencer {
-                crate::test_utils::fixture::NodeType::Sequencer
-            } else {
-                crate::test_utils::fixture::NodeType::Follower
-            },
+        let typ = if self.config.sequencer_args.sequencer_enabled && node_index == 0 {
+            crate::test_utils::fixture::NodeType::Sequencer
+        } else {
+            crate::test_utils::fixture::NodeType::Follower
         };
 
-        // Step 9: Replace the old (None) node slot with the new node
+        let new_node_handle = NodeHandle::new(new_node, typ).await?;
         self.nodes[node_index] = Some(new_node_handle);
         tracing::info!("Node started successfully at index {}", node_index);
 

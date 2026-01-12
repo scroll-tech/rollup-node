@@ -119,4 +119,6 @@ pub enum ChainOrchestratorEvent {
     },
     /// The head of the fork choice state has been updated in the engine driver.
     FcsHeadUpdated(BlockInfo),
+    /// The chain orchestrator is shutting down.
+    Shutdown,
 }
