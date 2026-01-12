@@ -25,14 +25,14 @@ pub struct ScrollWireManager {
     connections: HashMap<PeerId, UnboundedSender<ScrollMessage>>,
     /// A map of the state of the scroll wire protocol. Currently the state for each peer
     /// is just a cache of the last 100 blocks seen by each peer.
-    state: HashMap<PeerId, LruCache<B256>>,
+    block_received_state: HashMap<PeerId, LruCache<B256>>,
 }
 
 impl ScrollWireManager {
     /// Creates a new [`ScrollWireManager`] instance.
     pub fn new(events: UnboundedReceiver<ScrollWireEvent>) -> Self {
         trace!(target: "scroll::wire::manager", "Creating new ScrollWireManager instance");
-        Self { events: events.into(), connections: HashMap::new(), state: HashMap::new() }
+        Self { events: events.into(), connections: HashMap::new(), block_received_state: HashMap::new() }
     }
 
     /// Announces a new block to the specified peer.
@@ -42,27 +42,23 @@ impl ScrollWireManager {
             // connections map and delete its state as the connection is no longer valid.
             if to_connection.get().send(ScrollMessage::new_block(block.clone())).is_err() {
                 trace!(target: "scroll::wire::manager", peer_id = %peer_id, "Failed to send block to peer - dropping peer.");
-                self.state.remove(&peer_id);
+                self.block_received_state.remove(&peer_id);
                 to_connection.remove();
             } else {
                 // Upon successful sending of the block we update the state of the peer.
                 trace!(target: "scroll::wire::manager", peer_id = %peer_id, "Announced block to peer");
-                self.state
-                    .entry(peer_id)
-                    .or_insert_with(|| LruCache::new(LRU_CACHE_SIZE))
-                    .insert(hash);
             }
         }
     }
 
     /// Returns the state of the `ScrollWire` protocol.
-    pub const fn state(&self) -> &HashMap<PeerId, LruCache<B256>> {
-        &self.state
+    pub const fn block_received_state(&self) -> &HashMap<PeerId, LruCache<B256>> {
+        &self.block_received_state
     }
 
     /// Returns a mutable reference to the state of the `ScrollWire` protocol.
-    pub const fn state_mut(&mut self) -> &mut HashMap<PeerId, LruCache<B256>> {
-        &mut self.state
+    pub const fn block_received_state_mut(&mut self) -> &mut HashMap<PeerId, LruCache<B256>> {
+        &mut self.block_received_state
     }
 }
 
@@ -94,7 +90,7 @@ impl Future for ScrollWireManager {
                         direction
                     );
                     this.connections.insert(peer_id, to_connection);
-                    this.state.insert(peer_id, LruCache::new(100));
+                    this.block_received_state.insert(peer_id, LruCache::new(100));
                 }
                 None => break,
             }
