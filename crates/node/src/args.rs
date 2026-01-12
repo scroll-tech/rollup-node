@@ -51,7 +51,6 @@ use scroll_network::ScrollNetworkManager;
 use scroll_wire::ScrollWireEvent;
 use std::{fs, path::PathBuf, sync::Arc};
 use tokio::sync::mpsc::UnboundedReceiver;
-use tracing::{error, info};
 
 /// A struct that represents the arguments for the rollup node.
 #[derive(Debug, Clone, clap::Args)]
@@ -190,16 +189,16 @@ impl ScrollRollupNodeConfig {
 
             match pprof_config.launch_server().await {
                 Ok(handle) => {
-                    info!(target: "rollup_node::pprof", "pprof server started successfully");
+                    tracing::info!(target: "rollup_node::pprof", "pprof server started successfully");
                     // Spawn the pprof server task
                     ctx.task_executor.spawn_critical("pprof_server", async move {
                         if let Err(e) = handle.await {
-                            error!(target: "rollup_node::pprof", "pprof server error: {:?}", e);
+                            tracing::error!(target: "rollup_node::pprof", "pprof server error: {:?}", e);
                         }
                     });
                 }
                 Err(e) => {
-                    error!(target: "rollup_node::pprof", "Failed to start pprof server: {}", e);
+                    tracing::error!(target: "rollup_node::pprof", "Failed to start pprof server: {}", e);
                     return Err(e);
                 }
             }
