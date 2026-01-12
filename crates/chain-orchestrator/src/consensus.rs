@@ -63,6 +63,10 @@ impl SystemContractConsensus {
     /// Creates a new [`SystemContractConsensus`] consensus instance with the given authorized
     /// signers.
     pub fn new(authorized_signer: Address) -> Self {
+        tracing::info!(
+            target: "scroll::consensus",
+            "Initialized system contract consensus with authorized signer: {authorized_signer}"
+        );
         Self { authorized_signer, metrics: SystemContractConsensusMetrics::default() }
     }
 }
@@ -70,7 +74,13 @@ impl SystemContractConsensus {
 impl Consensus for SystemContractConsensus {
     fn update_config(&mut self, update: &ConsensusUpdate) {
         match update {
-            ConsensusUpdate::AuthorizedSigner(signer) => self.authorized_signer = *signer,
+            ConsensusUpdate::AuthorizedSigner(signer) => {
+                tracing::info!(
+                    target: "scroll::consensus",
+                    "Authorized signer updated to: {signer}"
+                );
+                self.authorized_signer = *signer
+            }
         };
     }
 
