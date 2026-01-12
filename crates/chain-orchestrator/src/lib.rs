@@ -292,13 +292,17 @@ impl<
                 }
             }
             SequencerEvent::PayloadReady(payload_id) => {
-                if let Some(block) = self
+                let block = self
                     .sequencer
                     .as_mut()
                     .expect("sequencer must be present")
                     .finalize_payload_building(payload_id, &mut self.engine)
-                    .await?
-                {
+                    .await?;
+
+                self.metric_handler.finish_all_block_building_recording();
+                self.metric_handler.finish_block_building_interval_recording();
+
+                if let Some(block) = block {
                     let block_info: L2BlockInfoWithL1Messages = (&block).into();
                     self.database
                         .update_l1_messages_from_l2_blocks(vec![block_info.clone()])
@@ -310,8 +314,6 @@ impl<
                     self.metric_handler.finish_no_empty_block_building_recording();
                     return Ok(Some(ChainOrchestratorEvent::BlockSequenced(block)));
                 }
-                self.metric_handler.finish_all_block_building_recording();
-                self.metric_handler.finish_block_building_interval_recording();
             }
         }
 
