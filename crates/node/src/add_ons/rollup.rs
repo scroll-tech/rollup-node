@@ -1,4 +1,4 @@
-use crate::{args::ScrollRollupNodeConfig, pprof::PprofConfig};
+use crate::args::ScrollRollupNodeConfig;
 
 use reth_chainspec::NamedChain;
 use reth_network::NetworkProtocols;
@@ -12,7 +12,6 @@ use rollup_node_chain_orchestrator::ChainOrchestratorHandle;
 use scroll_alloy_hardforks::ScrollHardforks;
 use scroll_wire::ScrollWireEvent;
 use tokio::sync::mpsc::UnboundedReceiver;
-use tracing::{error, info};
 
 /// Implementing the trait allows the type to return whether it is configured for dev chain.
 #[auto_impl::auto_impl(Arc)]
@@ -60,32 +59,6 @@ impl RollupManagerAddOn {
             ChainConfig<Config = ScrollChainConfig> + ScrollHardforks + IsDevChain,
         N::Network: NetworkProtocols + FullNetwork<Primitives = ScrollNetworkPrimitives>,
     {
-        // Start pprof server if enabled
-        if self.config.pprof_args.enabled {
-            let addr = self.config.pprof_args.addr.parse().map_err(|e| {
-                eyre::eyre!("Invalid pprof address '{}': {}", self.config.pprof_args.addr, e)
-            })?;
-
-            let pprof_config = PprofConfig::new(addr)
-                .with_default_duration(self.config.pprof_args.default_duration);
-
-            match pprof_config.launch_server().await {
-                Ok(handle) => {
-                    info!(target: "rollup_node::pprof", "pprof server started successfully");
-                    // Spawn the pprof server task
-                    ctx.node.task_executor().spawn_critical("pprof_server", async move {
-                        if let Err(e) = handle.await {
-                            error!(target: "rollup_node::pprof", "pprof server error: {:?}", e);
-                        }
-                    });
-                }
-                Err(e) => {
-                    error!(target: "rollup_node::pprof", "Failed to start pprof server: {}", e);
-                    return Err(e);
-                }
-            }
-        }
-
         let (chain_orchestrator, handle) = self
             .config
             .build((&ctx).into(), self.scroll_wire_event, rpc.rpc_server_handles)

@@ -2,10 +2,8 @@ use crate::{
     add_ons::IsDevChain,
     constants::{self},
     context::RollupNodeContext,
+    pprof::PprofConfig,
 };
-use scroll_migration::MigratorTrait;
-use std::{fs, path::PathBuf, sync::Arc};
-
 use alloy_chains::NamedChain;
 use alloy_primitives::{hex, Address, U128};
 use alloy_provider::{layers::CacheLayer, Provider, ProviderBuilder};
@@ -48,10 +46,12 @@ use scroll_db::{
 };
 use scroll_derivation_pipeline::DerivationPipeline;
 use scroll_engine::{Engine, ForkchoiceState};
-use scroll_migration::traits::ScrollMigrator;
+use scroll_migration::{traits::ScrollMigrator, MigratorTrait};
 use scroll_network::ScrollNetworkManager;
 use scroll_wire::ScrollWireEvent;
+use std::{fs, path::PathBuf, sync::Arc};
 use tokio::sync::mpsc::UnboundedReceiver;
+use tracing::{error, info};
 
 /// A struct that represents the arguments for the rollup node.
 #[derive(Debug, Clone, clap::Args)]
@@ -182,6 +182,29 @@ impl ScrollRollupNodeConfig {
             "Building rollup node with config:\n{:#?}",
             self
         );
+
+        // Start pprof server if enabled
+        if self.pprof_args.enabled {
+            let pprof_config = PprofConfig::new(self.pprof_args.addr)
+                .with_default_duration(self.pprof_args.default_duration);
+
+            match pprof_config.launch_server().await {
+                Ok(handle) => {
+                    info!(target: "rollup_node::pprof", "pprof server started successfully");
+                    // Spawn the pprof server task
+                    ctx.task_executor.spawn_critical("pprof_server", async move {
+                        if let Err(e) = handle.await {
+                            error!(target: "rollup_node::pprof", "pprof server error: {:?}", e);
+                        }
+                    });
+                }
+                Err(e) => {
+                    error!(target: "rollup_node::pprof", "Failed to start pprof server: {}", e);
+                    return Err(e);
+                }
+            }
+        }
+
         // Get the chain spec.
         let chain_spec = ctx.chain_spec;
 
@@ -867,7 +890,7 @@ pub struct PprofArgs {
         help = "Address to bind the pprof HTTP server (e.g., 0.0.0.0:6868)",
         default_value = constants::DEFAULT_PPROF_URL
     )]
-    pub addr: String,
+    pub addr: std::net::SocketAddr,
 
     /// Default profiling duration in seconds
     #[arg(
@@ -882,7 +905,7 @@ pub struct PprofArgs {
 
 impl Default for PprofArgs {
     fn default() -> Self {
-        Self { enabled: false, addr: "0.0.0.0:6868".to_string(), default_duration: 30 }
+        Self { enabled: false, addr: ([0, 0, 0, 0], 6868).into(), default_duration: 30 }
     }
 }
 
