@@ -35,7 +35,7 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-438e0800.js";
+            window.path_to_searchindex_js = "searchindex-449e64f3.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="toc-25269dc8.js"></script>
@@ -198,6 +198,23 @@ a follower node.</p>
 <p>This will create an optimized production binary at <code>target/release/rollup-node</code>.</p>
 <p>For development builds (faster compilation, slower runtime):</p>
 <pre><code class="language-bash">cargo build --bin rollup-node
+</code></pre>
+<h2 id="download-snapshot-optional"><a class="header" href="#download-snapshot-optional">Download Snapshot (Optional)</a></h2>
+<p>For faster initial sync, you can optionally download a snapshot of the blockchain data instead of syncing from genesis.</p>
+<p><strong>This step is recommended but not required.</strong> Without a snapshot, the node will sync from genesis, which can take considerably longer.</p>
+<p><strong>Step 1:</strong> Download the snapshot for your target network:</p>
+<p>For Scroll Mainnet:</p>
+<pre><code class="language-bash">wget https://scroll-geth-snapshot.s3.us-west-2.amazonaws.com/reth/latest.tar
+</code></pre>
+<p>For Scroll Sepolia:</p>
+<pre><code class="language-bash">wget https://scroll-sepolia-l2geth-snapshots.s3.us-west-2.amazonaws.com/reth/latest.tar
+</code></pre>
+<p><strong>Step 2:</strong> Extract the snapshot to your data directory:</p>
+<pre><code class="language-bash">tar -xvf latest.tar -C &lt;DATADIR_PATH&gt;
+</code></pre>
+<p>Replace <code>&lt;DATADIR_PATH&gt;</code> with your node’s data directory path. This should match the <code>--datadir</code> flag you’ll use when running the node (see configuration section below).</p>
+<p><strong>Step 3:</strong> Clean up the downloaded archive:</p>
+<pre><code class="language-bash">rm latest.tar
 </code></pre>
 <h2 id="running-the-node"><a class="header" href="#running-the-node">Running the Node</a></h2>
 <h3 id="basic-command"><a class="header" href="#basic-command">Basic Command</a></h3>

@@ -35,7 +35,7 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-438e0800.js";
+            window.path_to_searchindex_js = "searchindex-449e64f3.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="toc-25269dc8.js"></script>
@@ -208,14 +208,33 @@ endpoints.</p>
 <li><code>BEACON_URL</code>: Your beacon node URL for blob data</li>
 </ul>
 <p><strong>Note</strong>: You must provide your own RPC endpoints. Configure these in your <code>.env</code> file before starting the stack.</p>
-<h3 id="3-start-the-stack"><a class="header" href="#3-start-the-stack">3. Start the Stack</a></h3>
+<h3 id="3-download-snapshot-optional"><a class="header" href="#3-download-snapshot-optional">3. Download Snapshot (Optional)</a></h3>
+<p>For faster initial sync, you can optionally download a snapshot of the blockchain data before starting the stack.</p>
+<p><strong>This step is recommended but not required.</strong> Without a snapshot, the node will sync from genesis, which can take considerably longer.</p>
+<p><strong>Step 1:</strong> Create the volume directory if it doesn’t exist:</p>
+<pre><code class="language-bash">mkdir -p volumes/l2reth
+</code></pre>
+<p><strong>Step 2:</strong> Download the snapshot for your target network:</p>
+<p>For Scroll Mainnet:</p>
+<pre><code class="language-bash">wget https://scroll-geth-snapshot.s3.us-west-2.amazonaws.com/reth/latest.tar
+</code></pre>
+<p>For Scroll Sepolia:</p>
+<pre><code class="language-bash">wget https://scroll-sepolia-l2geth-snapshots.s3.us-west-2.amazonaws.com/reth/latest.tar
+</code></pre>
+<p><strong>Step 3:</strong> Extract the snapshot to the volume directory (<code>volumes/l2reth</code>):</p>
+<pre><code class="language-bash">tar -xvf latest.tar -C volumes/l2reth
+</code></pre>
+<p><strong>Step 4:</strong> Clean up the downloaded archive:</p>
+<pre><code class="language-bash">rm latest.tar
+</code></pre>
+<h3 id="4-start-the-stack"><a class="header" href="#4-start-the-stack">4. Start the Stack</a></h3>
 <p>For standard operation (following public networks):</p>
 <pre><code class="language-bash">docker compose up -d
 </code></pre>
 <p>For shadow-fork mode:</p>
 <pre><code class="language-bash">docker compose --profile shadow-fork up -d
 </code></pre>
-<h3 id="4-access-the-services"><a class="header" href="#4-access-the-services">4. Access the Services</a></h3>
+<h3 id="5-access-the-services"><a class="header" href="#5-access-the-services">5. Access the Services</a></h3>
 <p>Once running, the following endpoints are available:</p>
 <ul>
 <li><strong>Rollup Node JSON-RPC</strong>: <a href="http://localhost:8545">http://localhost:8545</a></li>
