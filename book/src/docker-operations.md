@@ -56,12 +56,12 @@ mkdir -p volumes/l2reth
 
 **Step 2:** Download the snapshot for your target network:
 
-**For Scroll Mainnet:**
+For Scroll Mainnet:
 ```bash
 wget https://scroll-geth-snapshot.s3.us-west-2.amazonaws.com/reth/latest.tar
 ```
 
-**For Scroll Sepolia:**
+For Scroll Sepolia:
 ```bash
 wget https://scroll-sepolia-l2geth-snapshots.s3.us-west-2.amazonaws.com/reth/latest.tar
 ```

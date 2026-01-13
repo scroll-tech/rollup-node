@@ -45,12 +45,12 @@ For faster initial sync, you can optionally download a snapshot of the blockchai
 
 **Step 1:** Download the snapshot for your target network:
 
-**For Scroll Mainnet:**
+For Scroll Mainnet:
 ```bash
 wget https://scroll-geth-snapshot.s3.us-west-2.amazonaws.com/reth/latest.tar
 ```
 
-**For Scroll Sepolia:**
+For Scroll Sepolia:
 ```bash
 wget https://scroll-sepolia-l2geth-snapshots.s3.us-west-2.amazonaws.com/reth/latest.tar
 ```
