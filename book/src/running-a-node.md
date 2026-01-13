@@ -37,7 +37,7 @@ For development builds (faster compilation, slower runtime):
 cargo build --bin rollup-node
 ```
 
-## Quick Start with Snapshot (Optional)
+## Download Snapshot (Optional)
 
 For faster initial sync, you can optionally download a snapshot of the blockchain data instead of syncing from genesis.
 
