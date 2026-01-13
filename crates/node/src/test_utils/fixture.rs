@@ -5,8 +5,9 @@ use super::{
 };
 use crate::{
     BlobProviderArgs, ChainOrchestratorArgs, ConsensusAlgorithm, ConsensusArgs, EngineDriverArgs,
-    L1ProviderArgs, RollupNodeDatabaseArgs, RollupNodeGasPriceOracleArgs, RollupNodeNetworkArgs,
-    RpcArgs, ScrollRollupNode, ScrollRollupNodeConfig, SequencerArgs, SignerArgs,
+    L1ProviderArgs, PprofArgs, RollupNodeDatabaseArgs, RollupNodeGasPriceOracleArgs,
+    RollupNodeNetworkArgs, RpcArgs, ScrollRollupNode, ScrollRollupNodeConfig, SequencerArgs,
+    SignerArgs,
 };
 
 use alloy_eips::BlockNumberOrTag;
@@ -250,6 +251,7 @@ impl TestFixtureBuilder {
             consensus_args: ConsensusArgs::noop(),
             database: None,
             rpc_args: RpcArgs { basic_enabled: true, admin_enabled: true },
+            pprof_args: PprofArgs::default(),
         }
     }
 

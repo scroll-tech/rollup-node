@@ -2,10 +2,8 @@ use crate::{
     add_ons::IsDevChain,
     constants::{self},
     context::RollupNodeContext,
+    pprof::PprofConfig,
 };
-use scroll_migration::MigratorTrait;
-use std::{fs, path::PathBuf, sync::Arc};
-
 use alloy_chains::NamedChain;
 use alloy_primitives::{hex, Address, U128};
 use alloy_provider::{layers::CacheLayer, Provider, ProviderBuilder};
@@ -48,9 +46,10 @@ use scroll_db::{
 };
 use scroll_derivation_pipeline::DerivationPipeline;
 use scroll_engine::{Engine, ForkchoiceState};
-use scroll_migration::traits::ScrollMigrator;
+use scroll_migration::{traits::ScrollMigrator, MigratorTrait};
 use scroll_network::ScrollNetworkManager;
 use scroll_wire::ScrollWireEvent;
+use std::{fs, path::PathBuf, sync::Arc};
 use tokio::sync::mpsc::UnboundedReceiver;
 
 /// A struct that represents the arguments for the rollup node.
@@ -92,6 +91,9 @@ pub struct ScrollRollupNodeConfig {
     /// The gas price oracle args
     #[command(flatten)]
     pub gas_price_oracle_args: RollupNodeGasPriceOracleArgs,
+    /// The pprof server arguments
+    #[command(flatten)]
+    pub pprof_args: PprofArgs,
     /// The database connection (not parsed via CLI but hydrated after validation).
     #[arg(skip)]
     pub database: Option<Arc<Database>>,
@@ -179,6 +181,29 @@ impl ScrollRollupNodeConfig {
             "Building rollup node with config:\n{:#?}",
             self
         );
+
+        // Start pprof server if enabled
+        if self.pprof_args.enabled {
+            let pprof_config = PprofConfig::new(self.pprof_args.addr)
+                .with_default_duration(self.pprof_args.default_duration);
+
+            match pprof_config.launch_server().await {
+                Ok(handle) => {
+                    tracing::info!(target: "rollup_node::pprof", "pprof server started successfully");
+                    // Spawn the pprof server task
+                    ctx.task_executor.spawn_critical("pprof_server", async move {
+                        if let Err(e) = handle.await {
+                            tracing::error!(target: "rollup_node::pprof", "pprof server error: {:?}", e);
+                        }
+                    });
+                }
+                Err(e) => {
+                    tracing::error!(target: "rollup_node::pprof", "Failed to start pprof server: {}", e);
+                    return Err(e);
+                }
+            }
+        }
+
         // Get the chain spec.
         let chain_spec = ctx.chain_spec;
 
@@ -849,6 +874,40 @@ pub struct RollupNodeGasPriceOracleArgs {
     pub default_suggested_priority_fee: u64,
 }
 
+/// The arguments for the pprof server.
+#[derive(Debug, Clone, clap::Args)]
+pub struct PprofArgs {
+    /// Enable the pprof HTTP server for performance profiling
+    #[arg(id = "pprof.enabled", long = "pprof.enabled", help = "Enable the pprof HTTP server")]
+    pub enabled: bool,
+
+    /// The address to bind the pprof HTTP server to
+    #[arg(
+        id = "pprof.url",
+        long = "pprof.addr",
+        value_name = "PPROF_URL",
+        help = "Address to bind the pprof HTTP server (e.g., 0.0.0.0:6868)",
+        default_value = constants::DEFAULT_PPROF_URL
+    )]
+    pub addr: std::net::SocketAddr,
+
+    /// Default profiling duration in seconds
+    #[arg(
+        id = "pprof.default_duration",
+        value_name = "PPROF_DEFAULT_DURATION",
+        long = "pprof.default-duration",
+        help = "Default CPU profiling duration in seconds",
+        default_value_t = constants::DEFAULT_PPROF_DEFAULT_DURATION
+    )]
+    pub default_duration: u64,
+}
+
+impl Default for PprofArgs {
+    fn default() -> Self {
+        Self { enabled: false, addr: ([0, 0, 0, 0], 6868).into(), default_duration: 30 }
+    }
+}
+
 /// Returns the total difficulty constant for the given chain.
 const fn td_constant(chain: Option<NamedChain>) -> U128 {
     match chain {
@@ -935,6 +994,7 @@ mod tests {
             },
             database: None,
             rpc_args: RpcArgs::default(),
+            pprof_args: PprofArgs::default(),
         };
 
         let result = config.validate();
@@ -967,6 +1027,7 @@ mod tests {
             },
             database: None,
             rpc_args: RpcArgs::default(),
+            pprof_args: PprofArgs::default(),
         };
 
         let result = config.validate();
@@ -994,6 +1055,7 @@ mod tests {
             consensus_args: ConsensusArgs::noop(),
             database: None,
             rpc_args: RpcArgs::default(),
+            pprof_args: PprofArgs::default(),
         };
 
         assert!(config.validate().is_ok());
@@ -1019,6 +1081,7 @@ mod tests {
             consensus_args: ConsensusArgs::noop(),
             database: None,
             rpc_args: RpcArgs::default(),
+            pprof_args: PprofArgs::default(),
         };
 
         assert!(config.validate().is_ok());
@@ -1040,6 +1103,7 @@ mod tests {
             consensus_args: ConsensusArgs::noop(),
             database: None,
             rpc_args: RpcArgs::default(),
+            pprof_args: PprofArgs::default(),
         };
 
         assert!(config.validate().is_ok());

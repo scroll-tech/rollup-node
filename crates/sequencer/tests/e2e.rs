@@ -10,8 +10,8 @@ use rollup_node::{
     constants::SCROLL_GAS_LIMIT,
     test_utils::{default_test_scroll_rollup_node_config, setup_engine},
     BlobProviderArgs, ChainOrchestratorArgs, ConsensusArgs, EngineDriverArgs, L1ProviderArgs,
-    RollupNodeDatabaseArgs, RollupNodeGasPriceOracleArgs, RollupNodeNetworkArgs, RpcArgs,
-    ScrollRollupNodeConfig, SequencerArgs, SignerArgs,
+    PprofArgs, RollupNodeDatabaseArgs, RollupNodeGasPriceOracleArgs, RollupNodeNetworkArgs,
+    RpcArgs, ScrollRollupNodeConfig, SequencerArgs, SignerArgs,
 };
 use rollup_node_chain_orchestrator::ChainOrchestratorEvent;
 use rollup_node_primitives::{sig_encode_hash, BlockInfo, L1MessageEnvelope};
@@ -508,6 +508,7 @@ async fn can_sequence_blocks_with_private_key_file() -> eyre::Result<()> {
         consensus_args: ConsensusArgs::noop(),
         database: None,
         rpc_args: RpcArgs::default(),
+        pprof_args: PprofArgs::default(),
     };
 
     let (nodes, _tasks, wallet) =
@@ -609,6 +610,7 @@ async fn can_sequence_blocks_with_hex_key_file_without_prefix() -> eyre::Result<
         consensus_args: ConsensusArgs::noop(),
         database: None,
         rpc_args: RpcArgs::default(),
+        pprof_args: PprofArgs::default(),
     };
 
     let (nodes, _tasks, wallet) =
