@@ -42,7 +42,43 @@ Key environment variables:
 
 **Note**: You must provide your own RPC endpoints. Configure these in your `.env` file before starting the stack.
 
-### 3. Start the Stack
+### 3. Download Snapshot (Optional)
+
+For faster initial sync, you can optionally download a snapshot of the blockchain data before starting the stack.
+
+**This step is recommended but not required.** Without a snapshot, the node will sync from genesis, which can take considerably longer.
+
+**Step 1:** Create the volume directory if it doesn't exist:
+
+```bash
+mkdir -p volumes/l2reth
+```
+
+**Step 2:** Download the snapshot for your target network:
+
+**For Scroll Mainnet:**
+```bash
+wget https://scroll-geth-snapshot.s3.us-west-2.amazonaws.com/reth/latest.tar
+```
+
+**For Scroll Sepolia:**
+```bash
+wget https://scroll-sepolia-l2geth-snapshots.s3.us-west-2.amazonaws.com/reth/latest.tar
+```
+
+**Step 3:** Extract the snapshot to the volume directory (`volumes/l2reth`):
+
+```bash
+tar -xvf latest.tar -C volumes/l2reth
+```
+
+**Step 4:** Clean up the downloaded archive:
+
+```bash
+rm latest.tar
+```
+
+### 4. Start the Stack
 
 For standard operation (following public networks):
 
@@ -56,7 +92,7 @@ For shadow-fork mode:
 docker compose --profile shadow-fork up -d
 ```
 
-### 4. Access the Services
+### 5. Access the Services
 
 Once running, the following endpoints are available:
 

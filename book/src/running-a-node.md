@@ -37,6 +37,38 @@ For development builds (faster compilation, slower runtime):
 cargo build --bin rollup-node
 ```
 
+## Quick Start with Snapshot (Optional)
+
+For faster initial sync, you can optionally download a snapshot of the blockchain data instead of syncing from genesis.
+
+**This step is recommended but not required.** Without a snapshot, the node will sync from genesis, which can take considerably longer.
+
+**Step 1:** Download the snapshot for your target network:
+
+**For Scroll Mainnet:**
+```bash
+wget https://scroll-geth-snapshot.s3.us-west-2.amazonaws.com/reth/latest.tar
+```
+
+**For Scroll Sepolia:**
+```bash
+wget https://scroll-sepolia-l2geth-snapshots.s3.us-west-2.amazonaws.com/reth/latest.tar
+```
+
+**Step 2:** Extract the snapshot to your data directory:
+
+```bash
+tar -xvf latest.tar -C <DATADIR_PATH>
+```
+
+Replace `<DATADIR_PATH>` with your node's data directory path. This should match the `--datadir` flag you'll use when running the node (see configuration section below).
+
+**Step 3:** Clean up the downloaded archive:
+
+```bash
+rm latest.tar
+```
+
 ## Running the Node
 
 ### Basic Command
