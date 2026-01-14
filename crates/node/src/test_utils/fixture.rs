@@ -18,10 +18,11 @@ use reth_chainspec::EthChainSpec;
 use reth_e2e_test_utils::{wallet::Wallet, NodeHelperType, TmpDB};
 use reth_eth_wire_types::BasicNetworkPrimitives;
 use reth_network::NetworkHandle;
+use reth_network_peers::TrustedPeer;
 use reth_node_builder::NodeTypes;
 use reth_node_types::NodeTypesWithDBAdapter;
 use reth_provider::providers::BlockchainProvider;
-use reth_scroll_chainspec::SCROLL_DEV;
+use reth_scroll_chainspec::{ScrollChainSpec, SCROLL_DEV, SCROLL_MAINNET, SCROLL_SEPOLIA};
 use reth_scroll_primitives::ScrollPrimitives;
 use reth_tasks::TaskManager;
 use reth_tokio_util::EventStream;
@@ -208,6 +209,7 @@ pub struct TestFixtureBuilder {
     chain_spec: Option<Arc<<ScrollRollupNode as NodeTypes>::ChainSpec>>,
     is_dev: bool,
     no_local_transactions_propagation: bool,
+    bootnodes: Option<Vec<TrustedPeer>>,
 }
 
 impl Default for TestFixtureBuilder {
@@ -225,6 +227,7 @@ impl TestFixtureBuilder {
             chain_spec: None,
             is_dev: false,
             no_local_transactions_propagation: false,
+            bootnodes: None,
         }
     }
 
@@ -256,7 +259,7 @@ impl TestFixtureBuilder {
     }
 
     /// Adds a sequencer node to the test with default settings.
-    pub fn sequencer(mut self) -> Self {
+    pub const fn sequencer(mut self) -> Self {
         self.config.sequencer_args.sequencer_enabled = true;
         self.config.sequencer_args.auto_start = false;
         self.config.sequencer_args.block_time = 100;
@@ -264,9 +267,13 @@ impl TestFixtureBuilder {
         self.config.sequencer_args.l1_message_inclusion_mode =
             L1MessageInclusionMode::BlockDepth(0);
         self.config.sequencer_args.allow_empty_blocks = true;
-        self.config.database_args.rn_db_path = Some(PathBuf::from("sqlite::memory:"));
-
         self.num_nodes += 1;
+        self
+    }
+
+    /// Sets the bootnodes for the test nodes.
+    pub fn bootnodes(mut self, bootnodes: Vec<TrustedPeer>) -> Self {
+        self.bootnodes = Some(bootnodes);
         self
     }
 
@@ -300,6 +307,47 @@ impl TestFixtureBuilder {
         spec: Arc<<ScrollRollupNode as NodeTypes>::ChainSpec>,
     ) -> Self {
         self.chain_spec = Some(spec);
+        self
+    }
+
+    /// Set the chain by name ("dev", "sepolia", "mainnet") or by file path.
+    ///
+    /// This is a convenience method that loads the appropriate chain spec.
+    /// If the input is a file path (contains '/' or ends with '.json'), it will
+    /// load the genesis from the file.
+    pub fn with_chain(mut self, chain: &str) -> Self {
+        let chain_spec: Arc<ScrollChainSpec> = match chain.to_lowercase().as_str() {
+            "dev" => SCROLL_DEV.clone(),
+            "scroll-sepolia" => SCROLL_SEPOLIA.clone(),
+            "scroll-mainnet" | "scroll" => SCROLL_MAINNET.clone(),
+            _ => {
+                // Check if it's a file path
+                if chain.contains('/') || chain.ends_with(".json") {
+                    match std::fs::read_to_string(chain) {
+                        Ok(contents) => {
+                            match serde_json::from_str::<alloy_genesis::Genesis>(&contents) {
+                                Ok(genesis) => {
+                                    Arc::new(ScrollChainSpec::from_custom_genesis(genesis))
+                                }
+                                Err(e) => {
+                                    tracing::error!(path = %chain, error = %e, "Failed to parse genesis file");
+                                    SCROLL_DEV.clone()
+                                }
+                            }
+                        }
+                        Err(e) => {
+                            tracing::error!(path = %chain, error = %e, "Failed to read genesis file");
+                            SCROLL_DEV.clone()
+                        }
+                    }
+                } else {
+                    // For unknown chains, default to dev
+                    tracing::warn!(chain = %chain, "Unknown chain, defaulting to dev");
+                    SCROLL_DEV.clone()
+                }
+            }
+        };
+        self.chain_spec = Some(chain_spec);
         self
     }
 
@@ -430,6 +478,7 @@ impl TestFixtureBuilder {
             chain_spec.clone(),
             self.is_dev,
             self.no_local_transactions_propagation,
+            self.bootnodes,
         )
         .await?;
 

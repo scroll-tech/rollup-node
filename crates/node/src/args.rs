@@ -5,6 +5,7 @@ use crate::{
     pprof::PprofConfig,
 };
 use alloy_chains::NamedChain;
+use alloy_consensus::BlockHeader;
 use alloy_primitives::{hex, Address, U128};
 use alloy_provider::{layers::CacheLayer, Provider, ProviderBuilder};
 use alloy_rpc_client::RpcClient;
@@ -19,7 +20,6 @@ use reth_network::NetworkProtocols;
 use reth_network_api::FullNetwork;
 use reth_network_p2p::FullBlockClient;
 use reth_node_builder::{rpc::RethRpcServerHandles, NodeConfig as RethNodeConfig};
-use reth_node_core::primitives::BlockHeader;
 use reth_scroll_chainspec::{
     ChainConfig, ScrollChainConfig, ScrollChainSpec, SCROLL_FEE_VAULT_ADDRESS,
 };

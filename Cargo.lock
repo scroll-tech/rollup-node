@@ -2677,7 +2677,7 @@ checksum = "c3b847e05a34be5c38f3f2a5052178a3bd32e6b5702f3ea775efde95c483a539"
 dependencies = [
  "anyhow",
  "cc",
- "colored",
+ "colored 2.2.0",
  "getrandom 0.2.16",
  "glob",
  "libc",
@@ -2696,7 +2696,7 @@ dependencies = [
  "clap",
  "codspeed",
  "codspeed-criterion-compat-walltime",
- "colored",
+ "colored 2.2.0",
  "futures",
  "regex",
  "tokio",
@@ -2822,6 +2822,15 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "117725a109d387c937a1533ce01b450cbde6b88abceea8473c4d7a85853cda3c"
 dependencies = [
  "lazy_static",
+ "windows-sys 0.59.0",
+]
+
+[[package]]
+name = "colored"
+version = "3.0.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "fde0e0ec90c9dfb3b4b1a0891a7dcd0e2bffde2f7efed5fe7c9bb00e5bfb915e"
+dependencies = [
  "windows-sys 0.59.0",
 ]
 
@@ -11092,7 +11101,10 @@ name = "rollup-node"
 version = "1.0.5"
 dependencies = [
  "alloy-chains",
+ "alloy-consensus",
  "alloy-eips",
+ "alloy-genesis",
+ "alloy-network",
  "alloy-primitives",
  "alloy-provider",
  "alloy-rpc-client",
@@ -11108,15 +11120,19 @@ dependencies = [
  "aws-sdk-kms",
  "clap",
  "color-eyre",
+ "colored 3.0.0",
  "console-subscriber",
+ "crossterm 0.28.1",
  "eyre",
  "futures",
+ "glob",
  "http-body-util",
  "hyper 1.8.1",
  "hyper-util",
  "jsonrpsee",
  "pprof",
  "rayon",
+ "regex-lite",
  "reqwest",
  "reth-chainspec",
  "reth-cli-util",
@@ -11127,6 +11143,7 @@ dependencies = [
  "reth-network",
  "reth-network-api",
  "reth-network-p2p",
+ "reth-network-peers",
  "reth-node-api",
  "reth-node-builder",
  "reth-node-core",
@@ -11176,6 +11193,7 @@ dependencies = [
  "serde_json",
  "tokio",
  "tracing",
+ "tracing-subscriber 0.3.20",
 ]
 
 [[package]]
@@ -13689,6 +13707,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "tracing-log"
+version = "0.2.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "ee855f1f400bd0e5c02d150ae5de3840039a3f54b025156404e34c23c03f47c3"
+dependencies = [
+ "log",
+ "once_cell",
+ "tracing-core",
+]
+
+[[package]]
 name = "tracing-logfmt"
 version = "0.3.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -13732,9 +13761,11 @@ dependencies = [
  "serde",
  "serde_json",
  "sharded-slab",
+ "smallvec",
  "thread_local",
  "tracing",
  "tracing-core",
+ "tracing-log",
  "tracing-serde",
 ]
 

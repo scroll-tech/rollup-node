@@ -67,12 +67,14 @@ pub mod l1_helpers;
 pub mod network_helpers;
 pub mod tx_helpers;
 
+use alloy_consensus::BlockHeader;
 // Re-export main types for convenience
 pub use event_utils::{EventAssertions, EventWaiter};
 pub use fixture::{NodeHandle, TestFixture, TestFixtureBuilder};
 pub use network_helpers::{
     NetworkHelper, NetworkHelperProvider, ReputationChecker, ReputationChecks,
 };
+use reth_network_peers::TrustedPeer;
 
 // Legacy utilities - keep existing functions for backward compatibility
 use crate::{
@@ -92,12 +94,14 @@ use reth_node_builder::{
     NodeHandle as RethNodeHandle, NodeTypes, NodeTypesWithDBAdapter, PayloadAttributesBuilder,
     PayloadTypes, TreeConfig,
 };
-use reth_node_core::args::{DiscoveryArgs, NetworkArgs, RpcServerArgs, TxPoolArgs};
+use reth_node_core::args::{
+    DiscoveryArgs, NetworkArgs, PayloadBuilderArgs, RpcServerArgs, TxPoolArgs,
+};
 use reth_provider::providers::BlockchainProvider;
 use reth_rpc_server_types::RpcModuleSelection;
 use reth_tasks::TaskManager;
 use rollup_node_sequencer::L1MessageInclusionMode;
-use std::{path::PathBuf, sync::Arc};
+use std::sync::Arc;
 use tokio::sync::Mutex;
 use tracing::{span, Level};
 
@@ -111,6 +115,7 @@ pub async fn setup_engine(
     chain_spec: Arc<<ScrollRollupNode as NodeTypes>::ChainSpec>,
     is_dev: bool,
     no_local_transactions_propagation: bool,
+    bootnodes: Option<Vec<TrustedPeer>>,
 ) -> eyre::Result<(
     Vec<
         NodeHelperType<
@@ -134,6 +139,7 @@ where
 
     let network_config = NetworkArgs {
         discovery: DiscoveryArgs { disable_discovery: true, ..DiscoveryArgs::default() },
+        bootnodes,
         ..NetworkArgs::default()
     };
 
@@ -145,8 +151,13 @@ where
         if idx != 0 {
             scroll_node_config.sequencer_args.sequencer_enabled = false;
         }
+
         let node_config = NodeConfig::new(chain_spec.clone())
             .with_network(network_config.clone())
+            .with_payload_builder(PayloadBuilderArgs {
+                gas_limit: Some(chain_spec.genesis_header().gas_limit()),
+                ..Default::default()
+            })
             .with_unused_ports()
             .with_rpc(
                 RpcServerArgs::default()
@@ -202,7 +213,7 @@ where
         nodes.push(node);
     }
 
-    Ok((nodes, tasks, Wallet::default().with_chain_id(chain_spec.chain().into())))
+    Ok((nodes, tasks, Wallet::new(10).with_chain_id(chain_spec.chain().into())))
 }
 
 /// Generate a transfer transaction with the given wallet.
@@ -256,9 +267,7 @@ pub fn default_sequencer_test_scroll_rollup_node_config() -> ScrollRollupNodeCon
     ScrollRollupNodeConfig {
         test: true,
         network_args: RollupNodeNetworkArgs::default(),
-        database_args: RollupNodeDatabaseArgs {
-            rn_db_path: Some(PathBuf::from("sqlite::memory:")),
-        },
+        database_args: RollupNodeDatabaseArgs::default(),
         l1_provider_args: L1ProviderArgs::default(),
         engine_driver_args: EngineDriverArgs { sync_at_startup: true },
         chain_orchestrator_args: ChainOrchestratorArgs {

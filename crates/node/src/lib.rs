@@ -10,6 +10,9 @@ pub mod pprof;
 #[cfg(feature = "test-utils")]
 pub mod test_utils;
 
+#[cfg(feature = "debug-toolkit")]
+pub mod debug_toolkit;
+
 pub use add_ons::*;
 pub use args::*;
 pub use builder::network::ScrollNetworkBuilder;
