@@ -115,7 +115,7 @@ pub async fn setup_engine(
     chain_spec: Arc<<ScrollRollupNode as NodeTypes>::ChainSpec>,
     is_dev: bool,
     no_local_transactions_propagation: bool,
-    bootnodes: Option<Vec<TrustedPeer>>,
+    trusted_peers: Option<Vec<TrustedPeer>>,
 ) -> eyre::Result<(
     Vec<
         NodeHelperType<
@@ -139,7 +139,7 @@ where
 
     let network_config = NetworkArgs {
         discovery: DiscoveryArgs { disable_discovery: true, ..DiscoveryArgs::default() },
-        bootnodes,
+        trusted_peers: trusted_peers.unwrap_or_default(),
         ..NetworkArgs::default()
     };
 
