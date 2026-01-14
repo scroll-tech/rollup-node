@@ -14,11 +14,14 @@ use alloy_eips::{eip2718::Encodable2718, BlockNumberOrTag};
 use alloy_network::{TransactionResponse, TxSignerSync};
 use alloy_primitives::TxKind;
 use colored::Colorize;
-use crossterm::event::{self, Event, KeyCode, KeyModifiers};
+use crossterm::{
+    event::{self, Event, KeyCode, KeyModifiers},
+    terminal::{disable_raw_mode, enable_raw_mode},
+};
 use futures::StreamExt;
 use reth_network::PeersInfo;
 use reth_network_api::Peers;
-use reth_network_peers::TrustedPeer;
+use reth_network_peers::NodeRecord;
 use reth_rpc_api::EthApiServer;
 use reth_transaction_pool::TransactionPool;
 use std::{io::Write, str::FromStr, time::Duration};
@@ -91,7 +94,21 @@ impl DebugRepl {
     pub async fn run(&mut self) -> eyre::Result<()> {
         self.running = true;
 
-        // Print welcome message
+        // Enable raw mode for proper terminal control
+        enable_raw_mode()?;
+
+        // Guard to ensure raw mode is disabled on exit
+        struct RawModeGuard;
+        impl Drop for RawModeGuard {
+            fn drop(&mut self) {
+                let _ = disable_raw_mode();
+            }
+        }
+        let _guard = RawModeGuard;
+
+        // Print welcome message and initial status
+        // Disable raw mode temporarily so println! works correctly
+        let _ = disable_raw_mode();
         println!();
         println!("{}", "Scroll Debug Toolkit".bold().cyan());
         println!("Type 'help' for available commands, 'exit' to quit.");
@@ -99,6 +116,9 @@ impl DebugRepl {
 
         // Show initial status
         self.cmd_status().await?;
+
+        // Re-enable raw mode for input handling
+        let _ = enable_raw_mode();
 
         // Current input line buffer
         let mut input_buffer = String::new();
@@ -117,8 +137,8 @@ impl DebugRepl {
                 Some(event) = self.fixture.nodes[self.active_node].chain_orchestrator_rx.next() => {
                     // Display if streaming is enabled
                     if let Some(formatted) = self.event_streams[self.active_node].record_event(event) {
-                        // Clear current line, print event, reprint prompt
-                        print!("\r\x1b[K{}\n{}{}", formatted, self.get_prompt(), input_buffer);
+                        // Clear current line, print event, reprint prompt with input buffer
+                        print!("\r\x1b[K{}\r\n{}{}", formatted, self.get_prompt(), input_buffer);
                         let _ = stdout.flush();
                     }
                 }
@@ -130,14 +150,19 @@ impl DebugRepl {
                         if let Event::Key(key_event) = event::read()? {
                             match key_event.code {
                                 KeyCode::Enter => {
-                                    println!();
+                                    print!("\r\n");
+                                    let _ = stdout.flush();
                                     let line = input_buffer.trim().to_string();
                                     input_buffer.clear();
 
                                     if !line.is_empty() {
+                                        // Disable raw mode for command output (println! works normally)
+                                        let _ = disable_raw_mode();
                                         if let Err(e) = self.execute_command(&line).await {
                                             println!("{}: {}", "Error".red(), e);
                                         }
+                                        // Re-enable raw mode for input
+                                        let _ = enable_raw_mode();
                                     }
 
                                     if self.running {
@@ -154,11 +179,11 @@ impl DebugRepl {
                                 }
                                 KeyCode::Char(c) => {
                                     if key_event.modifiers.contains(KeyModifiers::CONTROL) && c == 'c' {
-                                        println!("\nUse 'exit' to quit");
+                                        print!("\r\nUse 'exit' to quit\r\n");
                                         print!("{}{}", self.get_prompt(), input_buffer);
                                         let _ = stdout.flush();
                                     } else if key_event.modifiers.contains(KeyModifiers::CONTROL) && c == 'd' {
-                                        println!();
+                                        print!("\r\n");
                                         self.running = false;
                                     } else {
                                         input_buffer.push(c);
@@ -180,7 +205,7 @@ impl DebugRepl {
             }
         }
 
-        println!("Goodbye!");
+        print!("Goodbye!\r\n");
         Ok(())
     }
 
@@ -686,9 +711,8 @@ impl DebugRepl {
             }
             PeersCommand::Connect(enode_url) => {
                 // Parse the enode URL
-                match TrustedPeer::from_str(&enode_url) {
+                match NodeRecord::from_str(&enode_url) {
                     Ok(record) => {
-                        let record = record.resolve().await?;
                         network_handle.inner().add_peer(record.id, record.tcp_addr());
                         println!("{}", format!("Connecting to peer: {:?}", record.id).green());
                         println!("  Address: {}", record.tcp_addr());

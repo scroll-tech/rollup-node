@@ -11135,6 +11135,7 @@ dependencies = [
  "regex-lite",
  "reqwest",
  "reth-chainspec",
+ "reth-cli",
  "reth-cli-util",
  "reth-e2e-test-utils",
  "reth-engine-local",

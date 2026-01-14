@@ -1,6 +1,7 @@
 //! CLI subcommand for the debug toolkit.
 
 use crate::test_utils::TestFixtureBuilder;
+use alloy_primitives::Address;
 use clap::Parser;
 use reth_network_peers::TrustedPeer;
 use std::{path::PathBuf, str::FromStr};
@@ -44,6 +45,10 @@ pub struct DebugArgs {
     /// Comma-separated list of bootnode enode URLs to connect to.
     #[arg(long, value_delimiter = ',')]
     pub bootnodes: Option<Vec<String>>,
+
+    /// The valid signer address for the network.
+    #[arg(long)]
+    pub valid_signer: Option<Address>,
 }
 
 impl DebugArgs {
@@ -52,7 +57,7 @@ impl DebugArgs {
         use super::DebugRepl;
 
         // Build the fixture
-        let mut builder = TestFixtureBuilder::new().with_chain(&self.chain);
+        let mut builder = TestFixtureBuilder::new().with_chain(&self.chain)?;
 
         if self.sequencer {
             builder = builder.sequencer();
@@ -60,6 +65,19 @@ impl DebugArgs {
 
         if self.followers > 0 {
             builder = builder.followers(self.followers);
+        }
+
+        if self.valid_signer.is_some() {
+            builder = builder.with_consensus_system_contract(self.valid_signer);
+            builder = builder.with_network_valid_signer(self.valid_signer);
+        }
+
+        if self.bootnodes.as_ref().map(|b| !b.is_empty()).unwrap_or(false) ||
+            self.l1_url.is_some() ||
+            self.valid_signer.is_some()
+        {
+            // Disable test mode if bootnodes or l1 url are specified
+            builder.config_mut().test = false;
         }
 
         // Apply sequencer settings

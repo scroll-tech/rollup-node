@@ -182,6 +182,7 @@ reth-testing-utils = { git = "https://github.com/scroll-tech/reth.git", tag = "s
 reth-revm = { git = "https://github.com/scroll-tech/reth.git", tag = "scroll-v91.4", default-features = false }
 reth-evm = { git = "https://github.com/scroll-tech/reth.git", tag = "scroll-v91.4", default-features = false }
 reth-engine-local = { git = "https://github.com/scroll-tech/reth.git", tag = "scroll-v91.4", default-features = false }
+reth-cli = { git = "https://github.com/scroll-tech/reth.git", tag = "scroll-v91.4", default-features = false }
 reth-cli-util = { git = "https://github.com/scroll-tech/reth.git", tag = "scroll-v91.4", default-features = false }
 
 # reth-scroll

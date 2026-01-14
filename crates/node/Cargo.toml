@@ -52,6 +52,7 @@ reth-scroll-node.workspace = true
 reth-scroll-rpc.workspace = true
 
 reth-chainspec.workspace = true
+reth-cli.workspace = true
 reth-cli-util.workspace = true
 reth-eth-wire-types.workspace = true
 reth-evm.workspace = true

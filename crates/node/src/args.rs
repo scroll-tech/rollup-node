@@ -668,7 +668,7 @@ impl RollupNodeNetworkArgs {
 }
 
 /// The arguments for the L1 provider.
-#[derive(Debug, Default, Clone, clap::Args)]
+#[derive(Debug, Clone, clap::Args)]
 pub struct L1ProviderArgs {
     /// The URL for the L1 RPC.
     #[arg(long = "l1.url", id = "l1_url", value_name = "L1_URL")]
@@ -688,6 +688,19 @@ pub struct L1ProviderArgs {
     /// The maximum number of items to be stored in the cache layer.
     #[arg(long = "l1.cache-max-items", id = "l1_cache_max_items", value_name = "L1_CACHE_MAX_ITEMS", default_value_t = constants::L1_PROVIDER_CACHE_MAX_ITEMS)]
     pub cache_max_items: u32,
+}
+
+impl Default for L1ProviderArgs {
+    fn default() -> Self {
+        Self {
+            url: None,
+            compute_units_per_second: constants::PROVIDER_COMPUTE_UNITS_PER_SECOND,
+            max_retries: constants::L1_PROVIDER_MAX_RETRIES,
+            initial_backoff: constants::L1_PROVIDER_INITIAL_BACKOFF,
+            logs_query_block_range: constants::LOGS_QUERY_BLOCK_RANGE,
+            cache_max_items: constants::L1_PROVIDER_CACHE_MAX_ITEMS,
+        }
+    }
 }
 
 /// The arguments for the Beacon provider.

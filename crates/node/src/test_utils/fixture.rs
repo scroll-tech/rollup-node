@@ -15,6 +15,7 @@ use alloy_primitives::Address;
 use alloy_rpc_types_eth::Block;
 use alloy_signer_local::PrivateKeySigner;
 use reth_chainspec::EthChainSpec;
+use reth_cli::chainspec::ChainSpecParser;
 use reth_e2e_test_utils::{wallet::Wallet, NodeHelperType, TmpDB};
 use reth_eth_wire_types::BasicNetworkPrimitives;
 use reth_network::NetworkHandle;
@@ -22,7 +23,8 @@ use reth_network_peers::TrustedPeer;
 use reth_node_builder::NodeTypes;
 use reth_node_types::NodeTypesWithDBAdapter;
 use reth_provider::providers::BlockchainProvider;
-use reth_scroll_chainspec::{ScrollChainSpec, SCROLL_DEV, SCROLL_MAINNET, SCROLL_SEPOLIA};
+use reth_scroll_chainspec::{ScrollChainSpec, SCROLL_DEV};
+use reth_scroll_cli::ScrollChainSpecParser;
 use reth_scroll_primitives::ScrollPrimitives;
 use reth_tasks::TaskManager;
 use reth_tokio_util::EventStream;
@@ -315,40 +317,10 @@ impl TestFixtureBuilder {
     /// This is a convenience method that loads the appropriate chain spec.
     /// If the input is a file path (contains '/' or ends with '.json'), it will
     /// load the genesis from the file.
-    pub fn with_chain(mut self, chain: &str) -> Self {
-        let chain_spec: Arc<ScrollChainSpec> = match chain.to_lowercase().as_str() {
-            "dev" => SCROLL_DEV.clone(),
-            "scroll-sepolia" => SCROLL_SEPOLIA.clone(),
-            "scroll-mainnet" | "scroll" => SCROLL_MAINNET.clone(),
-            _ => {
-                // Check if it's a file path
-                if chain.contains('/') || chain.ends_with(".json") {
-                    match std::fs::read_to_string(chain) {
-                        Ok(contents) => {
-                            match serde_json::from_str::<alloy_genesis::Genesis>(&contents) {
-                                Ok(genesis) => {
-                                    Arc::new(ScrollChainSpec::from_custom_genesis(genesis))
-                                }
-                                Err(e) => {
-                                    tracing::error!(path = %chain, error = %e, "Failed to parse genesis file");
-                                    SCROLL_DEV.clone()
-                                }
-                            }
-                        }
-                        Err(e) => {
-                            tracing::error!(path = %chain, error = %e, "Failed to read genesis file");
-                            SCROLL_DEV.clone()
-                        }
-                    }
-                } else {
-                    // For unknown chains, default to dev
-                    tracing::warn!(chain = %chain, "Unknown chain, defaulting to dev");
-                    SCROLL_DEV.clone()
-                }
-            }
-        };
+    pub fn with_chain(mut self, chain: &str) -> eyre::Result<Self> {
+        let chain_spec: Arc<ScrollChainSpec> = ScrollChainSpecParser::parse(chain)?;
         self.chain_spec = Some(chain_spec);
-        self
+        Ok(self)
     }
 
     /// Enable dev mode.
@@ -408,9 +380,18 @@ impl TestFixtureBuilder {
     }
 
     /// Use `SystemContract` consensus with the given authorized signer address.
-    pub const fn with_consensus_system_contract(mut self, authorized_signer: Address) -> Self {
+    pub const fn with_consensus_system_contract(
+        mut self,
+        authorized_signer: Option<Address>,
+    ) -> Self {
         self.config.consensus_args.algorithm = ConsensusAlgorithm::SystemContract;
-        self.config.consensus_args.authorized_signer = Some(authorized_signer);
+        self.config.consensus_args.authorized_signer = authorized_signer;
+        self
+    }
+
+    /// Set the valid signer address for the network.
+    pub const fn with_network_valid_signer(mut self, address: Option<Address>) -> Self {
+        self.config.network_args.signer_address = address;
         self
     }
 

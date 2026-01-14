@@ -139,7 +139,8 @@ where
 
     let network_config = NetworkArgs {
         discovery: DiscoveryArgs { disable_discovery: true, ..DiscoveryArgs::default() },
-        trusted_peers: trusted_peers.unwrap_or_default(),
+        trusted_peers: trusted_peers.clone().unwrap_or_default(),
+        bootnodes: trusted_peers,
         ..NetworkArgs::default()
     };
 
