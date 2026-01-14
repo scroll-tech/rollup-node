@@ -18,7 +18,7 @@ use crossterm::event::{self, Event, KeyCode, KeyModifiers};
 use futures::StreamExt;
 use reth_network::PeersInfo;
 use reth_network_api::Peers;
-use reth_network_peers::NodeRecord;
+use reth_network_peers::TrustedPeer;
 use reth_rpc_api::EthApiServer;
 use reth_transaction_pool::TransactionPool;
 use std::{io::Write, str::FromStr, time::Duration};
@@ -686,8 +686,9 @@ impl DebugRepl {
             }
             PeersCommand::Connect(enode_url) => {
                 // Parse the enode URL
-                match NodeRecord::from_str(&enode_url) {
+                match TrustedPeer::from_str(&enode_url) {
                     Ok(record) => {
+                        let record = record.resolve().await?;
                         network_handle.inner().add_peer(record.id, record.tcp_addr());
                         println!("{}", format!("Connecting to peer: {:?}", record.id).green());
                         println!("  Address: {}", record.tcp_addr());
