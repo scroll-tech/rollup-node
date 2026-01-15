@@ -1,54 +1,76 @@
 # Debug Toolkit
 
-The Debug Toolkit is an interactive REPL (Read-Eval-Print Loop) for debugging, development, and hackathon scenarios. It provides a command-line interface to interact with rollup nodes, inspect chain state, inject transactions, and run custom actions.
+The Debug Toolkit is an interactive REPL (Read-Eval-Print Loop) for debugging, development, and hackathon scenarios. It allows you to spin up local follower nodes that connect to a remote sequencer and L1, run tests, execute scripts, and inspect chain state.
 
 ## Getting Started
 
+### Source Code
+
+The debug toolkit is available on the `feat/debug-toolkit` branch:
+
+**Repository:** [https://github.com/scroll-tech/rollup-node/tree/feat/debug-toolkit](https://github.com/scroll-tech/rollup-node/tree/feat/debug-toolkit)
+
+```bash
+git clone https://github.com/scroll-tech/rollup-node.git
+cd rollup-node
+git checkout feat/debug-toolkit
+```
+
 ### Building
 
-The debug toolkit is built with the `debug-toolkit` feature flag:
+Build with the `debug-toolkit` feature flag:
 
 ```bash
 cargo build -p rollup-node --features debug-toolkit --release
 ```
 
-### Running
+## Connecting to a Remote Network
 
-Launch the debug REPL using the `scroll-debug` binary:
+The primary use case is connecting local follower nodes to a remote sequencer and L1. This allows you to run tests and scripts against a live network.
 
-```bash
-# Basic usage with dev chain and sequencer mode
-cargo run --features debug-toolkit --bin scroll-debug -- --chain dev --sequencer
+### Network Connection Info
 
-# With multiple follower nodes
-cargo run --features debug-toolkit --bin scroll-debug -- --chain dev --sequencer --followers 2
-
-# With custom block time (auto-build every 1000ms)
-cargo run --features debug-toolkit --bin scroll-debug -- --chain dev --sequencer --block-time 1000
-
-# With a real L1 endpoint
-cargo run --features debug-toolkit --bin scroll-debug -- --chain dev --sequencer --l1-url https://eth.llamarpc.com
+```
+L1 RPC:           http://ec2-54-167-214-30.compute-1.amazonaws.com:8545
+L1 Private Key:   0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80
+Sequencer HTTP:   http://ec2-54-175-126-206.compute-1.amazonaws.com:8545
+Sequencer Enode:  enode://3322bb29bba1f30f3bb40e816779f1be8ab3c14a5d14ff6c76d0585a63bdcc4ba25008be138780dafd03cb3e3ae4546da9a566b4ff9f1d237fa5d3d79bfdd219@54.175.126.206:30303
+Signer:           0xb674ff99cca262c99d3eab5b32796a99188543da
+Genesis:          tests/l2reth-genesis-e2e.json
 ```
 
-### CLI Options
+### Connect to Remote Network
+
+```bash
+cargo run --features debug-toolkit --bin scroll-debug -- \
+    --followers 2 \
+    --chain tests/l2reth-genesis-e2e.json \
+    --bootnodes enode://3322bb29bba1f30f3bb40e816779f1be8ab3c14a5d14ff6c76d0585a63bdcc4ba25008be138780dafd03cb3e3ae4546da9a566b4ff9f1d237fa5d3d79bfdd219@54.175.126.206:30303 \
+    --l1-url http://ec2-54-167-214-30.compute-1.amazonaws.com:8545 \
+    --valid-signer 0xb674ff99cca262c99d3eab5b32796a99188543da
+```
+
+This creates local follower nodes that:
+- Connect to the remote sequencer via P2P (`--bootnodes`)
+- Sync L1 state from the remote L1 RPC (`--l1-url`)
+- Validate blocks using the network's authorized signer (`--valid-signer`)
+- Use the matching genesis configuration (`--chain`)
+
+### CLI Options Explained
 
 | Option | Description |
 |--------|-------------|
-| `--chain <name\|path>` | Chain to use: `dev`, `scroll-sepolia`, `scroll-mainnet`, or path to genesis JSON file (default: `dev`) |
-| `--sequencer` | Enable sequencer mode |
-| `--followers <n>` | Number of follower nodes to create (default: 0) |
-| `--block-time <ms>` | Block time in milliseconds (default: 0 = manual block building only) |
-| `--allow-empty-blocks` | Allow building empty blocks (default: true) |
-| `--l1-message-delay <n>` | L1 message inclusion delay in blocks (default: 0 = immediate) |
-| `--l1-url <url>` | L1 RPC endpoint URL (optional, uses mock L1 if not specified) |
+| `--chain <name\|path>` | Genesis configuration: `dev`, `scroll-sepolia`, `scroll-mainnet`, or path to JSON file |
+| `--sequencer` | Enable local sequencer mode |
+| `--followers <n>` | Number of local follower nodes to spin up (can be any number) |
+| `--bootnodes <enode>` | Remote sequencer enode URL to connect to |
+| `--l1-url <url>` | Remote L1 RPC endpoint |
+| `--valid-signer <addr>` | Authorized block signer address for consensus validation |
+| `--log-file <path>` | Path to log file (default: `./scroll-debug-<pid>.log`) |
 
-Run `cargo run --features debug-toolkit --bin scroll-debug -- --help` to see all available options.
+## Local-Only Mode
 
-## Quick Start: Multi-Node Environment with Mock L1
-
-This walkthrough demonstrates how to spin up a complete local environment with a mock L1, one sequencer, and two follower nodes.
-
-### Starting the Environment
+You can also run a fully local environment with a mock L1 and local sequencer for offline development:
 
 ```bash
 cargo run --features debug-toolkit --bin scroll-debug -- \
@@ -58,119 +80,47 @@ cargo run --features debug-toolkit --bin scroll-debug -- \
 ```
 
 This creates:
-- **Node 0**: Sequencer (produces blocks)
-- **Node 1**: Follower (receives blocks via P2P)
-- **Node 2**: Follower (receives blocks via P2P)
+- **Node 0**: Local sequencer (produces blocks)
+- **Node 1-N**: Local followers (receive blocks via P2P)
 
-### Understanding Mock L1
-
-When no `--l1-url` is specified, the toolkit uses a **mock L1**. The mock L1 starts in an "unsynced" state, which means the sequencer won't produce blocks until you explicitly sync it.
-
-If you try to build a block before syncing L1:
-
-```
-scroll-debug [seq:0]> build
-Error: L1 is not synced
-Hint: Run 'l1 sync' to mark the mock L1 as synced before building blocks
-```
-
-### Step-by-Step Walkthrough
-
-**1. Check initial status:**
-
-```
-scroll-debug [seq:0]> status
-=== Node 0 (Sequencer) ===
-Node:
-  Database:  /tmp/.tmpXYZ/db/scroll.db
-  HTTP RPC:  http://127.0.0.1:62491
-L2:
-  Head:      #0 (0x1234abcd...)
-  Safe:      #0 (0x1234abcd...)
-  Finalized: #0 (0x1234abcd...)
-  Synced:    false
-L1:
-  Head:      #0
-  Finalized: #0
-  Processed: #0
-  Synced:    false
-```
-
-Note that L1 `Synced` is `false`.
-
-**2. Sync the mock L1:**
+With mock L1, you must manually sync before building blocks:
 
 ```
 scroll-debug [seq:0]> l1 sync
-L1 synced event sent to all nodes
-```
-
-**3. Build your first block:**
-
-```
-scroll-debug [seq:0]> build
-Block build triggered!
-  [EVENT] BlockSequenced { block: 1, hash: 0xabcd1234... }
-```
-
-**4. Send a transaction and build another block:**
-
-```
-scroll-debug [seq:0]> tx send 0x742d35Cc6634C0532925a3b844Bc9e7595f0bEb2 1000000000000000000
-Transaction sent!
-  Hash: 0x5678...
-  From: 0x1234...
-  To:   0x742d...
-  Value: 1000000000000000000 wei
-Note: Run 'build' to include in a block
+L1 synced event sent
 
 scroll-debug [seq:0]> build
 Block build triggered!
-  [EVENT] BlockSequenced { block: 2, hash: 0xefgh5678... }
 ```
 
-**5. Check that followers received the blocks:**
+## Using the Network Handle
 
-```
-scroll-debug [seq:0]> node 1
-Switched to node 1 (Follower)
+The `TestFixture` provides access to network handles for programmatic control. This is useful for writing custom actions and tests:
 
-scroll-debug [fol:1]> status
-=== Node 1 (Follower) ===
-Node:
-  Database:  /tmp/.tmpABC/db/scroll.db
-  HTTP RPC:  http://127.0.0.1:62502
-L2:
-  Head:      #2 (0xefgh5678...)
-  Safe:      #0 (0x1234abcd...)
-  Finalized: #0 (0x1234abcd...)
-  Synced:    false
-...
-```
+```rust
+use rollup_node::test_utils::TestFixture;
 
-The follower's head is at block #2, showing it received the blocks via P2P.
+async fn example(fixture: &TestFixture) -> eyre::Result<()> {
+    // Access a node's network handle
+    let node = &fixture.nodes[0];
+    let network_handle = node.rollup_manager_handle.get_network_handle().await?;
 
-**6. Build multiple blocks quickly:**
+    // Get local node info
+    let local_record = network_handle.local_node_record();
+    println!("Local enode: {}", local_record);
 
-```
-scroll-debug [seq:0]> run build-blocks 5
-Building 5 blocks (timeout: 5000ms per block)...
-  Block 1 triggered, waiting... sequenced at #3
-  Block 2 triggered, waiting... sequenced at #4
-  Block 3 triggered, waiting... sequenced at #5
-  Block 4 triggered, waiting... sequenced at #6
-  Block 5 triggered, waiting... sequenced at #7
-Done! Head is now at block #7
-```
+    // Access the inner network handle for P2P operations
+    let inner = network_handle.inner();
 
-**7. View all nodes:**
+    // Get connected peers
+    let peers = inner.get_all_peers().await?;
+    println!("Connected to {} peers", peers.len());
 
-```
-scroll-debug [seq:0]> nodes
-Nodes:
-  [0] Sequencer *
-  [1] Follower
-  [2] Follower
+    // Add a peer
+    inner.add_peer(peer_id, socket_addr);
+
+    Ok(())
+}
 ```
 
 ## Commands
@@ -187,8 +137,11 @@ Nodes:
 **Example:**
 
 ```
-scroll-debug [seq:0]> status
-=== Node 0 (Sequencer) ===
+scroll-debug [fol:0]> status
+=== Node 0 (Follower) ===
+Node:
+  Database:  /tmp/.tmpXYZ/db/scroll.db
+  HTTP RPC:  http://127.0.0.1:62491
 L2:
   Head:      #42 (0x1234abcd...)
   Safe:      #40 (0x5678efgh...)
@@ -203,23 +156,20 @@ L1:
 
 ### L1 Commands
 
-These commands allow you to simulate L1 events:
+These commands allow you to simulate L1 events (useful in local mode with mock L1):
 
 | Command | Description |
 |---------|-------------|
 | `l1 status` | Show L1 sync state |
 | `l1 sync` | Inject L1 synced event |
 | `l1 block <n>` | Inject new L1 block notification |
-| `l1 message <json>` | Inject an L1 message |
-| `l1 commit <json>` | Inject batch commit |
-| `l1 finalize <idx>` | Inject batch finalization |
 | `l1 reorg <block>` | Inject L1 reorg |
 
 ### Block & Transaction
 
 | Command | Description |
 |---------|-------------|
-| `build` | Build a new block (sequencer mode) |
+| `build` | Build a new block (local sequencer mode only) |
 | `tx send <to> <value> [idx]` | Send ETH transfer (value in wei, idx = wallet index) |
 | `tx pending` | List pending transactions |
 | `tx inject <hex>` | Inject raw transaction |
@@ -233,19 +183,6 @@ Transaction sent!
   From: 0x1234...
   To:   0x742d...
   Value: 1000000000000000000 wei
-Note: Run 'build' to include in a block (sequencer mode)
-
-scroll-debug [seq:0]> build
-Block build triggered!
-```
-
-**Viewing pending transactions:**
-
-```
-scroll-debug [seq:0]> tx pending
-Pending Transactions (2):
-  [0] hash=0x1234abcd5678... from=0x742d35Cc... nonce=5 gas_price=1000000000
-  [1] hash=0xabcdef123456... from=0x742d35Cc... nonce=6 gas_price=1000000000
 ```
 
 ### Wallet
@@ -255,10 +192,10 @@ Pending Transactions (2):
 | `wallet` | Show wallet address, balance, and nonce |
 | `wallet gen` | Generate and list all available wallets |
 
-The toolkit includes pre-funded test wallets. Use `wallet gen` to see all available wallets, then reference them by index in `tx send`:
+The toolkit includes pre-funded test wallets:
 
 ```
-scroll-debug [seq:0]> wallet gen
+scroll-debug [fol:0]> wallet gen
 Generated Wallets (10):
   Chain ID: 222222
 
@@ -268,9 +205,6 @@ Generated Wallets (10):
   [1] 0xabcdef1234567890...
       Balance: 1000000000000000000000 wei (1000.000000 ETH)
   ...
-
-scroll-debug [seq:0]> tx send 0x742d... 1000000 2
-# Sends from wallet index 2
 ```
 
 ### Network
@@ -280,30 +214,34 @@ scroll-debug [seq:0]> tx send 0x742d... 1000000 2
 | `peers` | List connected peers and show local enode |
 | `peers connect <url>` | Connect to a peer (enode://...) |
 
+**Example:**
+
+```
+scroll-debug [fol:0]> peers
+Local Node:
+  Peer ID: 0x1234...
+  Enode:   enode://abcd...@127.0.0.1:30303
+
+Connected Peers (1):
+  0x3322bb29...
+    Address:    54.175.126.206:30303
+    Client:     scroll-reth/v1.0.0
+```
+
 ### Events
 
-The REPL streams chain events in real-time as they occur:
+The REPL streams chain events in real-time:
 
 | Command | Description |
 |---------|-------------|
 | `events on` | Enable background event stream |
 | `events off` | Disable background event stream |
-| `events [count]` | Stream next N events (default: 10) |
 | `events filter <pat>` | Filter events by type (e.g., `Block*`, `L1*`) |
 | `events history [n]` | Show last N events (default: 20) |
 
-**Example with events enabled:**
-
-```
-scroll-debug [seq:0]> build
-  [EVENT] BlockSequenced { block: 1, hash: 0xabcd... }
-  [EVENT] ChainExtended { block: 1 }
-Block build triggered!
-```
-
 ### Custom Actions
 
-Run pre-built or custom actions with full access to the test fixture:
+Run pre-built or custom actions:
 
 | Command | Description |
 |---------|-------------|
@@ -318,22 +256,9 @@ Run pre-built or custom actions with full access to the test fixture:
 | `stress-test <tx_count> [build_every]` | Send multiple transactions and build blocks |
 | `sync-all` | Send L1 sync event to all nodes |
 
-**Example:**
-
-```
-scroll-debug [seq:0]> run build-blocks 10 100
-Running action: build-blocks
-
-Building 10 blocks with 100ms delay...
-  Block 1 triggered
-  Block 2 triggered
-  ...
-Done! Head is now at block #10
-```
-
 ### Node Management
 
-When running with multiple nodes (e.g., `--followers 2`):
+Switch between nodes when running multiple followers:
 
 | Command | Description |
 |---------|-------------|
@@ -341,17 +266,14 @@ When running with multiple nodes (e.g., `--followers 2`):
 | `nodes` | List all nodes in fixture |
 
 ```
-scroll-debug [seq:0]> nodes
+scroll-debug [fol:0]> nodes
 Nodes:
-  [0] Sequencer *
+  [0] Follower *
   [1] Follower
   [2] Follower
 
-scroll-debug [seq:0]> node 1
+scroll-debug [fol:0]> node 1
 Switched to node 1 (Follower)
-
-scroll-debug [fol:1]> status
-...
 ```
 
 ### Database
@@ -360,10 +282,8 @@ scroll-debug [fol:1]> status
 |---------|-------------|
 | `db` | Show database path and access command |
 
-The `db` command shows the SQLite database path and provides a command to access it from another terminal:
-
 ```
-scroll-debug [seq:0]> db
+scroll-debug [fol:0]> db
 Database Info:
   Path: /path/to/datadir/db/scroll.db
 
@@ -377,7 +297,22 @@ Useful queries:
   SELECT * FROM l2_block ORDER BY number DESC LIMIT 10;
 ```
 
-The database path is also shown in the `status` command output.
+### Logs
+
+| Command | Description |
+|---------|-------------|
+| `logs` | Show log file path and tail command |
+
+Tracing logs are written to a file to keep the REPL display clean:
+
+```
+scroll-debug [fol:0]> logs
+Log File:
+  Path: ./scroll-debug-12345.log
+
+View logs in another terminal:
+  tail -f ./scroll-debug-12345.log
+```
 
 ### Other
 
@@ -388,15 +323,7 @@ The database path is also shown in the `status` command output.
 
 ## Creating Custom Actions
 
-You can create custom actions by implementing the `Action` trait. Actions have full access to the `TestFixture`, allowing you to:
-
-- Access all nodes and their RPC interfaces
-- Send transactions from test wallets
-- Trigger block building
-- Inject L1 events
-- Query chain state
-
-### Implementing an Action
+You can create custom actions by implementing the `Action` trait. Actions have full access to the `TestFixture`:
 
 ```rust
 use rollup_node::debug_toolkit::actions::{Action, ActionRegistry};
@@ -427,23 +354,19 @@ impl Action for MyCustomAction {
         // Access nodes
         println!("Fixture has {} nodes", fixture.nodes.len());
 
+        // Access network handle
+        let node = &fixture.nodes[0];
+        let network_handle = node.rollup_manager_handle.get_network_handle().await?;
+        println!("Connected peers: {}", network_handle.inner().num_connected_peers());
+
         // Access wallet
         let wallet = fixture.wallet.lock().await;
         println!("Wallet address: {:?}", wallet.inner.address());
         drop(wallet);
 
-        // Access specific node
-        let node = &fixture.nodes[0];
+        // Query chain state
         let status = node.rollup_manager_handle.status().await?;
         println!("Head block: {}", status.l2.fcs.head_block_info().number);
-
-        // Trigger block building (sequencer only)
-        if node.is_sequencer() {
-            node.rollup_manager_handle.build_block();
-        }
-
-        // Inject L1 events
-        fixture.l1().sync().await?;
 
         Ok(())
     }
@@ -472,134 +395,79 @@ impl ActionRegistry {
 }
 ```
 
-Or register programmatically before running the REPL:
+## Useful Cast Commands
 
-```rust
-let fixture = TestFixture::builder()
-    .with_chain("dev")
-    .sequencer()
-    .build()
-    .await?;
+Use [Foundry's `cast`](https://book.getfoundry.sh/cast/) to interact with the network. The `status` command in the REPL shows the HTTP RPC endpoint for your local nodes.
 
-let mut repl = DebugRepl::new(fixture);
-repl.action_registry_mut().register(Box::new(MyCustomAction));
-repl.run().await?;
-```
-
-## Use Cases
-
-### Hackathon Development
-
-The debug toolkit is ideal for hackathons where you need to:
-
-- Quickly spin up a local Scroll environment
-- Test smart contract interactions
-- Debug transaction flows
-- Simulate L1-L2 message passing
-
-### Integration Testing
-
-Use custom actions to create reproducible test scenarios:
-
-```rust
-struct IntegrationTestAction;
-
-#[async_trait]
-impl Action for IntegrationTestAction {
-    fn name(&self) -> &'static str { "integration-test" }
-    fn description(&self) -> &'static str { "Run integration test suite" }
-
-    async fn execute(&self, fixture: &mut TestFixture, _args: &[String]) -> eyre::Result<()> {
-        // 1. Sync L1
-        fixture.l1().sync().await?;
-
-        // 2. Send some transactions
-        // ...
-
-        // 3. Build blocks
-        let sequencer = fixture.nodes.iter().find(|n| n.is_sequencer()).unwrap();
-        sequencer.rollup_manager_handle.build_block();
-
-        // 4. Verify state
-        // ...
-
-        Ok(())
-    }
-}
-```
-
-### Debugging
-
-Inspect chain state interactively:
-
-```
-scroll-debug [seq:0]> block 42
-Block #42
-  Hash:       0xabcd...
-  Parent:     0x1234...
-  Timestamp:  1705123456
-  Gas Used:   21000
-  Gas Limit:  20000000
-  Txs:        3
-    [0] hash=0x1111...
-    [1] hash=0x2222...
-    [2] hash=0x3333...
-
-scroll-debug [seq:0]> fcs
-Forkchoice State:
-  Head:
-    Number: 42
-    Hash:   0xabcd...
-  Safe:
-    Number: 40
-    Hash:   0x5678...
-  Finalized:
-    Number: 35
-    Hash:   0x9abc...
-```
-
-## External Tools
-
-### Using Cast
-
-The `status` command shows the HTTP RPC endpoint for each node. You can use [Foundry's `cast`](https://book.getfoundry.sh/cast/) to interact with the node from another terminal:
-
-```
-scroll-debug [seq:0]> status
-=== Node 0 (Sequencer) ===
-Node:
-  Database:  /tmp/.tmpXYZ/db/scroll.db
-  HTTP RPC:  http://127.0.0.1:62491
-...
-```
-
-Then in another terminal, use `cast` with the HTTP RPC URL:
+### Check Block Status
 
 ```bash
-# Get the current block number
-cast block-number --rpc-url http://127.0.0.1:62491
+# Check latest L1 block
+cast block latest --rpc-url http://ec2-54-167-214-30.compute-1.amazonaws.com:8545
 
-# Get block details
-cast block latest --rpc-url http://127.0.0.1:62491
-
-# Get an account balance
-cast balance 0x742d35Cc6634C0532925a3b844Bc9e7595f0bEb2 --rpc-url http://127.0.0.1:62491
-
-# Send a transaction (using a test private key)
-cast send 0x742d35Cc6634C0532925a3b844Bc9e7595f0bEb2 \
-  --value 1ether \
-  --private-key 0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80 \
-  --rpc-url http://127.0.0.1:62491
-
-# Call a contract
-cast call 0xContractAddress "balanceOf(address)" 0xUserAddress --rpc-url http://127.0.0.1:62491
-
-# Get transaction receipt
-cast receipt 0xTransactionHash --rpc-url http://127.0.0.1:62491
+# Check latest L2 block (sequencer)
+cast block latest --rpc-url http://ec2-54-175-126-206.compute-1.amazonaws.com:8545
 ```
 
-This is useful for:
-- Testing smart contract deployments and interactions
-- Debugging transaction behavior
-- Scripting complex test scenarios
-- Using familiar Ethereum tooling with your local rollup node
+### Check Sync Status
+
+```bash
+# L2 sequencer sync status
+cast rpc rollupNode_status --rpc-url http://ec2-54-175-126-206.compute-1.amazonaws.com:8545 | jq
+```
+
+### Check and Manage Peers
+
+```bash
+# Check connected peers
+cast rpc admin_peers --rpc-url http://ec2-54-175-126-206.compute-1.amazonaws.com:8545
+
+# Get node info (enode URL)
+cast rpc admin_nodeInfo --rpc-url http://ec2-54-175-126-206.compute-1.amazonaws.com:8545 | jq -r '.enode'
+```
+
+### Enable Sequencing
+
+```bash
+cast rpc rollupNodeAdmin_enableAutomaticSequencing --rpc-url http://ec2-54-175-126-206.compute-1.amazonaws.com:8545
+```
+
+### Send Transactions
+
+```bash
+# Get wallet address from private key
+cast wallet address --private-key 0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80
+
+# Check balance on L2
+cast balance 0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266 --ether --rpc-url http://ec2-54-175-126-206.compute-1.amazonaws.com:8545
+
+# Send L2 transaction
+cast send 0x0000000000000000000000000000000000000002 \
+  --rpc-url http://ec2-54-175-126-206.compute-1.amazonaws.com:8545 \
+  --value 0.00001ether \
+  --private-key 0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80
+```
+
+### L1 to L2 Bridge (Send L1 Message)
+
+```bash
+# Send message from L1 to L2 via the messenger contract
+cast send --rpc-url http://ec2-54-167-214-30.compute-1.amazonaws.com:8545 \
+  --private-key 0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80 \
+  --legacy --gas-price 0.1gwei --gas-limit 200000 --value 0.001ether \
+  "0x8A791620dd6260079BF849Dc5567aDC3F2FdC318" \
+  "sendMessage(address _to, uint256 _value, bytes memory _message, uint256 _gasLimit)" \
+  0x0000000000000000000000000000000000000002 0x1 0x 200000
+
+# Check L1 message queue index
+cast call --rpc-url http://ec2-54-167-214-30.compute-1.amazonaws.com:8545 \
+  "0xDc64a140Aa3E981100a9becA4E685f962f0cF6C9" \
+  "nextCrossDomainMessageIndex()(uint256)"
+```
+
+### Contract Addresses
+
+| Contract | Address |
+|----------|---------|
+| L1 Messenger | `0x8A791620dd6260079BF849Dc5567aDC3F2FdC318` |
+| L1 Message Queue | `0xDc64a140Aa3E981100a9becA4E685f962f0cF6C9` |

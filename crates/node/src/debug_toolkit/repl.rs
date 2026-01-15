@@ -9,10 +9,13 @@ use super::{
     event_stream::EventStreamState,
 };
 use crate::test_utils::{fixture::NodeType, TestFixture};
-use alloy_consensus::{SignableTransaction, TxEip1559};
+use alloy_consensus::{SignableTransaction, TxEip1559, TxLegacy};
 use alloy_eips::{eip2718::Encodable2718, BlockNumberOrTag};
 use alloy_network::{TransactionResponse, TxSignerSync};
-use alloy_primitives::TxKind;
+use alloy_primitives::{address, Address, Bytes, TxKind, U256};
+use alloy_sol_types::{sol, SolCall};
+use alloy_rpc_types_eth::TransactionRequest;
+use alloy_signer_local::PrivateKeySigner;
 use colored::Colorize;
 use crossterm::{
     event::{self, Event, KeyCode, KeyModifiers},
@@ -24,7 +27,29 @@ use reth_network_api::Peers;
 use reth_network_peers::NodeRecord;
 use reth_rpc_api::EthApiServer;
 use reth_transaction_pool::TransactionPool;
-use std::{io::Write, str::FromStr, time::Duration};
+use std::{io::Write, path::PathBuf, str::FromStr, time::Duration};
+
+// L1 contract addresses
+const L1_MESSENGER_ADDRESS: Address = address!("8A791620dd6260079BF849Dc5567aDC3F2FdC318");
+const L1_MESSAGE_QUEUE_ADDRESS: Address = address!("Dc64a140Aa3E981100a9becA4E685f962f0cF6C9");
+
+// L1 contract interfaces
+sol! {
+    /// L1 Message Queue contract interface
+    interface IL1MessageQueue {
+        function nextCrossDomainMessageIndex() external view returns (uint256);
+    }
+
+    /// L1 Messenger contract interface
+    interface IL1ScrollMessenger {
+        function sendMessage(
+            address _to,
+            uint256 _value,
+            bytes memory _message,
+            uint256 _gasLimit
+        ) external payable;
+    }
+}
 
 /// Interactive REPL for debugging rollup nodes.
 pub struct DebugRepl {
@@ -38,6 +63,8 @@ pub struct DebugRepl {
     event_streams: Vec<EventStreamState>,
     /// Registry of custom actions.
     action_registry: ActionRegistry,
+    /// Path to the log file.
+    log_path: Option<PathBuf>,
 }
 
 impl std::fmt::Debug for DebugRepl {
@@ -47,6 +74,7 @@ impl std::fmt::Debug for DebugRepl {
             .field("active_node", &self.active_node)
             .field("event_streams", &self.event_streams)
             .field("action_registry", &"ActionRegistry { ... }")
+            .field("log_path", &self.log_path)
             .finish_non_exhaustive()
     }
 }
@@ -69,6 +97,7 @@ impl DebugRepl {
             active_node: 0,
             event_streams,
             action_registry: ActionRegistry::new(),
+            log_path: None,
         }
     }
 
@@ -82,7 +111,19 @@ impl DebugRepl {
             })
             .collect();
 
-        Self { fixture, running: false, active_node: 0, event_streams, action_registry }
+        Self {
+            fixture,
+            running: false,
+            active_node: 0,
+            event_streams,
+            action_registry,
+            log_path: None,
+        }
+    }
+
+    /// Set the log file path.
+    pub fn set_log_path(&mut self, path: PathBuf) {
+        self.log_path = Some(path);
     }
 
     /// Get mutable access to the action registry to register custom actions.
@@ -224,6 +265,7 @@ impl DebugRepl {
 
         match cmd {
             Command::Status => self.cmd_status().await,
+            Command::SyncStatus => self.cmd_sync_status().await,
             Command::Block(arg) => self.cmd_block(arg).await,
             Command::Blocks { from, to } => self.cmd_blocks(from, to).await,
             Command::Fcs => self.cmd_fcs().await,
@@ -237,6 +279,7 @@ impl DebugRepl {
             Command::Node(idx) => self.cmd_switch_node(idx),
             Command::Nodes => self.cmd_list_nodes(),
             Command::Db => self.cmd_db(),
+            Command::Logs => self.cmd_logs(),
             Command::Help => {
                 print_help();
                 Ok(())
@@ -306,6 +349,63 @@ impl DebugRepl {
         println!(
             "  Synced:    {}",
             if status.l1.status.is_synced() { "true".green() } else { "false".red() }
+        );
+
+        Ok(())
+    }
+
+    /// Show detailed sync status (rollupNode_status RPC equivalent).
+    async fn cmd_sync_status(&self) -> eyre::Result<()> {
+        let node = &self.fixture.nodes[self.active_node];
+        let status = node.rollup_manager_handle.status().await?;
+
+        println!("{}", "Sync Status:".bold());
+        println!();
+
+        // L1 Sync Status
+        println!("{}", "L1 Sync:".underline());
+        println!(
+            "  Status:      {}",
+            if status.l1.status.is_synced() {
+                "SYNCED".green()
+            } else {
+                format!("{:?}", status.l1.status).yellow().to_string().into()
+            }
+        );
+        println!("  Latest:      #{}", status.l1.latest.to_string().cyan());
+        println!("  Finalized:   #{}", status.l1.finalized);
+        println!("  Processed:   #{}", status.l1.processed);
+        println!();
+
+        // L2 Sync Status
+        println!("{}", "L2 Sync:".underline());
+        println!(
+            "  Status:      {}",
+            if status.l2.status.is_synced() {
+                "SYNCED".green()
+            } else {
+                format!("{:?}", status.l2.status).yellow().to_string().into()
+            }
+        );
+        println!();
+
+        // Forkchoice State
+        let fcs = &status.l2.fcs;
+        println!("{}", "Forkchoice:".underline());
+        println!(
+            "  Head:        #{} ({:.12}...)",
+            fcs.head_block_info().number.to_string().green(),
+            format!("{:?}", fcs.head_block_info().hash)
+        );
+        println!(
+            "  Safe:        #{} ({:.12}...)",
+            fcs.safe_block_info().number.to_string().yellow(),
+            format!("{:?}", fcs.safe_block_info().hash)
+        );
+        println!(
+            "  Finalized:   #{} ({:.12}...)",
+            fcs.finalized_block_info().number.to_string().blue(),
+            format!("{:?}", fcs.finalized_block_info().hash)
         );
 
         Ok(())
@@ -420,29 +520,137 @@ impl DebugRepl {
                 self.fixture.l1().new_block(n).await?;
                 println!("{}", format!("L1 block {} notification sent", n).green());
             }
-            L1Command::Message(json) => {
-                // Parse JSON and inject L1 message
-                // For now, just show that we received the command
-                println!(
-                    "{}",
-                    format!("L1 message injection not yet implemented. JSON: {}", json).yellow()
-                );
-            }
-            L1Command::Commit(json) => {
-                println!(
-                    "{}",
-                    format!("Batch commit injection not yet implemented. JSON: {}", json).yellow()
-                );
-            }
-            L1Command::Finalize(idx) => {
-                println!(
-                    "{}",
-                    format!("Batch finalization for index {} not yet implemented", idx).yellow()
-                );
-            }
             L1Command::Reorg(block) => {
                 self.fixture.l1().reorg_to(block).await?;
                 println!("{}", format!("L1 reorg to block {} sent", block).green());
+            }
+            L1Command::Messages => {
+                println!("{}", "L1 Message Queue:".bold());
+
+                let Some(provider) = &self.fixture.l1_provider else {
+                    println!(
+                        "{}",
+                        "No L1 provider available. Start with --l1-url to enable L1 commands."
+                            .yellow()
+                    );
+                    return Ok(());
+                };
+
+                // Use sol! generated call type for encoding
+                let call = IL1MessageQueue::nextCrossDomainMessageIndexCall {};
+                let call_request = TransactionRequest::default()
+                    .to(L1_MESSAGE_QUEUE_ADDRESS)
+                    .input(call.abi_encode().into());
+
+                match provider.call(call_request).await {
+                    Ok(result) => {
+                        // Decode uint256 from result using sol! generated return type
+                        match IL1MessageQueue::nextCrossDomainMessageIndexCall::abi_decode_returns(
+                            &result,
+                        ) {
+                            Ok(index) => {
+                                println!("  Next Message Index: {}", index.to_string().green());
+                            }
+                            Err(e) => {
+                                println!("{}", format!("Failed to decode response: {}", e).red());
+                            }
+                        }
+                    }
+                    Err(e) => {
+                        println!("{}", format!("Failed to query message queue: {}", e).red());
+                    }
+                }
+            }
+            L1Command::Send { to, value } => {
+                println!("{}", "L1 -> L2 Bridge Transfer:".bold());
+
+                let Some(provider) = &self.fixture.l1_provider else {
+                    println!(
+                        "{}",
+                        "No L1 provider available. Start with --l1-url to enable L1 commands."
+                            .yellow()
+                    );
+                    return Ok(());
+                };
+
+                println!("  To:    {:?}", to);
+                println!("  Value: {} wei", value);
+                println!();
+
+                // Use sol! generated call type for encoding
+                let call = IL1ScrollMessenger::sendMessageCall {
+                    _to: to,
+                    _value: value,
+                    _message: Bytes::new(),
+                    _gasLimit: U256::from(200000u64),
+                };
+                let calldata = call.abi_encode();
+
+                // Use the default private key for L1 transactions
+                let private_key =
+                    "0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80";
+                let signer: PrivateKeySigner = private_key.parse().expect("valid private key");
+                let from_address = signer.address();
+
+                // Get chain ID, nonce from L1
+                let chain_id = provider.get_chain_id().await?;
+                let nonce = provider.get_transaction_count(from_address).await?;
+
+                // Build a legacy transaction (for compatibility with local L1)
+                // Use fixed 0.1 gwei gas price like the cast command
+                let mut tx = TxLegacy {
+                    chain_id: Some(chain_id),
+                    nonce,
+                    gas_price: 100_000_000, // 0.1 gwei
+                    gas_limit: 200_000,
+                    to: TxKind::Call(L1_MESSENGER_ADDRESS),
+                    value,
+                    input: calldata.into(),
+                };
+
+                // Sign the transaction
+                let signature = signer.sign_transaction_sync(&mut tx)?;
+                let signed = tx.into_signed(signature);
+                let raw_tx = signed.encoded_2718();
+
+                // Send the transaction and wait for receipt
+                println!("{}", "Sending transaction...".dimmed());
+                match provider.send_raw_transaction(&raw_tx).await {
+                    Ok(pending) => {
+                        let tx_hash = *pending.tx_hash();
+                        println!("{}", "Transaction sent!".green());
+                        println!("  Hash: {:?}", tx_hash);
+                        println!("  From: {:?}", from_address);
+                        println!();
+                        println!("{}", "Waiting for receipt...".dimmed());
+                        match pending.get_receipt().await {
+                            Ok(receipt) => {
+                                let status_str = if receipt.status() {
+                                    "Success".green()
+                                } else {
+                                    "Failed".red()
+                                };
+                                println!("  Status: {}", status_str);
+                                println!("  Block:  #{}", receipt.block_number.unwrap_or(0));
+                                println!();
+                                println!(
+                                    "{}",
+                                    "The L1 message will be included in L2 after L1 block finalization."
+                                        .dimmed()
+                                );
+                            }
+                            Err(e) => {
+                                println!(
+                                    "{}",
+                                    format!("Failed to get receipt: {}", e).yellow()
+                                );
+                            }
+                        }
+                    }
+                    Err(e) => {
+                        println!("{}", format!("Failed to send transaction: {}", e).red());
+                    }
+                }
             }
         }
         Ok(())
@@ -740,27 +948,6 @@ impl DebugRepl {
                 event_stream.disable();
                 println!("{}", "Event stream disabled".yellow());
             }
-            EventsCommand::Stream(count) => {
-                println!("Streaming {} events (Ctrl+C to stop)...", count);
-                let mut received = 0;
-                let node = &mut self.fixture.nodes[self.active_node];
-
-                while received < count {
-                    tokio::select! {
-                        event = node.chain_orchestrator_rx.next() => {
-                            if let Some(event) = event {
-                                received += 1;
-                                let formatted = event_stream.format_event(&event);
-                                println!("[{}] {}", received, formatted);
-                            }
-                        }
-                        _ = tokio::time::sleep(Duration::from_secs(30)) => {
-                            println!("{}", "Timeout waiting for events".yellow());
-                            break;
-                        }
-                    }
-                }
-            }
             EventsCommand::Filter(pattern) => {
                 event_stream.set_filter(pattern.clone());
                 if let Some(p) = pattern {
@@ -878,6 +1065,21 @@ impl DebugRepl {
         println!("  .schema <table>               -- Show table schema");
         println!("  SELECT * FROM metadata;       -- View metadata");
         println!("  SELECT * FROM l2_block ORDER BY number DESC LIMIT 10;");
+
+        Ok(())
+    }
+
+    /// Show log file path and tail command.
+    fn cmd_logs(&self) -> eyre::Result<()> {
+        println!("{}", "Log File:".bold());
+        if let Some(path) = &self.log_path {
+            println!("  Path: {}", path.display());
+            println!();
+            println!("{}", "View logs in another terminal:".underline());
+            println!("  tail -f {}", path.display());
+        } else {
+            println!("  {}", "No log file configured (logs going to stdout)".dimmed());
+        }
 
         Ok(())
     }

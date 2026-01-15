@@ -1,7 +1,10 @@
 //! CLI subcommand for the debug toolkit.
 
-use crate::test_utils::TestFixtureBuilder;
+use crate::{test_utils::TestFixtureBuilder, L1ProviderArgs};
 use alloy_primitives::Address;
+use alloy_provider::{layers::CacheLayer, ProviderBuilder};
+use alloy_rpc_client::RpcClient;
+use alloy_transport::layers::RetryBackoffLayer;
 use clap::Parser;
 use reth_network_peers::TrustedPeer;
 use std::{path::PathBuf, str::FromStr};
@@ -26,18 +29,6 @@ pub struct DebugArgs {
     #[arg(long)]
     pub datadir: Option<PathBuf>,
 
-    /// Block time in milliseconds (0 = manual block building only).
-    #[arg(long, default_value = "0")]
-    pub block_time: u64,
-
-    /// Allow building empty blocks (default: true when sequencer is enabled).
-    #[arg(long, default_value = "true")]
-    pub allow_empty_blocks: bool,
-
-    /// L1 message inclusion delay in blocks (0 = immediate).
-    #[arg(long, default_value = "0")]
-    pub l1_message_delay: u64,
-
     /// L1 RPC endpoint URL (optional, uses mock L1 if not specified).
     #[arg(long)]
     pub l1_url: Option<reqwest::Url>,
@@ -49,11 +40,15 @@ pub struct DebugArgs {
     /// The valid signer address for the network.
     #[arg(long)]
     pub valid_signer: Option<Address>,
+
+    /// Path to log file. Defaults to ./scroll-debug-<pid>.log
+    #[arg(long)]
+    pub log_file: Option<PathBuf>,
 }
 
 impl DebugArgs {
     /// Run the debug toolkit with these arguments.
-    pub async fn run(self) -> eyre::Result<()> {
+    pub async fn run(self, log_path: Option<PathBuf>) -> eyre::Result<()> {
         use super::DebugRepl;
 
         // Build the fixture
@@ -80,16 +75,30 @@ impl DebugArgs {
             builder.config_mut().test = false;
         }
 
-        // Apply sequencer settings
-        builder = builder
-            .block_time(self.block_time)
-            .allow_empty_blocks(self.allow_empty_blocks)
-            .with_l1_message_delay(self.l1_message_delay);
-
-        // Apply L1 URL if provided
+        // Apply L1 URL if provided - build provider for REPL access
         if let Some(l1_url) = self.l1_url {
-            let config = builder.config_mut();
-            config.l1_provider_args.url = Some(l1_url);
+            builder.config_mut().l1_provider_args.url = Some(l1_url.clone());
+
+            // Build the L1 provider with retry and cache layers
+            let L1ProviderArgs {
+                max_retries,
+                initial_backoff,
+                compute_units_per_second,
+                cache_max_items,
+                ..
+            } = L1ProviderArgs::default();
+
+            let client = RpcClient::builder()
+                .layer(RetryBackoffLayer::new(
+                    max_retries,
+                    initial_backoff,
+                    compute_units_per_second,
+                ))
+                .http(l1_url);
+            let cache_layer = CacheLayer::new(cache_max_items);
+            let provider = ProviderBuilder::new().layer(cache_layer).connect_client(client);
+
+            builder = builder.with_l1_provider(Box::new(provider));
         }
 
         // Parse and apply bootnodes if provided
@@ -112,6 +121,9 @@ impl DebugArgs {
 
         // Create and run REPL
         let mut repl = DebugRepl::new(fixture);
+        if let Some(path) = log_path {
+            repl.set_log_path(path);
+        }
         repl.run().await
     }
 }
@@ -128,5 +140,5 @@ pub async fn main() -> eyre::Result<()> {
 
     // Parse arguments and run
     let args = DebugArgs::parse();
-    args.run().await
+    args.run(None).await
 }

@@ -9,6 +9,8 @@ use crate::{
     RollupNodeNetworkArgs, RpcArgs, ScrollRollupNode, ScrollRollupNodeConfig, SequencerArgs,
     SignerArgs,
 };
+use alloy_network::Ethereum;
+use alloy_provider::Provider;
 
 use alloy_eips::BlockNumberOrTag;
 use alloy_primitives::Address;
@@ -42,8 +44,10 @@ use std::{
 };
 use tokio::sync::Mutex;
 
+/// L1 provider type for making L1 RPC calls.
+pub type L1Provider = Box<dyn Provider<Ethereum> + Send + Sync>;
+
 /// Main test fixture providing a high-level interface for testing rollup nodes.
-#[derive(Debug)]
 pub struct TestFixture {
     /// The list of nodes in the test setup.
     pub nodes: Vec<NodeHandle>,
@@ -51,8 +55,21 @@ pub struct TestFixture {
     pub wallet: Arc<Mutex<Wallet>>,
     /// Chain spec used by the nodes.
     pub chain_spec: Arc<<ScrollRollupNode as NodeTypes>::ChainSpec>,
+    /// L1 provider for making L1 RPC calls (if connected to real L1).
+    pub l1_provider: Option<L1Provider>,
     /// The task manager. Held in order to avoid dropping the node.
     _tasks: TaskManager,
+}
+
+impl std::fmt::Debug for TestFixture {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("TestFixture")
+            .field("nodes", &self.nodes)
+            .field("wallet", &self.wallet)
+            .field("chain_spec", &self.chain_spec)
+            .field("l1_provider", &self.l1_provider.as_ref().map(|_| "L1Provider"))
+            .finish_non_exhaustive()
+    }
 }
 
 /// The network handle to the Scroll network.
@@ -204,7 +221,6 @@ impl TestFixture {
 }
 
 /// Builder for creating test fixtures with a fluent API.
-#[derive(Debug)]
 pub struct TestFixtureBuilder {
     config: ScrollRollupNodeConfig,
     num_nodes: usize,
@@ -212,6 +228,21 @@ pub struct TestFixtureBuilder {
     is_dev: bool,
     no_local_transactions_propagation: bool,
     bootnodes: Option<Vec<TrustedPeer>>,
+    l1_provider: Option<L1Provider>,
+}
+
+impl std::fmt::Debug for TestFixtureBuilder {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("TestFixtureBuilder")
+            .field("config", &self.config)
+            .field("num_nodes", &self.num_nodes)
+            .field("chain_spec", &self.chain_spec)
+            .field("is_dev", &self.is_dev)
+            .field("no_local_transactions_propagation", &self.no_local_transactions_propagation)
+            .field("bootnodes", &self.bootnodes)
+            .field("l1_provider", &self.l1_provider.as_ref().map(|_| "L1Provider"))
+            .finish()
+    }
 }
 
 impl Default for TestFixtureBuilder {
@@ -230,6 +261,7 @@ impl TestFixtureBuilder {
             is_dev: false,
             no_local_transactions_propagation: false,
             bootnodes: None,
+            l1_provider: None,
         }
     }
 
@@ -448,6 +480,12 @@ impl TestFixtureBuilder {
         &mut self.config
     }
 
+    /// Set the L1 provider for making L1 RPC calls.
+    pub fn with_l1_provider(mut self, provider: L1Provider) -> Self {
+        self.l1_provider = Some(provider);
+        self
+    }
+
     /// Build the test fixture.
     pub async fn build(self) -> eyre::Result<TestFixture> {
         let config = self.config;
@@ -500,6 +538,7 @@ impl TestFixtureBuilder {
             nodes: node_handles,
             wallet: Arc::new(Mutex::new(wallet)),
             chain_spec,
+            l1_provider: self.l1_provider,
             _tasks,
         })
     }

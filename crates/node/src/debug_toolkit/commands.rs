@@ -9,6 +9,8 @@ use std::str::FromStr;
 pub enum Command {
     /// Show node status.
     Status,
+    /// Show detailed sync status.
+    SyncStatus,
     /// Show block details.
     Block(BlockArg),
     /// List blocks in range.
@@ -40,6 +42,8 @@ pub enum Command {
     Nodes,
     /// Show database path and access command.
     Db,
+    /// Show log file path.
+    Logs,
     /// Show help.
     Help,
     /// Exit the REPL.
@@ -80,14 +84,17 @@ pub enum L1Command {
     Sync,
     /// Inject new L1 block.
     Block(u64),
-    /// Inject L1 message (JSON).
-    Message(String),
-    /// Inject batch commit (JSON).
-    Commit(String),
-    /// Inject batch finalization.
-    Finalize(u64),
     /// Inject L1 reorg.
     Reorg(u64),
+    /// Show L1 message queue status.
+    Messages,
+    /// Send L1 message (bridge to L2).
+    Send {
+        /// Recipient address on L2.
+        to: Address,
+        /// Value to send.
+        value: U256,
+    },
 }
 
 /// Transaction-related commands.
@@ -133,8 +140,6 @@ pub enum EventsCommand {
     On,
     /// Disable background event stream.
     Off,
-    /// Stream next N events.
-    Stream(usize),
     /// Set event filter.
     Filter(Option<String>),
     /// Show event history.
@@ -155,6 +160,7 @@ impl Command {
 
         match cmd.as_str() {
             "status" => Self::Status,
+            "sync-status" | "syncstatus" => Self::SyncStatus,
             "block" => Self::parse_block(args),
             "blocks" => Self::parse_blocks(args),
             "fcs" | "forkchoice" => Self::Fcs,
@@ -168,6 +174,7 @@ impl Command {
             "node" => Self::parse_node(args),
             "nodes" => Self::Nodes,
             "db" | "database" => Self::Db,
+            "logs" | "log" => Self::Logs,
             "help" | "?" => Self::Help,
             "exit" | "quit" | "q" => Self::Exit,
             _ => Self::Unknown(cmd),
@@ -210,32 +217,21 @@ impl Command {
                     Self::Unknown("l1 block requires a block number".to_string())
                 }
             }
-            "message" | "msg" => {
-                if subargs.is_empty() {
-                    Self::Unknown("l1 message requires JSON data".to_string())
-                } else {
-                    Self::L1(L1Command::Message(subargs.join(" ")))
-                }
-            }
-            "commit" => {
-                if subargs.is_empty() {
-                    Self::Unknown("l1 commit requires JSON data".to_string())
-                } else {
-                    Self::L1(L1Command::Commit(subargs.join(" ")))
-                }
-            }
-            "finalize" => {
-                if let Some(n) = subargs.first().and_then(|s| s.parse::<u64>().ok()) {
-                    Self::L1(L1Command::Finalize(n))
-                } else {
-                    Self::Unknown("l1 finalize requires a batch index".to_string())
-                }
-            }
             "reorg" => {
                 if let Some(n) = subargs.first().and_then(|s| s.parse::<u64>().ok()) {
                     Self::L1(L1Command::Reorg(n))
                 } else {
                     Self::Unknown("l1 reorg requires a block number".to_string())
+                }
+            }
+            "messages" | "msg" | "queue" => Self::L1(L1Command::Messages),
+            "send" => {
+                if subargs.len() < 2 {
+                    return Self::Unknown("l1 send requires <to> <value>".to_string());
+                }
+                match (Address::from_str(subargs[0]), U256::from_str(subargs[1])) {
+                    (Ok(to), Ok(value)) => Self::L1(L1Command::Send { to, value }),
+                    _ => Self::Unknown("l1 send: invalid address or value".to_string()),
                 }
             }
             _ => Self::Unknown(format!("l1 {}", subcmd)),
@@ -303,7 +299,7 @@ impl Command {
     }
 
     fn parse_events(args: &[&str]) -> Self {
-        let subcmd = args.first().copied().unwrap_or("stream");
+        let subcmd = args.first().copied().unwrap_or("history");
         let subargs = if args.len() > 1 { &args[1..] } else { &[] };
 
         match subcmd {
@@ -317,14 +313,7 @@ impl Command {
                 let count = subargs.first().and_then(|s| s.parse().ok()).unwrap_or(20);
                 Self::Events(EventsCommand::History(count))
             }
-            _ => {
-                // Try to parse as a number for stream count
-                if let Ok(count) = subcmd.parse::<usize>() {
-                    Self::Events(EventsCommand::Stream(count))
-                } else {
-                    Self::Events(EventsCommand::Stream(10))
-                }
-            }
+            _ => Self::Unknown("Unknown events command".to_string()),
         }
     }
 
@@ -353,6 +342,7 @@ pub fn print_help() {
     println!();
     println!("{}", "Status & Inspection:".underline());
     println!("  status              Show node status (head, safe, finalized, L1 state)");
+    println!("  sync-status         Show detailed sync status (L1/L2 sync state)");
     println!("  block [n|latest]    Display block details");
     println!("  blocks <from> <to>  List blocks in range");
     println!("  fcs                 Show forkchoice state");
@@ -361,10 +351,9 @@ pub fn print_help() {
     println!("  l1 status           Show L1 sync state");
     println!("  l1 sync             Inject L1 synced event");
     println!("  l1 block <n>        Inject new L1 block notification");
-    println!("  l1 message <json>   Inject an L1 message");
-    println!("  l1 commit <json>    Inject batch commit");
-    println!("  l1 finalize <idx>   Inject batch finalization");
     println!("  l1 reorg <block>    Inject L1 reorg");
+    println!("  l1 messages         Show L1 message queue info (requires --l1-url)");
+    println!("  l1 send <to> <val>  Show cast command for L1->L2 bridge transfer");
     println!();
     println!("{}", "Block & Transaction:".underline());
     println!("  build               Build a new block (sequencer mode)");
@@ -383,7 +372,6 @@ pub fn print_help() {
     println!("{}", "Events:".underline());
     println!("  events on           Enable background event stream");
     println!("  events off          Disable background event stream");
-    println!("  events [count]      Stream next N events (default: 10)");
     println!("  events filter <pat> Filter events by type (e.g., Block*, L1*)");
     println!("  events history [n]  Show last N events (default: 20)");
     println!();
@@ -397,6 +385,9 @@ pub fn print_help() {
     println!();
     println!("{}", "Database:".underline());
     println!("  db                  Show database path and access command");
+    println!();
+    println!("{}", "Logs:".underline());
+    println!("  logs                Show log file path and tail command");
     println!();
     println!("{}", "Other:".underline());
     println!("  help                Show this help message");

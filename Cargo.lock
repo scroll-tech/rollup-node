@@ -11113,6 +11113,7 @@ dependencies = [
  "alloy-signer",
  "alloy-signer-aws",
  "alloy-signer-local",
+ "alloy-sol-types",
  "alloy-transport",
  "async-trait",
  "auto_impl",
