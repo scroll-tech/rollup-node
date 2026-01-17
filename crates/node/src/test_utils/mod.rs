@@ -77,7 +77,7 @@ pub use network_helpers::{
 // Legacy utilities - keep existing functions for backward compatibility
 use crate::{
     BlobProviderArgs, ChainOrchestratorArgs, ConsensusArgs, EngineDriverArgs, L1ProviderArgs,
-    RollupNodeDatabaseArgs, RollupNodeNetworkArgs, RpcArgs, ScrollRollupNode,
+    PprofArgs, RollupNodeDatabaseArgs, RollupNodeNetworkArgs, RpcArgs, ScrollRollupNode,
     ScrollRollupNodeConfig, SequencerArgs,
 };
 use alloy_primitives::Bytes;
@@ -239,6 +239,7 @@ pub fn default_test_scroll_rollup_node_config() -> ScrollRollupNodeConfig {
         gas_price_oracle_args: crate::RollupNodeGasPriceOracleArgs::default(),
         consensus_args: ConsensusArgs::noop(),
         database: None,
+        pprof_args: PprofArgs::default(),
         rpc_args: RpcArgs { basic_enabled: true, admin_enabled: true },
     }
 }
@@ -279,6 +280,7 @@ pub fn default_sequencer_test_scroll_rollup_node_config() -> ScrollRollupNodeCon
         gas_price_oracle_args: crate::RollupNodeGasPriceOracleArgs::default(),
         consensus_args: ConsensusArgs::noop(),
         database: None,
+        pprof_args: PprofArgs::default(),
         rpc_args: RpcArgs { basic_enabled: true, admin_enabled: true },
     }
 }

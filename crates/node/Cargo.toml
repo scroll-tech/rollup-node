@@ -106,6 +106,12 @@ tokio.workspace = true
 tracing.workspace = true
 console-subscriber = "0.5.0"
 
+# pprof dependencies
+pprof = { version = "0.15.0", features = ["flamegraph", "protobuf-codec"] }
+hyper = { version = "1.5", features = ["full"] }
+hyper-util = { version = "0.1", features = ["tokio"] }
+http-body-util = "0.1"
+
 [dev-dependencies]
 alloy-chains.workspace = true
 alloy-eips.workspace = true

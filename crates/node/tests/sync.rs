@@ -13,8 +13,8 @@ use rollup_node::{
         TestFixture,
     },
     BlobProviderArgs, ChainOrchestratorArgs, ConsensusArgs, EngineDriverArgs, L1ProviderArgs,
-    RollupNodeDatabaseArgs, RollupNodeGasPriceOracleArgs, RollupNodeNetworkArgs, RpcArgs,
-    ScrollRollupNodeConfig, SequencerArgs,
+    PprofArgs, RollupNodeDatabaseArgs, RollupNodeGasPriceOracleArgs, RollupNodeNetworkArgs,
+    RpcArgs, ScrollRollupNodeConfig, SequencerArgs,
 };
 use rollup_node_chain_orchestrator::ChainOrchestratorEvent;
 use rollup_node_primitives::BlockInfo;
@@ -76,6 +76,7 @@ async fn test_should_consolidate_to_block_15k() -> eyre::Result<()> {
         consensus_args: ConsensusArgs::noop(),
         database: None,
         rpc_args: RpcArgs::default(),
+        pprof_args: PprofArgs::default(),
     };
 
     let chain_spec = (*SCROLL_SEPOLIA).clone();
@@ -544,6 +545,7 @@ async fn test_chain_orchestrator_l1_reorg() -> eyre::Result<()> {
         consensus_args: ConsensusArgs::noop(),
         database: None,
         rpc_args: RpcArgs::default(),
+        pprof_args: PprofArgs::default(),
     };
 
     // Create the chain spec for scroll dev with Feynman activated and a test genesis.
