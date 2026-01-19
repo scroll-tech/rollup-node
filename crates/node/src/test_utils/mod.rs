@@ -241,7 +241,6 @@ where
         let node = ScrollNodeTestComponents::new(node, task_manager, node_exit_future).await;
 
         nodes.push(node);
-        // Note: db is already added to dbs in the creation logic above
     }
 
     Ok((nodes, dbs, Wallet::default().with_chain_id(chain_spec.chain().into())))

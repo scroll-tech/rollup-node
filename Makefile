@@ -64,22 +64,12 @@ lint: fmt lint-toml clippy udeps codespell zepter
 
 .PHONY: test
 test:
-	cargo nextest run \
+	cargo +nightly-2026-01-05 nextest run \
 	--workspace \
 	--locked \
 	--all-features \
 	--no-fail-fast \
-	-E 'not test(docker) and not binary(l1_sync)'
-
-.PHONY: test-l1-sync
-test-l1-sync:
-	cargo nextest run \
-	--workspace \
-	--locked \
-	--all-features \
-	--no-fail-fast \
-	--failure-output immediate \
-	-E 'binary(l1_sync)'
+	-E 'not test(docker)'
 
 .PHONY: test-docker
 test-docker:
@@ -110,7 +100,7 @@ docs:
 	cargo docs --document-private-items --exclude rollup-node-chain-orchestrator
 
 .PHONY: pr
-pr: lint test test-l1-sync docs
+pr: lint test docs
 
 .PHONY: docker
 docker:

@@ -601,35 +601,17 @@ impl TestFixtureBuilder {
         &mut self.config
     }
 
-    /// Enable Anvil with optional configuration.
-    ///
-    /// # Parameters
-    /// - `state_path`: Optional path to Anvil state file. Defaults to
-    ///   `./tests/testdata/anvil_state.json` if `None`.
-    /// - `chain_id`: Optional chain ID for Anvil. If `None`, Anvil uses its default.
-    /// - `block_time`: Optional block time in seconds. If `None`, Anvil uses its default.
-    ///
-    /// # Examples
-    /// ```ignore
-    /// // Use default state file and default Anvil settings
-    /// builder.with_anvil(None, None, None)
-    ///
-    /// // Use default state file with custom chain ID
-    /// builder.with_anvil(None, Some(22222222), None)
-    ///
-    /// // Use custom state file with custom chain ID and block time
-    /// builder.with_anvil(Some(PathBuf::from("custom_state.json")), Some(22222222), Some(1))
-    /// ```
+    /// Enable Anvil L1 with optional configuration.
+    /// 
+    /// Defaults: state_path = `./tests/testdata/anvil_state.json`, others use Anvil defaults.
     pub fn with_anvil(
         mut self,
-        port: Option<u16>,
         state_path: Option<PathBuf>,
         chain_id: Option<u64>,
         block_time: Option<u64>,
         slots_in_an_epoch: Option<u64>,
     ) -> Self {
         self.anvil_config.enabled = true;
-        self.anvil_config.port = port.unwrap_or(8544);
         self.anvil_config.state_path =
             state_path.or_else(|| Some(PathBuf::from("./tests/testdata/anvil_state.json")));
         self.anvil_config.chain_id = chain_id;

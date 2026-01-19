@@ -40,7 +40,7 @@ use std::{collections::HashMap, sync::LazyLock};
 /// This loads the file only once and keeps all transactions in memory for efficient access
 /// throughout the test suite. The cache is organized as a nested map:
 /// `tx_type -> index -> raw_bytes`
-static TEST_TRANSACTIONS: LazyLock<HashMap<String, HashMap<String, Bytes>>> = LazyLock::new(|| {
+static TEST_TRANSACTIONS: LazyLock<HashMap<String, HashMap<usize, Bytes>>> = LazyLock::new(|| {
     let tx_json_path = "./tests/testdata/test_transactions.json";
     let tx_json_content = std::fs::read_to_string(tx_json_path)
         .unwrap_or_else(|e| panic!("Failed to read {}: {}", tx_json_path, e));
@@ -57,6 +57,11 @@ static TEST_TRANSACTIONS: LazyLock<HashMap<String, HashMap<String, Bytes>>> = La
                 for (index, raw_tx_hex) in transactions {
                     if let Value::String(hex) = raw_tx_hex {
                         if !hex.is_empty() {
+                            // Parse index as usize
+                            let index_num: usize = index.parse()
+                                .unwrap_or_else(|e| {
+                                    panic!("Failed to parse index '{}' as usize: {}", index, e)
+                                });
                             // Decode hex string to bytes
                             let raw_tx_bytes = if let Some(stripped) = hex.strip_prefix("0x") {
                                 alloy_primitives::hex::decode(stripped)
@@ -66,7 +71,7 @@ static TEST_TRANSACTIONS: LazyLock<HashMap<String, HashMap<String, Bytes>>> = La
                             .unwrap_or_else(|e| {
                                 panic!("Failed to decode hex for {}.{}: {}", tx_type, index, e)
                             });
-                            tx_map.insert(index, Bytes::from(raw_tx_bytes));
+                            tx_map.insert(index_num, Bytes::from(raw_tx_bytes));
                         }
                     }
                 }
@@ -87,14 +92,14 @@ static TEST_TRANSACTIONS: LazyLock<HashMap<String, HashMap<String, Bytes>>> = La
 ///
 /// # Arguments
 /// * `tx_type` - The transaction category (e.g., "commitBatch", "finalizeBatch")
-/// * `index` - The transaction index within that category (e.g., "0", "1", "2")
+/// * `index` - The transaction index within that category (e.g., 0, 1, 2)
 ///
 /// # Returns
 /// The raw transaction bytes ready to be sent to Anvil via `eth_sendRawTransaction`.
-fn read_test_transaction(tx_type: &str, index: &str) -> eyre::Result<Bytes> {
+fn read_test_transaction(tx_type: &str, index: usize) -> eyre::Result<Bytes> {
     TEST_TRANSACTIONS
         .get(tx_type)
-        .and_then(|tx_group| tx_group.get(index))
+        .and_then(|tx_group| tx_group.get(&index))
         .cloned()
         .ok_or_else(|| eyre::eyre!("Transaction not found: {}.{}", tx_type, index))
 }
@@ -125,7 +130,7 @@ async fn test_l1_sync_batch_commit() -> eyre::Result<()> {
     let mut fixture = TestFixture::builder()
         .followers(1)
         .skip_l1_synced_notifications() // Prevents automatic L1Synced, simulates initial sync
-        .with_anvil(None, None, Some(22222222), None, None)
+        .with_anvil(None, Some(22222222), None, None)
         .build()
         .await?;
 
@@ -137,7 +142,7 @@ async fn test_l1_sync_batch_commit() -> eyre::Result<()> {
     // Step 2: Send BatchCommit transactions to L1 while node is syncing
     // These commits contain L2 blocks that should eventually become the safe head
     for i in 0..=6 {
-        let commit_batch_tx = read_test_transaction("commitBatch", &i.to_string())?;
+        let commit_batch_tx = read_test_transaction("commitBatch", i)?;
         fixture.anvil_inject_tx(commit_batch_tx).await?;
     }
     for _ in 1..=6 {
@@ -193,7 +198,7 @@ async fn test_l1_sync_batch_finalized() -> eyre::Result<()> {
     let mut fixture = TestFixture::builder()
         .followers(1)
         .skip_l1_synced_notifications()
-        .with_anvil(None, None, Some(22222222), None, Some(4))
+        .with_anvil(None, Some(22222222), None, Some(4))
         .build()
         .await?;
 
@@ -209,7 +214,7 @@ async fn test_l1_sync_batch_finalized() -> eyre::Result<()> {
 
     // Step 2: Send BatchCommit transactions (batches 0-6) to L1
     for i in 0..=6 {
-        let commit_batch_tx = read_test_transaction("commitBatch", &i.to_string())?;
+        let commit_batch_tx = read_test_transaction("commitBatch", i)?;
         fixture.anvil_inject_tx(commit_batch_tx).await?;
     }
     for _ in 1..=6 {
@@ -228,7 +233,7 @@ async fn test_l1_sync_batch_finalized() -> eyre::Result<()> {
     // Mine blocks to ensure the BatchFinalized events are themselves finalized on L1
     // This should trigger all unprocessed BatchCommit events up to the finalized batch
     for i in 1..=1 {
-        let finalize_batch_tx = read_test_transaction("finalizeBatch", &i.to_string())?;
+        let finalize_batch_tx = read_test_transaction("finalizeBatch", i)?;
         fixture.anvil_inject_tx(finalize_batch_tx).await?;
     }
     let anvil_block_number = fixture.anvil_get_block_number().await?;
@@ -281,7 +286,7 @@ async fn test_l1_sync_batch_finalized() -> eyre::Result<()> {
 
     // Step 7: Send more BatchFinalized transactions (batches 2-6) after L1Synced
     for i in 2..=6 {
-        let finalize_batch_tx = read_test_transaction("finalizeBatch", &i.to_string())?;
+        let finalize_batch_tx = read_test_transaction("finalizeBatch", i)?;
         fixture.anvil_inject_tx(finalize_batch_tx).await?;
     }
     for i in 2..=6 {
@@ -342,7 +347,7 @@ async fn test_l1_sync_batch_revert_before_l1_synced() -> eyre::Result<()> {
     let mut fixture = TestFixture::builder()
         .followers(1)
         .skip_l1_synced_notifications()
-        .with_anvil(None, None, Some(22222222), None, None)
+        .with_anvil(None, Some(22222222), None, None)
         .build()
         .await?;
 
@@ -353,7 +358,7 @@ async fn test_l1_sync_batch_revert_before_l1_synced() -> eyre::Result<()> {
 
     // Step 2: Send BatchCommit transactions (batches 0-6) to L1
     for i in 0..=6 {
-        let commit_batch_tx = read_test_transaction("commitBatch", &i.to_string())?;
+        let commit_batch_tx = read_test_transaction("commitBatch", i)?;
         fixture.anvil_inject_tx(commit_batch_tx).await?;
     }
     for _ in 1..=6 {
@@ -369,7 +374,7 @@ async fn test_l1_sync_batch_revert_before_l1_synced() -> eyre::Result<()> {
     );
 
     // Step 4: Send BatchRevert transaction to revert some batches
-    let revert_batch_tx = read_test_transaction("revertBatch", "0")?;
+    let revert_batch_tx = read_test_transaction("revertBatch", 0)?;
     fixture.anvil_inject_tx(revert_batch_tx).await?;
 
     fixture.expect_event().batch_reverted().await?;
@@ -408,7 +413,7 @@ async fn test_l1_sync_batch_revert_after_l1_synced() -> eyre::Result<()> {
     let mut fixture = TestFixture::builder()
         .followers(1)
         .skip_l1_synced_notifications()
-        .with_anvil(None, None, Some(22222222), None, None)
+        .with_anvil(None, Some(22222222), None, None)
         .build()
         .await?;
 
@@ -419,7 +424,7 @@ async fn test_l1_sync_batch_revert_after_l1_synced() -> eyre::Result<()> {
 
     // Step 2: Send BatchCommit transactions (batches 0-6) to L1
     for i in 0..=6 {
-        let commit_batch_tx = read_test_transaction("commitBatch", &i.to_string())?;
+        let commit_batch_tx = read_test_transaction("commitBatch", i)?;
         fixture.anvil_inject_tx(commit_batch_tx).await?;
     }
     for _ in 1..=6 {
@@ -441,7 +446,7 @@ async fn test_l1_sync_batch_revert_after_l1_synced() -> eyre::Result<()> {
     );
 
     // Step 4: Send BatchRevert transaction to revert some batches
-    let revert_batch_tx = read_test_transaction("revertBatch", "0")?;
+    let revert_batch_tx = read_test_transaction("revertBatch", 0)?;
     fixture.anvil_inject_tx(revert_batch_tx).await?;
 
     fixture.expect_event().batch_reverted().await?;
@@ -485,7 +490,7 @@ async fn test_l1_reorg_batch_commit() -> eyre::Result<()> {
     let mut fixture = TestFixture::builder()
         .followers(1)
         .skip_l1_synced_notifications()
-        .with_anvil(None, None, Some(22222222), None, Some(32))
+        .with_anvil(None, Some(22222222), None, Some(32))
         .build()
         .await?;
 
@@ -494,7 +499,7 @@ async fn test_l1_reorg_batch_commit() -> eyre::Result<()> {
 
     // Step 2: Send first batch of commits (batches 0-3)
     for i in 0..=3 {
-        let commit_batch_tx = read_test_transaction("commitBatch", &i.to_string())?;
+        let commit_batch_tx = read_test_transaction("commitBatch", i)?;
         fixture.anvil_inject_tx(commit_batch_tx).await?;
     }
     for _ in 1..=3 {
@@ -508,7 +513,7 @@ async fn test_l1_reorg_batch_commit() -> eyre::Result<()> {
 
     // Step 3: Send more commits (batches 4-6) to advance safe head
     for i in 4..=6 {
-        let commit_batch_tx = read_test_transaction("commitBatch", &i.to_string())?;
+        let commit_batch_tx = read_test_transaction("commitBatch", i)?;
         fixture.anvil_inject_tx(commit_batch_tx).await?;
     }
     for _ in 1..=3 {
@@ -565,7 +570,7 @@ async fn test_l1_reorg_batch_finalized() -> eyre::Result<()> {
     let mut fixture = TestFixture::builder()
         .followers(1)
         .skip_l1_synced_notifications()
-        .with_anvil(None, None, Some(22222222), None, None)
+        .with_anvil(None, Some(22222222), None, None)
         .build()
         .await?;
 
@@ -575,7 +580,7 @@ async fn test_l1_reorg_batch_finalized() -> eyre::Result<()> {
     // Step 2: Send BatchCommit transactions (batches 0-6)
     // This commits the batches to L1 but doesn't finalize them yet
     for i in 0..=6 {
-        let commit_batch_tx = read_test_transaction("commitBatch", &i.to_string())?;
+        let commit_batch_tx = read_test_transaction("commitBatch", i)?;
         fixture.anvil_inject_tx(commit_batch_tx).await?;
     }
     for i in 1..=6 {
@@ -593,7 +598,7 @@ async fn test_l1_reorg_batch_finalized() -> eyre::Result<()> {
     // Step 3: Send BatchFinalized transactions (batches 1-2)
     // This finalizes the committed batches on L1
     for i in 1..=2 {
-        let finalize_batch_tx = read_test_transaction("finalizeBatch", &i.to_string())?;
+        let finalize_batch_tx = read_test_transaction("finalizeBatch", i)?;
         fixture.anvil_inject_tx(finalize_batch_tx).await?;
     }
     for i in 1..=2 {
@@ -662,7 +667,7 @@ async fn test_l1_reorg_batch_revert() -> eyre::Result<()> {
     let mut fixture = TestFixture::builder()
         .followers(1)
         .skip_l1_synced_notifications()
-        .with_anvil(None, None, Some(22222222), None, None)
+        .with_anvil(None, Some(22222222), None, None)
         .build()
         .await?;
 
@@ -671,7 +676,7 @@ async fn test_l1_reorg_batch_revert() -> eyre::Result<()> {
 
     // Step 2: Send BatchCommit transactions (batches 0-6)
     for i in 0..=6 {
-        let commit_batch_tx = read_test_transaction("commitBatch", &i.to_string())?;
+        let commit_batch_tx = read_test_transaction("commitBatch", i)?;
         fixture.anvil_inject_tx(commit_batch_tx).await?;
     }
     for _ in 1..=6 {
@@ -684,7 +689,7 @@ async fn test_l1_reorg_batch_revert() -> eyre::Result<()> {
     tracing::info!("Safe head after all commits: {}", safe_after_commits);
 
     // Step 3: Send BatchRevert transaction to roll back some batches
-    let revert_batch_tx = read_test_transaction("revertBatch", "0")?;
+    let revert_batch_tx = read_test_transaction("revertBatch", 0)?;
     fixture.anvil_inject_tx(revert_batch_tx).await?;
     fixture.expect_event().batch_reverted().await?;
 
@@ -732,7 +737,7 @@ async fn test_l1_sync_commit_batch_after_reboot() -> eyre::Result<()> {
     let mut fixture = TestFixture::builder()
         .followers(1)
         .skip_l1_synced_notifications()
-        .with_anvil(None, None, Some(22222222), None, None)
+        .with_anvil(None, Some(22222222), None, None)
         .build()
         .await?;
 
@@ -741,7 +746,7 @@ async fn test_l1_sync_commit_batch_after_reboot() -> eyre::Result<()> {
 
     // Step 2: Send BatchCommit transactions (batches 0-3)
     for i in 0..=3 {
-        let commit_batch_tx = read_test_transaction("commitBatch", &i.to_string())?;
+        let commit_batch_tx = read_test_transaction("commitBatch", i)?;
         fixture.anvil_inject_tx(commit_batch_tx).await?;
     }
     for _ in 1..=3 {
@@ -759,7 +764,7 @@ async fn test_l1_sync_commit_batch_after_reboot() -> eyre::Result<()> {
 
     // Step 4: Send more BatchCommit transactions (batches 4-6)
     for i in 4..=6 {
-        let commit_batch_tx = read_test_transaction("commitBatch", &i.to_string())?;
+        let commit_batch_tx = read_test_transaction("commitBatch", i)?;
         fixture.anvil_inject_tx(commit_batch_tx).await?;
     }
 
@@ -805,7 +810,7 @@ async fn test_l1_sync_finalize_batch_after_reboot() -> eyre::Result<()> {
     let mut fixture = TestFixture::builder()
         .followers(1)
         .skip_l1_synced_notifications()
-        .with_anvil(None, None, Some(22222222), None, None)
+        .with_anvil(None, Some(22222222), None, None)
         .build()
         .await?;
 
@@ -814,7 +819,7 @@ async fn test_l1_sync_finalize_batch_after_reboot() -> eyre::Result<()> {
 
     // Step 2: Send BatchCommit transactions (batches 0-6)
     for i in 0..=6 {
-        let commit_batch_tx = read_test_transaction("commitBatch", &i.to_string())?;
+        let commit_batch_tx = read_test_transaction("commitBatch", i)?;
         fixture.anvil_inject_tx(commit_batch_tx).await?;
     }
     for _ in 1..=6 {
@@ -827,7 +832,7 @@ async fn test_l1_sync_finalize_batch_after_reboot() -> eyre::Result<()> {
 
     // Step 3: Send BatchFinalized transactions (batches 1-3)
     for i in 1..=3 {
-        let finalize_batch_tx = read_test_transaction("finalizeBatch", &i.to_string())?;
+        let finalize_batch_tx = read_test_transaction("finalizeBatch", i)?;
         fixture.anvil_inject_tx(finalize_batch_tx).await?;
     }
     for _ in 1..=3 {
@@ -845,7 +850,7 @@ async fn test_l1_sync_finalize_batch_after_reboot() -> eyre::Result<()> {
 
     // Step 5: Send more BatchFinalized transactions (batches 4-6)
     for i in 4..=6 {
-        let finalize_batch_tx = read_test_transaction("finalizeBatch", &i.to_string())?;
+        let finalize_batch_tx = read_test_transaction("finalizeBatch", i)?;
         fixture.anvil_inject_tx(finalize_batch_tx).await?;
     }
 
@@ -889,7 +894,7 @@ async fn test_l1_sync_revert_batch_after_reboot() -> eyre::Result<()> {
     let mut fixture = TestFixture::builder()
         .followers(1)
         .skip_l1_synced_notifications()
-        .with_anvil(None, None, Some(22222222), None, None)
+        .with_anvil(None, Some(22222222), None, None)
         .build()
         .await?;
 
@@ -898,7 +903,7 @@ async fn test_l1_sync_revert_batch_after_reboot() -> eyre::Result<()> {
 
     // Step 2: Send BatchCommit transactions (batches 0-6)
     for i in 0..=6 {
-        let commit_batch_tx = read_test_transaction("commitBatch", &i.to_string())?;
+        let commit_batch_tx = read_test_transaction("commitBatch", i)?;
         fixture.anvil_inject_tx(commit_batch_tx).await?;
     }
     for _ in 1..=6 {
@@ -919,7 +924,7 @@ async fn test_l1_sync_revert_batch_after_reboot() -> eyre::Result<()> {
     fixture.expect_event().l1_synced().await?;
 
     // Step 5: Send BatchRevert transaction
-    let revert_batch_tx = read_test_transaction("revertBatch", "0")?;
+    let revert_batch_tx = read_test_transaction("revertBatch", 0)?;
     fixture.anvil_inject_tx(revert_batch_tx).await?;
     fixture.expect_event().batch_reverted().await?;
 
@@ -955,7 +960,7 @@ async fn test_l1_reorg_commit_batch_after_reboot() -> eyre::Result<()> {
     let mut fixture = TestFixture::builder()
         .followers(1)
         .skip_l1_synced_notifications()
-        .with_anvil(None, None, Some(22222222), None, None)
+        .with_anvil(None, Some(22222222), None, None)
         .build()
         .await?;
 
@@ -964,7 +969,7 @@ async fn test_l1_reorg_commit_batch_after_reboot() -> eyre::Result<()> {
 
     // Step 2: Send BatchCommit transactions (batches 0-3)
     for i in 0..=3 {
-        let commit_batch_tx = read_test_transaction("commitBatch", &i.to_string())?;
+        let commit_batch_tx = read_test_transaction("commitBatch", i)?;
         fixture.anvil_inject_tx(commit_batch_tx).await?;
     }
     for _ in 1..=3 {
@@ -1023,7 +1028,7 @@ async fn test_l1_reorg_finalize_batch_after_reboot() -> eyre::Result<()> {
     let mut fixture = TestFixture::builder()
         .followers(1)
         .skip_l1_synced_notifications()
-        .with_anvil(None, None, Some(22222222), None, Some(32))
+        .with_anvil(None, Some(22222222), None, Some(32))
         .build()
         .await?;
 
@@ -1032,7 +1037,7 @@ async fn test_l1_reorg_finalize_batch_after_reboot() -> eyre::Result<()> {
 
     // Step 2: Send BatchCommit transactions (batches 0-6)
     for i in 0..=6 {
-        let commit_batch_tx = read_test_transaction("commitBatch", &i.to_string())?;
+        let commit_batch_tx = read_test_transaction("commitBatch", i)?;
         fixture.anvil_inject_tx(commit_batch_tx).await?;
     }
     for _ in 1..=6 {
@@ -1041,7 +1046,7 @@ async fn test_l1_reorg_finalize_batch_after_reboot() -> eyre::Result<()> {
 
     // Step 3: Send BatchFinalized transactions (batches 1-3)
     for i in 1..=3 {
-        let finalize_batch_tx = read_test_transaction("finalizeBatch", &i.to_string())?;
+        let finalize_batch_tx = read_test_transaction("finalizeBatch", i)?;
         fixture.anvil_inject_tx(finalize_batch_tx).await?;
     }
     for _ in 1..=3 {
@@ -1099,7 +1104,7 @@ async fn test_l1_reorg_revert_batch_after_reboot() -> eyre::Result<()> {
     let mut fixture = TestFixture::builder()
         .followers(1)
         .skip_l1_synced_notifications()
-        .with_anvil(None, None, Some(22222222), None, None)
+        .with_anvil(None, Some(22222222), None, None)
         .build()
         .await?;
 
@@ -1108,7 +1113,7 @@ async fn test_l1_reorg_revert_batch_after_reboot() -> eyre::Result<()> {
 
     // Step 2: Send BatchCommit transactions (batches 0-6)
     for i in 0..=6 {
-        let commit_batch_tx = read_test_transaction("commitBatch", &i.to_string())?;
+        let commit_batch_tx = read_test_transaction("commitBatch", i)?;
         fixture.anvil_inject_tx(commit_batch_tx).await?;
     }
     for _ in 1..=6 {
@@ -1120,7 +1125,7 @@ async fn test_l1_reorg_revert_batch_after_reboot() -> eyre::Result<()> {
     tracing::info!("Safe head after commits: {}", safe_after_commits);
 
     // Step 3: Send BatchRevert transaction
-    let revert_batch_tx = read_test_transaction("revertBatch", "0")?;
+    let revert_batch_tx = read_test_transaction("revertBatch", 0)?;
     fixture.anvil_inject_tx(revert_batch_tx).await?;
     fixture.expect_event().batch_reverted().await?;
 
