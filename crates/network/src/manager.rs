@@ -241,7 +241,7 @@ impl<
         // Announce block to the filtered set of peers
         for peer_id in peers {
             trace!(target: "scroll::network::manager", peer_id = %peer_id, block_number = %block.block.header.number, block_hash = %hash, "Announcing new block to peer");
-            self.scroll_wire.announce_block(peer_id, &block);
+            self.scroll_wire.announce_block(peer_id, &block, hash);
         }
     }
 

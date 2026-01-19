@@ -16,24 +16,16 @@ use tracing::trace;
 /// The size of the LRU cache used to track blocks that have been seen by peers.
 pub const LRU_CACHE_SIZE: u32 = 100;
 
-/// Tracks which blocks a peer has seen via different protocols.
-///
-/// This prevents duplicate block penalties when the same peer sends the same block
-/// through both scroll-wire and eth-wire protocols (which is expected behavior).
-/// Each protocol maintains its own LRU cache to detect true duplicates (same block
-/// sent multiple times via the same protocol).
+/// Tracks block announced and received state for a peer.
 #[derive(Debug)]
 pub struct PeerBlockState {
-    /// the blocks announced to the peer
+    /// blocks announced to the peer
     announced: LruCache<B256>,
     /// blocks received via scroll-wire protocol, this is used to penalize peers that send
     /// duplicate blocks via scroll-wire.
     scroll_wire_received: LruCache<B256>,
     /// blocks received via eth-wire protocol, this is used to penalize peers that send duplicate
-    /// blocks via eth-wire. TODO: Remove this field once eth-wire protocol is deprecated and
-    /// l2geth is no longer supported. These entries are NOT automatically removed when
-    /// eth-wire connections close (since we can't detect that), but their memory is bounded by
-    /// `LRU_CACHE_SIZE` per peer (~6.4 KB per peer).
+    /// blocks via eth-wire.
     eth_wire_received: LruCache<B256>,
 }
 
@@ -104,23 +96,21 @@ impl ScrollWireManager {
     }
 
     /// Announces a new block to the specified peer.
-    pub fn announce_block(&mut self, peer_id: PeerId, block: &NewBlock) {
+    pub fn announce_block(&mut self, peer_id: PeerId, block: &NewBlock, hash: B256) {
         if let Entry::Occupied(to_connection) = self.connections.entry(peer_id) {
             // We send the block to the peer. If we receive an error we remove the peer from the
-            // connections map as the connection is no longer valid.
+            // connections map and peer_block_state as the connection is no longer valid.
             if to_connection.get().send(ScrollMessage::new_block(block.clone())).is_err() {
                 trace!(target: "scroll::wire::manager", peer_id = %peer_id, "Failed to send block to peer - dropping peer.");
-                // Clean up both connection and state when scroll-wire peer disconnects
                 self.peer_block_state.remove(&peer_id);
                 to_connection.remove();
             } else {
                 trace!(target: "scroll::wire::manager", peer_id = %peer_id, "Announced block to peer");
                 // Record that we announced this block to the peer
-                let block_hash = block.block.hash_slow();
                 self.peer_block_state
                     .entry(peer_id)
                     .or_insert_with(|| PeerBlockState::new(LRU_CACHE_SIZE))
-                    .insert_announced(block_hash);
+                    .insert_announced(hash);
             }
         }
     }
