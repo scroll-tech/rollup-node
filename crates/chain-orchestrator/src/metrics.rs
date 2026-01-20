@@ -28,23 +28,15 @@ impl MetricsHandler {
 
     /// The duration of the current block building task if any.
     pub(crate) fn finish_no_empty_block_building_recording(&mut self) {
-        let duration = self
-            .block_building_meter
-            .block_building_start
-            .take()
-            .map(|block_building_start| block_building_start.elapsed());
-        if let Some(duration) = duration {
+        if let Some(block_build_start) = self.block_building_meter.block_building_start {
+            let duration = block_build_start.elapsed();
             self.block_building_meter.metric.block_building_duration.record(duration.as_secs_f64());
         }
     }
 
     pub(crate) fn finish_all_block_building_recording(&mut self) {
-        let duration = self
-            .block_building_meter
-            .block_building_start
-            .take()
-            .map(|block_building_start| block_building_start.elapsed());
-        if let Some(duration) = duration {
+        if let Some(block_build_start) = self.block_building_meter.block_building_start {
+            let duration = block_build_start.elapsed();
             self.block_building_meter
                 .metric
                 .all_block_building_duration

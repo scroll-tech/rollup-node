@@ -27,7 +27,7 @@ jobs:
         with:
           cache-on-failure: true
       - name: Run clippy
-        run: cargo clean && cargo clippy --workspace --lib --examples --tests --benches --all-features --locked
+        run: cargo clippy --workspace --lib --examples --tests --benches --all-features --locked
         env:
           RUSTFLAGS: -D warnings
 
