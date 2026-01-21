@@ -35,7 +35,7 @@ pub fn decode_v2(calldata: &[u8], blob: &[u8]) -> Result<Batch, DecodingError> {
 
     // get blob iterator and collect, skipping unused bytes.
     let compressed_heap_blob = BlobSliceIter::from_blob_slice(blob).copied().collect::<Vec<_>>();
-    let uncompressed_heap_blob = decompress_blob_data(&compressed_heap_blob);
+    let uncompressed_heap_blob = decompress_blob_data(&compressed_heap_blob)?;
     let buf = &mut (uncompressed_heap_blob.as_slice());
 
     // check buf len.
