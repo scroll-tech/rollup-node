@@ -58,10 +58,9 @@ static TEST_TRANSACTIONS: LazyLock<HashMap<String, HashMap<usize, Bytes>>> = Laz
                     if let Value::String(hex) = raw_tx_hex {
                         if !hex.is_empty() {
                             // Parse index as usize
-                            let index_num: usize = index.parse()
-                                .unwrap_or_else(|e| {
-                                    panic!("Failed to parse index '{}' as usize: {}", index, e)
-                                });
+                            let index_num: usize = index.parse().unwrap_or_else(|e| {
+                                panic!("Failed to parse index '{}' as usize: {}", index, e)
+                            });
                             // Decode hex string to bytes
                             let raw_tx_bytes = if let Some(stripped) = hex.strip_prefix("0x") {
                                 alloy_primitives::hex::decode(stripped)

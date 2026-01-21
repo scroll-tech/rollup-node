@@ -4,10 +4,10 @@ use super::{
     block_builder::BlockBuilder, l1_helpers::L1Helper, setup_engine, tx_helpers::TxHelper,
 };
 use crate::{
-    constants, BlobProviderArgs, ChainOrchestratorArgs, ConsensusAlgorithm, ConsensusArgs,
-    EngineDriverArgs, L1ProviderArgs, RollupNodeDatabaseArgs, RollupNodeGasPriceOracleArgs,
+    BlobProviderArgs, ChainOrchestratorArgs, ConsensusAlgorithm, ConsensusArgs, EngineDriverArgs,
+    L1ProviderArgs, PprofArgs, RollupNodeDatabaseArgs, RollupNodeGasPriceOracleArgs,
     RollupNodeNetworkArgs, RpcArgs, ScrollRollupNode, ScrollRollupNodeConfig, SequencerArgs,
-    SignerArgs, TestArgs,
+    SignerArgs,
 };
 
 use alloy_eips::BlockNumberOrTag;
@@ -427,6 +427,7 @@ impl TestFixtureBuilder {
             consensus_args: ConsensusArgs::noop(),
             database: None,
             rpc_args: RpcArgs { basic_enabled: true, admin_enabled: true },
+            pprof_args: PprofArgs::default(),
         }
     }
 
@@ -602,7 +603,7 @@ impl TestFixtureBuilder {
     }
 
     /// Enable Anvil L1 with optional configuration.
-    /// 
+    ///
     /// Defaults: state_path = `./tests/testdata/anvil_state.json`, others use Anvil defaults.
     pub fn with_anvil(
         mut self,

@@ -13,7 +13,7 @@ use crate::test_utils::{fixture::ScrollNodeTestComponents, setup_engine, NodeHan
 
 impl TestFixture {
     /// Gracefully shutdown a node and clean up its resources.
-    /// 
+    ///
     /// Process: Shutdown ChainOrchestrator → Drop NodeHandle → Wait for cleanup (1s).
     /// The node can be restarted later with `start_node()` to reuse its database.
     pub async fn shutdown_node(&mut self, node_index: usize) -> eyre::Result<()> {

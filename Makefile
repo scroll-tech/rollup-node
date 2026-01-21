@@ -1,6 +1,8 @@
+NIGHTLY_TOOLCHAIN := nightly-2026-01-05
+
 .PHONY: fmt
 fmt:
-	cargo +nightly fmt
+	cargo +$(NIGHTLY_TOOLCHAIN) fmt
 
 .PHONY: lint-toml
 lint-toml: ensure-dprint
@@ -14,7 +16,7 @@ ensure-dprint:
 
 .PHONY: clippy
 clippy:
-	cargo +nightly clippy \
+	cargo +$(NIGHTLY_TOOLCHAIN) clippy \
 	--workspace \
 	--lib \
 	--examples \
@@ -25,7 +27,7 @@ clippy:
 
 .PHONY: clippy-fix
 clippy-fix:
-	cargo +nightly clippy \
+	cargo +$(NIGHTLY_TOOLCHAIN) clippy \
 	--workspace \
 	--lib \
 	--examples \
@@ -37,7 +39,7 @@ clippy-fix:
 
 .PHONY: udeps
 udeps:
-	cargo +nightly udeps --workspace --lib --examples --tests --benches --all-features --locked
+	cargo +$(NIGHTLY_TOOLCHAIN) udeps --workspace --lib --examples --tests --benches --all-features --locked
 
 .PHONY: codespell
 codespell: ensure-codespell
@@ -64,7 +66,7 @@ lint: fmt lint-toml clippy udeps codespell zepter
 
 .PHONY: test
 test:
-	cargo +nightly-2026-01-05 nextest run \
+	cargo +$(NIGHTLY_TOOLCHAIN) nextest run \
 	--workspace \
 	--locked \
 	--all-features \

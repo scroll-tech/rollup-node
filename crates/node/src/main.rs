@@ -45,7 +45,11 @@ fn main() {
                         .config()
                         .engine
                         .tree_config()
-                        .with_always_process_payload_attributes_on_canonical_head(true).with_persistence_threshold(0).with_unwind_canonical_header(true);
+                        .with_always_process_payload_attributes_on_canonical_head(true)
+                        .with_persistence_threshold(0)
+                        .with_unwind_canonical_header(true)
+                        // Use legacy state root processor due to performance issues with the new state root processor in reth.
+                        .with_legacy_state_root(true);
                     let launcher = EngineNodeLauncher::new(
                         builder.task_executor().clone(),
                         builder.config().datadir(),

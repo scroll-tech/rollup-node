@@ -77,10 +77,8 @@ impl<'a> EventWaiter<'a> {
 
     /// Wait for L1 synced event on all specified nodes.
     pub async fn l1_synced(self) -> eyre::Result<()> {
-        self.wait_for_event_on_all(|e| {
-            matches!(e, ChainOrchestratorEvent::L1Synced).then_some(())
-        })
-        .await?;
+        self.wait_for_event_on_all(|e| matches!(e, ChainOrchestratorEvent::L1Synced).then_some(()))
+            .await?;
         Ok(())
     }
 
@@ -215,8 +213,7 @@ impl<'a> EventWaiter<'a> {
         self,
         predicate: impl Fn(&ChainOrchestratorEvent) -> bool,
     ) -> eyre::Result<Vec<ChainOrchestratorEvent>> {
-        self.wait_for_event_on_all(move |e| predicate(e).then(|| e.clone()))
-            .await
+        self.wait_for_event_on_all(move |e| predicate(e).then(|| e.clone())).await
     }
 
     /// Wait for N events matching a predicate.
