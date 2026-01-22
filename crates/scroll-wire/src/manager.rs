@@ -18,7 +18,7 @@ pub const LRU_CACHE_SIZE: u32 = 100;
 
 /// Tracks block announced and received state for a peer.
 #[derive(Debug)]
-pub struct PeerBlockState {
+pub struct PeerState {
     /// blocks announced to the peer
     announced: LruCache<B256>,
     /// blocks received via scroll-wire protocol, this is used to penalize peers that send
@@ -29,7 +29,7 @@ pub struct PeerBlockState {
     eth_wire_received: LruCache<B256>,
 }
 
-impl PeerBlockState {
+impl PeerState {
     /// Creates a new `PeerBlockState` with the specified LRU cache capacity.
     pub fn new(capacity: u32) -> Self {
         Self {
@@ -81,18 +81,14 @@ pub struct ScrollWireManager {
     /// A map of connections to peers.
     connections: HashMap<PeerId, UnboundedSender<ScrollMessage>>,
     /// Unified state tracking block state and blocks received from each peer via both protocols.
-    peer_block_state: HashMap<PeerId, PeerBlockState>,
+    peer_state: HashMap<PeerId, PeerState>,
 }
 
 impl ScrollWireManager {
     /// Creates a new [`ScrollWireManager`] instance.
     pub fn new(events: UnboundedReceiver<ScrollWireEvent>) -> Self {
         trace!(target: "scroll::wire::manager", "Creating new ScrollWireManager instance");
-        Self {
-            events: events.into(),
-            connections: HashMap::new(),
-            peer_block_state: HashMap::new(),
-        }
+        Self { events: events.into(), connections: HashMap::new(), peer_state: HashMap::new() }
     }
 
     /// Announces a new block to the specified peer.
@@ -102,14 +98,14 @@ impl ScrollWireManager {
             // connections map and peer_block_state as the connection is no longer valid.
             if to_connection.get().send(ScrollMessage::new_block(block.clone())).is_err() {
                 trace!(target: "scroll::wire::manager", peer_id = %peer_id, "Failed to send block to peer - dropping peer.");
-                self.peer_block_state.remove(&peer_id);
+                self.peer_state.remove(&peer_id);
                 to_connection.remove();
             } else {
                 trace!(target: "scroll::wire::manager", peer_id = %peer_id, "Announced block to peer");
                 // Record that we announced this block to the peer
-                self.peer_block_state
+                self.peer_state
                     .entry(peer_id)
-                    .or_insert_with(|| PeerBlockState::new(LRU_CACHE_SIZE))
+                    .or_insert_with(|| PeerState::new(LRU_CACHE_SIZE))
                     .insert_announced(hash);
             }
         }
@@ -120,14 +116,14 @@ impl ScrollWireManager {
         self.connections.keys()
     }
 
-    /// Returns a reference to the peer block state map.
-    pub const fn peer_block_state(&self) -> &HashMap<PeerId, PeerBlockState> {
-        &self.peer_block_state
+    /// Returns a reference to the peer state map.
+    pub const fn peer_state(&self) -> &HashMap<PeerId, PeerState> {
+        &self.peer_state
     }
 
-    /// Returns a mutable reference to the peer block state map.
-    pub const fn peer_block_state_mut(&mut self) -> &mut HashMap<PeerId, PeerBlockState> {
-        &mut self.peer_block_state
+    /// Returns a mutable reference to the peer state map.
+    pub const fn peer_state_mut(&mut self) -> &mut HashMap<PeerId, PeerState> {
+        &mut self.peer_state
     }
 }
 
