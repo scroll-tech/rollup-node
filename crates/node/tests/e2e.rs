@@ -1949,3 +1949,323 @@ where
         interval.tick().await;
     }
 }
+
+/// Tests that peers are penalized for sending finalized blocks (DoS protection).
+///
+/// This test verifies that the node rejects blocks with block numbers at or below
+/// the finalized height to prevent DoS attacks from malicious peers repeatedly
+/// sending old blocks.
+///
+/// Test flow:
+/// 1. Build and finalize several blocks
+/// 2. Attempt to send a finalized block from node0 to node1
+/// 3. Verify that node0's reputation decreases
+// #[tokio::test]
+// async fn can_penalize_peer_for_sending_finalized_block() -> eyre::Result<()> {
+//     reth_tracing::init_test_tracing();
+
+//     // Create 2 nodes with the TestFixture API
+//     let mut fixture = TestFixture::builder()
+//         .sequencer()
+//         .followers(1)
+//         .block_time(0)
+//         .allow_empty_blocks(true)
+//         .with_eth_scroll_bridge(true)
+//         .with_scroll_wire(true)
+//         .payload_building_duration(1000)
+//         .build()
+//         .await?;
+
+//     // Set the L1 to synced on the sequencer node
+//     fixture.l1().for_node(0).sync().await?;
+//     fixture.expect_event_on(0).l1_synced().await?;
+
+//     // Build and finalize 3 blocks
+//     for _ in 0..3 {
+//         fixture.build_block().expect_tx_count(0).build_and_await_block().await?;
+//     }
+
+//     // Get the last finalized block (block 3)
+//     let finalized_block = fixture.build_block().expect_tx_count(0).build_and_await_block().await?;
+//     let finalized_number = finalized_block.header.number;
+
+//     // Finalize the block
+//     fixture
+//         .l1()
+//         .for_node(1)
+//         .finalize_l1_block(finalized_number, finalized_number)
+//         .await?;
+
+//     // Wait for finalization event
+//     fixture.expect_event_on(1).l2_finalized().await?;
+
+//     // Check initial reputation of node 0 from node 1's perspective
+//     fixture.check_reputation_on(1).of_node(0).await?.equals(0).await?;
+
+//     // Attempt to send the finalized block from node0 to node1
+//     // This should be rejected as a DoS attack
+//     fixture
+//         .network_on(0)
+//         .announce_block(
+//             finalized_block.clone(),
+//             Signature::new(U256::from(1), U256::from(1), false),
+//         )
+//         .await?;
+
+//     // Wait for reputation to decrease due to DoS attempt
+//     fixture
+//         .check_reputation_on(1)
+//         .of_node(0)
+//         .await?
+//         .with_timeout(Duration::from_secs(5))
+//         .with_poll_interval(Duration::from_millis(10))
+//         .eventually_less_than(0)
+//         .await?;
+
+//     Ok(())
+// }
+
+// #[tokio::test]
+// async fn can_penalize_peer_for_invalid_signature() -> eyre::Result<()> {
+//     reth_tracing::init_test_tracing();
+
+//     let chain_spec = (*SCROLL_DEV).clone();
+
+//     // Create two signers - one authorized and one unauthorized
+//     let authorized_signer = PrivateKeySigner::random().with_chain_id(Some(chain_spec.chain().id()));
+//     let authorized_address = authorized_signer.address();
+//     let unauthorized_signer =
+//         PrivateKeySigner::random().with_chain_id(Some(chain_spec.chain().id()));
+
+//     // Build fixture with SystemContract consensus
+//     let mut fixture = TestFixture::builder()
+//         .sequencer()
+//         .followers(1)
+//         .with_chain_spec(chain_spec)
+//         .block_time(0)
+//         .allow_empty_blocks(true)
+//         .with_consensus_system_contract(authorized_address)
+//         .with_signer(authorized_signer.clone())
+//         .payload_building_duration(1000)
+//         .build()
+//         .await?;
+
+//     // Set the L1 to synced on the sequencer node
+//     fixture.l1().for_node(0).sync().await?;
+//     fixture.expect_event_on(0).l1_synced().await?;
+
+//     // === Phase 1: Test valid block with correct signature ===
+
+//     // Have the legitimate sequencer build and sign a block
+//     let block0 = fixture.build_block().expect_tx_count(0).build_and_await_block().await?;
+
+//     // Wait for node1 to receive and validate the block with correct signature
+//     let received_block = fixture.expect_event_on(1).new_block_received().await?;
+//     assert_eq!(block0.hash_slow(), received_block.hash_slow());
+
+//     // Wait for successful import
+//     fixture.expect_event_on(1).chain_extended(block0.header.number).await?;
+
+//     // === Phase 2: Create and send valid block with unauthorized signer signature ===
+
+//     // Check initial reputation
+//     fixture.check_reputation_on(1).of_node(0).await?.equals(0).await?;
+
+//     // Create a new block manually (we'll reuse the valid block structure but with wrong signature)
+//     let mut block1 = block0.clone();
+//     block1.header.number += 1;
+//     block1.header.parent_hash = block0.hash_slow();
+//     block1.header.timestamp += 1;
+
+//     // Sign the block with the unauthorized signer
+//     let block_hash = sig_encode_hash(&block1);
+//     let unauthorized_signature = unauthorized_signer.sign_hash(&block_hash).await?;
+
+//     // Send the block with invalid signature from node0 to node1
+//     fixture.network_on(0).announce_block(block1.clone(), unauthorized_signature).await?;
+
+//     // Node1 should receive and process the invalid block
+//     fixture
+//         .expect_event_on(1)
+//         .timeout(Duration::from_secs(5))
+//         .extract(|e| {
+//             if let ChainOrchestratorEvent::NewBlockReceived(block_with_peer) = e {
+//                 if block1.hash_slow() == block_with_peer.block.hash_slow() {
+//                     // Verify the signature is from the unauthorized signer
+//                     let hash = sig_encode_hash(&block_with_peer.block);
+//                     if let Result::Ok(recovered) =
+//                         block_with_peer.signature.recover_address_from_prehash(&hash)
+//                     {
+//                         return Some(recovered == unauthorized_signer.address());
+//                     }
+//                 }
+//             }
+//             None
+//         })
+//         .await?;
+
+//     // Wait for reputation to decrease
+//     fixture
+//         .check_reputation_on(1)
+//         .of_node(0)
+//         .await?
+//         .with_timeout(Duration::from_secs(5))
+//         .with_poll_interval(Duration::from_millis(100))
+//         .eventually_less_than(0)
+//         .await?;
+
+//     // === Phase 3: Send valid block with invalid signature ===
+
+//     // Get current reputation before sending malformed signature
+//     let current_reputation = fixture.check_reputation_on(1).of_node(0).await?.get().await?.unwrap();
+
+//     let invalid_signature = Signature::new(U256::from(1), U256::from(1), false);
+
+//     // Create a new block with the same structure as before but with an invalid signature.
+//     // We need to make sure the block is different so that it is not filtered.
+//     block1.header.timestamp += 1;
+//     fixture.network_on(0).announce_block(block1.clone(), invalid_signature).await?;
+
+//     // Wait for the node's 0 reputation to eventually fall.
+//     fixture
+//         .check_reputation_on(1)
+//         .of_node(0)
+//         .await?
+//         .with_timeout(Duration::from_secs(5))
+//         .with_poll_interval(Duration::from_millis(100))
+//         .eventually_less_than(current_reputation)
+//         .await?;
+
+//     Ok(())
+// }
+
+
+/// Tests that peers are penalized for sending duplicate blocks via the same protocol
+/// (scroll-wire).
+///
+/// This test verifies the DoS protection mechanism that detects when a peer sends
+/// the same block multiple times through the scroll-wire protocol.
+///
+/// Test flow:
+/// 1. Node0 sends a block to node1 via scroll-wire
+/// 2. Node0 sends the SAME block again via scroll-wire
+/// 3. Verify that node0's reputation decreases (duplicate detected)
+#[tokio::test]
+async fn can_penalize_peer_for_duplicate_block_via_scroll_wire() -> eyre::Result<()> {
+    reth_tracing::init_test_tracing();
+
+    let chain_spec = (*SCROLL_DEV).clone();
+
+    // Create signer
+    let authorized_signer = PrivateKeySigner::random().with_chain_id(Some(chain_spec.chain().id()));
+    let authorized_address = authorized_signer.address();
+
+    // Build fixture with SystemContract consensus
+    let mut fixture = TestFixture::builder()
+        .sequencer()
+        .followers(1)
+        .with_chain_spec(chain_spec)
+        .block_time(0)
+        .allow_empty_blocks(true)
+        .with_consensus_system_contract(authorized_address)
+        .with_signer(authorized_signer.clone())
+        .with_scroll_wire(true)
+        .payload_building_duration(1000)
+        .build()
+        .await?;
+
+    // Set the L1 to synced on the sequencer node
+    fixture.l1().for_node(0).sync().await?;
+    fixture.expect_event_on(0).l1_synced().await?;
+
+    // Have the legitimate sequencer build and sign a block
+    let block = fixture.build_block().expect_tx_count(0).build_and_await_block().await?;
+
+    // Wait for node1 to receive and validate the block
+    let received_block = fixture.expect_event_on(1).new_block_received().await?;
+    assert_eq!(block.hash_slow(), received_block.hash_slow());
+
+    // Wait for successful import
+    fixture.expect_event_on(1).chain_extended(block.header.number).await?;
+
+    // Check initial reputation
+    fixture.check_reputation_on(1).of_node(0).await?.equals(0).await?;
+
+    // Sign the block with the unauthorized signer
+    let signature = authorized_signer.sign_hash(&sig_encode_hash(&block)).await?;
+
+    // Send the same block again via scroll-wire (duplicate)
+    fixture.network_on(0).announce_block(block.clone(), signature).await?;
+
+    // Wait for node1 to receive the block
+    fixture.expect_event_on(1).new_block_received().await?;
+
+    // Wait for reputation to decrease due to duplicate block detection
+    fixture
+        .check_reputation_on(1)
+        .of_node(0)
+        .await?
+        .with_timeout(Duration::from_secs(5))
+        .with_poll_interval(Duration::from_millis(10))
+        .eventually_less_than(0)
+        .await?;
+
+    Ok(())
+}
+
+/// Tests that peers are penalized for sending duplicate blocks via the same protocol
+/// (eth-wire).
+///
+/// This test verifies the DoS protection mechanism that detects when a peer sends
+/// the same block multiple times through the eth-wire protocol.
+///
+/// Test flow:
+/// 1. Node0 sends a block to node1 via eth-wire
+/// 2. Node0 sends the SAME block again via eth-wire
+/// 3. Verify that node0's reputation decreases (duplicate detected)
+#[tokio::test]
+async fn can_penalize_peer_for_duplicate_block_via_eth_wire() -> eyre::Result<()> {
+    reth_tracing::init_test_tracing();
+
+    // Create 2 nodes with eth-scroll bridge enabled (for eth-wire)
+    let mut fixture = TestFixture::builder()
+        .sequencer()
+        .followers(1)
+        .block_time(0)
+        .allow_empty_blocks(true)
+        .with_eth_scroll_bridge(true)
+        .payload_building_duration(1000)
+        .build()
+        .await?;
+
+    // Set the L1 to synced on the sequencer node
+    fixture.l1().for_node(0).sync().await?;
+    fixture.expect_event_on(0).l1_synced().await?;
+
+    // Build a block
+    let block = fixture.build_block().expect_tx_count(0).build_and_await_block().await?;
+
+    // Wait for node1 to receive the block via eth-wire
+    fixture.expect_event_on(1).new_block_received().await?;
+
+    // Check initial reputation of node 0 from node 1's perspective
+    fixture.check_reputation_on(1).of_node(0).await?.equals(0).await?;
+
+    // Send the same block again via eth-wire (duplicate)
+    fixture
+        .network_on(0)
+        .announce_block(block.clone(), Signature::new(U256::from(1), U256::from(1), false))
+        .await?;
+
+    // Wait for reputation to decrease due to duplicate block detection
+    fixture
+        .check_reputation_on(1)
+        .of_node(0)
+        .await?
+        .with_timeout(Duration::from_secs(5))
+        .with_poll_interval(Duration::from_millis(10))
+        .eventually_less_than(0)
+        .await?;
+
+    Ok(())
+}
