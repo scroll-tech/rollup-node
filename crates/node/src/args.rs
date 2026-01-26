@@ -392,6 +392,8 @@ impl ScrollRollupNodeConfig {
                             l1_block_startup_info,
                             node_config,
                             self.l1_provider_args.logs_query_block_range,
+                            self.l1_provider_args.liveness_threshold,
+                            self.l1_provider_args.liveness_check_interval,
                         )
                         .await,
                     ),
@@ -668,7 +670,7 @@ impl RollupNodeNetworkArgs {
 }
 
 /// The arguments for the L1 provider.
-#[derive(Debug, Default, Clone, clap::Args)]
+#[derive(Debug, Clone, clap::Args)]
 pub struct L1ProviderArgs {
     /// The URL for the L1 RPC.
     #[arg(long = "l1.url", id = "l1_url", value_name = "L1_URL")]
@@ -688,6 +690,28 @@ pub struct L1ProviderArgs {
     /// The maximum number of items to be stored in the cache layer.
     #[arg(long = "l1.cache-max-items", id = "l1_cache_max_items", value_name = "L1_CACHE_MAX_ITEMS", default_value_t = constants::L1_PROVIDER_CACHE_MAX_ITEMS)]
     pub cache_max_items: u32,
+    /// The L1 liveness threshold in seconds. If no new L1 block is received within this duration,
+    /// an error is logged.
+    #[arg(long = "l1.liveness-threshold", id = "l1_liveness_threshold", value_name = "L1_LIVENESS_THRESHOLD", default_value_t = constants::L1_LIVENESS_THRESHOLD)]
+    pub liveness_threshold: u64,
+    /// The interval in seconds at which to check L1 liveness.
+    #[arg(long = "l1.liveness-check-interval", id = "l1_liveness_check_interval", value_name = "L1_LIVENESS_CHECK_INTERVAL", default_value_t = constants::L1_LIVENESS_CHECK_INTERVAL)]
+    pub liveness_check_interval: u64,
+}
+
+impl Default for L1ProviderArgs {
+    fn default() -> Self {
+        Self {
+            url: None,
+            compute_units_per_second: constants::PROVIDER_COMPUTE_UNITS_PER_SECOND,
+            max_retries: constants::L1_PROVIDER_MAX_RETRIES,
+            initial_backoff: constants::L1_PROVIDER_INITIAL_BACKOFF,
+            logs_query_block_range: constants::LOGS_QUERY_BLOCK_RANGE,
+            cache_max_items: constants::L1_PROVIDER_CACHE_MAX_ITEMS,
+            liveness_threshold: constants::L1_LIVENESS_THRESHOLD,
+            liveness_check_interval: constants::L1_LIVENESS_CHECK_INTERVAL,
+        }
+    }
 }
 
 /// The arguments for the Beacon provider.

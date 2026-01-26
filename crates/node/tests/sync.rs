@@ -55,6 +55,7 @@ async fn test_should_consolidate_to_block_15k() -> eyre::Result<()> {
             initial_backoff: 100,
             logs_query_block_range: 500,
             cache_max_items: 100,
+            ..Default::default()
         },
         engine_driver_args: EngineDriverArgs { sync_at_startup: false },
         sequencer_args: SequencerArgs {

@@ -11089,7 +11089,7 @@ dependencies = [
 
 [[package]]
 name = "rollup-node"
-version = "1.0.5"
+version = "1.0.6"
 dependencies = [
  "alloy-chains",
  "alloy-eips",
@@ -11180,7 +11180,7 @@ dependencies = [
 
 [[package]]
 name = "rollup-node-chain-orchestrator"
-version = "1.0.5"
+version = "1.0.6"
 dependencies = [
  "alloy-consensus",
  "alloy-eips",
@@ -11236,7 +11236,7 @@ dependencies = [
 
 [[package]]
 name = "rollup-node-primitives"
-version = "1.0.5"
+version = "1.0.6"
 dependencies = [
  "alloy-chains",
  "alloy-consensus",
@@ -11260,7 +11260,7 @@ dependencies = [
 
 [[package]]
 name = "rollup-node-providers"
-version = "1.0.5"
+version = "1.0.6"
 dependencies = [
  "alloy-eips",
  "alloy-primitives",
@@ -11287,7 +11287,7 @@ dependencies = [
 
 [[package]]
 name = "rollup-node-sequencer"
-version = "1.0.5"
+version = "1.0.6"
 dependencies = [
  "alloy-consensus",
  "alloy-eips",
@@ -11326,7 +11326,7 @@ dependencies = [
 
 [[package]]
 name = "rollup-node-signer"
-version = "1.0.5"
+version = "1.0.6"
 dependencies = [
  "alloy-primitives",
  "alloy-signer",
@@ -11345,7 +11345,7 @@ dependencies = [
 
 [[package]]
 name = "rollup-node-watcher"
-version = "1.0.5"
+version = "1.0.6"
 dependencies = [
  "alloy-consensus",
  "alloy-eips",
@@ -11880,7 +11880,7 @@ dependencies = [
 
 [[package]]
 name = "scroll-db"
-version = "1.0.5"
+version = "1.0.6"
 dependencies = [
  "alloy-primitives",
  "arbitrary",
@@ -11907,7 +11907,7 @@ dependencies = [
 
 [[package]]
 name = "scroll-derivation-pipeline"
-version = "1.0.5"
+version = "1.0.6"
 dependencies = [
  "alloy-eips",
  "alloy-primitives",
@@ -11934,7 +11934,7 @@ dependencies = [
 
 [[package]]
 name = "scroll-engine"
-version = "1.0.5"
+version = "1.0.6"
 dependencies = [
  "alloy-chains",
  "alloy-consensus",
@@ -11970,7 +11970,7 @@ dependencies = [
 
 [[package]]
 name = "scroll-l1"
-version = "1.0.5"
+version = "1.0.6"
 dependencies = [
  "alloy-primitives",
  "alloy-sol-types",
@@ -12002,7 +12002,7 @@ dependencies = [
 
 [[package]]
 name = "scroll-network"
-version = "1.0.5"
+version = "1.0.6"
 dependencies = [
  "alloy-primitives",
  "futures",
@@ -12030,7 +12030,7 @@ dependencies = [
 
 [[package]]
 name = "scroll-wire"
-version = "1.0.5"
+version = "1.0.6"
 dependencies = [
  "alloy-primitives",
  "alloy-rlp",
