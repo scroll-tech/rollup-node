@@ -937,6 +937,17 @@ impl<
     ) -> Result<Option<ChainOrchestratorEvent>, ChainOrchestratorError> {
         tracing::debug!(target: "scroll::chain_orchestrator", block_hash = ?block_with_peer.block.header.hash_slow(), block_number = ?block_with_peer.block.number, peer_id = ?block_with_peer.peer_id, "Received new block from peer");
 
+        // Check we are not handling a finalized block.
+        if block_with_peer.block.header.number <= self.engine.fcs().finalized_block_info().number {
+            self.network
+                .handle()
+                .block_import_outcome(BlockImportOutcome::finalized_block(block_with_peer.peer_id));
+            return Ok(Some(ChainOrchestratorEvent::L2FinalizedBlockReceived(
+                block_with_peer.block.header.hash_slow(),
+                block_with_peer.peer_id,
+            )));
+        }
+
         if let Err(err) =
             self.consensus.validate_new_block(&block_with_peer.block, &block_with_peer.signature)
         {
