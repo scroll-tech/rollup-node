@@ -1,4 +1,5 @@
 use alloy_primitives::Signature;
+use alloy_rpc_types_engine::ForkchoiceUpdated;
 use reth_network_peers::PeerId;
 use reth_scroll_primitives::ScrollBlock;
 use std::vec::Vec;
@@ -14,11 +15,18 @@ pub struct ChainImport {
     pub peer_id: PeerId,
     /// The signature for the import of the chain tip.
     pub signature: Signature,
+    /// The result of the chain import operation.
+    pub result: ForkchoiceUpdated,
 }
 
 impl ChainImport {
     /// Creates a new `ChainImport` instance with the provided blocks, peer ID, and signature.
-    pub const fn new(blocks: Vec<ScrollBlock>, peer_id: PeerId, signature: Signature) -> Self {
-        Self { chain: blocks, peer_id, signature }
+    pub const fn new(
+        blocks: Vec<ScrollBlock>,
+        peer_id: PeerId,
+        signature: Signature,
+        result: ForkchoiceUpdated,
+    ) -> Self {
+        Self { chain: blocks, peer_id, signature, result }
     }
 }
