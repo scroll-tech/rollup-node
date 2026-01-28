@@ -94,6 +94,9 @@ pub struct ScrollRollupNodeConfig {
     /// The pprof server arguments
     #[command(flatten)]
     pub pprof_args: PprofArgs,
+    /// The remote block source arguments
+    #[command(flatten)]
+    pub remote_block_source_args: RemoteBlockSourceArgs,
     /// The database connection (not parsed via CLI but hydrated after validation).
     #[arg(skip)]
     pub database: Option<Arc<Database>>,
@@ -126,6 +129,10 @@ impl ScrollRollupNodeConfig {
             self.l1_provider_args.url.is_none()
         {
             return Err("System contract consensus requires either an authorized signer or a L1 provider URL".to_string());
+        }
+
+        if self.remote_block_source_args.enabled && self.remote_block_source_args.url.is_none() {
+            return Err("Remote source URL required when remote source is enabled".to_string());
         }
 
         Ok(())
@@ -908,6 +915,26 @@ impl Default for PprofArgs {
     }
 }
 
+/// The arguments for the remote block source.
+#[derive(Debug, Default, Clone, clap::Args)]
+pub struct RemoteBlockSourceArgs {
+    /// Enable the remote block source feature
+    #[arg(long = "remote-source.enabled", default_value_t = false)]
+    pub enabled: bool,
+
+    /// URL for the remote L2 source node RPC
+    #[arg(long = "remote-source.url", value_name = "URL")]
+    pub url: Option<reqwest::Url>,
+
+    /// Polling interval in milliseconds (when already synced)
+    #[arg(
+        long = "remote-source.poll-interval-ms",
+        default_value_t = 100,
+        value_name = "POLL_INTERVAL_MS"
+    )]
+    pub poll_interval_ms: u64,
+}
+
 /// Returns the total difficulty constant for the given chain.
 const fn td_constant(chain: Option<NamedChain>) -> U128 {
     match chain {
@@ -995,6 +1022,7 @@ mod tests {
             database: None,
             rpc_args: RpcArgs::default(),
             pprof_args: PprofArgs::default(),
+            remote_block_source_args: RemoteBlockSourceArgs::default(),
         };
 
         let result = config.validate();
@@ -1002,6 +1030,37 @@ mod tests {
         assert!(result.unwrap_err().contains(
             "Either signer key file, AWS KMS key ID or private key is required when sequencer is enabled"
         ));
+    }
+
+    #[test]
+    fn test_validate_remote_source_enabled_without_url_fails() {
+        let config = ScrollRollupNodeConfig {
+            test: false,
+            sequencer_args: SequencerArgs::default(),
+            signer_args: SignerArgs::default(),
+            database_args: RollupNodeDatabaseArgs::default(),
+            engine_driver_args: EngineDriverArgs::default(),
+            chain_orchestrator_args: ChainOrchestratorArgs::default(),
+            l1_provider_args: L1ProviderArgs::default(),
+            blob_provider_args: BlobProviderArgs::default(),
+            network_args: RollupNodeNetworkArgs::default(),
+            gas_price_oracle_args: RollupNodeGasPriceOracleArgs::default(),
+            consensus_args: ConsensusArgs::noop(),
+            database: None,
+            rpc_args: RpcArgs::default(),
+            pprof_args: PprofArgs::default(),
+            remote_block_source_args: RemoteBlockSourceArgs {
+                enabled: true,
+                url: None,
+                poll_interval_ms: 100,
+            },
+        };
+
+        let result = config.validate();
+        assert!(result.is_err());
+        assert!(result
+            .unwrap_err()
+            .contains("Remote source URL required when remote source is enabled"));
     }
 
     #[test]
@@ -1028,6 +1087,7 @@ mod tests {
             database: None,
             rpc_args: RpcArgs::default(),
             pprof_args: PprofArgs::default(),
+            remote_block_source_args: RemoteBlockSourceArgs::default(),
         };
 
         let result = config.validate();
@@ -1056,6 +1116,7 @@ mod tests {
             database: None,
             rpc_args: RpcArgs::default(),
             pprof_args: PprofArgs::default(),
+            remote_block_source_args: RemoteBlockSourceArgs::default(),
         };
 
         assert!(config.validate().is_ok());
@@ -1082,6 +1143,7 @@ mod tests {
             database: None,
             rpc_args: RpcArgs::default(),
             pprof_args: PprofArgs::default(),
+            remote_block_source_args: RemoteBlockSourceArgs::default(),
         };
 
         assert!(config.validate().is_ok());
@@ -1104,6 +1166,7 @@ mod tests {
             database: None,
             rpc_args: RpcArgs::default(),
             pprof_args: PprofArgs::default(),
+            remote_block_source_args: RemoteBlockSourceArgs::default(),
         };
 
         assert!(config.validate().is_ok());
