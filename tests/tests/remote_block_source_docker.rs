@@ -41,7 +41,8 @@ async fn docker_test_remote_block_source_recovery() -> Result<()> {
     reth_tracing::init_test_tracing();
 
     tracing::info!("=== STARTING docker_test_remote_block_source_recovery ===");
-    let env = DockerComposeEnv::new_remote_source("docker_test_remote_block_source_recovery").await?;
+    let env =
+        DockerComposeEnv::new_remote_source("docker_test_remote_block_source_recovery").await?;
 
     let rn_sequencer = env.get_rn_sequencer_provider().await?;
     let rn_remote_source = env.get_rn_remote_source_provider().await?;
