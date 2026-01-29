@@ -174,6 +174,52 @@ impl<
         )
     }
 
+    /// Runs the network manager event loop.
+    ///
+    /// This is the main event loop that processes:
+    /// - Messages from the network handle
+    /// - Events from the scroll-wire protocol
+    /// - Blocks received from the eth-wire protocol
+    pub async fn run(mut self) {
+        loop {
+            tokio::select! {
+                biased;
+
+                // Handle messages from the network handle.
+                message = self.from_handle_rx.next() => {
+                    match message {
+                        Some(message) => {
+                            self.on_handle_message(message);
+                        }
+                        // All network handles have been dropped so we can shutdown the network.
+                        None => {
+                            return;
+                        }
+                    }
+                }
+
+                // Handle scroll-wire events.
+                event = &mut self.scroll_wire => {
+                    if let Some(event) = self.on_scroll_wire_event(event) {
+                        self.event_sender.notify(event);
+                    }
+                }
+
+                // Handle blocks received from the eth-wire protocol.
+                Some(block) = async {
+                    match &mut self.eth_wire_listener {
+                        Some(listener) => listener.next().await,
+                        None => std::future::pending().await,
+                    }
+                } => {
+                    if let Some(event) = self.handle_eth_wire_block(block) {
+                        self.event_sender.notify(event);
+                    }
+                }
+            }
+        }
+    }
+
     /// Announces a new block to the network.
     fn announce_block(&mut self, block: NewBlock) {
         #[cfg(feature = "test-utils")]

@@ -6,5 +6,5 @@ pub use handler::ScrollWireProtocolHandler;
 pub(crate) use handler::ScrollWireProtocolState;
 
 mod proto;
-pub use proto::NewBlock;
-pub(crate) use proto::{ScrollMessage, ScrollMessagePayload};
+pub use proto::{NewBlock, ScrollMessage};
+pub(crate) use proto::ScrollMessagePayload;

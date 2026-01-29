@@ -8,4 +8,4 @@ mod manager;
 pub use manager::{PeerState, ScrollWireManager, LRU_CACHE_SIZE};
 
 mod protocol;
-pub use protocol::{NewBlock, ScrollWireEvent, ScrollWireProtocolHandler};
+pub use protocol::{NewBlock, ScrollMessage, ScrollWireEvent, ScrollWireProtocolHandler};
