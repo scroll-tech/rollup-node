@@ -923,7 +923,7 @@ pub struct RemoteBlockSourceArgs {
     pub enabled: bool,
 
     /// URL for the remote L2 source node RPC
-    #[arg(long = "remote-source.url", value_name = "URL")]
+    #[arg(long = "remote-source.url", id = "remote_source_url", value_name = "URL")]
     pub url: Option<reqwest::Url>,
 
     /// Polling interval in milliseconds (when already synced)
