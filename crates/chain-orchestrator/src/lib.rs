@@ -299,8 +299,7 @@ impl<
                     .finalize_payload_building(payload_id, &mut self.engine)
                     .await?;
 
-                self.metric_handler.finish_all_block_building_recording();
-                self.metric_handler.finish_block_building_interval_recording();
+                self.metric_handler.finish_block_building_recording(block.as_ref());
 
                 if let Some(block) = block {
                     let block_info: L2BlockInfoWithL1Messages = (&block).into();
@@ -311,7 +310,6 @@ impl<
                         .as_mut()
                         .expect("signer must be present")
                         .sign_block(block.clone())?;
-                    self.metric_handler.finish_no_empty_block_building_recording();
                     return Ok(Some(ChainOrchestratorEvent::BlockSequenced(block)));
                 }
             }

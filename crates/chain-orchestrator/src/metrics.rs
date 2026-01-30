@@ -1,5 +1,6 @@
 use metrics::Histogram;
 use metrics_derive::Metrics;
+use reth_scroll_primitives::ScrollBlock;
 use std::{collections::HashMap, time::Instant};
 use strum::{EnumIter, IntoEnumIterator};
 
@@ -26,37 +27,28 @@ impl MetricsHandler {
         self.block_building_meter.block_building_start = Some(Instant::now());
     }
 
-    /// The duration of the current block building task if any.
-    pub(crate) fn finish_no_empty_block_building_recording(&self) {
-        if let Some(block_build_start) = self.block_building_meter.block_building_start {
-            let duration = block_build_start.elapsed();
-            self.block_building_meter.metric.block_building_duration.record(duration.as_secs_f64());
-        }
-    }
+    /// Finishes tracking the current block building task.
+    pub(crate) fn finish_block_building_recording(&mut self, block: Option<&ScrollBlock>) {
+        let now = Instant::now();
+        if let Some(t) = self.block_building_meter.block_building_start.take() {
+            let elapsed = now.duration_since(t).as_secs_f64();
+            self.block_building_meter.metric.all_block_building_duration.record(elapsed);
 
-    pub(crate) fn finish_all_block_building_recording(&self) {
-        if let Some(block_build_start) = self.block_building_meter.block_building_start {
-            let duration = block_build_start.elapsed();
-            self.block_building_meter
-                .metric
-                .all_block_building_duration
-                .record(duration.as_secs_f64());
+            // Record only if it's not an empty block
+            let is_empty_block = block.map(|b| b.body.transactions.is_empty()).unwrap_or(true);
+            if !is_empty_block {
+                self.block_building_meter.metric.block_building_duration.record(elapsed);
+            }
         }
-    }
 
-    pub(crate) fn finish_block_building_interval_recording(&mut self) {
-        let interval = self
-            .block_building_meter
-            .last_block_building_time
-            .take()
-            .map(|last_block_building_time| last_block_building_time.elapsed());
-        if let Some(interval) = interval {
-            self.block_building_meter
-                .metric
-                .consecutive_block_interval
-                .record(interval.as_secs_f64());
+        if block.is_some() {
+            if let Some(t) = self.block_building_meter.last_block_building_time.replace(now) {
+                self.block_building_meter
+                    .metric
+                    .consecutive_block_interval
+                    .record(now.duration_since(t).as_secs_f64());
+            }
         }
-        self.block_building_meter.last_block_building_time = Some(Instant::now());
     }
 }
 
