@@ -3,9 +3,9 @@ use crate::{ChainOrchestratorEvent, ChainOrchestratorStatus};
 use reth_network_api::FullNetwork;
 use reth_scroll_node::ScrollNetworkPrimitives;
 use reth_tokio_util::EventStream;
-use rollup_node_primitives::{BlockInfo, L1MessageEnvelope};
+use rollup_node_primitives::{BlockInfo, ChainImport, L1MessageEnvelope};
 use scroll_db::L1MessageKey;
-use scroll_network::ScrollNetworkHandle;
+use scroll_network::{NewBlockWithPeer, ScrollNetworkHandle};
 use tokio::sync::oneshot;
 
 /// The commands that can be sent to the rollup manager.
@@ -29,6 +29,13 @@ pub enum ChainOrchestratorCommand<N: FullNetwork<Primitives = ScrollNetworkPrimi
     DatabaseQuery(DatabaseQuery),
     /// Revert the rollup node state to the specified L1 block number.
     RevertToL1Block((u64, oneshot::Sender<bool>)),
+    /// Import a block from a remote source.
+    ImportBlock {
+        /// The block to import with peer info
+        block_with_peer: NewBlockWithPeer,
+        /// Response channel
+        response: oneshot::Sender<Result<ChainImport, String>>,
+    },
     /// Enable gossiping of blocks to peers.
     #[cfg(feature = "test-utils")]
     SetGossip((bool, oneshot::Sender<()>)),
