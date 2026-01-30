@@ -427,6 +427,13 @@ impl<
                 self.notify(ChainOrchestratorEvent::UnwoundToL1Block(block_number));
                 let _ = tx.send(true);
             }
+            ChainOrchestratorCommand::ImportBlock { block_with_peer, response } => {
+                let result = self
+                    .import_chain(vec![block_with_peer.block.clone()], block_with_peer)
+                    .await
+                    .map_err(|e| e.to_string());
+                let _ = response.send(result);
+            }
             #[cfg(feature = "test-utils")]
             ChainOrchestratorCommand::SetGossip((enabled, tx)) => {
                 self.network.handle().set_gossip(enabled).await;
@@ -1220,6 +1227,7 @@ impl<
             chain,
             peer_id: block_with_peer.peer_id,
             signature: block_with_peer.signature,
+            result,
         })
     }
 

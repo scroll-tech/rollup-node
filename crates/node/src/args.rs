@@ -2,10 +2,8 @@ use crate::{
     add_ons::IsDevChain,
     constants::{self},
     context::RollupNodeContext,
+    pprof::PprofConfig,
 };
-use scroll_migration::MigratorTrait;
-use std::{fs, path::PathBuf, sync::Arc};
-
 use alloy_chains::NamedChain;
 use alloy_primitives::{hex, Address, U128};
 use alloy_provider::{layers::CacheLayer, Provider, ProviderBuilder};
@@ -48,9 +46,10 @@ use scroll_db::{
 };
 use scroll_derivation_pipeline::DerivationPipeline;
 use scroll_engine::{Engine, ForkchoiceState};
-use scroll_migration::traits::ScrollMigrator;
+use scroll_migration::{traits::ScrollMigrator, MigratorTrait};
 use scroll_network::ScrollNetworkManager;
 use scroll_wire::ScrollWireEvent;
+use std::{fs, path::PathBuf, sync::Arc};
 use tokio::sync::mpsc::UnboundedReceiver;
 
 /// A struct that represents the arguments for the rollup node.
@@ -92,6 +91,12 @@ pub struct ScrollRollupNodeConfig {
     /// The gas price oracle args
     #[command(flatten)]
     pub gas_price_oracle_args: RollupNodeGasPriceOracleArgs,
+    /// The pprof server arguments
+    #[command(flatten)]
+    pub pprof_args: PprofArgs,
+    /// The remote block source arguments
+    #[command(flatten)]
+    pub remote_block_source_args: RemoteBlockSourceArgs,
     /// The database connection (not parsed via CLI but hydrated after validation).
     #[arg(skip)]
     pub database: Option<Arc<Database>>,
@@ -124,6 +129,10 @@ impl ScrollRollupNodeConfig {
             self.l1_provider_args.url.is_none()
         {
             return Err("System contract consensus requires either an authorized signer or a L1 provider URL".to_string());
+        }
+
+        if self.remote_block_source_args.enabled && self.remote_block_source_args.url.is_none() {
+            return Err("Remote source URL required when remote source is enabled".to_string());
         }
 
         Ok(())
@@ -179,6 +188,29 @@ impl ScrollRollupNodeConfig {
             "Building rollup node with config:\n{:#?}",
             self
         );
+
+        // Start pprof server if enabled
+        if self.pprof_args.enabled {
+            let pprof_config = PprofConfig::new(self.pprof_args.addr)
+                .with_default_duration(self.pprof_args.default_duration);
+
+            match pprof_config.launch_server().await {
+                Ok(handle) => {
+                    tracing::info!(target: "rollup_node::pprof", "pprof server started successfully");
+                    // Spawn the pprof server task
+                    ctx.task_executor.spawn_critical("pprof_server", async move {
+                        if let Err(e) = handle.await {
+                            tracing::error!(target: "rollup_node::pprof", "pprof server error: {:?}", e);
+                        }
+                    });
+                }
+                Err(e) => {
+                    tracing::error!(target: "rollup_node::pprof", "Failed to start pprof server: {}", e);
+                    return Err(e);
+                }
+            }
+        }
+
         // Get the chain spec.
         let chain_spec = ctx.chain_spec;
 
@@ -367,6 +399,8 @@ impl ScrollRollupNodeConfig {
                             l1_block_startup_info,
                             node_config,
                             self.l1_provider_args.logs_query_block_range,
+                            self.l1_provider_args.liveness_threshold,
+                            self.l1_provider_args.liveness_check_interval,
                         )
                         .await,
                     ),
@@ -643,7 +677,7 @@ impl RollupNodeNetworkArgs {
 }
 
 /// The arguments for the L1 provider.
-#[derive(Debug, Default, Clone, clap::Args)]
+#[derive(Debug, Clone, clap::Args)]
 pub struct L1ProviderArgs {
     /// The URL for the L1 RPC.
     #[arg(long = "l1.url", id = "l1_url", value_name = "L1_URL")]
@@ -663,6 +697,28 @@ pub struct L1ProviderArgs {
     /// The maximum number of items to be stored in the cache layer.
     #[arg(long = "l1.cache-max-items", id = "l1_cache_max_items", value_name = "L1_CACHE_MAX_ITEMS", default_value_t = constants::L1_PROVIDER_CACHE_MAX_ITEMS)]
     pub cache_max_items: u32,
+    /// The L1 liveness threshold in seconds. If no new L1 block is received within this duration,
+    /// an error is logged.
+    #[arg(long = "l1.liveness-threshold", id = "l1_liveness_threshold", value_name = "L1_LIVENESS_THRESHOLD", default_value_t = constants::L1_LIVENESS_THRESHOLD)]
+    pub liveness_threshold: u64,
+    /// The interval in seconds at which to check L1 liveness.
+    #[arg(long = "l1.liveness-check-interval", id = "l1_liveness_check_interval", value_name = "L1_LIVENESS_CHECK_INTERVAL", default_value_t = constants::L1_LIVENESS_CHECK_INTERVAL)]
+    pub liveness_check_interval: u64,
+}
+
+impl Default for L1ProviderArgs {
+    fn default() -> Self {
+        Self {
+            url: None,
+            compute_units_per_second: constants::PROVIDER_COMPUTE_UNITS_PER_SECOND,
+            max_retries: constants::L1_PROVIDER_MAX_RETRIES,
+            initial_backoff: constants::L1_PROVIDER_INITIAL_BACKOFF,
+            logs_query_block_range: constants::LOGS_QUERY_BLOCK_RANGE,
+            cache_max_items: constants::L1_PROVIDER_CACHE_MAX_ITEMS,
+            liveness_threshold: constants::L1_LIVENESS_THRESHOLD,
+            liveness_check_interval: constants::L1_LIVENESS_CHECK_INTERVAL,
+        }
+    }
 }
 
 /// The arguments for the Beacon provider.
@@ -849,6 +905,60 @@ pub struct RollupNodeGasPriceOracleArgs {
     pub default_suggested_priority_fee: u64,
 }
 
+/// The arguments for the pprof server.
+#[derive(Debug, Clone, clap::Args)]
+pub struct PprofArgs {
+    /// Enable the pprof HTTP server for performance profiling
+    #[arg(id = "pprof.enabled", long = "pprof.enabled", help = "Enable the pprof HTTP server")]
+    pub enabled: bool,
+
+    /// The address to bind the pprof HTTP server to
+    #[arg(
+        id = "pprof.url",
+        long = "pprof.addr",
+        value_name = "PPROF_URL",
+        help = "Address to bind the pprof HTTP server (e.g., 0.0.0.0:6868)",
+        default_value = constants::DEFAULT_PPROF_URL
+    )]
+    pub addr: std::net::SocketAddr,
+
+    /// Default profiling duration in seconds
+    #[arg(
+        id = "pprof.default_duration",
+        value_name = "PPROF_DEFAULT_DURATION",
+        long = "pprof.default-duration",
+        help = "Default CPU profiling duration in seconds",
+        default_value_t = constants::DEFAULT_PPROF_DEFAULT_DURATION
+    )]
+    pub default_duration: u64,
+}
+
+impl Default for PprofArgs {
+    fn default() -> Self {
+        Self { enabled: false, addr: ([0, 0, 0, 0], 6868).into(), default_duration: 30 }
+    }
+}
+
+/// The arguments for the remote block source.
+#[derive(Debug, Default, Clone, clap::Args)]
+pub struct RemoteBlockSourceArgs {
+    /// Enable the remote block source feature
+    #[arg(long = "remote-source.enabled", default_value_t = false)]
+    pub enabled: bool,
+
+    /// URL for the remote L2 source node RPC
+    #[arg(long = "remote-source.url", id = "remote_source_url", value_name = "URL")]
+    pub url: Option<reqwest::Url>,
+
+    /// Polling interval in milliseconds (when already synced)
+    #[arg(
+        long = "remote-source.poll-interval-ms",
+        default_value_t = 100,
+        value_name = "POLL_INTERVAL_MS"
+    )]
+    pub poll_interval_ms: u64,
+}
+
 /// Returns the total difficulty constant for the given chain.
 const fn td_constant(chain: Option<NamedChain>) -> U128 {
     match chain {
@@ -935,6 +1045,8 @@ mod tests {
             },
             database: None,
             rpc_args: RpcArgs::default(),
+            pprof_args: PprofArgs::default(),
+            remote_block_source_args: RemoteBlockSourceArgs::default(),
         };
 
         let result = config.validate();
@@ -942,6 +1054,37 @@ mod tests {
         assert!(result.unwrap_err().contains(
             "Either signer key file, AWS KMS key ID or private key is required when sequencer is enabled"
         ));
+    }
+
+    #[test]
+    fn test_validate_remote_source_enabled_without_url_fails() {
+        let config = ScrollRollupNodeConfig {
+            test: false,
+            sequencer_args: SequencerArgs::default(),
+            signer_args: SignerArgs::default(),
+            database_args: RollupNodeDatabaseArgs::default(),
+            engine_driver_args: EngineDriverArgs::default(),
+            chain_orchestrator_args: ChainOrchestratorArgs::default(),
+            l1_provider_args: L1ProviderArgs::default(),
+            blob_provider_args: BlobProviderArgs::default(),
+            network_args: RollupNodeNetworkArgs::default(),
+            gas_price_oracle_args: RollupNodeGasPriceOracleArgs::default(),
+            consensus_args: ConsensusArgs::noop(),
+            database: None,
+            rpc_args: RpcArgs::default(),
+            pprof_args: PprofArgs::default(),
+            remote_block_source_args: RemoteBlockSourceArgs {
+                enabled: true,
+                url: None,
+                poll_interval_ms: 100,
+            },
+        };
+
+        let result = config.validate();
+        assert!(result.is_err());
+        assert!(result
+            .unwrap_err()
+            .contains("Remote source URL required when remote source is enabled"));
     }
 
     #[test]
@@ -967,6 +1110,8 @@ mod tests {
             },
             database: None,
             rpc_args: RpcArgs::default(),
+            pprof_args: PprofArgs::default(),
+            remote_block_source_args: RemoteBlockSourceArgs::default(),
         };
 
         let result = config.validate();
@@ -994,6 +1139,8 @@ mod tests {
             consensus_args: ConsensusArgs::noop(),
             database: None,
             rpc_args: RpcArgs::default(),
+            pprof_args: PprofArgs::default(),
+            remote_block_source_args: RemoteBlockSourceArgs::default(),
         };
 
         assert!(config.validate().is_ok());
@@ -1019,6 +1166,8 @@ mod tests {
             consensus_args: ConsensusArgs::noop(),
             database: None,
             rpc_args: RpcArgs::default(),
+            pprof_args: PprofArgs::default(),
+            remote_block_source_args: RemoteBlockSourceArgs::default(),
         };
 
         assert!(config.validate().is_ok());
@@ -1040,6 +1189,8 @@ mod tests {
             consensus_args: ConsensusArgs::noop(),
             database: None,
             rpc_args: RpcArgs::default(),
+            pprof_args: PprofArgs::default(),
+            remote_block_source_args: RemoteBlockSourceArgs::default(),
         };
 
         assert!(config.validate().is_ok());

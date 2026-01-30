@@ -11,6 +11,12 @@ pub(crate) const L1_PROVIDER_INITIAL_BACKOFF: u64 = 100;
 /// The maximum number of items to store in L1 provider's cache layer.
 pub(crate) const L1_PROVIDER_CACHE_MAX_ITEMS: u32 = 100;
 
+/// The default L1 liveness threshold in seconds.
+pub(crate) const L1_LIVENESS_THRESHOLD: u64 = 60;
+
+/// The default L1 liveness check interval in seconds.
+pub(crate) const L1_LIVENESS_CHECK_INTERVAL: u64 = 12;
+
 /// The block range used to fetch L1 logs.
 pub(crate) const LOGS_QUERY_BLOCK_RANGE: u64 = 500;
 
@@ -70,3 +76,9 @@ pub(crate) const SCROLL_MAINNET_SIGNER: Address =
 /// The authorized signer address for Scroll sepolia.
 pub(crate) const SCROLL_SEPOLIA_SIGNER: Address =
     address!("0x687E0E85AD67ff71aC134CF61b65905b58Ab43b2");
+
+/// The url for pprof
+pub(crate) const DEFAULT_PPROF_URL: &str = "0.0.0.0:6868";
+
+/// The default duration for pprof
+pub(crate) const DEFAULT_PPROF_DEFAULT_DURATION: u64 = 30;
