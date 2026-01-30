@@ -20,7 +20,7 @@ use reth_tokio_util::{EventSender, EventStream};
 use rollup_node_primitives::{sig_encode_hash, BlockInfo};
 use scroll_alloy_hardforks::ScrollHardforks;
 use scroll_wire::{
-    NewBlock, PeerState, ScrollMessage, ScrollWireConfig, ScrollWireEvent, ScrollWireManager,
+    NewBlock, ScrollMessage, ScrollWireConfig, ScrollWireEvent, ScrollWireManager,
     ScrollWireProtocolHandler, LRU_CACHE_SIZE,
 };
 use std::sync::Arc;
@@ -262,7 +262,7 @@ impl<
                 .scroll_wire
                 .peer_state()
                 .get(&peer.remote_id)
-                .is_some_and(|state| state.has_seen(&hash))
+                .is_some_and(|state| state.contains(&hash))
             {
                 continue;
             }
@@ -274,7 +274,7 @@ impl<
                 .any(|cap| cap == &ScrollMessage::capability())
             {
                 trace!(target: "scroll::network::manager", peer_id = %peer.remote_id, block_number = %block.block.header.number, block_hash = %hash, "Announcing new block to peer via scroll-wire");
-                self.scroll_wire.announce_block(peer.remote_id, &block, hash);
+                self.scroll_wire.announce_block(peer.remote_id, &block);
             } else {
                 if should_announce_eth_wire {
                     trace!(target: "scroll::network::manager", peer_id = %peer.remote_id, block_number = %block.block.header.number, block_hash = %hash, "Announcing new block to peer via eth-wire");
@@ -304,9 +304,9 @@ impl<
                     .scroll_wire
                     .peer_state_mut()
                     .entry(peer_id)
-                    .or_insert_with(|| PeerState::new(LRU_CACHE_SIZE));
+                    .or_insert_with(|| LruCache::new(LRU_CACHE_SIZE));
 
-                if state.has_received(&block_hash) {
+                if state.contains(&block_hash) {
                     tracing::warn!(target: "scroll::network::manager", peer_id = ?peer_id, block = ?block_hash, "Peer sent duplicate block via scroll-wire, penalizing");
                     self.inner_network_handle.reputation_change(
                         peer_id,
@@ -315,7 +315,7 @@ impl<
                     return None;
                 }
                 // Update the state that the peer has received this block
-                state.insert_received(block_hash);
+                state.insert(block_hash);
 
                 if self.blocks_seen.contains(&(block_hash, signature)) {
                     None
@@ -422,16 +422,16 @@ impl<
                 .scroll_wire
                 .peer_state_mut()
                 .entry(peer_id)
-                .or_insert_with(|| PeerState::new(LRU_CACHE_SIZE));
+                .or_insert_with(|| LruCache::new(LRU_CACHE_SIZE));
 
-            if state.has_received(&block_hash) {
+            if state.contains(&block_hash) {
                 tracing::warn!(target: "scroll::bridge::import", peer_id = ?peer_id, block = ?block_hash, "Peer sent duplicate block via eth-wire, penalizing");
                 self.inner_network_handle
                     .reputation_change(peer_id, reth_network_api::ReputationChangeKind::BadBlock);
                 return None;
             }
             // Update the state that the peer has received this block
-            state.insert_received(block_hash);
+            state.insert(block_hash);
 
             if self.blocks_seen.contains(&(block_hash, signature)) {
                 None

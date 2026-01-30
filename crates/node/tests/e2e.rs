@@ -2217,59 +2217,57 @@ where
 //     Ok(())
 // }
 
-// /// Tests that peers are penalized for sending duplicate blocks via the same protocol
-// /// (eth-wire).
-// ///
-// /// This test verifies the DoS protection mechanism that detects when a peer sends
-// /// the same block multiple times through the eth-wire protocol.
-// ///
-// /// Test flow:
-// /// 1. Node0 sends a block to node1 via eth-wire
-// /// 2. Node0 sends the SAME block again via eth-wire
-// /// 3. Verify that node0's reputation decreases (duplicate detected)
-// #[tokio::test]
-// async fn can_penalize_peer_for_duplicate_block_via_eth_wire() -> eyre::Result<()> {
-//     reth_tracing::init_test_tracing();
+/// Tests that peers are penalized for sending duplicate blocks
+///
+/// This test verifies the DoS protection mechanism that detects when a peer sends
+/// the same block multiple times through the eth-wire protocol.
+///
+/// Test flow:
+/// 1. Node0 sends a block to node1 via eth-wire
+/// 2. Node0 sends the SAME block again via eth-wire
+/// 3. Verify that node0's reputation decreases (duplicate detected)
+#[tokio::test]
+async fn can_penalize_peer_for_duplicate_block_via_eth_wire() -> eyre::Result<()> {
+    reth_tracing::init_test_tracing();
 
-//     // Create 2 nodes with eth-scroll bridge enabled (for eth-wire)
-//     let mut fixture = TestFixture::builder()
-//         .sequencer()
-//         .followers(1)
-//         .block_time(0)
-//         .allow_empty_blocks(true)
-//         .with_eth_scroll_bridge(true)
-//         .payload_building_duration(1000)
-//         .build()
-//         .await?;
+    // Create 2 nodes with eth-scroll bridge enabled (for eth-wire)
+    let mut fixture = TestFixture::builder()
+        .sequencer()
+        .followers(1)
+        .block_time(0)
+        .allow_empty_blocks(true)
+        .payload_building_duration(1000)
+        .build()
+        .await?;
 
-//     // Set the L1 to synced on the sequencer node
-//     fixture.l1().for_node(0).sync().await?;
-//     fixture.expect_event_on(0).l1_synced().await?;
+    // Set the L1 to synced on the sequencer node
+    fixture.l1().for_node(0).sync().await?;
+    fixture.expect_event_on(0).l1_synced().await?;
 
-//     // Build a block
-//     let block = fixture.build_block().expect_tx_count(0).build_and_await_block().await?;
+    // Build a block
+    let block = fixture.build_block().expect_tx_count(0).build_and_await_block().await?;
 
-//     // Wait for node1 to receive the block via eth-wire
-//     fixture.expect_event_on(1).new_block_received().await?;
+    // Wait for node1 to receive the block
+    fixture.expect_event_on(1).new_block_received().await?;
 
-//     // Check initial reputation of node 0 from node 1's perspective
-//     fixture.check_reputation_on(1).of_node(0).await?.equals(0).await?;
+    // Check initial reputation of node 0 from node 1's perspective
+    fixture.check_reputation_on(1).of_node(0).await?.equals(0).await?;
 
-//     // Send the same block again via eth-wire (duplicate)
-//     fixture
-//         .network_on(0)
-//         .announce_block(block.clone(), Signature::new(U256::from(1), U256::from(1), false))
-//         .await?;
+    // Send the same block again (duplicate)
+    fixture
+        .network_on(0)
+        .announce_block(block.clone(), Signature::new(U256::from(1), U256::from(1), false))
+        .await?;
 
-//     // Wait for reputation to decrease due to duplicate block detection
-//     fixture
-//         .check_reputation_on(1)
-//         .of_node(0)
-//         .await?
-//         .with_timeout(Duration::from_secs(5))
-//         .with_poll_interval(Duration::from_millis(10))
-//         .eventually_less_than(0)
-//         .await?;
+    // Wait for reputation to decrease due to duplicate block detection
+    fixture
+        .check_reputation_on(1)
+        .of_node(0)
+        .await?
+        .with_timeout(Duration::from_secs(5))
+        .with_poll_interval(Duration::from_millis(10))
+        .eventually_less_than(0)
+        .await?;
 
-//     Ok(())
-// }
+    Ok(())
+}

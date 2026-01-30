@@ -5,7 +5,7 @@ pub use config::ScrollWireConfig;
 
 mod connection;
 mod manager;
-pub use manager::{PeerState, ScrollWireManager, LRU_CACHE_SIZE};
+pub use manager::{ScrollWireManager, LRU_CACHE_SIZE};
 
 mod protocol;
 pub use protocol::{NewBlock, ScrollMessage, ScrollWireEvent, ScrollWireProtocolHandler};
