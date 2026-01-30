@@ -1,5 +1,6 @@
 use metrics::Histogram;
 use metrics_derive::Metrics;
+use reth_scroll_primitives::ScrollBlock;
 use std::{collections::HashMap, time::Instant};
 use strum::{EnumIter, IntoEnumIterator};
 
@@ -20,17 +21,33 @@ impl MetricsHandler {
 
     /// Starts tracking a new block building task.
     pub(crate) fn start_block_building_recording(&mut self) {
-        if self.block_building_meter.start.is_some() {
+        if self.block_building_meter.block_building_start.is_some() {
             tracing::warn!(target: "scroll::chain_orchestrator", "block building recording is already ongoing, overwriting");
         }
-        self.block_building_meter.start = Some(Instant::now());
+        self.block_building_meter.block_building_start = Some(Instant::now());
     }
 
-    /// The duration of the current block building task if any.
-    pub(crate) fn finish_block_building_recording(&mut self) {
-        let duration = self.block_building_meter.start.take().map(|start| start.elapsed());
-        if let Some(duration) = duration {
-            self.block_building_meter.metric.block_building_duration.record(duration.as_secs_f64());
+    /// Finishes tracking the current block building task.
+    pub(crate) fn finish_block_building_recording(&mut self, block: Option<&ScrollBlock>) {
+        let now = Instant::now();
+        if let Some(t) = self.block_building_meter.block_building_start.take() {
+            let elapsed = now.duration_since(t).as_secs_f64();
+            self.block_building_meter.metric.all_block_building_duration.record(elapsed);
+
+            // Record only if it's not an empty block
+            let is_empty_block = block.map(|b| b.body.transactions.is_empty()).unwrap_or(true);
+            if !is_empty_block {
+                self.block_building_meter.metric.block_building_duration.record(elapsed);
+            }
+        }
+
+        if block.is_some() {
+            if let Some(t) = self.block_building_meter.last_block_building_time.replace(now) {
+                self.block_building_meter
+                    .metric
+                    .consecutive_block_interval
+                    .record(now.duration_since(t).as_secs_f64());
+            }
         }
     }
 }
@@ -104,13 +121,18 @@ pub(crate) struct ChainOrchestratorMetrics {
 #[derive(Debug, Default)]
 pub(crate) struct BlockBuildingMeter {
     metric: BlockBuildingMetric,
-    start: Option<Instant>,
+    block_building_start: Option<Instant>,
+    last_block_building_time: Option<Instant>,
 }
 
 /// Block building related metric.
 #[derive(Metrics, Clone)]
 #[metrics(scope = "chain_orchestrator")]
 pub(crate) struct BlockBuildingMetric {
-    /// The duration of the block building task.
+    /// The duration of the block building task without empty block
     block_building_duration: Histogram,
+    /// The duration of the block building task for all blocks include empty block
+    all_block_building_duration: Histogram,
+    /// The duration of the block interval include empty block
+    consecutive_block_interval: Histogram,
 }

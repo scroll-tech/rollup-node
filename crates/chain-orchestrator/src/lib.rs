@@ -292,13 +292,16 @@ impl<
                 }
             }
             SequencerEvent::PayloadReady(payload_id) => {
-                if let Some(block) = self
+                let block = self
                     .sequencer
                     .as_mut()
                     .expect("sequencer must be present")
                     .finalize_payload_building(payload_id, &mut self.engine)
-                    .await?
-                {
+                    .await?;
+
+                self.metric_handler.finish_block_building_recording(block.as_ref());
+
+                if let Some(block) = block {
                     let block_info: L2BlockInfoWithL1Messages = (&block).into();
                     self.database
                         .update_l1_messages_from_l2_blocks(vec![block_info.clone()])
@@ -307,7 +310,6 @@ impl<
                         .as_mut()
                         .expect("signer must be present")
                         .sign_block(block.clone())?;
-                    self.metric_handler.finish_block_building_recording();
                     return Ok(Some(ChainOrchestratorEvent::BlockSequenced(block)));
                 }
             }
