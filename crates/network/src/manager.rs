@@ -176,6 +176,21 @@ impl<
         )
     }
 
+    /// Checks if a peer has already seen a specific block.
+    fn peer_has_seen_block(&self, peer_id: &PeerId, block_hash: &B256) -> bool {
+        self.peer_state.get(peer_id).is_some_and(|state| state.contains(block_hash))
+    }
+
+    /// Marks a block as seen by a peer, returning `true` if this is a duplicate.
+    fn mark_block_seen(&mut self, peer_id: PeerId, block_hash: B256) -> bool {
+        let state = self.peer_state.entry(peer_id).or_insert_with(|| LruCache::new(LRU_CACHE_SIZE));
+        if state.contains(&block_hash) {
+            return true;
+        }
+        state.insert(block_hash);
+        false
+    }
+
     /// Main execution loop for the [`ScrollNetworkManager`].
     pub async fn run(mut self) {
         loop {
@@ -249,7 +264,7 @@ impl<
 
         for peer in peers {
             // Skip peers that have already seen this block
-            if self.peer_state.get(&peer.remote_id).is_some_and(|state| state.contains(&hash)) {
+            if self.peer_has_seen_block(&peer.remote_id, &hash) {
                 continue;
             }
 
@@ -313,10 +328,7 @@ impl<
 
                 // Check if we have already received this block via scroll-wire from this peer, if
                 // so penalize it.
-                let state =
-                    self.peer_state.entry(peer_id).or_insert_with(|| LruCache::new(LRU_CACHE_SIZE));
-
-                if state.contains(&block_hash) {
+                if self.mark_block_seen(peer_id, block_hash) {
                     tracing::warn!(target: "scroll::network::manager", peer_id = ?peer_id, block = ?block_hash, "Peer sent duplicate block via scroll-wire, penalizing");
                     self.inner_network_handle.reputation_change(
                         peer_id,
@@ -324,8 +336,6 @@ impl<
                     );
                     return None;
                 }
-                // Update the state that the peer has received this block
-                state.insert(block_hash);
 
                 if self.blocks_seen.contains(&(block_hash, signature)) {
                     None
@@ -428,17 +438,12 @@ impl<
 
             // Check if we have already received this block from this peer via eth-wire, if so,
             // penalize the peer.
-            let state =
-                self.peer_state.entry(peer_id).or_insert_with(|| LruCache::new(LRU_CACHE_SIZE));
-
-            if state.contains(&block_hash) {
+            if self.mark_block_seen(peer_id, block_hash) {
                 tracing::warn!(target: "scroll::bridge::import", peer_id = ?peer_id, block = ?block_hash, "Peer sent duplicate block via eth-wire, penalizing");
                 self.inner_network_handle
                     .reputation_change(peer_id, reth_network_api::ReputationChangeKind::BadBlock);
                 return None;
             }
-            // Update the state that the peer has received this block
-            state.insert(block_hash);
 
             if self.blocks_seen.contains(&(block_hash, signature)) {
                 None
