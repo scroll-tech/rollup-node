@@ -273,8 +273,6 @@ impl<
                 if let Err(e) = self.scroll_wire.announce_block(peer.remote_id, &block) {
                     trace!(target: "scroll::network::manager", peer_id = %peer.remote_id, block_number = %block.block.header.number, block_hash = %hash, error = ?e, "Failed to announce block to peer via scroll-wire");
                     self.peer_state.remove(&peer.remote_id);
-                } else {
-                    trace!(target: "scroll::network::manager", peer_id = %peer.remote_id, block_number = %block.block.header.number, block_hash = %hash, "Announced block to peer via scroll-wire");
                 }
             } else if should_announce_eth_wire {
                 // Build eth-wire block on first use
