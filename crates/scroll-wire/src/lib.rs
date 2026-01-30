@@ -4,6 +4,10 @@ mod config;
 pub use config::ScrollWireConfig;
 
 mod connection;
+
+mod error;
+pub use error::AnnounceBlockError;
+
 mod manager;
 pub use manager::{ScrollWireManager, LRU_CACHE_SIZE};
 
