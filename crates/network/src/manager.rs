@@ -12,7 +12,7 @@ use reth_network::{
     cache::LruCache, NetworkConfig as RethNetworkConfig, NetworkHandle as RethNetworkHandle,
     NetworkManager as RethNetworkManager,
 };
-use reth_network_api::{block::NewBlockWithPeer as RethNewBlockWithPeer, FullNetwork};
+use reth_network_api::{block::NewBlockWithPeer as RethNewBlockWithPeer, FullNetwork, PeerId};
 use reth_scroll_node::ScrollNetworkPrimitives;
 use reth_scroll_primitives::ScrollBlock;
 use reth_storage_api::BlockNumReader as BlockNumReaderT;
@@ -20,10 +20,10 @@ use reth_tokio_util::{EventSender, EventStream};
 use rollup_node_primitives::{sig_encode_hash, BlockInfo};
 use scroll_alloy_hardforks::ScrollHardforks;
 use scroll_wire::{
-    NewBlock, ScrollMessage, ScrollWireConfig, ScrollWireEvent, ScrollWireManager,
-    ScrollWireProtocolHandler, LRU_CACHE_SIZE,
+    NewBlock, ScrollWireConfig, ScrollWireEvent, ScrollWireManager, ScrollWireProtocolHandler,
+    LRU_CACHE_SIZE,
 };
-use std::sync::Arc;
+use std::{collections::HashMap, sync::Arc};
 use tokio::sync::mpsc::{self, UnboundedReceiver};
 use tokio_stream::wrappers::UnboundedReceiverStream;
 use tracing::trace;
@@ -56,6 +56,8 @@ pub struct ScrollNetworkManager<N, CS> {
     pub scroll_wire: ScrollWireManager,
     /// The LRU cache used to track already seen (block,signature) pair.
     pub blocks_seen: LruCache<(B256, Signature)>,
+    /// Tracks block hashes received from each peer for duplicate detection.
+    peer_state: HashMap<PeerId, LruCache<B256>>,
     /// The constant value that must be added to the block number to get the total difficulty.
     td_constant: U128,
     /// The authorized signer for the network.
@@ -101,6 +103,7 @@ impl<CS: ScrollHardforks + EthChainSpec + Send + Sync + 'static>
         let scroll_wire = ScrollWireManager::new(events);
 
         let blocks_seen = LruCache::new(LRU_CACHE_SIZE);
+        let peer_state = HashMap::new();
 
         // Spawn the inner network manager.
         tokio::spawn(inner_network_manager);
@@ -112,6 +115,7 @@ impl<CS: ScrollHardforks + EthChainSpec + Send + Sync + 'static>
                 from_handle_rx: from_handle_rx.into(),
                 scroll_wire,
                 blocks_seen,
+                peer_state,
                 eth_wire_listener,
                 td_constant,
                 authorized_signer,
@@ -151,6 +155,7 @@ impl<
         let event_sender = EventSender::new(EVENT_CHANNEL_SIZE);
 
         let blocks_seen = LruCache::new(LRU_CACHE_SIZE);
+        let peer_state = HashMap::new();
 
         (
             Self {
@@ -159,6 +164,7 @@ impl<
                 from_handle_rx: from_handle_rx.into(),
                 scroll_wire,
                 blocks_seen,
+                peer_state,
                 eth_wire_listener,
                 td_constant,
                 authorized_signer,
@@ -184,6 +190,7 @@ impl<
                         }
                         // All network handles have been dropped so we can shutdown the network.
                         None => {
+                            trace!(target: "scroll::network::manager", "Network handle channel closed, shutting down network manager");
                             return;
                         }
                     }
@@ -197,17 +204,23 @@ impl<
                 }
 
                 // Handle blocks received from the eth-wire protocol.
-                Some(block) = async {
-                    match &mut self.eth_wire_listener {
-                        Some(listener) => listener.next().await,
-                        None => std::future::pending().await,
-                    }
-                } => {
+                Some(block) = Self::next_eth_wire_block(&mut self.eth_wire_listener) => {
                     if let Some(event) = self.handle_eth_wire_block(block) {
                         self.event_sender.notify(event);
                     }
                 }
             }
+        }
+    }
+
+    async fn next_eth_wire_block(
+        eth_wire_listener: &mut Option<
+            EventStream<reth_network_api::block::NewBlockWithPeer<ScrollBlock>>,
+        >,
+    ) -> Option<reth_network_api::block::NewBlockWithPeer<ScrollBlock>> {
+        match eth_wire_listener.as_mut() {
+            Some(listener) => listener.next().await,
+            None => std::future::pending().await,
         }
     }
 
@@ -236,19 +249,18 @@ impl<
 
         for peer in peers {
             // Skip peers that have already seen this block
-            if self
-                .scroll_wire
-                .peer_state()
-                .get(&peer.remote_id)
-                .is_some_and(|state| state.contains(&hash))
-            {
+            if self.peer_state.get(&peer.remote_id).is_some_and(|state| state.contains(&hash)) {
                 continue;
             }
 
             // Announce via scroll-wire if peer supports it
-            if self.peer_supports_scroll_wire(&peer) {
-                trace!(target: "scroll::network::manager", peer_id = %peer.remote_id, block_number = %block.block.header.number, block_hash = %hash, "Announcing new block to peer via scroll-wire");
-                self.scroll_wire.announce_block(peer.remote_id, &block);
+            if self.scroll_wire.is_connected(peer.remote_id) {
+                if let Err(e) = self.scroll_wire.announce_block(peer.remote_id, &block) {
+                    trace!(target: "scroll::network::manager", peer_id = %peer.remote_id, block_number = %block.block.header.number, block_hash = %hash, error = ?e, "Failed to announce block to peer via scroll-wire");
+                    self.peer_state.remove(&peer.remote_id);
+                } else {
+                    trace!(target: "scroll::network::manager", peer_id = %peer.remote_id, block_number = %block.block.header.number, block_hash = %hash, "Announced block to peer via scroll-wire");
+                }
             } else if should_announce_eth_wire {
                 // Build eth-wire block on first use
                 let eth_wire_block = eth_wire_new_block.get_or_insert_with(|| {
@@ -259,18 +271,13 @@ impl<
                 });
 
                 trace!(target: "scroll::network::manager", peer_id = %peer.remote_id, block_number = %block.block.header.number, block_hash = %hash, "Announcing new block to peer via eth-wire");
-                self.inner_network_handle.eth_wire_announce_block_to(
+                self.inner_network_handle.eth_wire_announce_block_to_peer(
                     peer.remote_id,
                     eth_wire_block.clone(),
                     hash,
                 );
             }
         }
-    }
-
-    /// Checks if a peer supports the scroll-wire protocol.
-    fn peer_supports_scroll_wire(&self, peer: &reth_network_api::PeerInfo) -> bool {
-        peer.capabilities.capabilities().iter().any(|cap| cap == &ScrollMessage::capability())
     }
 
     /// Verifies the block signature against the authorized signer.
@@ -306,11 +313,8 @@ impl<
 
                 // Check if we have already received this block via scroll-wire from this peer, if
                 // so penalize it.
-                let state = self
-                    .scroll_wire
-                    .peer_state_mut()
-                    .entry(peer_id)
-                    .or_insert_with(|| LruCache::new(LRU_CACHE_SIZE));
+                let state =
+                    self.peer_state.entry(peer_id).or_insert_with(|| LruCache::new(LRU_CACHE_SIZE));
 
                 if state.contains(&block_hash) {
                     tracing::warn!(target: "scroll::network::manager", peer_id = ?peer_id, block = ?block_hash, "Peer sent duplicate block via scroll-wire, penalizing");
@@ -424,11 +428,8 @@ impl<
 
             // Check if we have already received this block from this peer via eth-wire, if so,
             // penalize the peer.
-            let state = self
-                .scroll_wire
-                .peer_state_mut()
-                .entry(peer_id)
-                .or_insert_with(|| LruCache::new(LRU_CACHE_SIZE));
+            let state =
+                self.peer_state.entry(peer_id).or_insert_with(|| LruCache::new(LRU_CACHE_SIZE));
 
             if state.contains(&block_hash) {
                 tracing::warn!(target: "scroll::bridge::import", peer_id = ?peer_id, block = ?block_hash, "Peer sent duplicate block via eth-wire, penalizing");

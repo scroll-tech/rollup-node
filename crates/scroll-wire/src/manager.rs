@@ -1,7 +1,8 @@
-use crate::protocol::{NewBlock, ScrollMessage, ScrollWireEvent};
-use alloy_primitives::B256;
+use crate::{
+    error::AnnounceBlockError,
+    protocol::{NewBlock, ScrollMessage, ScrollWireEvent},
+};
 use futures::StreamExt;
-use reth_network::cache::LruCache;
 use reth_network_api::PeerId;
 use std::{
     collections::{hash_map::Entry, HashMap},
@@ -23,30 +24,33 @@ pub struct ScrollWireManager {
     events: UnboundedReceiverStream<ScrollWireEvent>,
     /// A map of connections to peers.
     connections: HashMap<PeerId, UnboundedSender<ScrollMessage>>,
-    /// Tracks block hashes received from each peer for duplicate detection.
-    peer_state: HashMap<PeerId, LruCache<B256>>,
 }
 
 impl ScrollWireManager {
     /// Creates a new [`ScrollWireManager`] instance.
     pub fn new(events: UnboundedReceiver<ScrollWireEvent>) -> Self {
         trace!(target: "scroll::wire::manager", "Creating new ScrollWireManager instance");
-        Self { events: events.into(), connections: HashMap::new(), peer_state: HashMap::new() }
+        Self { events: events.into(), connections: HashMap::new() }
     }
 
     /// Announces a new block to the specified peer.
-    pub fn announce_block(&mut self, peer_id: PeerId, block: &NewBlock) {
-        if let Entry::Occupied(to_connection) = self.connections.entry(peer_id) {
-            // We send the block to the peer. If we receive an error we remove the peer from the
-            // connections map and peer_block_state as the connection is no longer valid.
-            if to_connection.get().send(ScrollMessage::new_block(block.clone())).is_err() {
-                trace!(target: "scroll::wire::manager", peer_id = %peer_id, "Failed to send block to peer - dropping peer.");
-                self.peer_state.remove(&peer_id);
-                to_connection.remove();
-            } else {
-                trace!(target: "scroll::wire::manager", peer_id = %peer_id, "Announced block to peer");
-            }
+    pub fn announce_block(
+        &mut self,
+        peer_id: PeerId,
+        block: &NewBlock,
+    ) -> Result<(), AnnounceBlockError> {
+        let Entry::Occupied(to_connection) = self.connections.entry(peer_id) else {
+            return Err(AnnounceBlockError::PeerNotConnected(peer_id));
+        };
+
+        if to_connection.get().send(ScrollMessage::new_block(block.clone())).is_err() {
+            trace!(target: "scroll::wire::manager", peer_id = %peer_id, "Failed to send block to peer - dropping peer.");
+            to_connection.remove();
+            return Err(AnnounceBlockError::SendFailed(peer_id));
         }
+
+        trace!(target: "scroll::wire::manager", peer_id = %peer_id, "Announced block to peer");
+        Ok(())
     }
 
     /// Returns an iterator over the connected peer IDs.
@@ -54,14 +58,9 @@ impl ScrollWireManager {
         self.connections.keys()
     }
 
-    /// Returns a reference to the peer state map.
-    pub const fn peer_state(&self) -> &HashMap<PeerId, LruCache<B256>> {
-        &self.peer_state
-    }
-
-    /// Returns a mutable reference to the peer state map.
-    pub const fn peer_state_mut(&mut self) -> &mut HashMap<PeerId, LruCache<B256>> {
-        &mut self.peer_state
+    /// Checks if a peer is connected to the manager via scroll-wire.
+    pub fn is_connected(&self, peer_id: PeerId) -> bool {
+        self.connections.contains_key(&peer_id)
     }
 }
 
