@@ -5,9 +5,9 @@ use super::ChainOrchestratorEvent;
 use reth_network_api::FullNetwork;
 use reth_scroll_node::ScrollNetworkPrimitives;
 use reth_tokio_util::EventStream;
-use rollup_node_primitives::{BlockInfo, L1MessageEnvelope};
+use rollup_node_primitives::{BlockInfo, ChainImport, L1MessageEnvelope};
 use scroll_db::L1MessageKey;
-use scroll_network::ScrollNetworkHandle;
+use scroll_network::{NewBlockWithPeer, ScrollNetworkHandle};
 use tokio::sync::{mpsc, oneshot};
 use tracing::error;
 
@@ -129,6 +129,16 @@ impl<N: FullNetwork<Primitives = ScrollNetworkPrimitives>> ChainOrchestratorHand
     ) -> Result<bool, oneshot::error::RecvError> {
         let (tx, rx) = oneshot::channel();
         self.send_command(ChainOrchestratorCommand::RevertToL1Block((block_number, tx)));
+        rx.await
+    }
+
+    /// Import a block from a remote source.
+    pub async fn import_block(
+        &self,
+        block_with_peer: NewBlockWithPeer,
+    ) -> Result<Result<ChainImport, String>, oneshot::error::RecvError> {
+        let (tx, rx) = oneshot::channel();
+        self.send_command(ChainOrchestratorCommand::ImportBlock { block_with_peer, response: tx });
         rx.await
     }
 

@@ -292,13 +292,16 @@ impl<
                 }
             }
             SequencerEvent::PayloadReady(payload_id) => {
-                if let Some(block) = self
+                let block = self
                     .sequencer
                     .as_mut()
                     .expect("sequencer must be present")
                     .finalize_payload_building(payload_id, &mut self.engine)
-                    .await?
-                {
+                    .await?;
+
+                self.metric_handler.finish_block_building_recording(block.as_ref());
+
+                if let Some(block) = block {
                     let block_info: L2BlockInfoWithL1Messages = (&block).into();
                     self.database
                         .update_l1_messages_from_l2_blocks(vec![block_info.clone()])
@@ -307,7 +310,6 @@ impl<
                         .as_mut()
                         .expect("signer must be present")
                         .sign_block(block.clone())?;
-                    self.metric_handler.finish_block_building_recording();
                     return Ok(Some(ChainOrchestratorEvent::BlockSequenced(block)));
                 }
             }
@@ -424,6 +426,13 @@ impl<
 
                 self.notify(ChainOrchestratorEvent::UnwoundToL1Block(block_number));
                 let _ = tx.send(true);
+            }
+            ChainOrchestratorCommand::ImportBlock { block_with_peer, response } => {
+                let result = self
+                    .import_chain(vec![block_with_peer.block.clone()], block_with_peer)
+                    .await
+                    .map_err(|e| e.to_string());
+                let _ = response.send(result);
             }
             #[cfg(feature = "test-utils")]
             ChainOrchestratorCommand::SetGossip((enabled, tx)) => {
@@ -1229,6 +1238,7 @@ impl<
             chain,
             peer_id: block_with_peer.peer_id,
             signature: block_with_peer.signature,
+            result,
         })
     }
 
