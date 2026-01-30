@@ -218,7 +218,6 @@ impl<
             return;
         }
 
-        // Compute the block hash.
         let hash = block.block.hash_slow();
 
         let peers = match self.inner_network_handle.get_all_peers().await {
@@ -230,31 +229,10 @@ impl<
         };
 
         // TODO: remove this once we deprecate l2geth.
-        // Determine if we should announce via eth wire
-        let should_announce_eth_wire = if let Some(authorized_signer) = self.authorized_signer {
-            // Only announce if the block signature matches the authorized signer
-            let sig_hash = sig_encode_hash(&block.block.header);
-            if let Ok(signature) = Signature::from_raw(&block.signature) {
-                if let Ok(recovered_signer) =
-                    reth_primitives_traits::crypto::secp256k1::recover_signer(&signature, sig_hash)
-                {
-                    authorized_signer == recovered_signer
-                } else {
-                    false
-                }
-            } else {
-                false
-            }
-        } else {
-            // If no authorized signer is set, always announce
-            true
-        };
-        let eth_wire_new_block = {
-            let td = compute_td(self.td_constant, block.block.header.number);
-            let mut eth_wire_block = block.block.clone();
-            eth_wire_block.header.extra_data = block.signature.clone().into();
-            EthWireNewBlock { block: eth_wire_block, td }
-        };
+        let should_announce_eth_wire = self.verify_block_signature(&block);
+
+        // Lazily build eth-wire block only if needed
+        let mut eth_wire_new_block = None;
 
         for peer in peers {
             // Skip peers that have already seen this block
@@ -267,25 +245,53 @@ impl<
                 continue;
             }
 
-            if peer
-                .capabilities
-                .capabilities()
-                .iter()
-                .any(|cap| cap == &ScrollMessage::capability())
-            {
+            // Announce via scroll-wire if peer supports it
+            if self.peer_supports_scroll_wire(&peer) {
                 trace!(target: "scroll::network::manager", peer_id = %peer.remote_id, block_number = %block.block.header.number, block_hash = %hash, "Announcing new block to peer via scroll-wire");
                 self.scroll_wire.announce_block(peer.remote_id, &block);
-            } else {
-                if should_announce_eth_wire {
-                    trace!(target: "scroll::network::manager", peer_id = %peer.remote_id, block_number = %block.block.header.number, block_hash = %hash, "Announcing new block to peer via eth-wire");
-                    self.inner_network_handle.eth_wire_announce_block_to(
-                        peer.remote_id,
-                        eth_wire_new_block.clone(),
-                        hash,
-                    );
-                }
-            };
+            } else if should_announce_eth_wire {
+                // Build eth-wire block on first use
+                let eth_wire_block = eth_wire_new_block.get_or_insert_with(|| {
+                    let td = compute_td(self.td_constant, block.block.header.number);
+                    let mut eth_wire_block = block.block.clone();
+                    eth_wire_block.header.extra_data = block.signature.clone().into();
+                    EthWireNewBlock { block: eth_wire_block, td }
+                });
+
+                trace!(target: "scroll::network::manager", peer_id = %peer.remote_id, block_number = %block.block.header.number, block_hash = %hash, "Announcing new block to peer via eth-wire");
+                self.inner_network_handle.eth_wire_announce_block_to(
+                    peer.remote_id,
+                    eth_wire_block.clone(),
+                    hash,
+                );
+            }
         }
+    }
+
+    /// Checks if a peer supports the scroll-wire protocol.
+    fn peer_supports_scroll_wire(&self, peer: &reth_network_api::PeerInfo) -> bool {
+        peer.capabilities.capabilities().iter().any(|cap| cap == &ScrollMessage::capability())
+    }
+
+    /// Verifies the block signature against the authorized signer.
+    ///
+    /// Returns true if the signature is valid or if no authorized signer is configured.
+    fn verify_block_signature(&self, block: &NewBlock) -> bool {
+        let Some(authorized_signer) = self.authorized_signer else {
+            return true;
+        };
+
+        let sig_hash = sig_encode_hash(&block.block.header);
+        let Ok(signature) = Signature::from_raw(&block.signature) else {
+            return false;
+        };
+        let Ok(recovered_signer) =
+            reth_primitives_traits::crypto::secp256k1::recover_signer(&signature, sig_hash)
+        else {
+            return false;
+        };
+
+        authorized_signer == recovered_signer
     }
 
     /// Handler for received events from the [`ScrollWireManager`].
