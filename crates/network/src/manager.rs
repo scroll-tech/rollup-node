@@ -4,8 +4,8 @@ use super::{
     BlockImportOutcome, BlockValidation, NetworkHandleMessage, NewBlockWithPeer,
     ScrollNetworkHandle, ScrollNetworkManagerEvent,
 };
-use alloy_primitives::{Address, FixedBytes, Signature, B256, U128};
-use futures::{Future, FutureExt, StreamExt};
+use alloy_primitives::{Address, Signature, B256, U128};
+use futures::StreamExt;
 use reth_chainspec::EthChainSpec;
 use reth_eth_wire_types::NewBlock as EthWireNewBlock;
 use reth_network::{
@@ -20,14 +20,10 @@ use reth_tokio_util::{EventSender, EventStream};
 use rollup_node_primitives::{sig_encode_hash, BlockInfo};
 use scroll_alloy_hardforks::ScrollHardforks;
 use scroll_wire::{
-    NewBlock, PeerState, ScrollWireConfig, ScrollWireEvent, ScrollWireManager,
+    NewBlock, PeerState, ScrollMessage, ScrollWireConfig, ScrollWireEvent, ScrollWireManager,
     ScrollWireProtocolHandler, LRU_CACHE_SIZE,
 };
-use std::{
-    pin::Pin,
-    sync::Arc,
-    task::{Context, Poll},
-};
+use std::sync::Arc;
 use tokio::sync::mpsc::{self, UnboundedReceiver};
 use tokio_stream::wrappers::UnboundedReceiverStream;
 use tracing::trace;
@@ -174,12 +170,7 @@ impl<
         )
     }
 
-    /// Runs the network manager event loop.
-    ///
-    /// This is the main event loop that processes:
-    /// - Messages from the network handle
-    /// - Events from the scroll-wire protocol
-    /// - Blocks received from the eth-wire protocol
+    /// Main execution loop for the [`ScrollNetworkManager`].
     pub async fn run(mut self) {
         loop {
             tokio::select! {
@@ -189,7 +180,7 @@ impl<
                 message = self.from_handle_rx.next() => {
                     match message {
                         Some(message) => {
-                            self.on_handle_message(message);
+                            self.on_handle_message(message).await;
                         }
                         // All network handles have been dropped so we can shutdown the network.
                         None => {
@@ -221,7 +212,7 @@ impl<
     }
 
     /// Announces a new block to the network.
-    fn announce_block(&mut self, block: NewBlock) {
+    async fn announce_block(&mut self, block: NewBlock) {
         #[cfg(feature = "test-utils")]
         if !self.gossip {
             return;
@@ -230,27 +221,13 @@ impl<
         // Compute the block hash.
         let hash = block.block.hash_slow();
 
-        // Filter the peers that have not seen this block hash via either protocol.
-        // We iterate over all connected scroll-wire peers.
-        let peers: Vec<FixedBytes<64>> = self
-            .scroll_wire
-            .connected_peers()
-            .filter_map(|peer_id| {
-                // Check if peer has seen this block via any protocol
-                let has_seen = self
-                    .scroll_wire
-                    .peer_state()
-                    .get(peer_id)
-                    .is_some_and(|state| state.has_seen(&hash));
-
-                // Only announce if peer hasn't seen this block
-                if !has_seen {
-                    Some(*peer_id)
-                } else {
-                    None
-                }
-            })
-            .collect();
+        let peers = match self.inner_network_handle.get_all_peers().await {
+            Ok(peers) => peers,
+            Err(e) => {
+                tracing::error!(target: "scroll::network::manager", "Failed to get all peers: {}", e);
+                return;
+            }
+        };
 
         // TODO: remove this once we deprecate l2geth.
         // Determine if we should announce via eth wire
@@ -272,22 +249,42 @@ impl<
             // If no authorized signer is set, always announce
             true
         };
+        let eth_wire_new_block = {
+            let td = compute_td(self.td_constant, block.block.header.number);
+            let mut eth_wire_block = block.block.clone();
+            eth_wire_block.header.extra_data = block.signature.clone().into();
+            EthWireNewBlock { block: eth_wire_block, td }
+        };
 
-        // Announce via eth wire if allowed
-        if should_announce_eth_wire {
-            let eth_wire_new_block = {
-                let td = compute_td(self.td_constant, block.block.header.number);
-                let mut eth_wire_block = block.block.clone();
-                eth_wire_block.header.extra_data = block.signature.clone().into();
-                EthWireNewBlock { block: eth_wire_block, td }
+        for peer in peers {
+            // Skip peers that have already seen this block
+            if self
+                .scroll_wire
+                .peer_state()
+                .get(&peer.remote_id)
+                .is_some_and(|state| state.has_seen(&hash))
+            {
+                continue;
+            }
+
+            if peer
+                .capabilities
+                .capabilities()
+                .iter()
+                .any(|cap| cap == &ScrollMessage::capability())
+            {
+                trace!(target: "scroll::network::manager", peer_id = %peer.remote_id, block_number = %block.block.header.number, block_hash = %hash, "Announcing new block to peer via scroll-wire");
+                self.scroll_wire.announce_block(peer.remote_id, &block, hash);
+            } else {
+                if should_announce_eth_wire {
+                    trace!(target: "scroll::network::manager", peer_id = %peer.remote_id, block_number = %block.block.header.number, block_hash = %hash, "Announcing new block to peer via eth-wire");
+                    self.inner_network_handle.eth_wire_announce_block_to(
+                        peer.remote_id,
+                        eth_wire_new_block.clone(),
+                        hash,
+                    );
+                }
             };
-            self.inner_network_handle.eth_wire_announce_block(eth_wire_new_block, hash);
-        }
-
-        // Announce block to the filtered set of peers
-        for peer_id in peers {
-            trace!(target: "scroll::network::manager", peer_id = %peer_id, block_number = %block.block.header.number, block_hash = %hash, "Announcing new block to peer");
-            self.scroll_wire.announce_block(peer_id, &block, hash);
         }
     }
 
@@ -309,7 +306,7 @@ impl<
                     .entry(peer_id)
                     .or_insert_with(|| PeerState::new(LRU_CACHE_SIZE));
 
-                if state.has_seen_via_scroll_wire(&block_hash) {
+                if state.has_received(&block_hash) {
                     tracing::warn!(target: "scroll::network::manager", peer_id = ?peer_id, block = ?block_hash, "Peer sent duplicate block via scroll-wire, penalizing");
                     self.inner_network_handle.reputation_change(
                         peer_id,
@@ -317,8 +314,8 @@ impl<
                     );
                     return None;
                 }
-                // Update the state: peer has seen this block via scroll-wire
-                state.insert_scroll_wire(block_hash);
+                // Update the state that the peer has received this block
+                state.insert_received(block_hash);
 
                 if self.blocks_seen.contains(&(block_hash, signature)) {
                     None
@@ -341,13 +338,13 @@ impl<
     }
 
     /// Handler for received messages from the [`ScrollNetworkHandle`].
-    fn on_handle_message(&mut self, message: NetworkHandleMessage) {
+    async fn on_handle_message(&mut self, message: NetworkHandleMessage) {
         match message {
             NetworkHandleMessage::AnnounceBlock { block, signature } => {
-                self.announce_block(NewBlock::new(signature, block))
+                self.announce_block(NewBlock::new(signature, block)).await
             }
             NetworkHandleMessage::BlockImportOutcome(outcome) => {
-                self.on_block_import_result(outcome);
+                self.on_block_import_result(outcome).await;
             }
             NetworkHandleMessage::Shutdown(tx) => {
                 tx.send(()).unwrap()
@@ -366,13 +363,13 @@ impl<
     }
 
     /// Handler for the result of a block import.
-    fn on_block_import_result(&mut self, outcome: BlockImportOutcome) {
+    async fn on_block_import_result(&mut self, outcome: BlockImportOutcome) {
         let BlockImportOutcome { peer, result } = outcome;
         match result {
             Ok(BlockValidation::ValidBlock { new_block: msg }) |
             Ok(BlockValidation::ValidHeader { new_block: msg }) => {
                 trace!(target: "scroll::network::manager", peer_id = ?peer, block = %Into::<BlockInfo>::into(&msg.block), "Block import successful - announcing block to network");
-                self.announce_block(msg);
+                self.announce_block(msg).await;
             }
             Err(BlockImportError::Consensus(err)) => {
                 trace!(target: "scroll::network::manager", peer_id = ?peer, ?err, "Block import failed - consensus error - penalizing peer");
@@ -427,14 +424,14 @@ impl<
                 .entry(peer_id)
                 .or_insert_with(|| PeerState::new(LRU_CACHE_SIZE));
 
-            if state.has_seen_via_eth_wire(&block_hash) {
+            if state.has_received(&block_hash) {
                 tracing::warn!(target: "scroll::bridge::import", peer_id = ?peer_id, block = ?block_hash, "Peer sent duplicate block via eth-wire, penalizing");
                 self.inner_network_handle
                     .reputation_change(peer_id, reth_network_api::ReputationChangeKind::BadBlock);
                 return None;
             }
-            // Update the state: peer has seen this block via eth-wire
-            state.insert_eth_wire(block_hash);
+            // Update the state that the peer has received this block
+            state.insert_received(block_hash);
 
             if self.blocks_seen.contains(&(block_hash, signature)) {
                 None
@@ -455,52 +452,6 @@ impl<
                 .reputation_change(peer_id, reth_network_api::ReputationChangeKind::BadBlock);
             None
         }
-    }
-}
-
-impl<
-        N: FullNetwork<Primitives = ScrollNetworkPrimitives>,
-        CS: ScrollHardforks + EthChainSpec + Send + Sync + 'static,
-    > Future for ScrollNetworkManager<N, CS>
-{
-    type Output = ();
-
-    fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
-        let this = self.get_mut();
-
-        // We handle the messages from the network handle.
-        loop {
-            match this.from_handle_rx.poll_next_unpin(cx) {
-                // A message has been received from the network handle.
-                Poll::Ready(Some(message)) => {
-                    this.on_handle_message(message);
-                }
-                // All network handles have been dropped so we can shutdown the network.
-                Poll::Ready(None) => {
-                    return Poll::Ready(());
-                }
-                // No additional messages exist break.
-                Poll::Pending => break,
-            }
-        }
-
-        // Next we handle the scroll-wire events.
-        while let Poll::Ready(event) = this.scroll_wire.poll_unpin(cx) {
-            if let Some(event) = this.on_scroll_wire_event(event) {
-                this.event_sender.notify(event);
-            }
-        }
-
-        // Handle blocks received from the eth-wire protocol.
-        while let Some(Poll::Ready(Some(block))) =
-            this.eth_wire_listener.as_mut().map(|new_block_rx| new_block_rx.poll_next_unpin(cx))
-        {
-            if let Some(event) = this.handle_eth_wire_block(block) {
-                this.event_sender.notify(event);
-            }
-        }
-
-        Poll::Pending
     }
 }
 

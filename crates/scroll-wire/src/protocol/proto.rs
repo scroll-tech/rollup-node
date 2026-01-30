@@ -51,7 +51,9 @@ impl TryFrom<u8> for ScrollMessageId {
 /// The scroll wire message type.
 #[derive(Clone, Debug)]
 pub struct ScrollMessage {
+    /// The message ID.
     pub id: ScrollMessageId,
+    /// The payload of the message.
     pub payload: ScrollMessagePayload,
 }
 

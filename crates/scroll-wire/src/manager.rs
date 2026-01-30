@@ -21,55 +21,34 @@ pub const LRU_CACHE_SIZE: u32 = 100;
 pub struct PeerState {
     /// blocks announced to the peer
     announced: LruCache<B256>,
-    /// blocks received via scroll-wire protocol, this is used to penalize peers that send
-    /// duplicate blocks via scroll-wire.
-    scroll_wire_received: LruCache<B256>,
-    /// blocks received via eth-wire protocol, this is used to penalize peers that send duplicate
-    /// blocks via eth-wire.
-    eth_wire_received: LruCache<B256>,
+    /// blocks received, this is used to penalize peers that send duplicate blocks.
+    received: LruCache<B256>,
 }
 
 impl PeerState {
     /// Creates a new `PeerBlockState` with the specified LRU cache capacity.
     pub fn new(capacity: u32) -> Self {
-        Self {
-            announced: LruCache::new(capacity),
-            scroll_wire_received: LruCache::new(capacity),
-            eth_wire_received: LruCache::new(capacity),
-        }
+        Self { announced: LruCache::new(capacity), received: LruCache::new(capacity) }
     }
 
     /// Check if peer knows about this block (either received or announced).
     pub fn has_seen(&self, hash: &B256) -> bool {
-        self.announced.contains(hash) ||
-            self.scroll_wire_received.contains(hash) ||
-            self.eth_wire_received.contains(hash)
+        self.announced.contains(hash) || self.received.contains(hash)
     }
 
-    /// Check if peer has received this block via scroll-wire specifically (for duplicate
-    /// detection).
-    pub fn has_seen_via_scroll_wire(&self, hash: &B256) -> bool {
-        self.scroll_wire_received.contains(hash)
+    /// Check if peer has received this block.
+    pub fn has_received(&self, hash: &B256) -> bool {
+        self.received.contains(hash)
     }
 
-    /// Check if peer has received this block via eth-wire specifically (for duplicate detection).
-    pub fn has_seen_via_eth_wire(&self, hash: &B256) -> bool {
-        self.eth_wire_received.contains(hash)
-    }
-
-    /// Record that this peer has received a block via scroll-wire.
-    pub fn insert_scroll_wire(&mut self, hash: B256) {
-        self.scroll_wire_received.insert(hash); // Track for duplicate detection
-    }
-
-    /// Record that this peer has received a block via eth-wire.
-    pub fn insert_eth_wire(&mut self, hash: B256) {
-        self.eth_wire_received.insert(hash); // Track for duplicate detection
-    }
-
-    /// Record that we have announced a block to this peer.
+    /// Record that this peer has announced this block.
     pub fn insert_announced(&mut self, hash: B256) {
-        self.announced.insert(hash); // Only update unified announced, not protocol-specific
+        self.announced.insert(hash);
+    }
+
+    /// Record that this peer has received this block.
+    pub fn insert_received(&mut self, hash: B256) {
+        self.received.insert(hash); // Track for duplicate detection
     }
 }
 
