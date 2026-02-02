@@ -99,7 +99,7 @@ export-sample-test-data:
 
 .PHONY: docs
 docs:
-	cargo docs --document-private-items --exclude rollup-node-chain-orchestrator
+	cargo +$(NIGHTLY_TOOLCHAIN) docs --document-private-items --exclude rollup-node-chain-orchestrator
 
 .PHONY: pr
 pr: lint test docs

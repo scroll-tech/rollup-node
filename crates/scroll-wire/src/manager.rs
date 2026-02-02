@@ -1,7 +1,8 @@
-use crate::protocol::{NewBlock, ScrollMessage, ScrollWireEvent};
-use alloy_primitives::B256;
+use crate::{
+    error::AnnounceBlockError,
+    protocol::{NewBlock, ScrollMessage, ScrollWireEvent},
+};
 use futures::StreamExt;
-use reth_network::cache::LruCache;
 use reth_network_api::PeerId;
 use std::{
     collections::{hash_map::Entry, HashMap},
@@ -23,46 +24,43 @@ pub struct ScrollWireManager {
     events: UnboundedReceiverStream<ScrollWireEvent>,
     /// A map of connections to peers.
     connections: HashMap<PeerId, UnboundedSender<ScrollMessage>>,
-    /// A map of the state of the scroll wire protocol. Currently the state for each peer
-    /// is just a cache of the last 100 blocks seen by each peer.
-    state: HashMap<PeerId, LruCache<B256>>,
 }
 
 impl ScrollWireManager {
     /// Creates a new [`ScrollWireManager`] instance.
     pub fn new(events: UnboundedReceiver<ScrollWireEvent>) -> Self {
         trace!(target: "scroll::wire::manager", "Creating new ScrollWireManager instance");
-        Self { events: events.into(), connections: HashMap::new(), state: HashMap::new() }
+        Self { events: events.into(), connections: HashMap::new() }
     }
 
     /// Announces a new block to the specified peer.
-    pub fn announce_block(&mut self, peer_id: PeerId, block: &NewBlock, hash: B256) {
-        if let Entry::Occupied(to_connection) = self.connections.entry(peer_id) {
-            // We send the block to the peer. If we receive an error we remove the peer from the
-            // connections map and delete its state as the connection is no longer valid.
-            if to_connection.get().send(ScrollMessage::new_block(block.clone())).is_err() {
-                trace!(target: "scroll::wire::manager", peer_id = %peer_id, "Failed to send block to peer - dropping peer.");
-                self.state.remove(&peer_id);
-                to_connection.remove();
-            } else {
-                // Upon successful sending of the block we update the state of the peer.
-                trace!(target: "scroll::wire::manager", peer_id = %peer_id, "Announced block to peer");
-                self.state
-                    .entry(peer_id)
-                    .or_insert_with(|| LruCache::new(LRU_CACHE_SIZE))
-                    .insert(hash);
-            }
+    pub fn announce_block(
+        &mut self,
+        peer_id: PeerId,
+        block: &NewBlock,
+    ) -> Result<(), AnnounceBlockError> {
+        let Entry::Occupied(to_connection) = self.connections.entry(peer_id) else {
+            return Err(AnnounceBlockError::PeerNotConnected(peer_id));
+        };
+
+        if to_connection.get().send(ScrollMessage::new_block(block.clone())).is_err() {
+            trace!(target: "scroll::wire::manager", peer_id = %peer_id, "Failed to send block to peer - dropping peer.");
+            to_connection.remove();
+            return Err(AnnounceBlockError::SendFailed(peer_id));
         }
+
+        trace!(target: "scroll::wire::manager", peer_id = %peer_id, "Announced block to peer");
+        Ok(())
     }
 
-    /// Returns the state of the `ScrollWire` protocol.
-    pub const fn state(&self) -> &HashMap<PeerId, LruCache<B256>> {
-        &self.state
+    /// Returns an iterator over the connected peer IDs.
+    pub fn connected_peers(&self) -> impl Iterator<Item = &PeerId> {
+        self.connections.keys()
     }
 
-    /// Returns a mutable reference to the state of the `ScrollWire` protocol.
-    pub const fn state_mut(&mut self) -> &mut HashMap<PeerId, LruCache<B256>> {
-        &mut self.state
+    /// Checks if a peer is connected to the manager via scroll-wire.
+    pub fn is_connected(&self, peer_id: PeerId) -> bool {
+        self.connections.contains_key(&peer_id)
     }
 }
 
@@ -94,7 +92,6 @@ impl Future for ScrollWireManager {
                         direction
                     );
                     this.connections.insert(peer_id, to_connection);
-                    this.state.insert(peer_id, LruCache::new(100));
                 }
                 None => break,
             }
