@@ -119,6 +119,7 @@ pub async fn setup_engine(
 ) -> eyre::Result<(
     Vec<ScrollNodeTestComponents>,
     Vec<Arc<reth_db::test_utils::TempDatabase<reth_db::DatabaseEnv>>>,
+    TaskManager,
     Wallet,
 )>
 where
@@ -247,7 +248,7 @@ where
         nodes.push(node);
     }
 
-    Ok((nodes, dbs, Wallet::default().with_chain_id(chain_spec.chain().into())))
+    Ok((nodes, dbs, exec, Wallet::default().with_chain_id(chain_spec.chain().into())))
 }
 
 /// Generate a transfer transaction with the given wallet.

@@ -30,11 +30,17 @@ impl TestFixture {
         }
 
         tracing::info!("Shutting down node at index {}", node_index);
-        let NodeHandle { node, mut chain_orchestrator_rx, rollup_manager_handle: _r_h, typ: _ } =
-            self.nodes
-                .get_mut(node_index)
-                .and_then(|opt| opt.take())
-                .expect("Node existence checked above");
+        let NodeHandle {
+            node,
+            engine,
+            mut chain_orchestrator_rx,
+            rollup_manager_handle: _r_h,
+            typ: _,
+        } = self
+            .nodes
+            .get_mut(node_index)
+            .and_then(|opt| opt.take())
+            .expect("Node existence checked above");
         let ScrollNodeTestComponents { node, task_manager, exit_future } = node;
 
         tokio::task::spawn_blocking(|| {
@@ -88,13 +94,14 @@ impl TestFixture {
         tracing::info!("Starting node at index {} (reusing database)", node_index);
 
         // Create node instance with existing database
-        let (mut new_nodes, _, _) = setup_engine(
+        let (mut new_nodes, _, _, _) = setup_engine(
             self.config.clone(),
             1,
             self.chain_spec.clone(),
             true,
             false,
             Some((node_index, self.dbs[node_index].clone())),
+            None,
         )
         .await?;
 

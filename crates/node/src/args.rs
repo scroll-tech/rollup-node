@@ -402,7 +402,6 @@ impl ScrollRollupNodeConfig {
         {
             tracing::info!(target: "scroll::node::args", ?l1_block_startup_info, "Starting L1 watcher");
 
-<<<<<<< HEAD
             #[cfg(feature = "test-utils")]
             let skip_synced = self.test_args.test && self.test_args.skip_l1_synced;
 
@@ -411,28 +410,8 @@ impl ScrollRollupNodeConfig {
                 l1_block_startup_info,
                 node_config,
                 self.l1_provider_args.logs_query_block_range,
-=======
-        let (_l1_watcher_mock, l1_watcher_handle): (L1WatcherMockOpt, Option<L1WatcherHandle>) =
-            if let Some(provider) = l1_provider.filter(|_| !self.test) {
-                tracing::info!(target: "scroll::node::args", ?l1_block_startup_info, "Starting L1 watcher");
-                (
-                    None,
-                    Some(
-                        L1Watcher::spawn(
-                            provider,
-                            l1_block_startup_info,
-                            node_config,
-                            self.l1_provider_args.logs_query_block_range,
-                            self.l1_provider_args.liveness_threshold,
-                            self.l1_provider_args.liveness_check_interval,
-                        )
-                        .await,
-                    ),
-                )
-            } else {
-                // Create a channel for L1 notifications that we can use to inject L1 messages for
-                // testing
->>>>>>> main
+                self.l1_provider_args.liveness_threshold,
+                self.l1_provider_args.liveness_check_interval,
                 #[cfg(feature = "test-utils")]
                 skip_synced,
             )

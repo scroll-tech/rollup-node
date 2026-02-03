@@ -34,6 +34,7 @@ use rollup_node_chain_orchestrator::{ChainOrchestratorEvent, ChainOrchestratorHa
 use rollup_node_sequencer::L1MessageInclusionMode;
 use scroll_alloy_consensus::ScrollPooledTransaction;
 use scroll_alloy_rpc_types::Transaction;
+use scroll_engine::{Engine, ForkchoiceState};
 use std::{
     fmt::{Debug, Formatter},
     ops::{Deref, DerefMut},
@@ -95,14 +96,10 @@ pub type ScrollNetworkHandle =
 pub type TestBlockChainProvider =
     BlockchainProvider<NodeTypesWithDBAdapter<ScrollRollupNode, TmpDB>>;
 
-<<<<<<< HEAD
 /// The test node type for Scroll nodes.
 pub type ScrollTestNode = NodeHelperType<ScrollRollupNode, TestBlockChainProvider>;
 
-/// The node type (sequencer or follower).
-=======
 /// The node type (sequencer, follower, or remote source).
->>>>>>> main
 #[derive(Debug)]
 pub enum NodeType {
     /// A sequencer node.
@@ -158,6 +155,8 @@ impl Deref for ScrollNodeTestComponents {
 pub struct NodeHandle {
     /// The underlying node context.
     pub node: ScrollNodeTestComponents,
+    /// Engine instance for this node.
+    pub engine: Engine<Arc<dyn ScrollEngineApi + Send + Sync + 'static>>,
     /// Chain orchestrator listener.
     pub chain_orchestrator_rx: EventStream<ChainOrchestratorEvent>,
     /// Chain orchestrator handle.
@@ -167,15 +166,6 @@ pub struct NodeHandle {
 }
 
 impl NodeHandle {
-    /// Create a new node handle.
-    pub async fn new(node: ScrollNodeTestComponents, typ: NodeType) -> eyre::Result<Self> {
-        let rollup_manager_handle = node.inner.add_ons_handle.rollup_manager_handle.clone();
-        let chain_orchestrator_rx =
-            node.inner.add_ons_handle.rollup_manager_handle.get_event_listener().await?;
-
-        Ok(Self { node, chain_orchestrator_rx, rollup_manager_handle, typ })
-    }
-
     /// Returns true if this is a handle to the sequencer.
     pub const fn is_sequencer(&self) -> bool {
         matches!(self.typ, NodeType::Sequencer)
@@ -236,7 +226,7 @@ impl TestFixture {
     pub fn remote_source(&mut self) -> &mut NodeHandle {
         self.nodes
             .iter_mut()
-            .find(|n| matches!(n.typ, NodeType::RemoteSource))
+            .find_map(|n| n.as_mut().filter(|node| matches!(node.typ, NodeType::RemoteSource)))
             .expect("remote source node not found")
     }
 
@@ -654,7 +644,6 @@ impl TestFixtureBuilder {
     pub async fn build(mut self) -> eyre::Result<TestFixture> {
         let chain_spec = self.chain_spec.unwrap_or_else(|| SCROLL_DEV.clone());
 
-<<<<<<< HEAD
         // Start Anvil if requested
         let anvil = if self.anvil_config.enabled {
             let handle = Self::spawn_anvil(
@@ -682,25 +671,17 @@ impl TestFixtureBuilder {
             None
         };
 
-        let (node_components, dbs, wallet) = setup_engine(
+        let (mut nodes, mut dbs, task, wallet) = setup_engine(
             self.config.clone(),
-=======
-        let (mut nodes, mut tasks, wallet) = setup_engine(
-            config.clone(),
->>>>>>> main
             self.num_nodes,
             chain_spec.clone(),
             self.is_dev,
             self.no_local_transactions_propagation,
             None,
+            None,
         )
         .await?;
 
-<<<<<<< HEAD
-        let mut nodes = Vec::with_capacity(node_components.len());
-        for (index, node) in node_components.into_iter().enumerate() {
-            let handle = NodeHandle::new(
-=======
         // Launch remote source node if requested
         if self.has_remote_source_node {
             // Get sequencer's RPC URL
@@ -716,16 +697,17 @@ impl TestFixtureBuilder {
             // Use a fast poll interval for tests
             remote_config.remote_block_source_args.poll_interval_ms = 100;
 
-            let (mut remote_nodes, new_tasks, _) = setup_engine(
+            let (mut remote_nodes, _, new_task, _) = setup_engine(
                 remote_config,
                 1,
                 chain_spec.clone(),
                 self.is_dev,
                 self.no_local_transactions_propagation,
+                None,
                 Some(tasks),
             )
             .await?;
-            tasks = new_tasks;
+            let tasks = new_task;
 
             nodes.push(remote_nodes.pop().unwrap());
         }
@@ -751,17 +733,18 @@ impl TestFixtureBuilder {
                 node.inner.add_ons_handle.rollup_manager_handle.get_event_listener().await?;
 
             node_handles.push(NodeHandle {
->>>>>>> main
                 node,
-                if self.config.sequencer_args.sequencer_enabled && index == 0 {
+                engine,
+                chain_orchestrator_rx,
+                rollup_manager_handle,
+                typ: if config.sequencer_args.sequencer_enabled && index == 0 {
                     NodeType::Sequencer
                 } else if config.remote_block_source_args.enabled && index == node_handles.len() {
                     NodeType::RemoteSource
                 } else {
                     NodeType::Follower
                 },
-            )
-            .await?;
+            });
 
             nodes.push(Some(handle));
         }
@@ -771,12 +754,8 @@ impl TestFixtureBuilder {
             dbs,
             wallet: Arc::new(Mutex::new(wallet)),
             chain_spec,
-<<<<<<< HEAD
             anvil,
             config: self.config,
-=======
-            _tasks: tasks,
->>>>>>> main
         })
     }
 

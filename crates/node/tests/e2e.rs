@@ -390,7 +390,7 @@ async fn can_forward_tx_to_sequencer() -> eyre::Result<()> {
 
     // Create the chain spec for scroll mainnet with Euclid v2 activated and a test genesis.
     let chain_spec = (*SCROLL_DEV).clone();
-    let (mut sequencer_node, _tasks, _) =
+    let (mut sequencer_node, _dbs, _tasks, _) =
         setup_engine(sequencer_node_config, 1, chain_spec.clone(), false, true, None, None)
             .await
             .unwrap();
@@ -560,7 +560,7 @@ async fn can_bridge_blocks() -> eyre::Result<()> {
     let chain_spec = (*SCROLL_DEV).clone();
 
     // Setup the bridge node and a standard node.
-    let (mut nodes, tasks, _) = setup_engine(
+    let (mut nodes, _dbs, tasks, _) = setup_engine(
         default_test_scroll_rollup_node_config(),
         1,
         chain_spec.clone(),
@@ -668,7 +668,7 @@ async fn shutdown_consolidates_most_recent_batch_on_startup() -> eyre::Result<()
     let chain_spec = (*SCROLL_MAINNET).clone();
 
     // Launch a node
-    let (mut nodes, _tasks, _) = setup_engine(
+    let (mut nodes, _dbs, _tasks, _) = setup_engine(
         default_test_scroll_rollup_node_config(),
         1,
         chain_spec.clone(),
@@ -955,7 +955,7 @@ async fn graceful_shutdown_sets_fcs_to_latest_signed_block_in_db_on_start_up() -
     config.signer_args.private_key = Some(PrivateKeySigner::random());
 
     // Launch a node
-    let (mut nodes, _tasks, _) =
+    let (mut nodes, _dbs, _tasks, _) =
         setup_engine(config.clone(), 1, chain_spec.clone(), false, false, None, None).await?;
     let node = nodes.pop().unwrap();
 
