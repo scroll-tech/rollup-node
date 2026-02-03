@@ -14,6 +14,8 @@ use scroll_network::NewBlockWithPeer;
 pub enum ChainOrchestratorEvent {
     /// A received block failed the consensus checks.
     BlockFailedConsensusChecks(B256, PeerId),
+    /// A finalized block was received from a peer.
+    L2FinalizedBlockReceived(B256, PeerId),
     /// A new block has been received from the network but we have insufficient data to process it
     /// due to being in optimistic mode.
     InsufficientDataForReceivedBlock(B256),

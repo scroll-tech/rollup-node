@@ -95,16 +95,22 @@ pub type ScrollNetworkHandle =
 pub type TestBlockChainProvider =
     BlockchainProvider<NodeTypesWithDBAdapter<ScrollRollupNode, TmpDB>>;
 
+<<<<<<< HEAD
 /// The test node type for Scroll nodes.
 pub type ScrollTestNode = NodeHelperType<ScrollRollupNode, TestBlockChainProvider>;
 
 /// The node type (sequencer or follower).
+=======
+/// The node type (sequencer, follower, or remote source).
+>>>>>>> main
 #[derive(Debug)]
 pub enum NodeType {
     /// A sequencer node.
     Sequencer,
     /// A follower node.
     Follower,
+    /// A remote source node that imports blocks from a remote L2 and builds on top.
+    RemoteSource,
 }
 
 /// Components of a test node.
@@ -179,6 +185,11 @@ impl NodeHandle {
     pub const fn is_follower(&self) -> bool {
         matches!(self.typ, NodeType::Follower)
     }
+
+    /// Returns true if this is a handle to a remote source node.
+    pub const fn is_remote_source(&self) -> bool {
+        matches!(self.typ, NodeType::RemoteSource)
+    }
 }
 
 impl Debug for NodeHandle {
@@ -219,6 +230,14 @@ impl TestFixture {
             return self.nodes[index + 1].as_mut().expect("follower node has been shutdown");
         }
         self.nodes[index].as_mut().expect("follower node has been shutdown")
+    }
+
+    /// Get the remote source node.
+    pub fn remote_source(&mut self) -> &mut NodeHandle {
+        self.nodes
+            .iter_mut()
+            .find(|n| matches!(n.typ, NodeType::RemoteSource))
+            .expect("remote source node not found")
     }
 
     /// Get the wallet.
@@ -379,6 +398,7 @@ pub struct AnvilConfig {
 pub struct TestFixtureBuilder {
     config: ScrollRollupNodeConfig,
     num_nodes: usize,
+    has_remote_source_node: bool,
     chain_spec: Option<Arc<<ScrollRollupNode as NodeTypes>::ChainSpec>>,
     is_dev: bool,
     no_local_transactions_propagation: bool,
@@ -397,6 +417,7 @@ impl TestFixtureBuilder {
         Self {
             config: Self::default_config(),
             num_nodes: 0,
+            has_remote_source_node: false,
             chain_spec: None,
             is_dev: false,
             no_local_transactions_propagation: false,
@@ -427,6 +448,7 @@ impl TestFixtureBuilder {
             consensus_args: ConsensusArgs::noop(),
             database: None,
             rpc_args: RpcArgs { basic_enabled: true, admin_enabled: true },
+            remote_block_source_args: Default::default(),
             pprof_args: PprofArgs::default(),
         }
     }
@@ -449,6 +471,13 @@ impl TestFixtureBuilder {
     /// Adds `count`s follower nodes to the test.
     pub const fn followers(mut self, count: usize) -> Self {
         self.num_nodes += count;
+        self
+    }
+
+    /// Adds a remote source node that follows the sequencer via `RemoteBlockSourceAddOn`.
+    /// Must be used together with `.sequencer()`.
+    pub const fn remote_source_node(mut self) -> Self {
+        self.has_remote_source_node = true;
         self
     }
 
@@ -625,6 +654,7 @@ impl TestFixtureBuilder {
     pub async fn build(mut self) -> eyre::Result<TestFixture> {
         let chain_spec = self.chain_spec.unwrap_or_else(|| SCROLL_DEV.clone());
 
+<<<<<<< HEAD
         // Start Anvil if requested
         let anvil = if self.anvil_config.enabled {
             let handle = Self::spawn_anvil(
@@ -654,6 +684,10 @@ impl TestFixtureBuilder {
 
         let (node_components, dbs, wallet) = setup_engine(
             self.config.clone(),
+=======
+        let (mut nodes, mut tasks, wallet) = setup_engine(
+            config.clone(),
+>>>>>>> main
             self.num_nodes,
             chain_spec.clone(),
             self.is_dev,
@@ -662,12 +696,67 @@ impl TestFixtureBuilder {
         )
         .await?;
 
+<<<<<<< HEAD
         let mut nodes = Vec::with_capacity(node_components.len());
         for (index, node) in node_components.into_iter().enumerate() {
             let handle = NodeHandle::new(
+=======
+        // Launch remote source node if requested
+        if self.has_remote_source_node {
+            // Get sequencer's RPC URL
+            let sequencer_url: reqwest::Url =
+                format!("http://localhost:{}", nodes[0].rpc_url().port().unwrap()).parse()?;
+
+            // Configure remote source node
+            let mut remote_config = config.clone();
+            remote_config.sequencer_args.sequencer_enabled = true; // needs to build blocks
+            remote_config.sequencer_args.auto_start = false;
+            remote_config.remote_block_source_args.enabled = true;
+            remote_config.remote_block_source_args.url = Some(sequencer_url);
+            // Use a fast poll interval for tests
+            remote_config.remote_block_source_args.poll_interval_ms = 100;
+
+            let (mut remote_nodes, new_tasks, _) = setup_engine(
+                remote_config,
+                1,
+                chain_spec.clone(),
+                self.is_dev,
+                self.no_local_transactions_propagation,
+                Some(tasks),
+            )
+            .await?;
+            tasks = new_tasks;
+
+            nodes.push(remote_nodes.pop().unwrap());
+        }
+
+        let mut node_handles = Vec::with_capacity(nodes.len());
+        for (index, node) in nodes.into_iter().enumerate() {
+            let genesis_hash = node.inner.chain_spec().genesis_hash();
+
+            // Create engine for the node
+            let auth_client = node.inner.engine_http_client();
+            let engine_client = Arc::new(ScrollAuthApiEngineClient::new(auth_client))
+                as Arc<dyn ScrollEngineApi + Send + Sync + 'static>;
+            let fcs = ForkchoiceState::new(
+                BlockInfo { hash: genesis_hash, number: 0 },
+                Default::default(),
+                Default::default(),
+            );
+            let engine = Engine::new(Arc::new(engine_client), fcs);
+
+            // Get handles if available
+            let rollup_manager_handle = node.inner.add_ons_handle.rollup_manager_handle.clone();
+            let chain_orchestrator_rx =
+                node.inner.add_ons_handle.rollup_manager_handle.get_event_listener().await?;
+
+            node_handles.push(NodeHandle {
+>>>>>>> main
                 node,
                 if self.config.sequencer_args.sequencer_enabled && index == 0 {
                     NodeType::Sequencer
+                } else if config.remote_block_source_args.enabled && index == node_handles.len() {
+                    NodeType::RemoteSource
                 } else {
                     NodeType::Follower
                 },
@@ -682,8 +771,12 @@ impl TestFixtureBuilder {
             dbs,
             wallet: Arc::new(Mutex::new(wallet)),
             chain_spec,
+<<<<<<< HEAD
             anvil,
             config: self.config,
+=======
+            _tasks: tasks,
+>>>>>>> main
         })
     }
 

@@ -115,6 +115,7 @@ pub async fn setup_engine(
     is_dev: bool,
     no_local_transactions_propagation: bool,
     reboot_info: Option<(usize, Arc<reth_db::test_utils::TempDatabase<reth_db::DatabaseEnv>>)>,
+    task_executor: Option<reth_tasks::TaskManager>,
 ) -> eyre::Result<(
     Vec<ScrollNodeTestComponents>,
     Vec<Arc<reth_db::test_utils::TempDatabase<reth_db::DatabaseEnv>>>,
@@ -128,6 +129,9 @@ where
     TmpNodeAddOnsHandle<ScrollRollupNode>:
         RpcHandleProvider<Adapter<ScrollRollupNode>, TmpNodeEthApi<ScrollRollupNode>>,
 {
+    let tasks = task_executor.unwrap_or_else(TaskManager::current);
+    let exec = tasks.executor();
+
     let network_config = NetworkArgs {
         discovery: DiscoveryArgs { disable_discovery: true, ..DiscoveryArgs::default() },
         ..NetworkArgs::default()
@@ -281,6 +285,7 @@ pub fn default_test_scroll_rollup_node_config() -> ScrollRollupNodeConfig {
         consensus_args: ConsensusArgs::noop(),
         database: None,
         pprof_args: PprofArgs::default(),
+        remote_block_source_args: Default::default(),
         rpc_args: RpcArgs { basic_enabled: true, admin_enabled: true },
     }
 }
@@ -321,6 +326,7 @@ pub fn default_sequencer_test_scroll_rollup_node_config() -> ScrollRollupNodeCon
         gas_price_oracle_args: crate::RollupNodeGasPriceOracleArgs::default(),
         consensus_args: ConsensusArgs::noop(),
         database: None,
+        remote_block_source_args: Default::default(),
         pprof_args: PprofArgs::default(),
         rpc_args: RpcArgs { basic_enabled: true, admin_enabled: true },
     }

@@ -21,6 +21,8 @@ async fn test_should_not_miss_logs_on_reorg() -> eyre::Result<()> {
     const CHAIN_LEN: usize = 200;
     const HALF_CHAIN_LEN: usize = CHAIN_LEN / 2;
     const LOGS_QUERY_BLOCK_RANGE: u64 = 500;
+    const L1_LIVENESS_THRESHOLD: u64 = 60;
+    const L1_LIVENESS_CHECK_INTERVAL: u64 = 12;
 
     // Given
     let (finalized, _, headers) = chain(CHAIN_LEN);
@@ -69,6 +71,8 @@ async fn test_should_not_miss_logs_on_reorg() -> eyre::Result<()> {
         L1BlockStartupInfo::None,
         Arc::new(config),
         LOGS_QUERY_BLOCK_RANGE,
+        L1_LIVENESS_THRESHOLD,
+        L1_LIVENESS_CHECK_INTERVAL,
         false,
     )
     .await;

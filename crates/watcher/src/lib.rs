@@ -6,6 +6,9 @@ pub use error::{EthRequestError, FilterLogError, L1WatcherError};
 mod handle;
 pub use handle::{L1WatcherCommand, L1WatcherHandle};
 
+mod liveness;
+use liveness::LivenessProbe;
+
 mod metrics;
 pub use metrics::WatcherMetrics;
 
@@ -97,6 +100,8 @@ pub struct L1Watcher<EP> {
     is_synced: bool,
     /// The log query block range.
     log_query_block_range: u64,
+    /// The L1 liveness probe.
+    liveness_probe: LivenessProbe,
     /// Test mode: skip sending `L1Notification::Synced` events.
     #[cfg(feature = "test-utils")]
     test_mode_skip_synced_notification: bool,
@@ -209,6 +214,8 @@ where
         l1_block_startup_info: L1BlockStartupInfo,
         config: Arc<NodeConfig>,
         log_query_block_range: u64,
+        liveness_threshold: u64,
+        liveness_check_interval: u64,
         #[cfg(feature = "test-utils")] test_mode_skip_synced_notification: bool,
     ) -> (mpsc::Sender<Arc<L1Notification>>, L1WatcherHandle) {
         tracing::trace!(target: "scroll::watcher", ?l1_block_startup_info, ?config, "spawning L1 watcher");
@@ -275,6 +282,7 @@ where
             metrics: WatcherMetrics::default(),
             is_synced: false,
             log_query_block_range,
+            liveness_probe: LivenessProbe::new(liveness_threshold, liveness_check_interval),
             #[cfg(feature = "test-utils")]
             test_mode_skip_synced_notification,
         };
@@ -308,6 +316,11 @@ where
                 if let Err(err) = self.handle_command(command) {
                     tracing::error!(target: "scroll::watcher", ?err, "failed to handle L1 watcher command");
                 }
+            }
+
+            // Check L1 liveness if due.
+            if self.liveness_probe.is_due() {
+                self.liveness_probe.check(self.unfinalized_blocks.last());
             }
 
             // step the watcher.
@@ -957,6 +970,7 @@ mod tests {
                 metrics: WatcherMetrics::default(),
                 is_synced: false,
                 log_query_block_range: LOG_QUERY_BLOCK_RANGE,
+                liveness_probe: LivenessProbe::new(60, 12),
                 #[cfg(feature = "test-utils")]
                 test_mode_skip_synced_notification: false,
             },

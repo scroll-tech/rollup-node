@@ -284,6 +284,101 @@ async fn can_penalize_peer_for_invalid_signature() -> eyre::Result<()> {
     Ok(())
 }
 
+/// Tests that peers are penalized for sending duplicate unfinalized blocks via scroll-wire.
+#[tokio::test]
+async fn can_penalize_peer_for_duplicate_block_via_scroll_wire() -> eyre::Result<()> {
+    reth_tracing::init_test_tracing();
+
+    // Create 2 nodes with scroll-wire enabled
+    let mut fixture = TestFixture::builder()
+        .sequencer()
+        .followers(1)
+        .block_time(0)
+        .allow_empty_blocks(true)
+        .payload_building_duration(1000)
+        .build()
+        .await?;
+
+    // Set the L1 to synced on the sequencer node
+    fixture.l1().for_node(0).sync().await?;
+    fixture.expect_event_on(0).l1_synced().await?;
+
+    // Build a block
+    let block = fixture.build_block().expect_tx_count(0).build_and_await_block().await?;
+
+    // Wait for node1 to receive the block
+    fixture.expect_event_on(1).new_block_received().await?;
+
+    // Check initial reputation of node 0 from node 1's perspective
+    fixture.check_reputation_on(1).of_node(0).await?.equals(0).await?;
+
+    // Send the same block again (duplicate)
+    fixture
+        .network_on(0)
+        .announce_block(block.clone(), Signature::new(U256::from(1), U256::from(1), false))
+        .await?;
+
+    // Wait for reputation to decrease due to duplicate block detection
+    fixture
+        .check_reputation_on(1)
+        .of_node(0)
+        .await?
+        .with_timeout(Duration::from_secs(5))
+        .with_poll_interval(Duration::from_millis(10))
+        .eventually_less_than(0)
+        .await?;
+
+    Ok(())
+}
+
+/// Tests that peers are penalized for sending duplicate unfinalized blocks via eth-wire.
+#[tokio::test]
+async fn can_penalize_peer_for_duplicate_block_via_eth_wire() -> eyre::Result<()> {
+    reth_tracing::init_test_tracing();
+
+    // Create 2 nodes with scroll-wire disabled
+    let mut fixture = TestFixture::builder()
+        .sequencer()
+        .followers(1)
+        .block_time(0)
+        .allow_empty_blocks(true)
+        .with_scroll_wire(false)
+        .payload_building_duration(1000)
+        .build()
+        .await?;
+
+    // Set the L1 to synced on the sequencer node
+    fixture.l1().for_node(0).sync().await?;
+    fixture.expect_event_on(0).l1_synced().await?;
+
+    // Build a block
+    let block = fixture.build_block().expect_tx_count(0).build_and_await_block().await?;
+
+    // Wait for node1 to receive the block
+    fixture.expect_event_on(1).new_block_received().await?;
+
+    // Check initial reputation of node 0 from node 1's perspective
+    fixture.check_reputation_on(1).of_node(0).await?.equals(0).await?;
+
+    // Send the same block again (duplicate)
+    fixture
+        .network_on(0)
+        .announce_block(block.clone(), Signature::new(U256::from(1), U256::from(1), false))
+        .await?;
+
+    // Wait for reputation to decrease due to duplicate block detection
+    fixture
+        .check_reputation_on(1)
+        .of_node(0)
+        .await?
+        .with_timeout(Duration::from_secs(5))
+        .with_poll_interval(Duration::from_millis(10))
+        .eventually_less_than(0)
+        .await?;
+
+    Ok(())
+}
+
 #[allow(clippy::large_stack_frames)]
 #[tokio::test]
 async fn can_forward_tx_to_sequencer() -> eyre::Result<()> {
@@ -295,15 +390,15 @@ async fn can_forward_tx_to_sequencer() -> eyre::Result<()> {
 
     // Create the chain spec for scroll mainnet with Euclid v2 activated and a test genesis.
     let chain_spec = (*SCROLL_DEV).clone();
-    let (mut sequencer_node, _, _) =
-        setup_engine(sequencer_node_config, 1, chain_spec.clone(), false, true, None)
+    let (mut sequencer_node, _tasks, _) =
+        setup_engine(sequencer_node_config, 1, chain_spec.clone(), false, true, None, None)
             .await
             .unwrap();
 
     let sequencer_url = format!("http://localhost:{}", sequencer_node[0].rpc_url().port().unwrap());
     follower_node_config.network_args.sequencer_url = Some(sequencer_url);
-    let (mut follower_node, _, wallet) =
-        setup_engine(follower_node_config, 1, chain_spec, false, true, None).await.unwrap();
+    let (mut follower_node, _tasks, wallet) =
+        setup_engine(follower_node_config, 1, chain_spec, false, true, None, None).await.unwrap();
 
     let wallet = Arc::new(Mutex::new(wallet));
 
@@ -465,12 +560,13 @@ async fn can_bridge_blocks() -> eyre::Result<()> {
     let chain_spec = (*SCROLL_DEV).clone();
 
     // Setup the bridge node and a standard node.
-    let (mut nodes, _, _) = setup_engine(
+    let (mut nodes, tasks, _) = setup_engine(
         default_test_scroll_rollup_node_config(),
         1,
         chain_spec.clone(),
         false,
         false,
+        None,
         None,
     )
     .await?;
@@ -498,7 +594,7 @@ async fn can_bridge_blocks() -> eyre::Result<()> {
         None,
     )
     .await;
-    tokio::spawn(scroll_network);
+    tokio::spawn(scroll_network.run());
     let mut scroll_network_events = scroll_network_handle.event_listener().await;
 
     // Connect the scroll-wire node to the scroll NetworkManager.
@@ -572,12 +668,13 @@ async fn shutdown_consolidates_most_recent_batch_on_startup() -> eyre::Result<()
     let chain_spec = (*SCROLL_MAINNET).clone();
 
     // Launch a node
-    let (mut nodes, _, _) = setup_engine(
+    let (mut nodes, _tasks, _) = setup_engine(
         default_test_scroll_rollup_node_config(),
         1,
         chain_spec.clone(),
         false,
         false,
+        None,
         None,
     )
     .await?;
@@ -858,8 +955,8 @@ async fn graceful_shutdown_sets_fcs_to_latest_signed_block_in_db_on_start_up() -
     config.signer_args.private_key = Some(PrivateKeySigner::random());
 
     // Launch a node
-    let (mut nodes, _, _) =
-        setup_engine(config.clone(), 1, chain_spec.clone(), false, false, None).await?;
+    let (mut nodes, _tasks, _) =
+        setup_engine(config.clone(), 1, chain_spec.clone(), false, false, None, None).await?;
     let node = nodes.pop().unwrap();
 
     // Instantiate the rollup node manager.
@@ -1814,6 +1911,7 @@ async fn can_gossip_over_eth_wire() -> eyre::Result<()> {
         .followers(1)
         .with_sequencer_auto_start(true)
         .block_time(40)
+        .with_scroll_wire(false)
         .build()
         .await?;
 

@@ -32,6 +32,9 @@ use std::sync::Arc;
 mod handle;
 pub use handle::ScrollAddOnsHandle;
 
+mod remote_block_source;
+pub use remote_block_source::RemoteBlockSourceAddOn;
+
 mod rpc;
 pub use rpc::{
     RollupNodeAdminApiClient, RollupNodeAdminApiServer, RollupNodeApiClient, RollupNodeApiServer,
@@ -133,6 +136,8 @@ where
 
         let (tx, rx) = tokio::sync::oneshot::channel();
         let rpc_config = rollup_node_manager_addon.config().rpc_args.clone();
+        let remote_block_source_config =
+            rollup_node_manager_addon.config().remote_block_source_args.clone();
 
         // Register rollupNode API and rollupNodeAdmin API if enabled
         let rollup_node_rpc_ext = Arc::new(RollupNodeRpcExt::<N::Network>::new(rx));
@@ -159,6 +164,22 @@ where
         if rpc_config.basic_enabled || rpc_config.admin_enabled {
             tx.send(rollup_manager_handle.clone())
                 .map_err(|_| eyre::eyre!("failed to send rollup manager handle"))?;
+        }
+
+        // Launch remote block source if enabled
+        if remote_block_source_config.enabled {
+            let remote_source = RemoteBlockSourceAddOn::new(
+                remote_block_source_config,
+                rollup_manager_handle.clone(),
+            )
+            .await?;
+            ctx.node
+                .task_executor()
+                .spawn_critical_with_shutdown_signal("remote_block_source", |shutdown| async move {
+                    if let Err(e) = remote_source.run_until_shutdown(shutdown).await {
+                        tracing::error!(target: "scroll::remote_source", ?e, "Remote block source failed");
+                    }
+                });
         }
 
         Ok(ScrollAddOnsHandle { rollup_manager_handle, rpc_handle })
