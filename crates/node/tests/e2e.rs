@@ -284,6 +284,101 @@ async fn can_penalize_peer_for_invalid_signature() -> eyre::Result<()> {
     Ok(())
 }
 
+/// Tests that peers are penalized for sending duplicate unfinalized blocks via scroll-wire.
+#[tokio::test]
+async fn can_penalize_peer_for_duplicate_block_via_scroll_wire() -> eyre::Result<()> {
+    reth_tracing::init_test_tracing();
+
+    // Create 2 nodes with scroll-wire enabled
+    let mut fixture = TestFixture::builder()
+        .sequencer()
+        .followers(1)
+        .block_time(0)
+        .allow_empty_blocks(true)
+        .payload_building_duration(1000)
+        .build()
+        .await?;
+
+    // Set the L1 to synced on the sequencer node
+    fixture.l1().for_node(0).sync().await?;
+    fixture.expect_event_on(0).l1_synced().await?;
+
+    // Build a block
+    let block = fixture.build_block().expect_tx_count(0).build_and_await_block().await?;
+
+    // Wait for node1 to receive the block
+    fixture.expect_event_on(1).new_block_received().await?;
+
+    // Check initial reputation of node 0 from node 1's perspective
+    fixture.check_reputation_on(1).of_node(0).await?.equals(0).await?;
+
+    // Send the same block again (duplicate)
+    fixture
+        .network_on(0)
+        .announce_block(block.clone(), Signature::new(U256::from(1), U256::from(1), false))
+        .await?;
+
+    // Wait for reputation to decrease due to duplicate block detection
+    fixture
+        .check_reputation_on(1)
+        .of_node(0)
+        .await?
+        .with_timeout(Duration::from_secs(5))
+        .with_poll_interval(Duration::from_millis(10))
+        .eventually_less_than(0)
+        .await?;
+
+    Ok(())
+}
+
+/// Tests that peers are penalized for sending duplicate unfinalized blocks via eth-wire.
+#[tokio::test]
+async fn can_penalize_peer_for_duplicate_block_via_eth_wire() -> eyre::Result<()> {
+    reth_tracing::init_test_tracing();
+
+    // Create 2 nodes with scroll-wire disabled
+    let mut fixture = TestFixture::builder()
+        .sequencer()
+        .followers(1)
+        .block_time(0)
+        .allow_empty_blocks(true)
+        .with_scroll_wire(false)
+        .payload_building_duration(1000)
+        .build()
+        .await?;
+
+    // Set the L1 to synced on the sequencer node
+    fixture.l1().for_node(0).sync().await?;
+    fixture.expect_event_on(0).l1_synced().await?;
+
+    // Build a block
+    let block = fixture.build_block().expect_tx_count(0).build_and_await_block().await?;
+
+    // Wait for node1 to receive the block
+    fixture.expect_event_on(1).new_block_received().await?;
+
+    // Check initial reputation of node 0 from node 1's perspective
+    fixture.check_reputation_on(1).of_node(0).await?.equals(0).await?;
+
+    // Send the same block again (duplicate)
+    fixture
+        .network_on(0)
+        .announce_block(block.clone(), Signature::new(U256::from(1), U256::from(1), false))
+        .await?;
+
+    // Wait for reputation to decrease due to duplicate block detection
+    fixture
+        .check_reputation_on(1)
+        .of_node(0)
+        .await?
+        .with_timeout(Duration::from_secs(5))
+        .with_poll_interval(Duration::from_millis(10))
+        .eventually_less_than(0)
+        .await?;
+
+    Ok(())
+}
+
 #[allow(clippy::large_stack_frames)]
 #[tokio::test]
 async fn can_forward_tx_to_sequencer() -> eyre::Result<()> {
@@ -498,7 +593,7 @@ async fn can_bridge_blocks() -> eyre::Result<()> {
         None,
     )
     .await;
-    tokio::spawn(scroll_network);
+    tokio::spawn(scroll_network.run());
     let mut scroll_network_events = scroll_network_handle.event_listener().await;
 
     // Connect the scroll-wire node to the scroll NetworkManager.
@@ -1815,6 +1910,7 @@ async fn can_gossip_over_eth_wire() -> eyre::Result<()> {
         .followers(1)
         .with_sequencer_auto_start(true)
         .block_time(40)
+        .with_scroll_wire(false)
         .build()
         .await?;
 

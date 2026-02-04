@@ -12043,6 +12043,7 @@ dependencies = [
  "reth-network-api",
  "reth-scroll-primitives",
  "rollup-node-signer",
+ "thiserror 2.0.17",
  "tokio",
  "tokio-stream",
  "tracing",

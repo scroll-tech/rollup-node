@@ -371,7 +371,7 @@ impl ScrollRollupNodeConfig {
             td_constant(chain_spec.chain().named()),
             authorized_signer,
         );
-        ctx.task_executor.spawn(scroll_network_manager);
+        ctx.task_executor.spawn(scroll_network_manager.run());
 
         tracing::info!(target: "scroll::node::args", fcs = ?fcs, payload_building_duration = ?self.sequencer_args.payload_building_duration, "Starting engine driver");
         let engine = Engine::new(Arc::new(engine_api), fcs);
