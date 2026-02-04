@@ -191,17 +191,7 @@ impl PprofConfig {
                 match report.pprof() {
                     Ok(profile) => {
                         // The profile object needs to be converted to bytes
-                        let body = match profile.write_to_bytes() {
-                            Ok(bytes) => bytes,
-                            Err(e) => {
-                                error!("Failed to encode profile: {}", e);
-                                let error_msg = format!("Failed to encode profile: {}", e);
-                                return Ok(Response::builder()
-                                    .status(StatusCode::INTERNAL_SERVER_ERROR)
-                                    .body(Full::new(Bytes::from(error_msg)))
-                                    .unwrap());
-                            }
-                        };
+                        let body: Vec<u8> = profile.encode_to_vec();
 
                         info!("Successfully collected CPU profile ({} bytes)", body.len());
 
