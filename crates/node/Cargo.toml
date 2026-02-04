@@ -79,7 +79,7 @@ aws-config = "1.8.0"
 aws-sdk-kms = "1.76.0"
 
 # test-utils
-anvil = { git = "https://github.com/foundry-rs/foundry.git", tag = "v1.5.1", default-features = false, optional = true }
+anvil = { git = "https://github.com/foundry-rs/foundry.git", rev = "2c84e1c970d11ef5023a77d8002a1cb70b143888", default-features = false, optional = true }
 alloy-rpc-types-eth = { workspace = true, optional = true }
 alloy-rpc-types-anvil = { workspace = true, optional = true }
 reth-db = { workspace = true, optional = true, features = ["test-utils"] }
@@ -111,7 +111,7 @@ tracing.workspace = true
 console-subscriber = "0.5.0"
 
 # pprof dependencies
-pprof = { version = "0.15.0", features = ["flamegraph", "protobuf-codec"] }
+pprof = { version = "0.15.0", features = ["flamegraph", "prost-codec"] }
 hyper = { version = "1.5", features = ["full"] }
 hyper-util = { version = "0.1", features = ["tokio"] }
 http-body-util = "0.1"
