@@ -140,7 +140,9 @@ where
 
     // Create nodes and peer them
     let mut nodes: Vec<NodeTestContext<_, _>> = Vec::with_capacity(num_nodes);
-
+    let mut chain_spec = Arc::unwrap_or_clone(chain_spec);
+    chain_spec.config.l1_data_fee_buffer_check = scroll_node_config.require_l1_data_fee_buffer;
+    let chain_spec = Arc::new(chain_spec);
     for idx in 0..num_nodes {
         // disable sequencer nodes after the first one
         if idx != 0 {
@@ -243,6 +245,7 @@ pub fn default_test_scroll_rollup_node_config() -> ScrollRollupNodeConfig {
         pprof_args: PprofArgs::default(),
         remote_block_source_args: Default::default(),
         rpc_args: RpcArgs { basic_enabled: true, admin_enabled: true },
+        require_l1_data_fee_buffer: false,
     }
 }
 
@@ -285,5 +288,6 @@ pub fn default_sequencer_test_scroll_rollup_node_config() -> ScrollRollupNodeCon
         remote_block_source_args: Default::default(),
         pprof_args: PprofArgs::default(),
         rpc_args: RpcArgs { basic_enabled: true, admin_enabled: true },
+        require_l1_data_fee_buffer: false,
     }
 }

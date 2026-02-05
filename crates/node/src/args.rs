@@ -100,6 +100,13 @@ pub struct ScrollRollupNodeConfig {
     /// The database connection (not parsed via CLI but hydrated after validation).
     #[arg(skip)]
     pub database: Option<Arc<Database>>,
+    /// Require an additional L1 data fee buffer in the account balance checks for transactions.
+    #[arg(
+        long = "require-l1-data-fee-buffer",
+        value_name = "REQUIRE_L1_DATA_FEE_BUFFER",
+        default_value = "false"
+    )]
+    pub require_l1_data_fee_buffer: bool,
 }
 
 impl ScrollRollupNodeConfig {
@@ -1047,6 +1054,7 @@ mod tests {
             rpc_args: RpcArgs::default(),
             pprof_args: PprofArgs::default(),
             remote_block_source_args: RemoteBlockSourceArgs::default(),
+            require_l1_data_fee_buffer: false,
         };
 
         let result = config.validate();
@@ -1078,6 +1086,7 @@ mod tests {
                 url: None,
                 poll_interval_ms: 100,
             },
+            require_l1_data_fee_buffer: false,
         };
 
         let result = config.validate();
@@ -1112,6 +1121,7 @@ mod tests {
             rpc_args: RpcArgs::default(),
             pprof_args: PprofArgs::default(),
             remote_block_source_args: RemoteBlockSourceArgs::default(),
+            require_l1_data_fee_buffer: false,
         };
 
         let result = config.validate();
@@ -1141,6 +1151,7 @@ mod tests {
             rpc_args: RpcArgs::default(),
             pprof_args: PprofArgs::default(),
             remote_block_source_args: RemoteBlockSourceArgs::default(),
+            require_l1_data_fee_buffer: false,
         };
 
         assert!(config.validate().is_ok());
@@ -1168,6 +1179,7 @@ mod tests {
             rpc_args: RpcArgs::default(),
             pprof_args: PprofArgs::default(),
             remote_block_source_args: RemoteBlockSourceArgs::default(),
+            require_l1_data_fee_buffer: false,
         };
 
         assert!(config.validate().is_ok());
@@ -1191,6 +1203,7 @@ mod tests {
             rpc_args: RpcArgs::default(),
             pprof_args: PprofArgs::default(),
             remote_block_source_args: RemoteBlockSourceArgs::default(),
+            require_l1_data_fee_buffer: false,
         };
 
         assert!(config.validate().is_ok());

@@ -79,6 +79,7 @@ async fn test_should_consolidate_to_block_15k() -> eyre::Result<()> {
         rpc_args: RpcArgs::default(),
         remote_block_source_args: Default::default(),
         pprof_args: PprofArgs::default(),
+        require_l1_data_fee_buffer: false,
     };
 
     let chain_spec = (*SCROLL_SEPOLIA).clone();
@@ -549,6 +550,7 @@ async fn test_chain_orchestrator_l1_reorg() -> eyre::Result<()> {
         rpc_args: RpcArgs::default(),
         remote_block_source_args: Default::default(),
         pprof_args: PprofArgs::default(),
+        require_l1_data_fee_buffer: false,
     };
 
     // Create the chain spec for scroll dev with Feynman activated and a test genesis.
