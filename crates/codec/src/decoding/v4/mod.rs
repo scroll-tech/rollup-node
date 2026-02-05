@@ -31,7 +31,7 @@ pub fn decode_v4(calldata: &[u8], blob: &[u8]) -> Result<Batch, DecodingError> {
     debug_assert!(is_compressed == 1 || is_compressed == 0, "incorrect compressed byte flag");
 
     let buf = if is_compressed == 1 {
-        heap_blob = decompress_blob_data(&heap_blob[1..]);
+        heap_blob = decompress_blob_data(&heap_blob[1..])?;
         &mut heap_blob.as_slice()
     } else {
         &mut (&heap_blob[1..])
