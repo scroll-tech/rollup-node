@@ -111,6 +111,8 @@ impl TestFixture {
         let new_node = new_nodes.remove(0);
         let typ = if self.config.sequencer_args.sequencer_enabled && node_index == 0 {
             crate::test_utils::fixture::NodeType::Sequencer
+        } else if self.config.remote_block_source_args.enabled && node_index == self.nodes.len() {
+            crate::test_utils::fixture::NodeType::RemoteSource
         } else {
             crate::test_utils::fixture::NodeType::Follower
         };

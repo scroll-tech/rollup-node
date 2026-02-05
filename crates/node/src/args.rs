@@ -402,9 +402,6 @@ impl ScrollRollupNodeConfig {
         {
             tracing::info!(target: "scroll::node::args", ?l1_block_startup_info, "Starting L1 watcher");
 
-            #[cfg(feature = "test-utils")]
-            let skip_synced = self.test_args.test && self.test_args.skip_l1_synced;
-
             let (notification_tx, handle) = L1Watcher::spawn(
                 provider,
                 l1_block_startup_info,
@@ -413,7 +410,7 @@ impl ScrollRollupNodeConfig {
                 self.l1_provider_args.liveness_threshold,
                 self.l1_provider_args.liveness_check_interval,
                 #[cfg(feature = "test-utils")]
-                skip_synced,
+                self.test_args.skip_l1_synced,
             )
             .await;
             (Some(notification_tx), None::<UnboundedReceiver<L1WatcherCommand>>, Some(handle))
@@ -507,8 +504,7 @@ impl ScrollRollupNodeConfig {
         )
         .await;
 
-        #[cfg_attr(not(feature = "test-utils"), allow(unused_mut))]
-        let (chain_orchestrator, mut handle) = ChainOrchestrator::new(
+        let (chain_orchestrator, handle) = ChainOrchestrator::new(
             db,
             config,
             Arc::new(block_client),
@@ -524,14 +520,14 @@ impl ScrollRollupNodeConfig {
         .await?;
 
         #[cfg(feature = "test-utils")]
-        {
+        let handle = {
             let command_rx = _l1_command_rx.map(|rx| Arc::new(tokio::sync::Mutex::new(rx)));
             let l1_watcher_mock = rollup_node_watcher::test_utils::L1WatcherMock {
                 command_rx,
                 notification_tx: _l1_notification_tx.expect("L1 notification sender should be set"),
             };
-            handle = handle.with_l1_watcher_mock(Some(l1_watcher_mock));
-        }
+            handle.with_l1_watcher_mock(Some(l1_watcher_mock))
+        };
 
         Ok((chain_orchestrator, handle))
     }
