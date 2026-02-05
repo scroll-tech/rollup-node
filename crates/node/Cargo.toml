@@ -114,6 +114,8 @@ http-body-util = "0.1"
 
 [dev-dependencies]
 alloy-chains.workspace = true
+alloy-consensus.workspace = true
+alloy-genesis.workspace = true
 alloy-eips.workspace = true
 futures.workspace = true
 reth-e2e-test-utils.workspace = true

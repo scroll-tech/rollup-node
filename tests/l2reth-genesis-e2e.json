@@ -25,6 +25,7 @@
     "galileoV2Time": 0,
     "scroll": {
       "maxTxPayloadBytesPerBlock": 122880,
+      "l1DataFeeBufferCheck": false,
       "feeVaultAddress": "0x5300000000000000000000000000000000000005",
       "l1Config": {
         "l1ChainId": 22222222,
