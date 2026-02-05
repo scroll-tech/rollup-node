@@ -4,10 +4,10 @@ use super::{
     block_builder::BlockBuilder, l1_helpers::L1Helper, setup_engine, tx_helpers::TxHelper,
 };
 use crate::{
-    BlobProviderArgs, ChainOrchestratorArgs, ConsensusAlgorithm, ConsensusArgs, EngineDriverArgs,
-    L1ProviderArgs, PprofArgs, RollupNodeDatabaseArgs, RollupNodeGasPriceOracleArgs,
-    RollupNodeNetworkArgs, RpcArgs, ScrollRollupNode, ScrollRollupNodeConfig, SequencerArgs,
-    SignerArgs,
+    constants, BlobProviderArgs, ChainOrchestratorArgs, ConsensusAlgorithm, ConsensusArgs,
+    EngineDriverArgs, L1ProviderArgs, PprofArgs, RollupNodeDatabaseArgs,
+    RollupNodeGasPriceOracleArgs, RollupNodeNetworkArgs, RpcArgs, ScrollRollupNode,
+    ScrollRollupNodeConfig, SequencerArgs, SignerArgs, TestArgs,
 };
 
 use alloy_eips::BlockNumberOrTag;
@@ -31,8 +31,10 @@ use reth_scroll_primitives::ScrollPrimitives;
 use reth_tasks::TaskManager;
 use reth_tokio_util::EventStream;
 use rollup_node_chain_orchestrator::{ChainOrchestratorEvent, ChainOrchestratorHandle};
+use rollup_node_primitives::BlockInfo;
 use rollup_node_sequencer::L1MessageInclusionMode;
 use scroll_alloy_consensus::ScrollPooledTransaction;
+use scroll_alloy_provider::{ScrollAuthApiEngineClient, ScrollEngineApi};
 use scroll_alloy_rpc_types::Transaction;
 use scroll_engine::{Engine, ForkchoiceState};
 use std::{
@@ -166,6 +168,27 @@ pub struct NodeHandle {
 }
 
 impl NodeHandle {
+    /// Create a new node handle.
+    pub async fn new(node: ScrollNodeTestComponents, typ: NodeType) -> eyre::Result<Self> {
+        // Create engine for the node
+        let genesis_hash = node.inner.chain_spec().genesis_hash();
+        let auth_client = node.inner.engine_http_client();
+        let engine_client = Arc::new(ScrollAuthApiEngineClient::new(auth_client))
+            as Arc<dyn ScrollEngineApi + Send + Sync + 'static>;
+        let fcs = ForkchoiceState::new(
+            BlockInfo { hash: genesis_hash, number: 0 },
+            Default::default(),
+            Default::default(),
+        );
+        let engine = Engine::new(Arc::new(engine_client), fcs);
+
+        let rollup_manager_handle = node.inner.add_ons_handle.rollup_manager_handle.clone();
+        let chain_orchestrator_rx =
+            node.inner.add_ons_handle.rollup_manager_handle.get_event_listener().await?;
+
+        Ok(Self { node, engine, chain_orchestrator_rx, rollup_manager_handle, typ })
+    }
+
     /// Returns true if this is a handle to the sequencer.
     pub const fn is_sequencer(&self) -> bool {
         matches!(self.typ, NodeType::Sequencer)
@@ -671,13 +694,12 @@ impl TestFixtureBuilder {
             None
         };
 
-        let (mut nodes, mut dbs, task, wallet) = setup_engine(
+        let (mut nodes, dbs, wallet) = setup_engine(
             self.config.clone(),
             self.num_nodes,
             chain_spec.clone(),
             self.is_dev,
             self.no_local_transactions_propagation,
-            None,
             None,
         )
         .await?;
@@ -689,7 +711,7 @@ impl TestFixtureBuilder {
                 format!("http://localhost:{}", nodes[0].rpc_url().port().unwrap()).parse()?;
 
             // Configure remote source node
-            let mut remote_config = config.clone();
+            let mut remote_config = self.config.clone();
             remote_config.sequencer_args.sequencer_enabled = true; // needs to build blocks
             remote_config.sequencer_args.auto_start = false;
             remote_config.remote_block_source_args.enabled = true;
@@ -697,60 +719,33 @@ impl TestFixtureBuilder {
             // Use a fast poll interval for tests
             remote_config.remote_block_source_args.poll_interval_ms = 100;
 
-            let (mut remote_nodes, _, new_task, _) = setup_engine(
+            let (mut remote_nodes, _, _) = setup_engine(
                 remote_config,
                 1,
                 chain_spec.clone(),
                 self.is_dev,
                 self.no_local_transactions_propagation,
                 None,
-                Some(tasks),
             )
             .await?;
-            let tasks = new_task;
 
             nodes.push(remote_nodes.pop().unwrap());
         }
 
         let mut node_handles = Vec::with_capacity(nodes.len());
         for (index, node) in nodes.into_iter().enumerate() {
-            let genesis_hash = node.inner.chain_spec().genesis_hash();
-
-            // Create engine for the node
-            let auth_client = node.inner.engine_http_client();
-            let engine_client = Arc::new(ScrollAuthApiEngineClient::new(auth_client))
-                as Arc<dyn ScrollEngineApi + Send + Sync + 'static>;
-            let fcs = ForkchoiceState::new(
-                BlockInfo { hash: genesis_hash, number: 0 },
-                Default::default(),
-                Default::default(),
-            );
-            let engine = Engine::new(Arc::new(engine_client), fcs);
-
-            // Get handles if available
-            let rollup_manager_handle = node.inner.add_ons_handle.rollup_manager_handle.clone();
-            let chain_orchestrator_rx =
-                node.inner.add_ons_handle.rollup_manager_handle.get_event_listener().await?;
-
-            node_handles.push(NodeHandle {
-                node,
-                engine,
-                chain_orchestrator_rx,
-                rollup_manager_handle,
-                typ: if config.sequencer_args.sequencer_enabled && index == 0 {
-                    NodeType::Sequencer
-                } else if config.remote_block_source_args.enabled && index == node_handles.len() {
-                    NodeType::RemoteSource
-                } else {
-                    NodeType::Follower
-                },
-            });
-
-            nodes.push(Some(handle));
+            let typ = if self.config.sequencer_args.sequencer_enabled && index == 0 {
+                NodeType::Sequencer
+            } else if self.config.remote_block_source_args.enabled && index == node_handles.len() {
+                NodeType::RemoteSource
+            } else {
+                NodeType::Follower
+            };
+            node_handles.push(Some(NodeHandle::new(node, typ).await?));
         }
 
         Ok(TestFixture {
-            nodes,
+            nodes: node_handles,
             dbs,
             wallet: Arc::new(Mutex::new(wallet)),
             chain_spec,

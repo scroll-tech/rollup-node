@@ -32,7 +32,7 @@ impl TestFixture {
         tracing::info!("Shutting down node at index {}", node_index);
         let NodeHandle {
             node,
-            engine,
+            engine: _,
             mut chain_orchestrator_rx,
             rollup_manager_handle: _r_h,
             typ: _,
@@ -94,14 +94,13 @@ impl TestFixture {
         tracing::info!("Starting node at index {} (reusing database)", node_index);
 
         // Create node instance with existing database
-        let (mut new_nodes, _, _, _) = setup_engine(
+        let (mut new_nodes, _, _) = setup_engine(
             self.config.clone(),
             1,
             self.chain_spec.clone(),
             true,
             false,
             Some((node_index, self.dbs[node_index].clone())),
-            None,
         )
         .await?;
 

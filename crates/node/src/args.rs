@@ -1075,7 +1075,7 @@ mod tests {
     #[test]
     fn test_validate_remote_source_enabled_without_url_fails() {
         let config = ScrollRollupNodeConfig {
-            test: false,
+            test_args: TestArgs::default(),
             sequencer_args: SequencerArgs::default(),
             signer_args: SignerArgs::default(),
             database_args: RollupNodeDatabaseArgs::default(),

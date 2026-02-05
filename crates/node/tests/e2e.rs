@@ -390,15 +390,15 @@ async fn can_forward_tx_to_sequencer() -> eyre::Result<()> {
 
     // Create the chain spec for scroll mainnet with Euclid v2 activated and a test genesis.
     let chain_spec = (*SCROLL_DEV).clone();
-    let (mut sequencer_node, _dbs, _tasks, _) =
-        setup_engine(sequencer_node_config, 1, chain_spec.clone(), false, true, None, None)
+    let (mut sequencer_node, _dbs, _) =
+        setup_engine(sequencer_node_config, 1, chain_spec.clone(), false, true, None)
             .await
             .unwrap();
 
     let sequencer_url = format!("http://localhost:{}", sequencer_node[0].rpc_url().port().unwrap());
     follower_node_config.network_args.sequencer_url = Some(sequencer_url);
-    let (mut follower_node, _tasks, wallet) =
-        setup_engine(follower_node_config, 1, chain_spec, false, true, None, None).await.unwrap();
+    let (mut follower_node, _dbs, wallet) =
+        setup_engine(follower_node_config, 1, chain_spec, false, true, None).await.unwrap();
 
     let wallet = Arc::new(Mutex::new(wallet));
 
@@ -560,13 +560,12 @@ async fn can_bridge_blocks() -> eyre::Result<()> {
     let chain_spec = (*SCROLL_DEV).clone();
 
     // Setup the bridge node and a standard node.
-    let (mut nodes, _dbs, tasks, _) = setup_engine(
+    let (mut nodes, _dbs, _) = setup_engine(
         default_test_scroll_rollup_node_config(),
         1,
         chain_spec.clone(),
         false,
         false,
-        None,
         None,
     )
     .await?;
@@ -668,13 +667,12 @@ async fn shutdown_consolidates_most_recent_batch_on_startup() -> eyre::Result<()
     let chain_spec = (*SCROLL_MAINNET).clone();
 
     // Launch a node
-    let (mut nodes, _dbs, _tasks, _) = setup_engine(
+    let (mut nodes, _dbs, _) = setup_engine(
         default_test_scroll_rollup_node_config(),
         1,
         chain_spec.clone(),
         false,
         false,
-        None,
         None,
     )
     .await?;
@@ -955,8 +953,8 @@ async fn graceful_shutdown_sets_fcs_to_latest_signed_block_in_db_on_start_up() -
     config.signer_args.private_key = Some(PrivateKeySigner::random());
 
     // Launch a node
-    let (mut nodes, _dbs, _tasks, _) =
-        setup_engine(config.clone(), 1, chain_spec.clone(), false, false, None, None).await?;
+    let (mut nodes, _dbs, _) =
+        setup_engine(config.clone(), 1, chain_spec.clone(), false, false, None).await?;
     let node = nodes.pop().unwrap();
 
     // Instantiate the rollup node manager.

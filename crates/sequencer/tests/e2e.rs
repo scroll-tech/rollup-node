@@ -11,7 +11,7 @@ use rollup_node::{
     test_utils::{default_test_scroll_rollup_node_config, setup_engine},
     BlobProviderArgs, ChainOrchestratorArgs, ConsensusArgs, EngineDriverArgs, L1ProviderArgs,
     PprofArgs, RemoteBlockSourceArgs, RollupNodeDatabaseArgs, RollupNodeGasPriceOracleArgs,
-    RollupNodeNetworkArgs, RpcArgs, ScrollRollupNodeConfig, SequencerArgs, SignerArgs,
+    RollupNodeNetworkArgs, RpcArgs, ScrollRollupNodeConfig, SequencerArgs, SignerArgs, TestArgs,
 };
 use rollup_node_chain_orchestrator::ChainOrchestratorEvent;
 use rollup_node_primitives::{sig_encode_hash, BlockInfo, L1MessageEnvelope};
@@ -211,17 +211,10 @@ async fn can_build_blocks_with_delayed_l1_messages() {
     const L1_MESSAGE_DELAY: u64 = 2;
 
     // setup a test node
-    let (mut nodes, _dbs, _tasks, wallet) = setup_engine(
-        default_test_scroll_rollup_node_config(),
-        1,
-        chain_spec,
-        false,
-        false,
-        None,
-        None,
-    )
-    .await
-    .unwrap();
+    let (mut nodes, _dbs, wallet) =
+        setup_engine(default_test_scroll_rollup_node_config(), 1, chain_spec, false, false, None)
+            .await
+            .unwrap();
 
     let node = nodes.pop().unwrap();
     let wallet = Arc::new(Mutex::new(wallet));
@@ -343,17 +336,10 @@ async fn can_build_blocks_with_finalized_l1_messages() {
 
     let chain_spec = SCROLL_DEV.clone();
     // setup a test node
-    let (mut nodes, _tasks, wallet) = setup_engine(
-        default_test_scroll_rollup_node_config(),
-        1,
-        chain_spec,
-        false,
-        false,
-        None,
-        None,
-    )
-    .await
-    .unwrap();
+    let (mut nodes, _dbs, wallet) =
+        setup_engine(default_test_scroll_rollup_node_config(), 1, chain_spec, false, false, None)
+            .await
+            .unwrap();
     let node = nodes.pop().unwrap();
     let wallet = Arc::new(Mutex::new(wallet));
 
@@ -529,8 +515,8 @@ async fn can_sequence_blocks_with_private_key_file() -> eyre::Result<()> {
         remote_block_source_args: RemoteBlockSourceArgs::default(),
     };
 
-    let (nodes, _dbs, _tasks, wallet) =
-        setup_engine(rollup_manager_args, 1, chain_spec, false, false, None, None).await?;
+    let (nodes, _dbs, wallet) =
+        setup_engine(rollup_manager_args, 1, chain_spec, false, false, None).await?;
     let wallet = Arc::new(Mutex::new(wallet));
 
     let sequencer_rnm_handle = nodes[0].inner.add_ons_handle.rollup_manager_handle.clone();
@@ -635,8 +621,8 @@ async fn can_sequence_blocks_with_hex_key_file_without_prefix() -> eyre::Result<
         remote_block_source_args: RemoteBlockSourceArgs::default(),
     };
 
-    let (nodes, _dbs, _tasks, wallet) =
-        setup_engine(rollup_manager_args, 1, chain_spec, false, false, None, None).await?;
+    let (nodes, _dbs, wallet) =
+        setup_engine(rollup_manager_args, 1, chain_spec, false, false, None).await?;
     let wallet = Arc::new(Mutex::new(wallet));
 
     let sequencer_rnm_handle = nodes[0].inner.add_ons_handle.rollup_manager_handle.clone();
@@ -697,7 +683,7 @@ async fn can_build_blocks_and_exit_at_gas_limit() {
 
     // setup a test node. use a high value for the payload building duration to be sure we don't
     // exit early.
-    let (mut nodes, _, wallet) = setup_engine(
+    let (mut nodes, _dbs, wallet) = setup_engine(
         ScrollRollupNodeConfig {
             sequencer_args: SequencerArgs { payload_building_duration: 1000, ..Default::default() },
             ..default_test_scroll_rollup_node_config()
@@ -706,7 +692,6 @@ async fn can_build_blocks_and_exit_at_gas_limit() {
         chain_spec,
         false,
         false,
-        None,
         None,
     )
     .await
@@ -785,7 +770,7 @@ async fn can_build_blocks_and_exit_at_time_limit() {
 
     // setup a test node. use a low payload building duration in order to exit before we reach the
     // gas limit.
-    let (mut nodes, _, wallet) = setup_engine(
+    let (mut nodes, _dbs, wallet) = setup_engine(
         ScrollRollupNodeConfig {
             sequencer_args: SequencerArgs { payload_building_duration: 10, ..Default::default() },
             ..default_test_scroll_rollup_node_config()
@@ -794,7 +779,6 @@ async fn can_build_blocks_and_exit_at_time_limit() {
         chain_spec,
         false,
         false,
-        None,
         None,
     )
     .await
@@ -875,17 +859,10 @@ async fn should_limit_l1_message_cumulative_gas() {
 
     // setup a test node
     let chain_spec = SCROLL_DEV.clone();
-    let (mut nodes, _tasks, wallet) = setup_engine(
-        default_test_scroll_rollup_node_config(),
-        1,
-        chain_spec,
-        false,
-        false,
-        None,
-        None,
-    )
-    .await
-    .unwrap();
+    let (mut nodes, _dbs, wallet) =
+        setup_engine(default_test_scroll_rollup_node_config(), 1, chain_spec, false, false, None)
+            .await
+            .unwrap();
     let node = nodes.pop().unwrap();
     let wallet = Arc::new(Mutex::new(wallet));
 
@@ -999,17 +976,10 @@ async fn should_not_add_skipped_messages() {
 
     // setup a test node
     let chain_spec = SCROLL_DEV.clone();
-    let (mut nodes, _tasks, wallet) = setup_engine(
-        default_test_scroll_rollup_node_config(),
-        1,
-        chain_spec,
-        false,
-        false,
-        None,
-        None,
-    )
-    .await
-    .unwrap();
+    let (mut nodes, _dbs, wallet) =
+        setup_engine(default_test_scroll_rollup_node_config(), 1, chain_spec, false, false, None)
+            .await
+            .unwrap();
     let node = nodes.pop().unwrap();
     let wallet = Arc::new(Mutex::new(wallet));
 

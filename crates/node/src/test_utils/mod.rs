@@ -79,9 +79,10 @@ pub use network_helpers::{
 
 // Legacy utilities - keep existing functions for backward compatibility
 use crate::{
-    BlobProviderArgs, ChainOrchestratorArgs, ConsensusArgs, EngineDriverArgs, L1ProviderArgs,
-    PprofArgs, RollupNodeDatabaseArgs, RollupNodeNetworkArgs, RpcArgs, ScrollRollupNode,
-    ScrollRollupNodeConfig, SequencerArgs,
+    test_utils::fixture::ScrollNodeTestComponents, BlobProviderArgs, ChainOrchestratorArgs,
+    ConsensusArgs, EngineDriverArgs, L1ProviderArgs, PprofArgs, RollupNodeDatabaseArgs,
+    RollupNodeNetworkArgs, RpcArgs, ScrollRollupNode, ScrollRollupNodeConfig, SequencerArgs,
+    TestArgs,
 };
 use alloy_primitives::Bytes;
 use reth_chainspec::EthChainSpec;
@@ -115,11 +116,9 @@ pub async fn setup_engine(
     is_dev: bool,
     no_local_transactions_propagation: bool,
     reboot_info: Option<(usize, Arc<reth_db::test_utils::TempDatabase<reth_db::DatabaseEnv>>)>,
-    task_executor: Option<reth_tasks::TaskManager>,
 ) -> eyre::Result<(
     Vec<ScrollNodeTestComponents>,
     Vec<Arc<reth_db::test_utils::TempDatabase<reth_db::DatabaseEnv>>>,
-    TaskManager,
     Wallet,
 )>
 where
@@ -130,9 +129,6 @@ where
     TmpNodeAddOnsHandle<ScrollRollupNode>:
         RpcHandleProvider<Adapter<ScrollRollupNode>, TmpNodeEthApi<ScrollRollupNode>>,
 {
-    let tasks = task_executor.unwrap_or_else(TaskManager::current);
-    let exec = tasks.executor();
-
     let network_config = NetworkArgs {
         discovery: DiscoveryArgs { disable_discovery: true, ..DiscoveryArgs::default() },
         ..NetworkArgs::default()
@@ -248,7 +244,7 @@ where
         nodes.push(node);
     }
 
-    Ok((nodes, dbs, exec, Wallet::default().with_chain_id(chain_spec.chain().into())))
+    Ok((nodes, dbs, Wallet::default().with_chain_id(chain_spec.chain().into())))
 }
 
 /// Generate a transfer transaction with the given wallet.
