@@ -513,6 +513,7 @@ async fn can_sequence_blocks_with_private_key_file() -> eyre::Result<()> {
         rpc_args: RpcArgs::default(),
         pprof_args: PprofArgs::default(),
         remote_block_source_args: RemoteBlockSourceArgs::default(),
+        require_l1_data_fee_buffer: false,
     };
 
     let (nodes, _dbs, wallet) =
@@ -619,6 +620,7 @@ async fn can_sequence_blocks_with_hex_key_file_without_prefix() -> eyre::Result<
         rpc_args: RpcArgs::default(),
         pprof_args: PprofArgs::default(),
         remote_block_source_args: RemoteBlockSourceArgs::default(),
+        require_l1_data_fee_buffer: false,
     };
 
     let (nodes, _dbs, wallet) =

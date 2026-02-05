@@ -11,7 +11,7 @@ use crate::{
 };
 
 use alloy_eips::BlockNumberOrTag;
-use alloy_primitives::Address;
+use alloy_primitives::{Address, B256};
 use alloy_provider::{ext::AnvilApi, layers::CacheLayer, Provider, ProviderBuilder};
 use alloy_rpc_client::RpcClient;
 use alloy_rpc_types_anvil::ReorgOptions;
@@ -283,12 +283,11 @@ impl TestFixture {
         &mut self,
         node_index: usize,
         tx: impl Into<alloy_primitives::Bytes>,
-    ) -> eyre::Result<()> {
+    ) -> eyre::Result<B256> {
         let node = self.nodes[node_index]
             .as_ref()
             .ok_or_else(|| eyre::eyre!("Node at index {} has been shutdown", node_index))?;
-        node.node.rpc.inject_tx(tx.into()).await?;
-        Ok(())
+        Ok(node.node.rpc.inject_tx(tx.into()).await?)
     }
 
     /// Get the current (latest) block from a specific node.
@@ -407,7 +406,7 @@ pub struct AnvilConfig {
 }
 
 /// Builder for creating test fixtures with a fluent API.
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct TestFixtureBuilder {
     config: ScrollRollupNodeConfig,
     num_nodes: usize,
@@ -463,6 +462,7 @@ impl TestFixtureBuilder {
             rpc_args: RpcArgs { basic_enabled: true, admin_enabled: true },
             remote_block_source_args: Default::default(),
             pprof_args: PprofArgs::default(),
+            require_l1_data_fee_buffer: false,
         }
     }
 
@@ -642,6 +642,15 @@ impl TestFixtureBuilder {
     /// Get a mutable reference to the underlying config for advanced customization.
     pub const fn config_mut(&mut self) -> &mut ScrollRollupNodeConfig {
         &mut self.config
+    }
+
+    /// Modify the underlying config using a closure.
+    pub fn config<F>(mut self, f: F) -> Self
+    where
+        F: FnOnce(&mut ScrollRollupNodeConfig),
+    {
+        f(&mut self.config);
+        self
     }
 
     /// Enable Anvil L1 with optional configuration.

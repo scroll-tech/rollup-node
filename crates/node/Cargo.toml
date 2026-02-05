@@ -118,6 +118,8 @@ http-body-util = "0.1"
 
 [dev-dependencies]
 alloy-chains.workspace = true
+alloy-consensus.workspace = true
+alloy-genesis.workspace = true
 alloy-eips.workspace = true
 futures.workspace = true
 reth-db = { workspace = true, features = ["test-utils"] }

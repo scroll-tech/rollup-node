@@ -137,7 +137,9 @@ where
     // Create nodes and peer them
     let mut nodes: Vec<ScrollNodeTestComponents> = Vec::with_capacity(num_nodes);
     let mut dbs: Vec<Arc<reth_db::test_utils::TempDatabase<reth_db::DatabaseEnv>>> = Vec::new();
-
+    let mut chain_spec = Arc::unwrap_or_clone(chain_spec);
+    chain_spec.config.l1_data_fee_buffer_check = scroll_node_config.require_l1_data_fee_buffer;
+    let chain_spec = Arc::new(chain_spec);
     for idx in 0..num_nodes {
         // Determine the actual node index (for reboot use provided index, otherwise use idx)
         let node_index = reboot_info.as_ref().map(|(node_idx, _)| *node_idx).unwrap_or(idx);
@@ -284,6 +286,7 @@ pub fn default_test_scroll_rollup_node_config() -> ScrollRollupNodeConfig {
         pprof_args: PprofArgs::default(),
         remote_block_source_args: Default::default(),
         rpc_args: RpcArgs { basic_enabled: true, admin_enabled: true },
+        require_l1_data_fee_buffer: false,
     }
 }
 
@@ -326,5 +329,6 @@ pub fn default_sequencer_test_scroll_rollup_node_config() -> ScrollRollupNodeCon
         remote_block_source_args: Default::default(),
         pprof_args: PprofArgs::default(),
         rpc_args: RpcArgs { basic_enabled: true, admin_enabled: true },
+        require_l1_data_fee_buffer: false,
     }
 }
