@@ -135,7 +135,9 @@ async fn test_l1_sync_batch_commit() -> eyre::Result<()> {
 
     // Record initial state - should be at genesis
     let initial_status = fixture.get_status(0).await?;
+    let initial_head = initial_status.l2.fcs.head_block_info().number;
     let initial_safe = initial_status.l2.fcs.safe_block_info().number;
+    assert_eq!(initial_head, 0, "Initial head should be at genesis (block 0)");
     assert_eq!(initial_safe, 0, "Initial safe head should be at genesis (block 0)");
 
     // Step 2: Send BatchCommit transactions to L1 while node is syncing
@@ -165,6 +167,10 @@ async fn test_l1_sync_batch_commit() -> eyre::Result<()> {
 
     // Step 5: Verify safe head advanced after processing buffered events
     let new_status = fixture.get_status(0).await?;
+    assert!(
+        new_status.l2.fcs.head_block_info().number > initial_head,
+        "Head should advance after L1Synced when processing buffered BatchCommit events"
+    );
     assert!(
         new_status.l2.fcs.safe_block_info().number > initial_safe,
         "Safe head should advance after L1Synced when processing buffered BatchCommit events"
