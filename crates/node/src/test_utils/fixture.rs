@@ -646,7 +646,7 @@ impl TestFixtureBuilder {
 
     /// Enable Anvil L1 with optional configuration.
     ///
-    /// Defaults: state_path = `./tests/testdata/anvil_state.json`, others use Anvil defaults.
+    /// Defaults: `state_path` = `./tests/testdata/anvil_state.json`, others use Anvil defaults.
     pub fn with_anvil(
         mut self,
         state_path: Option<PathBuf>,

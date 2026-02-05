@@ -2,7 +2,7 @@
 //!
 //! Provides `shutdown_node()` and `start_node()` to test:
 //! - State persistence across reboots
-//! - ForkchoiceState restoration from database
+//! - `ForkchoiceState` restoration from database
 //! - L1 event processing continuity
 
 use std::time::Duration;
@@ -14,7 +14,7 @@ use crate::test_utils::{fixture::ScrollNodeTestComponents, setup_engine, NodeHan
 impl TestFixture {
     /// Gracefully shutdown a node and clean up its resources.
     ///
-    /// Process: Shutdown ChainOrchestrator → Drop NodeHandle → Wait for cleanup (1s).
+    /// Process: Shutdown `ChainOrchestrator` → Drop `NodeHandle` → Wait for cleanup (1s).
     /// The node can be restarted later with `start_node()` to reuse its database.
     pub async fn shutdown_node(&mut self, node_index: usize) -> eyre::Result<()> {
         if node_index >= self.nodes.len() {
@@ -77,7 +77,7 @@ impl TestFixture {
 
     /// Restart a previously shutdown node.
     ///
-    /// Reuses the existing database and restores ForkchoiceState from persisted data.
+    /// Reuses the existing database and restores `ForkchoiceState` from persisted data.
     pub async fn start_node(&mut self, node_index: usize) -> eyre::Result<()> {
         if node_index >= self.nodes.len() {
             return Err(eyre::eyre!(
