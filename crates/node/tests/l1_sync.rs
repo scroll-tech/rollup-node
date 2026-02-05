@@ -116,6 +116,7 @@ fn read_test_transaction(tx_type: &str, index: usize) -> eyre::Result<Bytes> {
 /// 3. Verify safe head remains at genesis (events are buffered, not processed)
 /// 4. Trigger L1 sync completion by sending `L1Synced` notification
 /// 5. Verify safe head advances after processing buffered `BatchCommit` events
+/// 6. Verify L2 head block number is updated in database
 ///
 /// # Expected Behavior
 /// The node should not update the safe head during initial sync. Only after receiving
@@ -135,10 +136,11 @@ async fn test_l1_sync_batch_commit() -> eyre::Result<()> {
 
     // Record initial state - should be at genesis
     let initial_status = fixture.get_status(0).await?;
-    let initial_head = initial_status.l2.fcs.head_block_info().number;
     let initial_safe = initial_status.l2.fcs.safe_block_info().number;
-    assert_eq!(initial_head, 0, "Initial head should be at genesis (block 0)");
     assert_eq!(initial_safe, 0, "Initial safe head should be at genesis (block 0)");
+
+    let initial_db_head = fixture.db().get_l2_head_block_number().await?;
+    assert_eq!(initial_db_head, 0, "L2 head block number should be 0");
 
     // Step 2: Send BatchCommit transactions to L1 while node is syncing
     // These commits contain L2 blocks that should eventually become the safe head
@@ -168,12 +170,15 @@ async fn test_l1_sync_batch_commit() -> eyre::Result<()> {
     // Step 5: Verify safe head advanced after processing buffered events
     let new_status = fixture.get_status(0).await?;
     assert!(
-        new_status.l2.fcs.head_block_info().number > initial_head,
-        "Head should advance after L1Synced when processing buffered BatchCommit events"
-    );
-    assert!(
         new_status.l2.fcs.safe_block_info().number > initial_safe,
         "Safe head should advance after L1Synced when processing buffered BatchCommit events"
+    );
+
+    // Step 6: Verify L2 head block number is updated in database
+    let new_db_head = fixture.db().get_l2_head_block_number().await?;
+    assert!(
+        new_db_head > initial_db_head,
+        "Database L2 head block number should advance after L1Synced when processing buffered BatchCommit events"
     );
 
     Ok(())

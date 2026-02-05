@@ -25,6 +25,18 @@ impl<'a> DatabaseHelper<'a> {
         Ok(node.rollup_manager_handle.get_database_handle().await?)
     }
 
+    /// Get the L2 head block number from the database.
+    pub async fn get_l2_head_block_number(&self) -> eyre::Result<u64> {
+        let db = self.database().await?;
+        let l2_head_block_number = db
+            .tx_mut(move |tx| async move {
+                let number = tx.get_l2_head_block_number().await?;
+                Ok::<_, DatabaseError>(number)
+            })
+            .await?;
+        Ok(l2_head_block_number)
+    }
+
     /// Get the finalized block number of a batch by its index.
     ///
     /// Returns `Ok(None)` if the batch is not found, or `Ok(Some(None))` if the batch exists

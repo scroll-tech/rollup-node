@@ -831,6 +831,9 @@ impl<T: WriteConnectionProvider + ?Sized + Sync> DatabaseWriteOperations for T {
         &self,
         outcome: BatchConsolidationOutcome,
     ) -> Result<(), DatabaseError> {
+        let l2_head_block_number = outcome.l2_head_updated.then(|| {
+            outcome.blocks.last().expect("must have at least one block").block_info.number
+        });
         self.insert_blocks(
             outcome.blocks.iter().map(|b| b.block_info).collect(),
             outcome.batch_info,
@@ -839,6 +842,9 @@ impl<T: WriteConnectionProvider + ?Sized + Sync> DatabaseWriteOperations for T {
         self.update_l1_messages_with_l2_blocks(outcome.blocks).await?;
         self.update_skipped_l1_messages(outcome.skipped_l1_messages).await?;
         self.update_batch_status(outcome.batch_info.hash, outcome.target_status).await?;
+        if let Some(block_number) = l2_head_block_number {
+            self.set_l2_head_block_number(block_number).await?;
+        }
         Ok(())
     }
 

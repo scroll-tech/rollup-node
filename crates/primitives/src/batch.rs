@@ -139,12 +139,24 @@ pub struct BatchConsolidationOutcome {
     pub skipped_l1_messages: Vec<u64>,
     /// The target status of the batch after consolidation.
     pub target_status: BatchStatus,
+    /// Is the l2 head block number updated.
+    pub l2_head_updated: bool,
 }
 
 impl BatchConsolidationOutcome {
     /// Creates a new empty batch consolidation outcome for the given batch info.
-    pub const fn new(batch_info: BatchInfo, target_status: BatchStatus) -> Self {
-        Self { batch_info, blocks: Vec::new(), skipped_l1_messages: Vec::new(), target_status }
+    pub const fn new(
+        batch_info: BatchInfo,
+        target_status: BatchStatus,
+        l2_head_updated: bool,
+    ) -> Self {
+        Self {
+            batch_info,
+            blocks: Vec::new(),
+            skipped_l1_messages: Vec::new(),
+            target_status,
+            l2_head_updated,
+        }
     }
 
     /// Pushes a block consolidation outcome to the batch.
