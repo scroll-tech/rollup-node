@@ -33,7 +33,7 @@ pub(crate) const DEFAULT_BLOCK_TIME: u64 = 1000;
 pub(crate) const DEFAULT_PAYLOAD_BUILDING_DURATION: u64 = 800;
 
 /// The default payload size limit in bytes for the sequencer.
-pub(crate) const DEFAULT_PAYLOAD_SIZE_LIMIT: u64 = 122_880;
+pub(crate) const DEFAULT_PAYLOAD_SIZE_LIMIT: u64 = 122_8800;
 
 /// The gap in blocks between the P2P and EN which triggers sync.
 pub(crate) const BLOCK_GAP_TRIGGER: u64 = 1_000;
