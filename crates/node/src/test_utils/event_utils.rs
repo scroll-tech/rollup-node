@@ -179,8 +179,8 @@ impl<'a> EventWaiter<'a> {
         Ok(())
     }
 
-    /// Wait for L1 block finalized event on all specified nodes.
-    pub async fn l1_block_finalized(self) -> eyre::Result<()> {
+    /// Wait for L1 genesis block finalized event on all specified nodes.
+    pub async fn l1_genesis_finalized(self) -> eyre::Result<()> {
         self.l1_block_finalized_at_least(0).await
     }
 

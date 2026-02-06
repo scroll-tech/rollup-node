@@ -337,20 +337,19 @@ where
             if self.is_synced {
                 tokio::time::sleep(SLOW_SYNC_INTERVAL).await;
             } else if self.current_block_number == self.l1_state.head {
+                // In test mode, skip notification if flag is set
+                #[cfg(feature = "test-utils")]
+                if self.test_mode_skip_synced_notification {
+                    self.is_synced = true;
+                    continue;
+                }
+
                 // if we have synced to the head of the L1, notify the channel and set the
                 // `is_synced`` flag.
-                #[cfg(feature = "test-utils")]
-                let should_skip = self.test_mode_skip_synced_notification;
-                #[cfg(not(feature = "test-utils"))]
-                let should_skip = false;
-
-                if !should_skip {
-                    if let Err(L1WatcherError::SendError(_)) =
-                        self.notify(L1Notification::Synced).await
-                    {
-                        tracing::warn!(target: "scroll::watcher", "L1 watcher channel closed, stopping the watcher");
-                        break;
-                    }
+                if let Err(L1WatcherError::SendError(_)) = self.notify(L1Notification::Synced).await
+                {
+                    tracing::warn!(target: "scroll::watcher", "L1 watcher channel closed, stopping the watcher");
+                    break;
                 }
                 self.is_synced = true;
             }

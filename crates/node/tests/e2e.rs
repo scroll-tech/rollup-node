@@ -1266,7 +1266,7 @@ async fn consolidates_committed_batches_after_chain_consolidation() -> eyre::Res
     fixture.l1().finalize_l1_block(batch_1_finalization_block_info.number).await?;
 
     // Wait for L1 block finalized event
-    fixture.expect_event().l1_block_finalized().await?;
+    fixture.expect_event().l1_genesis_finalized().await?;
 
     let status = fixture.get_sequencer_status().await?;
 
