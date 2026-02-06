@@ -83,8 +83,10 @@ impl<'a> NetworkHelper<'a> {
     pub async fn network_handle(
         &self,
     ) -> eyre::Result<scroll_network::ScrollNetworkHandle<ScrollNetworkHandle>> {
-        self.fixture.nodes[self.node_index]
-            .rollup_manager_handle
+        let node = self.fixture.nodes[self.node_index]
+            .as_ref()
+            .ok_or_else(|| eyre::eyre!("Node at index {} has been shutdown", self.node_index))?;
+        node.rollup_manager_handle
             .get_network_handle()
             .await
             .map_err(|e| eyre::eyre!("Failed to get network handle: {}", e))

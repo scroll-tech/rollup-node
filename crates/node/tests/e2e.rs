@@ -390,14 +390,14 @@ async fn can_forward_tx_to_sequencer() -> eyre::Result<()> {
 
     // Create the chain spec for scroll mainnet with Euclid v2 activated and a test genesis.
     let chain_spec = (*SCROLL_DEV).clone();
-    let (mut sequencer_node, _tasks, _) =
+    let (mut sequencer_node, _dbs, _) =
         setup_engine(sequencer_node_config, 1, chain_spec.clone(), false, true, None)
             .await
             .unwrap();
 
     let sequencer_url = format!("http://localhost:{}", sequencer_node[0].rpc_url().port().unwrap());
     follower_node_config.network_args.sequencer_url = Some(sequencer_url);
-    let (mut follower_node, _tasks, wallet) =
+    let (mut follower_node, _dbs, wallet) =
         setup_engine(follower_node_config, 1, chain_spec, false, true, None).await.unwrap();
 
     let wallet = Arc::new(Mutex::new(wallet));
@@ -560,7 +560,7 @@ async fn can_bridge_blocks() -> eyre::Result<()> {
     let chain_spec = (*SCROLL_DEV).clone();
 
     // Setup the bridge node and a standard node.
-    let (mut nodes, tasks, _) = setup_engine(
+    let (mut nodes, _dbs, _) = setup_engine(
         default_test_scroll_rollup_node_config(),
         1,
         chain_spec.clone(),
@@ -615,7 +615,7 @@ async fn can_bridge_blocks() -> eyre::Result<()> {
     let mut network_events = network_handle.event_listener();
 
     // Spawn the standard NetworkManager.
-    tasks.executor().spawn(network);
+    bridge_node.task_manager.executor().spawn(network);
 
     // Connect the standard NetworkManager to the bridge node.
     bridge_node.network.add_peer(network_handle.local_node_record()).await;
@@ -667,7 +667,7 @@ async fn shutdown_consolidates_most_recent_batch_on_startup() -> eyre::Result<()
     let chain_spec = (*SCROLL_MAINNET).clone();
 
     // Launch a node
-    let (mut nodes, _tasks, _) = setup_engine(
+    let (mut nodes, _dbs, _) = setup_engine(
         default_test_scroll_rollup_node_config(),
         1,
         chain_spec.clone(),
@@ -953,7 +953,7 @@ async fn graceful_shutdown_sets_fcs_to_latest_signed_block_in_db_on_start_up() -
     config.signer_args.private_key = Some(PrivateKeySigner::random());
 
     // Launch a node
-    let (mut nodes, _tasks, _) =
+    let (mut nodes, _dbs, _) =
         setup_engine(config.clone(), 1, chain_spec.clone(), false, false, None).await?;
     let node = nodes.pop().unwrap();
 
@@ -1009,7 +1009,7 @@ async fn graceful_shutdown_sets_fcs_to_latest_signed_block_in_db_on_start_up() -
     }
 
     // Wait for the EN to be synced to block 10.
-    let execution_node_provider = node.inner.provider;
+    let execution_node_provider = &node.inner.provider;
     loop {
         handle.build_block();
         let block_number = loop {
@@ -1266,7 +1266,7 @@ async fn consolidates_committed_batches_after_chain_consolidation() -> eyre::Res
     fixture.l1().finalize_l1_block(batch_1_finalization_block_info.number).await?;
 
     // Wait for L1 block finalized event
-    fixture.expect_event().l1_block_finalized().await?;
+    fixture.expect_event().l1_genesis_finalized().await?;
 
     let status = fixture.get_sequencer_status().await?;
 

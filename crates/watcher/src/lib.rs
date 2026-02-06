@@ -102,6 +102,9 @@ pub struct L1Watcher<EP> {
     log_query_block_range: u64,
     /// The L1 liveness probe.
     liveness_probe: LivenessProbe,
+    /// Test mode: skip sending `L1Notification::Synced` events.
+    #[cfg(feature = "test-utils")]
+    test_mode_skip_synced_notification: bool,
 }
 
 /// The L1 notification type yielded by the [`L1Watcher`].
@@ -213,7 +216,8 @@ where
         log_query_block_range: u64,
         liveness_threshold: u64,
         liveness_check_interval: u64,
-    ) -> L1WatcherHandle {
+        #[cfg(feature = "test-utils")] test_mode_skip_synced_notification: bool,
+    ) -> (mpsc::Sender<Arc<L1Notification>>, L1WatcherHandle) {
         tracing::trace!(target: "scroll::watcher", ?l1_block_startup_info, ?config, "spawning L1 watcher");
 
         let (notification_tx, notification_rx) = mpsc::channel(log_query_block_range as usize);
@@ -273,12 +277,14 @@ where
             current_block_number: start_block.saturating_sub(1),
             l1_state,
             command_rx,
-            sender: notification_tx,
+            sender: notification_tx.clone(),
             config,
             metrics: WatcherMetrics::default(),
             is_synced: false,
             log_query_block_range,
             liveness_probe: LivenessProbe::new(liveness_threshold, liveness_check_interval),
+            #[cfg(feature = "test-utils")]
+            test_mode_skip_synced_notification,
         };
 
         // notify at spawn.
@@ -299,7 +305,7 @@ where
 
         tokio::spawn(watcher.run());
 
-        handle
+        (notification_tx, handle)
     }
 
     /// Main execution loop for the [`L1Watcher`].
@@ -331,6 +337,13 @@ where
             if self.is_synced {
                 tokio::time::sleep(SLOW_SYNC_INTERVAL).await;
             } else if self.current_block_number == self.l1_state.head {
+                // In test mode, skip notification if flag is set
+                #[cfg(feature = "test-utils")]
+                if self.test_mode_skip_synced_notification {
+                    self.is_synced = true;
+                    continue;
+                }
+
                 // if we have synced to the head of the L1, notify the channel and set the
                 // `is_synced`` flag.
                 if let Err(L1WatcherError::SendError(_)) = self.notify(L1Notification::Synced).await
@@ -845,11 +858,31 @@ where
 
     /// Returns the finalized L1 block.
     async fn finalized_block(&self) -> L1WatcherResult<Block> {
-        Ok(self
-            .execution_provider
-            .get_block(BlockNumberOrTag::Finalized.into())
-            .await?
-            .expect("finalized block should always exist"))
+        #[cfg(not(feature = "test-utils"))]
+        {
+            Ok(self
+                .execution_provider
+                .get_block(BlockNumberOrTag::Finalized.into())
+                .await?
+                .expect("finalized block should always exist"))
+        }
+
+        #[cfg(feature = "test-utils")]
+        {
+            // We do not use BlockNumberOrTag::Finalized directly because there is an issue with
+            // Anvil. See https://github.com/foundry-rs/foundry/issues/12645.
+            let block = self
+                .execution_provider
+                .get_block(BlockNumberOrTag::Finalized.into())
+                .await?
+                .expect("finalized block should always exist");
+
+            Ok(self
+                .execution_provider
+                .get_block(block.number().into())
+                .await?
+                .expect("finalized block should always exist"))
+        }
     }
 
     /// Returns the next range of logs, for the block range in
@@ -937,6 +970,8 @@ mod tests {
                 is_synced: false,
                 log_query_block_range: LOG_QUERY_BLOCK_RANGE,
                 liveness_probe: LivenessProbe::new(60, 12),
+                #[cfg(feature = "test-utils")]
+                test_mode_skip_synced_notification: false,
             },
             handle,
         )

@@ -4,21 +4,26 @@ use super::{
     block_builder::BlockBuilder, l1_helpers::L1Helper, setup_engine, tx_helpers::TxHelper,
 };
 use crate::{
-    BlobProviderArgs, ChainOrchestratorArgs, ConsensusAlgorithm, ConsensusArgs, EngineDriverArgs,
-    L1ProviderArgs, PprofArgs, RollupNodeDatabaseArgs, RollupNodeGasPriceOracleArgs,
-    RollupNodeNetworkArgs, RpcArgs, ScrollRollupNode, ScrollRollupNodeConfig, SequencerArgs,
-    SignerArgs,
+    constants, BlobProviderArgs, ChainOrchestratorArgs, ConsensusAlgorithm, ConsensusArgs,
+    EngineDriverArgs, L1ProviderArgs, PprofArgs, RollupNodeDatabaseArgs,
+    RollupNodeGasPriceOracleArgs, RollupNodeNetworkArgs, RpcArgs, ScrollRollupNode,
+    ScrollRollupNodeConfig, SequencerArgs, SignerArgs, TestArgs,
 };
 
 use alloy_eips::BlockNumberOrTag;
 use alloy_primitives::{Address, B256};
+use alloy_provider::{ext::AnvilApi, layers::CacheLayer, Provider, ProviderBuilder};
+use alloy_rpc_client::RpcClient;
+use alloy_rpc_types_anvil::ReorgOptions;
 use alloy_rpc_types_eth::Block;
 use alloy_signer_local::PrivateKeySigner;
-use reth_chainspec::EthChainSpec;
+use alloy_transport::layers::RetryBackoffLayer;
 use reth_e2e_test_utils::{wallet::Wallet, NodeHelperType, TmpDB};
 use reth_eth_wire_types::BasicNetworkPrimitives;
+use reth_fs_util::remove_dir_all;
 use reth_network::NetworkHandle;
 use reth_node_builder::NodeTypes;
+use reth_node_core::exit::NodeExitFuture;
 use reth_node_types::NodeTypesWithDBAdapter;
 use reth_provider::providers::BlockchainProvider;
 use reth_scroll_chainspec::SCROLL_DEV;
@@ -34,22 +39,55 @@ use scroll_alloy_rpc_types::Transaction;
 use scroll_engine::{Engine, ForkchoiceState};
 use std::{
     fmt::{Debug, Formatter},
+    ops::{Deref, DerefMut},
     path::PathBuf,
     sync::Arc,
 };
 use tokio::sync::Mutex;
 
 /// Main test fixture providing a high-level interface for testing rollup nodes.
-#[derive(Debug)]
 pub struct TestFixture {
     /// The list of nodes in the test setup.
-    pub nodes: Vec<NodeHandle>,
+    /// Using Option to allow nodes to be shutdown without changing indices.
+    /// A None value means the node at that index has been shutdown.
+    pub nodes: Vec<Option<NodeHandle>>,
+    /// Database references for each node, used for reboot scenarios.
+    pub dbs: Vec<Arc<reth_db::test_utils::TempDatabase<reth_db::DatabaseEnv>>>,
     /// Shared wallet for generating transactions.
     pub wallet: Arc<Mutex<Wallet>>,
     /// Chain spec used by the nodes.
     pub chain_spec: Arc<<ScrollRollupNode as NodeTypes>::ChainSpec>,
-    /// The task manager. Held in order to avoid dropping the node.
-    _tasks: TaskManager,
+    /// Optional Anvil instance for L1 simulation.
+    pub anvil: Option<anvil::NodeHandle>,
+    /// The configuration for the nodes.
+    pub config: ScrollRollupNodeConfig,
+}
+
+impl Debug for TestFixture {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("TestFixture")
+            .field("nodes", &self.nodes)
+            .field("wallet", &"<Mutex<Wallet>>")
+            .field("chain_spec", &self.chain_spec)
+            .field("anvil", &self.anvil.is_some())
+            .field("_tasks", &"<TaskManager>")
+            .finish()
+    }
+}
+
+impl Drop for TestFixture {
+    fn drop(&mut self) {
+        // Manually cleanup test directories.
+        // TempDatabase's automatic drop only removes the database file itself,
+        // but the parent directory also contains other files (static files, blob store, etc.)
+        // that need to be cleaned up to avoid accumulating test artifacts.
+        let parent_paths: Vec<_> =
+            self.dbs.iter().filter_map(|db| db.path().parent().map(|p| p.to_path_buf())).collect();
+        // Delete parent directories containing all database files
+        for path in parent_paths {
+            let _ = remove_dir_all(&path);
+        }
+    }
 }
 
 /// The network handle to the Scroll network.
@@ -59,6 +97,9 @@ pub type ScrollNetworkHandle =
 /// The blockchain test provider.
 pub type TestBlockChainProvider =
     BlockchainProvider<NodeTypesWithDBAdapter<ScrollRollupNode, TmpDB>>;
+
+/// The test node type for Scroll nodes.
+pub type ScrollTestNode = NodeHelperType<ScrollRollupNode, TestBlockChainProvider>;
 
 /// The node type (sequencer, follower, or remote source).
 #[derive(Debug)]
@@ -71,10 +112,51 @@ pub enum NodeType {
     RemoteSource,
 }
 
+/// Components of a test node.
+pub struct ScrollNodeTestComponents {
+    /// The node helper type for the test node.
+    pub node: ScrollTestNode,
+    /// The task manager for the test node.
+    pub task_manager: TaskManager,
+    /// The exit future for the test node.
+    pub exit_future: NodeExitFuture,
+}
+
+impl ScrollNodeTestComponents {
+    /// Create new test node components.
+    pub async fn new(
+        node: ScrollTestNode,
+        task_manager: TaskManager,
+        exit_future: NodeExitFuture,
+    ) -> Self {
+        Self { node, task_manager, exit_future }
+    }
+}
+
+impl std::fmt::Debug for ScrollNodeTestComponents {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("ScrollNodeTestComponents").finish()
+    }
+}
+
+impl DerefMut for ScrollNodeTestComponents {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.node
+    }
+}
+
+impl Deref for ScrollNodeTestComponents {
+    type Target = ScrollTestNode;
+
+    fn deref(&self) -> &Self::Target {
+        &self.node
+    }
+}
+
 /// Handle to a single test node with its components.
 pub struct NodeHandle {
     /// The underlying node context.
-    pub node: NodeHelperType<ScrollRollupNode, TestBlockChainProvider>,
+    pub node: ScrollNodeTestComponents,
     /// Engine instance for this node.
     pub engine: Engine<Arc<dyn ScrollEngineApi + Send + Sync + 'static>>,
     /// Chain orchestrator listener.
@@ -86,6 +168,27 @@ pub struct NodeHandle {
 }
 
 impl NodeHandle {
+    /// Create a new node handle.
+    pub async fn new(node: ScrollNodeTestComponents, typ: NodeType) -> eyre::Result<Self> {
+        // Create engine for the node
+        let genesis_hash = node.inner.chain_spec().genesis_hash();
+        let auth_client = node.inner.engine_http_client();
+        let engine_client = Arc::new(ScrollAuthApiEngineClient::new(auth_client))
+            as Arc<dyn ScrollEngineApi + Send + Sync + 'static>;
+        let fcs = ForkchoiceState::new(
+            BlockInfo { hash: genesis_hash, number: 0 },
+            Default::default(),
+            Default::default(),
+        );
+        let engine = Engine::new(Arc::new(engine_client), fcs);
+
+        let rollup_manager_handle = node.inner.add_ons_handle.rollup_manager_handle.clone();
+        let chain_orchestrator_rx =
+            node.inner.add_ons_handle.rollup_manager_handle.get_event_listener().await?;
+
+        Ok(Self { node, engine, chain_orchestrator_rx, rollup_manager_handle, typ })
+    }
+
     /// Returns true if this is a handle to the sequencer.
     pub const fn is_sequencer(&self) -> bool {
         matches!(self.typ, NodeType::Sequencer)
@@ -118,26 +221,35 @@ impl TestFixture {
         TestFixtureBuilder::new()
     }
 
+    /// Get a node by index, returning an error if it has been shutdown.
+    fn get_node(&self, node_index: usize) -> eyre::Result<&NodeHandle> {
+        self.nodes
+            .get(node_index)
+            .ok_or_else(|| eyre::eyre!("Node index {} out of bounds", node_index))?
+            .as_ref()
+            .ok_or_else(|| eyre::eyre!("Node at index {} has been shutdown", node_index))
+    }
+
     /// Get the sequencer node (assumes first node is sequencer).
     pub fn sequencer(&mut self) -> &mut NodeHandle {
-        let handle = &mut self.nodes[0];
+        let handle = self.nodes[0].as_mut().expect("sequencer node has been shutdown");
         assert!(handle.is_sequencer(), "expected sequencer, got follower");
         handle
     }
 
     /// Get a follower node by index.
     pub fn follower(&mut self, index: usize) -> &mut NodeHandle {
-        if index == 0 && self.nodes[0].is_sequencer() {
-            return &mut self.nodes[index + 1];
+        if index == 0 && self.nodes[0].as_ref().map(|n| n.is_sequencer()).unwrap_or(false) {
+            return self.nodes[index + 1].as_mut().expect("follower node has been shutdown");
         }
-        &mut self.nodes[index]
+        self.nodes[index].as_mut().expect("follower node has been shutdown")
     }
 
     /// Get the remote source node.
     pub fn remote_source(&mut self) -> &mut NodeHandle {
         self.nodes
             .iter_mut()
-            .find(|n| matches!(n.typ, NodeType::RemoteSource))
+            .find_map(|n| n.as_mut().filter(|node| matches!(node.typ, NodeType::RemoteSource)))
             .expect("remote source node not found")
     }
 
@@ -172,15 +284,20 @@ impl TestFixture {
         node_index: usize,
         tx: impl Into<alloy_primitives::Bytes>,
     ) -> eyre::Result<B256> {
-        Ok(self.nodes[node_index].node.rpc.inject_tx(tx.into()).await?)
+        let node = self.nodes[node_index]
+            .as_ref()
+            .ok_or_else(|| eyre::eyre!("Node at index {} has been shutdown", node_index))?;
+        Ok(node.node.rpc.inject_tx(tx.into()).await?)
     }
 
     /// Get the current (latest) block from a specific node.
     pub async fn get_block(&self, node_index: usize) -> eyre::Result<Block<Transaction>> {
         use reth_rpc_api::EthApiServer;
 
-        self.nodes[node_index]
-            .node
+        let node = self.nodes[node_index]
+            .as_ref()
+            .ok_or_else(|| eyre::eyre!("Node at index {} has been shutdown", node_index))?;
+        node.node
             .rpc
             .inner
             .eth_api()
@@ -199,8 +316,8 @@ impl TestFixture {
         &self,
         node_index: usize,
     ) -> eyre::Result<rollup_node_chain_orchestrator::ChainOrchestratorStatus> {
-        self.nodes[node_index]
-            .rollup_manager_handle
+        let node = self.get_node(node_index)?;
+        node.rollup_manager_handle
             .status()
             .await
             .map_err(|e| eyre::eyre!("Failed to get status: {}", e))
@@ -212,6 +329,80 @@ impl TestFixture {
     ) -> eyre::Result<rollup_node_chain_orchestrator::ChainOrchestratorStatus> {
         self.get_status(0).await
     }
+
+    /// Get the Anvil HTTP provider with retry and cache layers.
+    pub fn anvil_provider(&self) -> Option<impl Provider + Clone> {
+        self.anvil.as_ref().map(|anvil| {
+            let retry_layer = RetryBackoffLayer::new(
+                constants::L1_PROVIDER_MAX_RETRIES,
+                constants::L1_PROVIDER_INITIAL_BACKOFF,
+                constants::PROVIDER_COMPUTE_UNITS_PER_SECOND,
+            );
+            let client = RpcClient::builder()
+                .layer(retry_layer)
+                .http(anvil.http_endpoint().parse().expect("failed to parse anvil http endpoint"));
+            let cache_layer = CacheLayer::new(constants::L1_PROVIDER_CACHE_MAX_ITEMS);
+            ProviderBuilder::new().layer(cache_layer).connect_client(client)
+        })
+    }
+
+    /// Get the current block number from Anvil.
+    pub async fn anvil_get_block_number(&self) -> eyre::Result<u64> {
+        let provider = self.anvil_provider().ok_or_else(|| eyre::eyre!("Anvil is not running"))?;
+        let block_number = provider.get_block_number().await?;
+        Ok(block_number)
+    }
+
+    /// Get the finalized block number from Anvil.
+    pub async fn anvil_get_finalized_block_number(&self) -> eyre::Result<u64> {
+        let provider = self.anvil_provider().ok_or_else(|| eyre::eyre!("Anvil is not running"))?;
+        let finalized_block = provider.get_block(BlockNumberOrTag::Finalized.into()).await?;
+        Ok(finalized_block.map(|block| block.number()).unwrap_or(0u64))
+    }
+
+    /// Generate Anvil blocks by calling `anvil_mine` RPC method.
+    pub async fn anvil_mine_blocks(&self, num_blocks: u64) -> eyre::Result<()> {
+        let provider = self.anvil_provider().ok_or_else(|| eyre::eyre!("Anvil is not running"))?;
+        Ok(provider.anvil_mine(Some(num_blocks), None).await?)
+    }
+
+    /// Inject a raw transaction to Anvil.
+    pub async fn anvil_inject_tx(
+        &self,
+        raw_tx: impl Into<alloy_primitives::Bytes>,
+    ) -> eyre::Result<alloy_primitives::B256> {
+        let provider = self.anvil_provider().ok_or_else(|| eyre::eyre!("Anvil is not running"))?;
+        let raw_tx_bytes = raw_tx.into();
+        let pending_tx = provider.send_raw_transaction(&raw_tx_bytes).await?;
+        let tx_hash = *pending_tx.tx_hash();
+        tracing::info!("Sent raw transaction to Anvil: {:?}", tx_hash);
+        Ok(tx_hash)
+    }
+
+    /// Reorg Anvil by a specific depth (number of blocks to rewind).
+    pub async fn anvil_reorg(&self, depth: u64) -> eyre::Result<()> {
+        let provider = self.anvil_provider().ok_or_else(|| eyre::eyre!("Anvil is not running"))?;
+        provider.anvil_reorg(ReorgOptions { depth, tx_block_pairs: Vec::new() }).await?;
+        tracing::info!("Reorged Anvil by {} blocks", depth);
+        Ok(())
+    }
+}
+
+/// Configuration for Anvil L1 simulation.
+#[derive(Debug, Default, Clone)]
+pub struct AnvilConfig {
+    /// Whether to enable Anvil.
+    pub enabled: bool,
+    /// Optional port for Anvil.
+    pub port: u16,
+    /// Optional state file to load into Anvil.
+    pub state_path: Option<PathBuf>,
+    /// Optional chain ID for Anvil.
+    pub chain_id: Option<u64>,
+    /// Optional block time for Anvil (in seconds).
+    pub block_time: Option<u64>,
+    /// Optional slots in an epoch for Anvil.
+    pub slots_in_an_epoch: u64,
 }
 
 /// Builder for creating test fixtures with a fluent API.
@@ -223,6 +414,7 @@ pub struct TestFixtureBuilder {
     chain_spec: Option<Arc<<ScrollRollupNode as NodeTypes>::ChainSpec>>,
     is_dev: bool,
     no_local_transactions_propagation: bool,
+    anvil_config: AnvilConfig,
 }
 
 impl Default for TestFixtureBuilder {
@@ -241,13 +433,14 @@ impl TestFixtureBuilder {
             chain_spec: None,
             is_dev: false,
             no_local_transactions_propagation: false,
+            anvil_config: AnvilConfig::default(),
         }
     }
 
     /// Returns the default rollup node config.
     fn default_config() -> ScrollRollupNodeConfig {
         ScrollRollupNodeConfig {
-            test: true,
+            test_args: TestArgs { test: true, skip_l1_synced: false },
             network_args: RollupNodeNetworkArgs::default(),
             database_args: RollupNodeDatabaseArgs::default(),
             l1_provider_args: L1ProviderArgs::default(),
@@ -303,7 +496,14 @@ impl TestFixtureBuilder {
 
     /// Toggle the test field.
     pub const fn with_test(mut self, test: bool) -> Self {
-        self.config.test = test;
+        self.config.test_args.test = test;
+        self
+    }
+
+    /// Enable test mode to skip L1 watcher Synced notifications.
+    /// This is useful for tests that don't want to wait for L1 sync completion events.
+    pub const fn skip_l1_synced_notifications(mut self) -> Self {
+        self.config.test_args.skip_l1_synced = true;
         self
     }
 
@@ -453,13 +653,58 @@ impl TestFixtureBuilder {
         self
     }
 
+    /// Enable Anvil L1 with optional configuration.
+    ///
+    /// Defaults: `state_path` = `./tests/testdata/anvil_state.json`, others use Anvil defaults.
+    pub fn with_anvil(
+        mut self,
+        state_path: Option<PathBuf>,
+        chain_id: Option<u64>,
+        block_time: Option<u64>,
+        slots_in_an_epoch: Option<u64>,
+    ) -> Self {
+        self.anvil_config.enabled = true;
+        self.anvil_config.state_path =
+            state_path.or_else(|| Some(PathBuf::from("./tests/testdata/anvil_state.json")));
+        self.anvil_config.chain_id = chain_id;
+        self.anvil_config.block_time = block_time;
+        self.anvil_config.slots_in_an_epoch = slots_in_an_epoch.unwrap_or(1);
+        self
+    }
+
     /// Build the test fixture.
-    pub async fn build(self) -> eyre::Result<TestFixture> {
-        let config = self.config;
+    pub async fn build(mut self) -> eyre::Result<TestFixture> {
         let chain_spec = self.chain_spec.unwrap_or_else(|| SCROLL_DEV.clone());
 
-        let (mut nodes, mut tasks, wallet) = setup_engine(
-            config.clone(),
+        // Start Anvil if requested
+        let anvil = if self.anvil_config.enabled {
+            let handle = Self::spawn_anvil(
+                self.anvil_config.state_path.as_deref(),
+                self.anvil_config.chain_id,
+                self.anvil_config.block_time,
+                self.anvil_config.slots_in_an_epoch,
+            )
+            .await?;
+
+            // Parse endpoint URL once and reuse
+            let endpoint_url = handle
+                .http_endpoint()
+                .parse::<reqwest::Url>()
+                .map_err(|e| eyre::eyre!("Failed to parse Anvil endpoint URL: {}", e))?;
+
+            // Configure L1 provider and blob provider to use Anvil
+            self.config.l1_provider_args.url = Some(endpoint_url.clone());
+            self.config.l1_provider_args.logs_query_block_range = 500;
+            self.config.blob_provider_args.anvil_url = Some(endpoint_url);
+            self.config.blob_provider_args.mock = false;
+
+            Some(handle)
+        } else {
+            None
+        };
+
+        let (mut nodes, dbs, wallet) = setup_engine(
+            self.config.clone(),
             self.num_nodes,
             chain_spec.clone(),
             self.is_dev,
@@ -475,7 +720,7 @@ impl TestFixtureBuilder {
                 format!("http://localhost:{}", nodes[0].rpc_url().port().unwrap()).parse()?;
 
             // Configure remote source node
-            let mut remote_config = config.clone();
+            let mut remote_config = self.config.clone();
             remote_config.sequencer_args.sequencer_enabled = true; // needs to build blocks
             remote_config.sequencer_args.auto_start = false;
             remote_config.remote_block_source_args.enabled = true;
@@ -483,60 +728,72 @@ impl TestFixtureBuilder {
             // Use a fast poll interval for tests
             remote_config.remote_block_source_args.poll_interval_ms = 100;
 
-            let (mut remote_nodes, new_tasks, _) = setup_engine(
+            let (mut remote_nodes, _, _) = setup_engine(
                 remote_config,
                 1,
                 chain_spec.clone(),
                 self.is_dev,
                 self.no_local_transactions_propagation,
-                Some(tasks),
+                None,
             )
             .await?;
-            tasks = new_tasks;
 
             nodes.push(remote_nodes.pop().unwrap());
         }
 
         let mut node_handles = Vec::with_capacity(nodes.len());
         for (index, node) in nodes.into_iter().enumerate() {
-            let genesis_hash = node.inner.chain_spec().genesis_hash();
-
-            // Create engine for the node
-            let auth_client = node.inner.engine_http_client();
-            let engine_client = Arc::new(ScrollAuthApiEngineClient::new(auth_client))
-                as Arc<dyn ScrollEngineApi + Send + Sync + 'static>;
-            let fcs = ForkchoiceState::new(
-                BlockInfo { hash: genesis_hash, number: 0 },
-                Default::default(),
-                Default::default(),
-            );
-            let engine = Engine::new(Arc::new(engine_client), fcs);
-
-            // Get handles if available
-            let rollup_manager_handle = node.inner.add_ons_handle.rollup_manager_handle.clone();
-            let chain_orchestrator_rx =
-                node.inner.add_ons_handle.rollup_manager_handle.get_event_listener().await?;
-
-            node_handles.push(NodeHandle {
-                node,
-                engine,
-                chain_orchestrator_rx,
-                rollup_manager_handle,
-                typ: if config.sequencer_args.sequencer_enabled && index == 0 {
-                    NodeType::Sequencer
-                } else if config.remote_block_source_args.enabled && index == node_handles.len() {
-                    NodeType::RemoteSource
-                } else {
-                    NodeType::Follower
-                },
-            });
+            let typ = if self.config.sequencer_args.sequencer_enabled && index == 0 {
+                NodeType::Sequencer
+            } else if self.config.remote_block_source_args.enabled && index == node_handles.len() {
+                NodeType::RemoteSource
+            } else {
+                NodeType::Follower
+            };
+            node_handles.push(Some(NodeHandle::new(node, typ).await?));
         }
 
         Ok(TestFixture {
             nodes: node_handles,
+            dbs,
             wallet: Arc::new(Mutex::new(wallet)),
             chain_spec,
-            _tasks: tasks,
+            anvil,
+            config: self.config,
         })
+    }
+
+    /// Spawn an Anvil instance with the given configuration.
+    async fn spawn_anvil(
+        state_path: Option<&std::path::Path>,
+        chain_id: Option<u64>,
+        block_time: Option<u64>,
+        slots_in_an_epoch: u64,
+    ) -> eyre::Result<anvil::NodeHandle> {
+        let mut config = anvil::NodeConfig { port: 0, ..Default::default() };
+
+        if let Some(id) = chain_id {
+            config.chain_id = Some(id);
+        }
+
+        // Configure block time
+        if let Some(time) = block_time {
+            config.block_time = Some(std::time::Duration::from_secs(time));
+        }
+
+        // Load state from file if provided
+        if let Some(path) = state_path {
+            let state = anvil::eth::backend::db::SerializableState::load(path).map_err(|e| {
+                eyre::eyre!("Failed to load Anvil state from {}: {:?}", path.display(), e)
+            })?;
+            tracing::info!("Loaded Anvil state from: {}", path.display());
+            config.init_state = Some(state);
+        }
+
+        config.slots_in_an_epoch = slots_in_an_epoch;
+
+        // Spawn Anvil and return the NodeHandle
+        let (_api, handle) = anvil::spawn(config).await;
+        Ok(handle)
     }
 }

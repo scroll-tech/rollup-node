@@ -36,7 +36,7 @@ use rollup_node_providers::{
 use rollup_node_sequencer::{
     L1MessageInclusionMode, PayloadBuildingConfig, Sequencer, SequencerConfig,
 };
-use rollup_node_watcher::{L1Watcher, L1WatcherHandle};
+use rollup_node_watcher::{L1Watcher, L1WatcherCommand};
 use scroll_alloy_hardforks::ScrollHardforks;
 use scroll_alloy_network::Scroll;
 use scroll_alloy_provider::{ScrollAuthApiEngineClient, ScrollEngineApi};
@@ -52,12 +52,23 @@ use scroll_wire::ScrollWireEvent;
 use std::{fs, path::PathBuf, sync::Arc};
 use tokio::sync::mpsc::UnboundedReceiver;
 
-/// A struct that represents the arguments for the rollup node.
-#[derive(Debug, Clone, clap::Args)]
-pub struct ScrollRollupNodeConfig {
+/// Test-related configuration arguments.
+#[derive(Debug, Clone, Default, clap::Args)]
+pub struct TestArgs {
     /// Whether the rollup node should be run in test mode.
     #[arg(long)]
     pub test: bool,
+    /// Test mode: skip L1 watcher Synced notifications.
+    #[arg(long, default_value = "false")]
+    pub skip_l1_synced: bool,
+}
+
+/// A struct that represents the arguments for the rollup node.
+#[derive(Debug, Clone, clap::Args)]
+pub struct ScrollRollupNodeConfig {
+    /// Test-related arguments
+    #[command(flatten)]
+    pub test_args: TestArgs,
     /// Consensus args
     #[command(flatten)]
     pub consensus_args: ConsensusArgs,
@@ -152,6 +163,7 @@ impl ScrollRollupNodeConfig {
     ) -> eyre::Result<()> {
         // Instantiate the database
         let db_path = node_config.datadir().db();
+
         let database_path = if let Some(database_path) = &self.database_args.rn_db_path {
             database_path.to_string_lossy().to_string()
         } else {
@@ -274,7 +286,7 @@ impl ScrollRollupNodeConfig {
         // Run the database migrations
         if let Some(named) = chain_spec.chain().named() {
             named
-                .migrate(db.inner().get_connection(), self.test)
+                .migrate(db.inner().get_connection(), self.test_args.test)
                 .await
                 .expect("failed to perform migration");
         } else {
@@ -388,51 +400,44 @@ impl ScrollRollupNodeConfig {
         };
         let consensus = self.consensus_args.consensus(authorized_signer)?;
 
-        // Define some types to support definitions of return type of following function in no_std.
-        #[cfg(feature = "test-utils")]
-        type L1WatcherMockOpt = Option<rollup_node_watcher::test_utils::L1WatcherMock>;
+        let is_anvil_provider = self.blob_provider_args.anvil_url.is_some();
 
-        #[cfg(not(feature = "test-utils"))]
-        type L1WatcherMockOpt = Option<std::convert::Infallible>;
+        let (_l1_notification_tx, _l1_command_rx, l1_watcher_handle): (_, _, _) = if let Some(
+            provider,
+        ) =
+            l1_provider.filter(|_| !self.test_args.test || is_anvil_provider)
+        {
+            tracing::info!(target: "scroll::node::args", ?l1_block_startup_info, "Starting L1 watcher");
 
-        let (_l1_watcher_mock, l1_watcher_handle): (L1WatcherMockOpt, Option<L1WatcherHandle>) =
-            if let Some(provider) = l1_provider.filter(|_| !self.test) {
-                tracing::info!(target: "scroll::node::args", ?l1_block_startup_info, "Starting L1 watcher");
-                (
-                    None,
-                    Some(
-                        L1Watcher::spawn(
-                            provider,
-                            l1_block_startup_info,
-                            node_config,
-                            self.l1_provider_args.logs_query_block_range,
-                            self.l1_provider_args.liveness_threshold,
-                            self.l1_provider_args.liveness_check_interval,
-                        )
-                        .await,
-                    ),
-                )
-            } else {
-                // Create a channel for L1 notifications that we can use to inject L1 messages for
-                // testing
+            let (notification_tx, handle) = L1Watcher::spawn(
+                provider,
+                l1_block_startup_info,
+                node_config,
+                self.l1_provider_args.logs_query_block_range,
+                self.l1_provider_args.liveness_threshold,
+                self.l1_provider_args.liveness_check_interval,
                 #[cfg(feature = "test-utils")]
-                {
-                    let (notification_tx, notification_rx) = tokio::sync::mpsc::channel(1000);
-                    let (command_tx, command_rx) = tokio::sync::mpsc::unbounded_channel();
-                    let handle =
-                        rollup_node_watcher::L1WatcherHandle::new(command_tx, notification_rx);
-                    let watcher_mock = rollup_node_watcher::test_utils::L1WatcherMock {
-                        command_rx: Arc::new(tokio::sync::Mutex::new(command_rx)),
-                        notification_tx,
-                    };
-                    (Some(watcher_mock), Some(handle))
-                }
+                self.test_args.skip_l1_synced,
+            )
+            .await;
+            (Some(notification_tx), None::<UnboundedReceiver<L1WatcherCommand>>, Some(handle))
+        } else {
+            // Create a channel for L1 notifications that we can use to inject L1 messages for
+            // testing
+            #[cfg(feature = "test-utils")]
+            {
+                let (notification_tx, notification_rx) = tokio::sync::mpsc::channel(1000);
+                let (command_tx, command_rx) = tokio::sync::mpsc::unbounded_channel();
+                let handle = rollup_node_watcher::L1WatcherHandle::new(command_tx, notification_rx);
 
-                #[cfg(not(feature = "test-utils"))]
-                {
-                    (None, None)
-                }
-            };
+                (Some(notification_tx), Some(command_rx), Some(handle))
+            }
+
+            #[cfg(not(feature = "test-utils"))]
+            {
+                (None, None, None)
+            }
+        };
 
         // Construct the l1 provider.
         let l1_messages_provider = db.clone();
@@ -474,7 +479,7 @@ impl ScrollRollupNodeConfig {
         let signer = if let Some(configured_signer) = self.signer_args.signer(chain_id).await? {
             // Use the signer configured by SignerArgs
             Some(rollup_node_signer::Signer::spawn(configured_signer))
-        } else if self.test {
+        } else if self.test_args.test {
             // Use a random private key signer for testing
             Some(rollup_node_signer::Signer::spawn(PrivateKeySigner::random()))
         } else {
@@ -522,7 +527,14 @@ impl ScrollRollupNodeConfig {
         .await?;
 
         #[cfg(feature = "test-utils")]
-        let handle = handle.with_l1_watcher_mock(_l1_watcher_mock);
+        let handle = {
+            let command_rx = _l1_command_rx.map(|rx| Arc::new(tokio::sync::Mutex::new(rx)));
+            let l1_watcher_mock = rollup_node_watcher::test_utils::L1WatcherMock {
+                command_rx,
+                notification_tx: _l1_notification_tx.expect("L1 notification sender should be set"),
+            };
+            handle.with_l1_watcher_mock(Some(l1_watcher_mock))
+        };
 
         Ok((chain_orchestrator, handle))
     }
@@ -1036,7 +1048,7 @@ mod tests {
     #[test]
     fn test_validate_sequencer_enabled_without_any_signer_fails() {
         let config = ScrollRollupNodeConfig {
-            test: false,
+            test_args: TestArgs::default(),
             sequencer_args: SequencerArgs { sequencer_enabled: true, ..Default::default() },
             signer_args: SignerArgs { key_file: None, aws_kms_key_id: None, private_key: None },
             database_args: RollupNodeDatabaseArgs::default(),
@@ -1067,7 +1079,7 @@ mod tests {
     #[test]
     fn test_validate_remote_source_enabled_without_url_fails() {
         let config = ScrollRollupNodeConfig {
-            test: false,
+            test_args: TestArgs::default(),
             sequencer_args: SequencerArgs::default(),
             signer_args: SignerArgs::default(),
             database_args: RollupNodeDatabaseArgs::default(),
@@ -1099,7 +1111,7 @@ mod tests {
     #[test]
     fn test_validate_sequencer_enabled_with_both_signers_fails() {
         let config = ScrollRollupNodeConfig {
-            test: false,
+            test_args: TestArgs::default(),
             sequencer_args: SequencerArgs { sequencer_enabled: true, ..Default::default() },
             signer_args: SignerArgs {
                 key_file: Some(PathBuf::from("/path/to/key")),
@@ -1132,7 +1144,7 @@ mod tests {
     #[test]
     fn test_validate_sequencer_enabled_with_key_file_succeeds() {
         let config = ScrollRollupNodeConfig {
-            test: false,
+            test_args: TestArgs::default(),
             sequencer_args: SequencerArgs { sequencer_enabled: true, ..Default::default() },
             signer_args: SignerArgs {
                 key_file: Some(PathBuf::from("/path/to/key")),
@@ -1160,7 +1172,7 @@ mod tests {
     #[test]
     fn test_validate_sequencer_enabled_with_aws_kms_succeeds() {
         let config = ScrollRollupNodeConfig {
-            test: false,
+            test_args: TestArgs::default(),
             sequencer_args: SequencerArgs { sequencer_enabled: true, ..Default::default() },
             signer_args: SignerArgs {
                 key_file: None,
@@ -1188,7 +1200,7 @@ mod tests {
     #[test]
     fn test_validate_sequencer_disabled_without_any_signer_succeeds() {
         let config = ScrollRollupNodeConfig {
-            test: false,
+            test_args: TestArgs::default(),
             sequencer_args: SequencerArgs { sequencer_enabled: false, ..Default::default() },
             signer_args: SignerArgs { key_file: None, aws_kms_key_id: None, private_key: None },
             database_args: RollupNodeDatabaseArgs::default(),

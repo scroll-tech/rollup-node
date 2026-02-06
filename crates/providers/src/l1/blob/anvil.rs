@@ -2,7 +2,7 @@ use crate::{BlobProvider, L1ProviderError};
 use std::sync::Arc;
 
 use alloy_eips::eip4844::Blob;
-use alloy_primitives::B256;
+use alloy_primitives::{Bytes, B256};
 use alloy_rpc_client::RpcClient;
 
 /// An implementation of a blob provider client using anvil.
@@ -21,11 +21,23 @@ impl AnvilBlobProvider {
 
 #[async_trait::async_trait]
 impl BlobProvider for AnvilBlobProvider {
+    #[allow(clippy::large_stack_frames)]
     async fn blob(
         &self,
         _block_timestamp: u64,
         hash: B256,
     ) -> Result<Option<Arc<Blob>>, L1ProviderError> {
-        Ok(self.inner.request("anvil_getBlobByHash", (hash,)).await?)
+        // Request blob data from Anvil - it returns hex-encoded bytes
+        let blob_data: Option<Bytes> = self.inner.request("anvil_getBlobByHash", (hash,)).await?;
+
+        match blob_data {
+            Some(data) => {
+                // Convert bytes to Blob type (same as S3BlobProvider does)
+                let blob = Blob::try_from(data.as_ref())
+                    .map_err(|_| L1ProviderError::Other("Invalid blob data from Anvil"))?;
+                Ok(Some(Arc::new(blob)))
+            }
+            None => Ok(None),
+        }
     }
 }
