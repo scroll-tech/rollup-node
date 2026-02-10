@@ -1,7 +1,6 @@
 //! The [`ScrollRollupNodeAddOns`] implementation for the Scroll rollup node.
 
 use super::args::ScrollRollupNodeConfig;
-use crate::constants;
 
 use reth_evm::{ConfigureEngineEvm, EvmFactory, EvmFactoryFor};
 use reth_network::NetworkProtocols;
@@ -80,7 +79,7 @@ where
                 .with_min_suggested_priority_fee(
                     config.gas_price_oracle_args.default_suggested_priority_fee,
                 )
-                .with_payload_size_limit(constants::DEFAULT_PAYLOAD_SIZE_LIMIT)
+                .with_payload_size_limit(config.sequencer_args.payload_size_limit)
                 .with_sequencer(config.network_args.sequencer_url.clone()),
             ScrollEngineValidatorBuilder::default(),
             BasicEngineApiBuilder::default(),

@@ -128,6 +128,6 @@ pub(crate) struct BlockBuildingMetric {
     pub(crate) gas_per_block: Histogram,
     /// The gas throughput in gas/second.
     pub(crate) gas_per_second: Histogram,
-    /// The cumulative gas used across all committed blocks (similar to geth's miner/commit_gas).
+    /// The cumulative gas used across all committed blocks (similar to geth's `miner/commit_gas`).
     pub(crate) commit_gas: Counter,
 }

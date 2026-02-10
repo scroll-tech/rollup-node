@@ -735,6 +735,9 @@ pub struct SequencerArgs {
     /// The payload building duration for the sequencer (milliseconds)
     #[arg(long = "sequencer.payload-building-duration", id = "sequencer_payload_building_duration", value_name = "SEQUENCER_PAYLOAD_BUILDING_DURATION", default_value_t = constants::DEFAULT_PAYLOAD_BUILDING_DURATION)]
     pub payload_building_duration: u64,
+    /// The payload size limit for the sequencer (bytes)
+    #[arg(long = "sequencer.payload-size-limit", id = "sequencer_payload_size_limit", value_name = "SEQUENCER_PAYLOAD_SIZE_LIMIT", default_value_t = constants::DEFAULT_PAYLOAD_SIZE_LIMIT)]
+    pub payload_size_limit: u64,
     /// The fee recipient for the sequencer.
     #[arg(long = "sequencer.fee-recipient", id = "sequencer_fee_recipient", value_name = "SEQUENCER_FEE_RECIPIENT", default_value_t = SCROLL_FEE_VAULT_ADDRESS)]
     pub fee_recipient: Address,
