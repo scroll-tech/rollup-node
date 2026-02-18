@@ -171,6 +171,7 @@ where
             let remote_source = RemoteBlockSourceAddOn::new(
                 remote_block_source_config,
                 rollup_manager_handle.clone(),
+                rpc_handle.provider().clone(),
             )
             .await?;
             ctx.node

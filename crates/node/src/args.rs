@@ -976,6 +976,10 @@ pub struct RemoteBlockSourceArgs {
         value_name = "POLL_INTERVAL_MS"
     )]
     pub poll_interval_ms: u64,
+
+    /// Whether to build blocks using the remote source.
+    #[arg(long = "remote-source.build")]
+    pub build: bool,
 }
 
 /// Returns the total difficulty constant for the given chain.
@@ -1097,6 +1101,7 @@ mod tests {
                 enabled: true,
                 url: None,
                 poll_interval_ms: 100,
+                build: false,
             },
             require_l1_data_fee_buffer: false,
         };

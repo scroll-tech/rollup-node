@@ -61,6 +61,8 @@ pub struct TestFixture {
     pub anvil: Option<anvil::NodeHandle>,
     /// The configuration for the nodes.
     pub config: ScrollRollupNodeConfig,
+    /// Whether this fixture has a remote source node (always the last node).
+    pub has_remote_source_node: bool,
 }
 
 impl Debug for TestFixture {
@@ -70,6 +72,7 @@ impl Debug for TestFixture {
             .field("wallet", &"<Mutex<Wallet>>")
             .field("chain_spec", &self.chain_spec)
             .field("anvil", &self.anvil.is_some())
+            .field("has_remote_source_node", &self.has_remote_source_node)
             .field("_tasks", &"<TaskManager>")
             .finish()
     }
@@ -703,7 +706,7 @@ impl TestFixtureBuilder {
             None
         };
 
-        let (mut nodes, dbs, wallet) = setup_engine(
+        let (mut nodes, mut dbs, wallet) = setup_engine(
             self.config.clone(),
             self.num_nodes,
             chain_spec.clone(),
@@ -723,12 +726,13 @@ impl TestFixtureBuilder {
             let mut remote_config = self.config.clone();
             remote_config.sequencer_args.sequencer_enabled = true; // needs to build blocks
             remote_config.sequencer_args.auto_start = false;
+            remote_config.remote_block_source_args.build = true;
             remote_config.remote_block_source_args.enabled = true;
             remote_config.remote_block_source_args.url = Some(sequencer_url);
             // Use a fast poll interval for tests
             remote_config.remote_block_source_args.poll_interval_ms = 100;
 
-            let (mut remote_nodes, _, _) = setup_engine(
+            let (mut remote_nodes, remote_dbs, _) = setup_engine(
                 remote_config,
                 1,
                 chain_spec.clone(),
@@ -739,13 +743,15 @@ impl TestFixtureBuilder {
             .await?;
 
             nodes.push(remote_nodes.pop().unwrap());
+            dbs.extend(remote_dbs);
         }
 
-        let mut node_handles = Vec::with_capacity(nodes.len());
+        let nodes_len = nodes.len();
+        let mut node_handles = Vec::with_capacity(nodes_len);
         for (index, node) in nodes.into_iter().enumerate() {
             let typ = if self.config.sequencer_args.sequencer_enabled && index == 0 {
                 NodeType::Sequencer
-            } else if self.config.remote_block_source_args.enabled && index == node_handles.len() {
+            } else if self.has_remote_source_node && index == nodes_len - 1 {
                 NodeType::RemoteSource
             } else {
                 NodeType::Follower
@@ -760,6 +766,7 @@ impl TestFixtureBuilder {
             chain_spec,
             anvil,
             config: self.config,
+            has_remote_source_node: self.has_remote_source_node,
         })
     }
 
