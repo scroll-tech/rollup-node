@@ -30,5 +30,6 @@ exec rollup-node node --chain /l2reth/l2reth-genesis-e2e.json --datadir=/l2reth 
   --remote-source.enabled \
   --remote-source.url http://rollup-node-sequencer:8545 \
   --remote-source.poll-interval-ms 100 \
+  --remote-source.build \
   --l1.url http://l1-node:8545 \
   --blob.mock

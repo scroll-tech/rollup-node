@@ -726,6 +726,7 @@ impl TestFixtureBuilder {
             let mut remote_config = self.config.clone();
             remote_config.sequencer_args.sequencer_enabled = true; // needs to build blocks
             remote_config.sequencer_args.auto_start = false;
+            remote_config.remote_block_source_args.build = true;
             remote_config.remote_block_source_args.enabled = true;
             remote_config.remote_block_source_args.url = Some(sequencer_url);
             // Use a fast poll interval for tests

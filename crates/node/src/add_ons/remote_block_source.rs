@@ -190,6 +190,11 @@ where
                 continue;
             }
 
+            if !self.config.build {
+                tracing::debug!(target: "scroll::remote_source", "Imported block is valid, but build is disabled, skipping build");
+                continue;
+            }
+
             // Trigger block building on top of the imported block
             self.orchestrator_handle.build_block();
 
