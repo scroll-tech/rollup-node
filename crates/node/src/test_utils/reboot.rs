@@ -93,14 +93,43 @@ impl TestFixture {
 
         tracing::info!("Starting node at index {} (reusing database)", node_index);
 
+        // Detect whether the node being restarted is the remote source (always the last index).
+        let is_remote = self.has_remote_source_node && node_index == self.nodes.len() - 1;
+
+        let (config, reboot_node_idx) = if is_remote {
+            // Reconstruct the remote config from the base config.
+            // Node 0 (sequencer) must still be running so we can read its RPC port.
+            let sequencer_port = self.nodes[0]
+                .as_ref()
+                .expect("sequencer must be running to restart remote source")
+                .node
+                .rpc_url()
+                .port()
+                .expect("sequencer RPC port must be set");
+            let sequencer_url: reqwest::Url =
+                format!("http://localhost:{}", sequencer_port).parse()?;
+
+            let mut remote_config = self.config.clone();
+            remote_config.sequencer_args.sequencer_enabled = true;
+            remote_config.sequencer_args.auto_start = false;
+            remote_config.remote_block_source_args.enabled = true;
+            remote_config.remote_block_source_args.url = Some(sequencer_url);
+            remote_config.remote_block_source_args.poll_interval_ms = 100;
+
+            // Use reboot_node_idx=0 so setup_engine does NOT disable sequencer_enabled.
+            (remote_config, 0usize)
+        } else {
+            (self.config.clone(), node_index)
+        };
+
         // Create node instance with existing database
         let (mut new_nodes, _, _) = setup_engine(
-            self.config.clone(),
+            config,
             1,
             self.chain_spec.clone(),
             true,
             false,
-            Some((node_index, self.dbs[node_index].clone())),
+            Some((reboot_node_idx, self.dbs[node_index].clone())),
         )
         .await?;
 
@@ -109,10 +138,10 @@ impl TestFixture {
         }
 
         let new_node = new_nodes.remove(0);
-        let typ = if self.config.sequencer_args.sequencer_enabled && node_index == 0 {
-            crate::test_utils::fixture::NodeType::Sequencer
-        } else if self.config.remote_block_source_args.enabled && node_index == self.nodes.len() {
+        let typ = if is_remote {
             crate::test_utils::fixture::NodeType::RemoteSource
+        } else if self.config.sequencer_args.sequencer_enabled && node_index == 0 {
+            crate::test_utils::fixture::NodeType::Sequencer
         } else {
             crate::test_utils::fixture::NodeType::Follower
         };
