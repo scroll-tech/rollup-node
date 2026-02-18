@@ -1,4 +1,4 @@
-use crate::RollupNodePrimitiveParsingError;
+use crate::{BlockInfo, RollupNodePrimitiveParsingError};
 
 use super::L2BlockInfoWithL1Messages;
 
@@ -139,12 +139,24 @@ pub struct BatchConsolidationOutcome {
     pub skipped_l1_messages: Vec<u64>,
     /// The target status of the batch after consolidation.
     pub target_status: BatchStatus,
+    /// Is the l2 head block number updated.
+    pub l2_head_updated: bool,
 }
 
 impl BatchConsolidationOutcome {
     /// Creates a new empty batch consolidation outcome for the given batch info.
-    pub const fn new(batch_info: BatchInfo, target_status: BatchStatus) -> Self {
-        Self { batch_info, blocks: Vec::new(), skipped_l1_messages: Vec::new(), target_status }
+    pub const fn new(
+        batch_info: BatchInfo,
+        target_status: BatchStatus,
+        l2_head_updated: bool,
+    ) -> Self {
+        Self {
+            batch_info,
+            blocks: Vec::new(),
+            skipped_l1_messages: Vec::new(),
+            target_status,
+            l2_head_updated,
+        }
     }
 
     /// Pushes a block consolidation outcome to the batch.
@@ -155,6 +167,12 @@ impl BatchConsolidationOutcome {
     /// Adds the skipped L1 messages indexes.
     pub fn with_skipped_l1_messages(&mut self, skipped: Vec<u64>) {
         self.skipped_l1_messages = skipped;
+    }
+
+    /// Returns the updated L2 head block info if consolidation updated it.
+    pub fn updated_l2_head(&self) -> Option<BlockInfo> {
+        self.l2_head_updated
+            .then(|| self.blocks.last().expect("must have at least one block").block_info)
     }
 }
 

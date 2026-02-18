@@ -61,13 +61,16 @@
 
 // Module declarations
 pub mod block_builder;
+pub mod database;
 pub mod event_utils;
 pub mod fixture;
 pub mod l1_helpers;
 pub mod network_helpers;
+pub mod reboot;
 pub mod tx_helpers;
 
 // Re-export main types for convenience
+pub use database::{DatabaseHelper, DatabaseOperations};
 pub use event_utils::{EventAssertions, EventWaiter};
 pub use fixture::{NodeHandle, TestFixture, TestFixtureBuilder};
 pub use network_helpers::{
@@ -76,21 +79,22 @@ pub use network_helpers::{
 
 // Legacy utilities - keep existing functions for backward compatibility
 use crate::{
-    BlobProviderArgs, ChainOrchestratorArgs, ConsensusArgs, EngineDriverArgs, L1ProviderArgs,
-    PprofArgs, RollupNodeDatabaseArgs, RollupNodeNetworkArgs, RpcArgs, ScrollRollupNode,
-    ScrollRollupNodeConfig, SequencerArgs,
+    test_utils::fixture::ScrollNodeTestComponents, BlobProviderArgs, ChainOrchestratorArgs,
+    ConsensusArgs, EngineDriverArgs, L1ProviderArgs, PprofArgs, RollupNodeDatabaseArgs,
+    RollupNodeNetworkArgs, RpcArgs, ScrollRollupNode, ScrollRollupNodeConfig, SequencerArgs,
+    TestArgs,
 };
 use alloy_primitives::Bytes;
 use reth_chainspec::EthChainSpec;
+use reth_db::test_utils::create_test_rw_db_with_path;
 use reth_e2e_test_utils::{
     node::NodeTestContext, transaction::TransactionTestContext, wallet::Wallet, Adapter,
-    NodeHelperType, TmpDB, TmpNodeAddOnsHandle, TmpNodeEthApi,
+    TmpNodeAddOnsHandle, TmpNodeEthApi,
 };
 use reth_engine_local::LocalPayloadAttributesBuilder;
 use reth_node_builder::{
     rpc::RpcHandleProvider, EngineNodeLauncher, Node, NodeBuilder, NodeConfig,
-    NodeHandle as RethNodeHandle, NodeTypes, NodeTypesWithDBAdapter, PayloadAttributesBuilder,
-    PayloadTypes, TreeConfig,
+    NodeHandle as RethNodeHandle, NodeTypes, PayloadAttributesBuilder, PayloadTypes, TreeConfig,
 };
 use reth_node_core::args::{DiscoveryArgs, NetworkArgs, RpcServerArgs, TxPoolArgs};
 use reth_provider::providers::BlockchainProvider;
@@ -111,15 +115,10 @@ pub async fn setup_engine(
     chain_spec: Arc<<ScrollRollupNode as NodeTypes>::ChainSpec>,
     is_dev: bool,
     no_local_transactions_propagation: bool,
-    task_executor: Option<reth_tasks::TaskManager>,
+    reboot_info: Option<(usize, Arc<reth_db::test_utils::TempDatabase<reth_db::DatabaseEnv>>)>,
 ) -> eyre::Result<(
-    Vec<
-        NodeHelperType<
-            ScrollRollupNode,
-            BlockchainProvider<NodeTypesWithDBAdapter<ScrollRollupNode, TmpDB>>,
-        >,
-    >,
-    TaskManager,
+    Vec<ScrollNodeTestComponents>,
+    Vec<Arc<reth_db::test_utils::TempDatabase<reth_db::DatabaseEnv>>>,
     Wallet,
 )>
 where
@@ -130,42 +129,85 @@ where
     TmpNodeAddOnsHandle<ScrollRollupNode>:
         RpcHandleProvider<Adapter<ScrollRollupNode>, TmpNodeEthApi<ScrollRollupNode>>,
 {
-    let tasks = task_executor.unwrap_or_else(TaskManager::current);
-    let exec = tasks.executor();
-
     let network_config = NetworkArgs {
         discovery: DiscoveryArgs { disable_discovery: true, ..DiscoveryArgs::default() },
         ..NetworkArgs::default()
     };
 
     // Create nodes and peer them
-    let mut nodes: Vec<NodeTestContext<_, _>> = Vec::with_capacity(num_nodes);
+    let mut nodes: Vec<ScrollNodeTestComponents> = Vec::with_capacity(num_nodes);
+    let mut dbs: Vec<Arc<reth_db::test_utils::TempDatabase<reth_db::DatabaseEnv>>> = Vec::new();
     let mut chain_spec = Arc::unwrap_or_clone(chain_spec);
     chain_spec.config.l1_data_fee_buffer_check = scroll_node_config.require_l1_data_fee_buffer;
     let chain_spec = Arc::new(chain_spec);
     for idx in 0..num_nodes {
-        // disable sequencer nodes after the first one
-        if idx != 0 {
+        // Determine the actual node index (for reboot use provided index, otherwise use idx)
+        let node_index = reboot_info.as_ref().map(|(node_idx, _)| *node_idx).unwrap_or(idx);
+
+        // Disable sequencer for all nodes except index 0
+        if node_index != 0 {
             scroll_node_config.sequencer_args.sequencer_enabled = false;
         }
-        let node_config = NodeConfig::new(chain_spec.clone())
+
+        // Configure node with the test data directory
+        let mut node_config = NodeConfig::new(chain_spec.clone())
             .with_network(network_config.clone())
+            .with_rpc(RpcServerArgs::default().with_http().with_http_api(RpcModuleSelection::All))
             .with_unused_ports()
-            .with_rpc(
-                RpcServerArgs::default()
-                    .with_unused_ports()
-                    .with_http()
-                    .with_http_api(RpcModuleSelection::All),
-            )
             .set_dev(is_dev)
             .with_txpool(TxPoolArgs { no_local_transactions_propagation, ..Default::default() });
 
-        let span = span!(Level::INFO, "node", idx);
+        // Check if we already have provided a database for a node (reboot scenario)
+        let db = if let Some((_, provided_db)) = &reboot_info {
+            // Reuse existing database for reboot
+            let db_path = provided_db.path();
+            let test_data_dir = db_path.parent().expect("db path should have a parent directory");
+
+            // Set the datadir in node_config to reuse the same directory
+            node_config.datadir.datadir =
+                reth_node_core::dirs::MaybePlatformPath::from(test_data_dir.to_path_buf());
+
+            tracing::info!(
+                "Reusing existing database for node {} at {:?}",
+                node_index,
+                test_data_dir
+            );
+            provided_db.clone()
+        } else {
+            // Create a unique persistent test directory for both Reth and Scroll databases
+            // Using process ID and node index to ensure uniqueness
+            let test_data_dir = std::env::temp_dir().join(format!(
+                "scroll-test-{}-node-{}-{}",
+                std::process::id(),
+                node_index,
+                std::time::SystemTime::now()
+                    .duration_since(std::time::UNIX_EPOCH)
+                    .unwrap()
+                    .as_nanos()
+            ));
+            std::fs::create_dir_all(&test_data_dir).expect("failed to create test data directory");
+
+            // Set the datadir in node_config (critical for proper initialization)
+            node_config.datadir.datadir =
+                reth_node_core::dirs::MaybePlatformPath::from(test_data_dir.clone());
+
+            // Create Reth database in the test directory's db subdirectory
+            let new_db = create_test_rw_db_with_path(node_config.datadir().db());
+
+            tracing::info!("Created new database for node {} at {:?}", node_index, test_data_dir);
+            dbs.push(new_db.clone());
+            new_db
+        };
+
+        let span = span!(Level::INFO, "node", node_index);
         let _enter = span.enter();
-        let testing_node = NodeBuilder::new(node_config.clone()).testing_node(exec.clone());
+        let task_manager = TaskManager::current();
+        let testing_node = NodeBuilder::new(node_config.clone())
+            .with_database(db.clone())
+            .with_launch_context(task_manager.executor());
         let testing_config = testing_node.config().clone();
         let node = ScrollRollupNode::new(scroll_node_config.clone(), testing_config).await;
-        let RethNodeHandle { node, node_exit_future: _ } = testing_node
+        let RethNodeHandle { node, node_exit_future } = testing_node
             .with_types_and_provider::<ScrollRollupNode, BlockchainProvider<_>>()
             .with_components(node.components_builder())
             .with_add_ons(node.add_ons())
@@ -187,9 +229,6 @@ where
             NodeTestContext::new(node, |_| panic!("should not build payloads using this method"))
                 .await?;
 
-        let genesis = node.block_hash(0);
-        node.update_forkchoice(genesis, genesis).await?;
-
         // Connect each node in a chain.
         if let Some(previous_node) = nodes.last_mut() {
             previous_node.connect(&mut node).await;
@@ -202,10 +241,12 @@ where
             }
         }
 
+        let node = ScrollNodeTestComponents::new(node, task_manager, node_exit_future).await;
+
         nodes.push(node);
     }
 
-    Ok((nodes, tasks, Wallet::default().with_chain_id(chain_spec.chain().into())))
+    Ok((nodes, dbs, Wallet::default().with_chain_id(chain_spec.chain().into())))
 }
 
 /// Generate a transfer transaction with the given wallet.
@@ -223,7 +264,7 @@ pub async fn generate_tx(wallet: Arc<Mutex<Wallet>>) -> Bytes {
 /// Returns a default [`ScrollRollupNodeConfig`] preconfigured for testing.
 pub fn default_test_scroll_rollup_node_config() -> ScrollRollupNodeConfig {
     ScrollRollupNodeConfig {
-        test: true,
+        test_args: TestArgs { test: true, skip_l1_synced: false },
         network_args: RollupNodeNetworkArgs::default(),
         database_args: RollupNodeDatabaseArgs::default(),
         l1_provider_args: L1ProviderArgs::default(),
@@ -259,7 +300,7 @@ pub fn default_test_scroll_rollup_node_config() -> ScrollRollupNodeConfig {
 /// interval.
 pub fn default_sequencer_test_scroll_rollup_node_config() -> ScrollRollupNodeConfig {
     ScrollRollupNodeConfig {
-        test: true,
+        test_args: TestArgs { test: true, skip_l1_synced: false },
         network_args: RollupNodeNetworkArgs::default(),
         database_args: RollupNodeDatabaseArgs {
             rn_db_path: Some(PathBuf::from("sqlite::memory:")),

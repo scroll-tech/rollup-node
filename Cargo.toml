@@ -130,10 +130,12 @@ alloy-eips = { version = "1.0.37", default-features = false }
 alloy-genesis = { version = "1.0.37", default-features = false }
 alloy-json-rpc = { version = "1.0.37", default-features = false }
 alloy-network = { version = "1.0.37", default-features = false }
+alloy-node-bindings = { version = "1.0.37", default-features = false }
 alloy-primitives = { version = "1.4.1", default-features = false }
 alloy-provider = { version = "1.0.37", default-features = false }
 alloy-rpc-client = { version = "1.0.37", default-features = false }
 alloy-rpc-types-engine = { version = "1.0.37", default-features = false }
+alloy-rpc-types-anvil = { version = "1.0.37", default-features = false }
 alloy-rpc-types-eth = { version = "1.0.37", default-features = false }
 alloy-sol-types = { version = "1.4.1", default-features = false }
 alloy-signer = { version = "1.0.37", default-features = false }
@@ -151,9 +153,11 @@ scroll-alloy-rpc-types-engine = { git = "https://github.com/scroll-tech/reth.git
 
 # reth
 reth-chainspec = { git = "https://github.com/scroll-tech/reth.git", tag = "scroll-v91.7", default-features = false }
+reth-db = { git = "https://github.com/scroll-tech/reth.git", tag = "scroll-v91.7", default-features = false }
 reth-e2e-test-utils = { git = "https://github.com/scroll-tech/reth.git", tag = "scroll-v91.7" }
 reth-eth-wire = { git = "https://github.com/scroll-tech/reth.git", tag = "scroll-v91.7", default-features = false }
 reth-eth-wire-types = { git = "https://github.com/scroll-tech/reth.git", tag = "scroll-v91.7", default-features = false }
+reth-fs-util = { git = "https://github.com/scroll-tech/reth.git", tag = "scroll-v91.7", default-features = false }
 reth-network = { git = "https://github.com/scroll-tech/reth.git", tag = "scroll-v91.7", default-features = false }
 reth-network-api = { git = "https://github.com/scroll-tech/reth.git", tag = "scroll-v91.7", default-features = false }
 reth-network-p2p = { git = "https://github.com/scroll-tech/reth.git", tag = "scroll-v91.7", default-features = false }

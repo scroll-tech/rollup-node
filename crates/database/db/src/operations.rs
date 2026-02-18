@@ -831,6 +831,9 @@ impl<T: WriteConnectionProvider + ?Sized + Sync> DatabaseWriteOperations for T {
         &self,
         outcome: BatchConsolidationOutcome,
     ) -> Result<(), DatabaseError> {
+        if let Some(block_info) = outcome.updated_l2_head() {
+            self.set_l2_head_block_number(block_info.number).await?;
+        }
         self.insert_blocks(
             outcome.blocks.iter().map(|b| b.block_info).collect(),
             outcome.batch_info,
