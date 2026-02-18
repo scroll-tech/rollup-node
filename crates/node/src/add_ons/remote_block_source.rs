@@ -3,11 +3,12 @@
 
 use crate::args::RemoteBlockSourceArgs;
 use alloy_primitives::Signature;
-use alloy_provider::{Provider, ProviderBuilder};
+use alloy_provider::{Provider, ProviderBuilder, RootProvider};
 use alloy_rpc_client::RpcClient;
 use alloy_transport::layers::RetryBackoffLayer;
 use futures::StreamExt;
 use reth_network_api::{FullNetwork, PeerId};
+use reth_provider::BlockReader;
 use reth_scroll_node::ScrollNetworkPrimitives;
 use reth_tasks::shutdown::Shutdown;
 use reth_tokio_util::EventStream;
@@ -26,7 +27,12 @@ where
     /// Configuration for the remote block source.
     config: RemoteBlockSourceArgs,
     /// Handle to the chain orchestrator for sending commands.
-    handle: ChainOrchestratorHandle<N>,
+    orchestrator_handle: ChainOrchestratorHandle<N>,
+    /// An event stream for listening to chain orchestrator events, used to wait for block build
+    /// completion.
+    events: EventStream<ChainOrchestratorEvent>,
+    /// A provider for the remote node, used to fetch blocks and block information.
+    remote: RootProvider<Scroll>,
     /// Tracks the last block number we imported from remote.
     /// This is different from local head because we build blocks on top of imports.
     last_imported_block: u64,
@@ -40,25 +46,19 @@ where
     pub async fn new(
         config: RemoteBlockSourceArgs,
         handle: ChainOrchestratorHandle<N>,
+        provider: impl BlockReader,
     ) -> eyre::Result<Self> {
-        let last_imported_block = handle.status().await?.l2.fcs.head_block_info().number;
-        Ok(Self { config, handle, last_imported_block })
-    }
-
-    /// Runs the remote block source until shutdown.
-    pub async fn run_until_shutdown(mut self, mut shutdown: Shutdown) -> eyre::Result<()> {
-        let Some(url) = self.config.url.clone() else {
+        // Build remote provider with retry layer.
+        let Some(url) = config.url.clone() else {
             tracing::error!(target: "scroll::remote_source", "URL required when remote-source is enabled");
             return Err(eyre::eyre!("URL required when remote-source is enabled"));
         };
-
-        // Build remote provider with retry layer
         let retry_layer = RetryBackoffLayer::new(10, 100, 330);
         let client = RpcClient::builder().layer(retry_layer).http(url);
         let remote = ProviderBuilder::<_, _, Scroll>::default().connect_client(client);
 
         // Get event listener for waiting on block completion
-        let mut event_stream = match self.handle.get_event_listener().await {
+        let events = match handle.get_event_listener().await {
             Ok(stream) => stream,
             Err(e) => {
                 tracing::error!(target: "scroll::remote_source", ?e, "Failed to get event listener");
@@ -66,6 +66,44 @@ where
             }
         };
 
+        // Determine the last imported block by finding the highest common block
+        // between the local chain and the remote node.
+        let local_head = provider.best_block_number()?;
+        let remote_head = remote.get_block_number().await?;
+
+        let last_imported_block;
+        let mut search = local_head.min(remote_head);
+        loop {
+            if search == 0 {
+                // Genesis is always a common block (same chain spec assumed).
+                last_imported_block = 0;
+                break;
+            }
+            let local_hash = provider.block_hash(search)?;
+            let remote_block = remote.get_block_by_number(search.into()).await?;
+            match (local_hash, remote_block) {
+                (Some(lh), Some(rb)) if lh == rb.header.hash => {
+                    last_imported_block = search;
+                    break;
+                }
+                _ => {
+                    search = search.saturating_sub(1);
+                }
+            }
+        }
+        tracing::info!(
+            target: "scroll::remote_source",
+            last_imported_block,
+            local_head,
+            remote_head,
+            "Determined highest common block with remote"
+        );
+
+        Ok(Self { config, orchestrator_handle: handle, events, remote, last_imported_block })
+    }
+
+    /// Runs the remote block source until shutdown.
+    pub async fn run_until_shutdown(mut self, mut shutdown: Shutdown) -> eyre::Result<()> {
         let mut poll_interval = interval(Duration::from_millis(self.config.poll_interval_ms));
 
         loop {
@@ -73,7 +111,7 @@ where
                 biased;
                 _guard = &mut shutdown => break,
                 _ = poll_interval.tick() => {
-                    if let Err(e) = self.follow_and_build(&remote, &mut event_stream).await {
+                    if let Err(e) = self.follow_and_build().await {
                         tracing::error!(target: "scroll::remote_source", ?e, "Sync error");
                     }
                 }
@@ -84,14 +122,11 @@ where
     }
 
     /// Follows the remote node and builds blocks on top of imported blocks.
-    async fn follow_and_build<P: Provider<Scroll>>(
-        &mut self,
-        remote: &P,
-        event_stream: &mut EventStream<ChainOrchestratorEvent>,
-    ) -> eyre::Result<()> {
+    async fn follow_and_build(&mut self) -> eyre::Result<()> {
         loop {
             // Get remote head
-            let remote_block = remote
+            let remote_block = self
+                .remote
                 .get_block_by_number(alloy_eips::BlockNumberOrTag::Latest)
                 .full()
                 .await?
@@ -117,7 +152,8 @@ where
 
             // Fetch and import the next block from remote
             let next_block_num = self.last_imported_block + 1;
-            let block = remote
+            let block = self
+                .remote
                 .get_block_by_number(next_block_num.into())
                 .full()
                 .await?
@@ -134,7 +170,7 @@ where
 
             // Import the block (this will cause a reorg if we had a locally built block at this
             // height)
-            let chain_import = match self.handle.import_block(block_with_peer).await {
+            let chain_import = match self.orchestrator_handle.import_block(block_with_peer).await {
                 Ok(Ok(chain_import)) => {
                     self.last_imported_block = next_block_num;
                     chain_import
@@ -155,12 +191,12 @@ where
             }
 
             // Trigger block building on top of the imported block
-            self.handle.build_block();
+            self.orchestrator_handle.build_block();
 
             // Wait for BlockSequenced event
             tracing::debug!(target: "scroll::remote_source", "Waiting for block to be built...");
             loop {
-                match event_stream.next().await {
+                match self.events.next().await {
                     Some(ChainOrchestratorEvent::BlockSequenced(block)) => {
                         tracing::info!(target: "scroll::remote_source",
                             block_number = block.header.number,

@@ -56,6 +56,7 @@ reth-node-types.workspace = true
 reth-network.workspace = true
 reth-network-api.workspace = true
 reth-network-p2p.workspace = true
+reth-provider.workspace = true
 reth-revm.workspace = true
 reth-rpc-api.workspace = true
 reth-rpc-eth-api.workspace = true
@@ -86,7 +87,6 @@ reth-db = { workspace = true, optional = true, features = ["test-utils"] }
 reth-e2e-test-utils = { workspace = true, optional = true }
 reth-engine-local = { workspace = true, optional = true }
 reth-fs-util = { workspace = true, optional = true }
-reth-provider = { workspace = true, optional = true }
 reth-rpc-layer = { workspace = true, optional = true }
 reth-rpc-server-types = { workspace = true, optional = true }
 reth-storage-api = { workspace = true, optional = true }
