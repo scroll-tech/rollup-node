@@ -68,7 +68,7 @@ where
 
         // Determine the last imported block by finding the highest common block
         // between the local chain and the remote node.
-        let local_head = provider.best_block_number()?;
+        let local_head = handle.status().await?.l2.fcs.head_block_info().number;
         let remote_head = remote.get_block_number().await?;
 
         let last_imported_block;
