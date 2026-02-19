@@ -12,6 +12,13 @@ pub struct ChainOrchestratorStatus {
 }
 
 impl ChainOrchestratorStatus {
+    /// Returns true if the chain orchestrator is fully synced.
+    pub const fn is_synced(&self) -> bool {
+        self.l1.status.is_synced() && self.l2.status.is_synced()
+    }
+}
+
+impl ChainOrchestratorStatus {
     /// Creates a new [`ChainOrchestratorStatus`] from the given sync state, latest L1 block number,
     pub fn new(
         sync_state: &SyncState,

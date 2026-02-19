@@ -195,6 +195,11 @@ where
                 continue;
             }
 
+            if !self.orchestrator_handle.status().await?.is_synced() {
+                tracing::debug!(target: "scroll::remote_source", "Imported block is valid, but orchestrator is not synced, skipping build");
+                continue;
+            }
+
             // Trigger block building on top of the imported block
             self.orchestrator_handle.build_block();
 
