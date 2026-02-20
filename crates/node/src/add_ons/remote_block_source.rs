@@ -214,6 +214,10 @@ where
                             "Block built successfully, proceeding to next");
                         break;
                     }
+                    Some(ChainOrchestratorEvent::BlockBuildingSkipped) => {
+                        tracing::debug!(target: "scroll::remote_source", "Block building skipped (empty block)");
+                        break;
+                    }
                     Some(_) => {
                         // Ignore other events, keep waiting
                     }

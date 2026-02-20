@@ -90,6 +90,9 @@ pub enum ChainOrchestratorEvent {
     L2ConsolidatedBlockCommitted(L2BlockInfoWithL1Messages),
     /// A new block has been sequenced by the sequencer.
     BlockSequenced(ScrollBlock),
+    /// Block building was skipped because the built payload was empty and empty blocks are
+    /// disabled.
+    BlockBuildingSkipped,
     /// A new block has been signed by the signer.
     SignedBlock {
         /// The signed block.

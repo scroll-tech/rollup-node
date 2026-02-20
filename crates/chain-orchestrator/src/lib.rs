@@ -313,6 +313,7 @@ impl<
                         .sign_block(block.clone())?;
                     return Ok(Some(ChainOrchestratorEvent::BlockSequenced(block)));
                 }
+                return Ok(Some(ChainOrchestratorEvent::BlockBuildingSkipped));
             }
         }
 
