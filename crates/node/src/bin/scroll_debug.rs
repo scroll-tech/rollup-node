@@ -53,9 +53,10 @@ fn main() -> eyre::Result<()> {
     eprintln!("Starting nodes (this may take a moment)...");
 
     // Create tokio runtime and run
-    tokio::runtime::Builder::new_multi_thread().enable_all().build()?.block_on(async {
-        args.run(Some(log_path)).await
-    })
+    tokio::runtime::Builder::new_multi_thread()
+        .enable_all()
+        .build()?
+        .block_on(async { args.run(Some(log_path)).await })
 }
 
 #[cfg(not(feature = "debug-toolkit"))]

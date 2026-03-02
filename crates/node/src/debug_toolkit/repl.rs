@@ -13,9 +13,9 @@ use alloy_consensus::{SignableTransaction, TxEip1559, TxLegacy};
 use alloy_eips::{eip2718::Encodable2718, BlockNumberOrTag};
 use alloy_network::{TransactionResponse, TxSignerSync};
 use alloy_primitives::{address, Address, Bytes, TxKind, U256};
-use alloy_sol_types::{sol, SolCall};
 use alloy_rpc_types_eth::TransactionRequest;
 use alloy_signer_local::PrivateKeySigner;
+use alloy_sol_types::{sol, SolCall};
 use colored::Colorize;
 use crossterm::{
     event::{self, Event, KeyCode, KeyModifiers},
@@ -286,6 +286,24 @@ impl DebugRepl {
             }
             Command::Exit => {
                 self.running = false;
+                Ok(())
+            }
+            Command::Admin(_) => {
+                println!(
+                    "{}",
+                    "admin commands are only available in attach mode (--attach <url>).".yellow()
+                );
+                Ok(())
+            }
+            Command::Rpc { method, params: _ } => {
+                println!(
+                    "{}",
+                    format!(
+                        "rpc {} is only available in attach mode (--attach <url>). Use 'cast rpc {}' instead.",
+                        method, method
+                    )
+                    .yellow()
+                );
                 Ok(())
             }
             Command::Unknown(s) => {
@@ -640,10 +658,7 @@ impl DebugRepl {
                                 );
                             }
                             Err(e) => {
-                                println!(
-                                    "{}",
-                                    format!("Failed to get receipt: {}", e).yellow()
-                                );
+                                println!("{}", format!("Failed to get receipt: {}", e).yellow());
                             }
                         }
                     }

@@ -11,8 +11,32 @@ use std::{path::PathBuf, str::FromStr};
 
 /// Debug toolkit CLI arguments.
 #[derive(Debug, Parser)]
-#[command(name = "scroll-debug", about = "Scroll Debug Toolkit - Interactive REPL for debugging")]
+#[command(
+    name = "scroll-debug",
+    about = "Scroll Debug Toolkit - Interactive REPL for debugging.\n\
+             \n\
+             Two modes:\n  \
+             Spawn:  scroll-debug --chain dev --sequencer  (starts a local test network)\n  \
+             Attach: scroll-debug --attach http://localhost:8545  (connects to a running node)"
+)]
 pub struct DebugArgs {
+    // ── Attach mode ──────────────────────────────────────────────────────────
+    /// Attach to an already-running node at this RPC URL instead of spawning a test network.
+    ///
+    /// Example: --attach http://localhost:8545
+    #[arg(
+        long,
+        conflicts_with_all = ["chain", "sequencer", "followers", "l1_url", "bootnodes", "valid_signer"]
+    )]
+    pub attach: Option<reqwest::Url>,
+
+    /// Private key (hex, with or without 0x prefix) used for signing transactions in attach mode.
+    ///
+    /// If omitted, tx send/inject commands will fail with an explanatory error.
+    #[arg(long, requires = "attach")]
+    pub private_key: Option<String>,
+
+    // ── Spawn mode ───────────────────────────────────────────────────────────
     /// Chain to use (dev, scroll-sepolia, scroll-mainnet) or path to genesis file.
     #[arg(long, default_value = "dev")]
     pub chain: String,
@@ -41,6 +65,7 @@ pub struct DebugArgs {
     #[arg(long)]
     pub valid_signer: Option<Address>,
 
+    // ── Common ───────────────────────────────────────────────────────────────
     /// Path to log file. Defaults to ./scroll-debug-<pid>.log
     #[arg(long)]
     pub log_file: Option<PathBuf>,
@@ -49,8 +74,18 @@ pub struct DebugArgs {
 impl DebugArgs {
     /// Run the debug toolkit with these arguments.
     pub async fn run(self, log_path: Option<PathBuf>) -> eyre::Result<()> {
-        use super::DebugRepl;
+        use super::{AttachRepl, DebugRepl};
 
+        // ── Attach mode ──────────────────────────────────────────────────────
+        if let Some(url) = self.attach {
+            let mut repl = AttachRepl::new(url, self.private_key).await?;
+            if let Some(path) = log_path {
+                repl.set_log_path(path);
+            }
+            return repl.run().await;
+        }
+
+        // ── Spawn mode ───────────────────────────────────────────────────────
         // Build the fixture
         let mut builder = TestFixtureBuilder::new().with_chain(&self.chain)?;
 

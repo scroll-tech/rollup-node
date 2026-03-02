@@ -11192,6 +11192,7 @@ dependencies = [
  "scroll-migration",
  "scroll-network",
  "scroll-wire",
+ "serde",
  "serde_json",
  "tokio",
  "tracing",

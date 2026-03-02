@@ -1,0 +1,676 @@
+2026-03-02T12:43:23.941198Z  INFO node{idx=0}: reth::cli: Saving prune config to toml file
+2026-03-02T12:43:23.941691Z  INFO node{idx=0}: reth::cli: Configuration loaded path="/var/folders/gn/8krhcpg563g0p6zyjrm6pr_c0000gq/T/reth-test-KUYbLIZB/reth.toml"
+2026-03-02T12:43:23.942422Z  INFO node{idx=0}: reth::cli: Database opened
+2026-03-02T12:43:24.245935Z  INFO node{idx=0}: reth::cli: 
+Pre-merge hard forks (block based):
+- Homestead                        @0
+- Tangerine                        @0
+- SpuriousDragon                   @0
+- Byzantium                        @0
+- Constantinople                   @0
+- Petersburg                       @0
+- Istanbul                         @0
+- Berlin                           @0
+- London                           @0
+- Archimedes                       @0
+- Bernoulli                        @0
+- Curie                            @0
+
+Post-merge hard forks (timestamp based):
+- Shanghai                         @0
+- Darwin                           @0
+- DarwinV2                         @0
+- Euclid                           @0
+- EuclidV2                         @0
+- Feynman                          @0
+- Galileo                          @0
+- GalileoV2                        @0
+2026-03-02T12:43:24.248691Z  INFO node{idx=0}: reth::cli: Transaction pool initialized
+2026-03-02T12:43:24.560959Z  INFO node{idx=0}: reth::cli: P2P networking initialized enode=enode://2a854fec1913ab788092e38bc059988bd54406e53074eaf80662b3f243810b82477f0830b7739dd12a550405b721d790b8fdda008a89da71779a0ed90192e8b3@127.0.0.1:52288
+2026-03-02T12:43:24.561933Z  INFO node{idx=0}: reth::cli: StaticFileProducer initialized
+2026-03-02T12:43:24.562765Z  INFO node{idx=0}: reth::cli: Verifying storage consistency.
+2026-03-02T12:43:24.563206Z  INFO node{idx=0}: reth::cli: Pruner initialized prune_config=PruneConfig { block_interval: 5, segments: PruneModes { sender_recovery: None, transaction_lookup: None, receipts: None, account_history: None, storage_history: None, bodies_history: None, receipts_log_filter: ReceiptsLogPruneConfig({}) } }
+2026-03-02T12:43:24.563372Z  INFO node{idx=0}: reth::cli: Creating JWT auth secret file path="/var/folders/gn/8krhcpg563g0p6zyjrm6pr_c0000gq/T/reth-test-KUYbLIZB/jwt.hex"
+2026-03-02T12:43:24.564552Z  INFO node{idx=0}: reth::cli: Consensus engine initialized
+2026-03-02T12:43:24.565074Z  INFO node{idx=0}: reth::cli: Engine API handler initialized
+2026-03-02T12:43:24.569199Z  INFO node{idx=0}: reth::cli: RPC auth server started url=127.0.0.1:52289
+2026-03-02T12:43:24.570829Z  INFO node{idx=0}: reth::cli: RPC IPC server started path=/tmp/reth.ipc-ZcdwhuVq
+2026-03-02T12:43:24.570874Z  INFO node{idx=0}: reth::cli: RPC HTTP server started url=127.0.0.1:52290
+2026-03-02T12:43:24.570927Z  INFO node{idx=0}: rollup_node::args: Building rollup node with config:
+ScrollRollupNodeConfig {
+    test: true,
+    consensus_args: ConsensusArgs {
+        algorithm: Noop,
+        authorized_signer: None,
+    },
+    database_args: RollupNodeDatabaseArgs {
+        rn_db_path: None,
+    },
+    chain_orchestrator_args: ChainOrchestratorArgs {
+        optimistic_sync_trigger: 100,
+        chain_buffer_size: 100,
+    },
+    engine_driver_args: EngineDriverArgs {
+        sync_at_startup: true,
+    },
+    blob_provider_args: BlobProviderArgs {
+        beacon_node_urls: None,
+        s3_url: None,
+        anvil_url: None,
+        mock: true,
+        compute_units_per_second: 0,
+        max_retries: 0,
+        initial_backoff: 0,
+    },
+    l1_provider_args: L1ProviderArgs {
+        url: None,
+        compute_units_per_second: 10000,
+        max_retries: 10,
+        initial_backoff: 100,
+        logs_query_block_range: 500,
+        cache_max_items: 100,
+    },
+    sequencer_args: SequencerArgs {
+        sequencer_enabled: true,
+        auto_start: false,
+        block_time: 100,
+        payload_building_duration: 40,
+        fee_recipient: 0x0000000000000000000000000000000000000000,
+        l1_message_inclusion_mode: BlockDepth(
+            0,
+        ),
+        allow_empty_blocks: true,
+        max_l1_messages: None,
+    },
+    network_args: RollupNodeNetworkArgs {
+        enable_eth_scroll_wire_bridge: true,
+        enable_scroll_wire: true,
+        sequencer_url: None,
+        signer_address: None,
+    },
+    rpc_args: RpcArgs {
+        basic_enabled: true,
+        admin_enabled: true,
+    },
+    signer_args: SignerArgs {
+        key_file: None,
+        aws_kms_key_id: None,
+        private_key: None,
+    },
+    gas_price_oracle_args: RollupNodeGasPriceOracleArgs {
+        default_suggested_priority_fee: 0,
+    },
+    pprof_args: PprofArgs {
+        enabled: false,
+        addr: 0.0.0.0:6868,
+        default_duration: 30,
+    },
+    database: Some(
+        Database {
+            database: Retry {
+                inner: DatabaseInner {
+                    connection: SqlxSqlitePoolConnection,
+                    write_lock: Mutex {
+                        data: (),
+                    },
+                    read_locks: Semaphore {
+                        ll_sem: Semaphore {
+                            permits: 5,
+                        },
+                        resource_span: Span {
+                            name: "runtime.resource",
+                            level: Level(
+                                Trace,
+                            ),
+                            target: "tokio::sync::semaphore",
+                            disabled: true,
+                            module_path: "tokio::sync::semaphore",
+                            line: 461,
+                            file: "/Users/yiweichi/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/tokio-1.48.0/src/sync/semaphore.rs",
+                        },
+                    },
+                    metrics: DatabaseMetrics,
+                    tmp_dir: None,
+                },
+                max_retries: None,
+                initial_delay_ms: 50,
+                exponential_backoff: false,
+                metrics: RetryMetrics,
+            },
+            metrics: {
+                RemoveL1BlockInfoLeq: DatabaseOperationMetrics,
+                SetBatchRevertBlockNumberForBatchRange: DatabaseOperationMetrics,
+                DeleteL2BlocksGtBlockNumber: DatabaseOperationMetrics,
+                InsertBlocks: DatabaseOperationMetrics,
+                DeleteL1MessagesGt: DatabaseOperationMetrics,
+                FetchAndUpdateUnprocessedFinalizedBatches: DatabaseOperationMetrics,
+                InsertGenesisBlock: DatabaseOperationMetrics,
+                UpdateL1MessagesFromL2Blocks: DatabaseOperationMetrics,
+                GetHighestBlockForBatchIndex: DatabaseOperationMetrics,
+                InsertSignatures: DatabaseOperationMetrics,
+                SetProcessedL1BlockNumber: DatabaseOperationMetrics,
+                DeleteBatchesGtBatchIndex: DatabaseOperationMetrics,
+                SetLatestL1BlockNumber: DatabaseOperationMetrics,
+                PurgeL1MessageToL2BlockMappings: DatabaseOperationMetrics,
+                InsertSignature: DatabaseOperationMetrics,
+                FetchAndUpdateUnprocessedCommittedBatches: DatabaseOperationMetrics,
+                GetL2BlockAndBatchInfoByHash: DatabaseOperationMetrics,
+                UpdateL1MessagesWithL2Block: DatabaseOperationMetrics,
+                GetFinalizedL1BlockNumber: DatabaseOperationMetrics,
+                GetLatestL1BlockNumber: DatabaseOperationMetrics,
+                DeleteBatchFinalizationGtBlockNumber: DatabaseOperationMetrics,
+                GetNL2BlockDataHint: DatabaseOperationMetrics,
+                GetLatestSafeL2Info: DatabaseOperationMetrics,
+                DeleteBatchesGtBlockNumber: DatabaseOperationMetrics,
+                RemoveL1BlockInfoGt: DatabaseOperationMetrics,
+                UpdateSkippedL1Messages: DatabaseOperationMetrics,
+                InsertBatch: DatabaseOperationMetrics,
+                SetL2HeadBlockNumber: DatabaseOperationMetrics,
+                InsertBatchConsolidationOutcome: DatabaseOperationMetrics,
+                GetBatchStatusByHash: DatabaseOperationMetrics,
+                GetL1BlockInfo: DatabaseOperationMetrics,
+                GetProcessedL1BlockNumber: DatabaseOperationMetrics,
+                GetL2HeadBlockNumber: DatabaseOperationMetrics,
+                SetFinalizedL1BlockNumber: DatabaseOperationMetrics,
+                GetL2BlockInfoByNumber: DatabaseOperationMetrics,
+                UpdateBatchStatus: DatabaseOperationMetrics,
+                InsertL1BlockInfo: DatabaseOperationMetrics,
+                Unwind: DatabaseOperationMetrics,
+                GetSignature: DatabaseOperationMetrics,
+                FinalizeConsolidatedBatches: DatabaseOperationMetrics,
+                ChangeBatchProcessingToCommittedStatus: DatabaseOperationMetrics,
+                GetHighestBlockForBatchHash: DatabaseOperationMetrics,
+                InsertL1Message: DatabaseOperationMetrics,
+                GetLatestIndexedEventL1BlockNumber: DatabaseOperationMetrics,
+                InsertBlock: DatabaseOperationMetrics,
+                GetBatchByIndex: DatabaseOperationMetrics,
+                DeleteBatchRevertGtBlockNumber: DatabaseOperationMetrics,
+                GetMaxBlockDataHintBlockNumber: DatabaseOperationMetrics,
+                PrepareOnStartup: DatabaseOperationMetrics,
+                DeleteL2BlocksGtBatchIndex: DatabaseOperationMetrics,
+                GetNL1Messages: DatabaseOperationMetrics,
+                FinalizeBatchesUpToIndex: DatabaseOperationMetrics,
+                GetBatchByHash: DatabaseOperationMetrics,
+            },
+        },
+    ),
+}
+2026-03-02T12:43:24.577126Z  INFO node{idx=0}: sea_orm_migration::migrator: Applying all pending migrations
+2026-03-02T12:43:24.577883Z  INFO node{idx=0}: sea_orm_migration::migrator: Applying migration 'm20220101_000001_create_batch_commit_table'
+2026-03-02T12:43:24.579501Z  INFO node{idx=0}: sea_orm_migration::migrator: Migration 'm20220101_000001_create_batch_commit_table' has been applied
+2026-03-02T12:43:24.579715Z  INFO node{idx=0}: sea_orm_migration::migrator: Applying migration 'm20250304_125946_add_l1_msg_table'
+2026-03-02T12:43:24.580314Z  INFO node{idx=0}: sea_orm_migration::migrator: Migration 'm20250304_125946_add_l1_msg_table' has been applied
+2026-03-02T12:43:24.580506Z  INFO node{idx=0}: sea_orm_migration::migrator: Applying migration 'm20250408_132123_add_header_metadata'
+2026-03-02T12:43:24.580660Z  INFO node{idx=0}: sea_orm_migration::migrator: Migration 'm20250408_132123_add_header_metadata' has been applied
+2026-03-02T12:43:24.580855Z  INFO node{idx=0}: sea_orm_migration::migrator: Applying migration 'm20250408_150338_load_header_metadata'
+2026-03-02T12:43:24.580868Z  INFO node{idx=0}: sea_orm_migration::migrator: Migration 'm20250408_150338_load_header_metadata' has been applied
+2026-03-02T12:43:24.580975Z  INFO node{idx=0}: sea_orm_migration::migrator: Applying migration 'm20250411_072004_add_l2_block'
+2026-03-02T12:43:24.582094Z  INFO node{idx=0}: sea_orm_migration::migrator: Migration 'm20250411_072004_add_l2_block' has been applied
+2026-03-02T12:43:24.582322Z  INFO node{idx=0}: sea_orm_migration::migrator: Applying migration 'm20250616_223947_add_metadata'
+2026-03-02T12:43:24.582676Z  INFO node{idx=0}: sea_orm_migration::migrator: Migration 'm20250616_223947_add_metadata' has been applied
+2026-03-02T12:43:24.582789Z  INFO node{idx=0}: sea_orm_migration::migrator: Applying migration 'm20250904_175949_block_signature'
+2026-03-02T12:43:24.582982Z  INFO node{idx=0}: sea_orm_migration::migrator: Migration 'm20250904_175949_block_signature' has been applied
+2026-03-02T12:43:24.583192Z  INFO node{idx=0}: sea_orm_migration::migrator: Applying migration 'm20251028_110719_add_l1_block_table'
+2026-03-02T12:43:24.583360Z  INFO node{idx=0}: sea_orm_migration::migrator: Migration 'm20251028_110719_add_l1_block_table' has been applied
+2026-03-02T12:43:24.594810Z  INFO node{idx=0}: scroll::node::args: Starting engine driver fcs=ForkchoiceState { head: BlockInfo { number: 0, hash: 0x31ad487404525f8260b2d507892547a39850aa0280a2e4950438f444237fe4b7 }, safe: BlockInfo { number: 0, hash: 0x31ad487404525f8260b2d507892547a39850aa0280a2e4950438f444237fe4b7 }, finalized: BlockInfo { number: 0, hash: 0x31ad487404525f8260b2d507892547a39850aa0280a2e4950438f444237fe4b7 } } payload_building_duration=40
+2026-03-02T12:43:24.594898Z  INFO node{idx=0}: scroll::providers: Running with mock blob provider - all other blob provider configurations are ignored
+2026-03-02T12:43:24.596013Z  INFO node{idx=0}: reth::cli: Starting consensus engine
+2026-03-02T12:43:24.596116Z  INFO scroll::derivation_pipeline: Starting derivation pipeline worker
+2026-03-02T12:43:24.596611Z  INFO node{idx=0}: reth_node_events::node: Forkchoice updated head_block_hash=0x31ad487404525f8260b2d507892547a39850aa0280a2e4950438f444237fe4b7 safe_block_hash=0x31ad487404525f8260b2d507892547a39850aa0280a2e4950438f444237fe4b7 finalized_block_hash=0x31ad487404525f8260b2d507892547a39850aa0280a2e4950438f444237fe4b7
+2026-03-02T12:43:24.601141Z  WARN node{idx=1}: reth_node_builder::launch::common: Failed to build global thread pool err=The global thread pool has already been initialized.
+2026-03-02T12:43:24.601466Z  INFO node{idx=1}: reth::cli: Saving prune config to toml file
+2026-03-02T12:43:24.601738Z  INFO node{idx=1}: reth::cli: Configuration loaded path="/var/folders/gn/8krhcpg563g0p6zyjrm6pr_c0000gq/T/reth-test-UXOFiwdf/reth.toml"
+2026-03-02T12:43:24.602128Z  INFO node{idx=1}: reth::cli: Database opened
+2026-03-02T12:43:24.687078Z  INFO node{idx=1}: reth::cli: 
+Pre-merge hard forks (block based):
+- Homestead                        @0
+- Tangerine                        @0
+- SpuriousDragon                   @0
+- Byzantium                        @0
+- Constantinople                   @0
+- Petersburg                       @0
+- Istanbul                         @0
+- Berlin                           @0
+- London                           @0
+- Archimedes                       @0
+- Bernoulli                        @0
+- Curie                            @0
+
+Post-merge hard forks (timestamp based):
+- Shanghai                         @0
+- Darwin                           @0
+- DarwinV2                         @0
+- Euclid                           @0
+- EuclidV2                         @0
+- Feynman                          @0
+- Galileo                          @0
+- GalileoV2                        @0
+2026-03-02T12:43:24.687735Z  INFO node{idx=1}: reth::cli: Transaction pool initialized
+2026-03-02T12:43:24.689263Z  INFO node{idx=1}: reth::cli: P2P networking initialized enode=enode://be607dbc7586bc1ed99f31b81bbe1a132c1d46579aefcbfd1c3a5ef1c8517ed666ff81a5b8d7e6582c106517523e5f72b7e76d466415aa45f95327baadd0c214@127.0.0.1:52295
+2026-03-02T12:43:24.689478Z  INFO node{idx=1}: reth::cli: StaticFileProducer initialized
+2026-03-02T12:43:24.689877Z  INFO node{idx=1}: reth::cli: Verifying storage consistency.
+2026-03-02T12:43:24.690177Z  INFO node{idx=1}: reth::cli: Pruner initialized prune_config=PruneConfig { block_interval: 5, segments: PruneModes { sender_recovery: None, transaction_lookup: None, receipts: None, account_history: None, storage_history: None, bodies_history: None, receipts_log_filter: ReceiptsLogPruneConfig({}) } }
+2026-03-02T12:43:24.690328Z  INFO node{idx=1}: reth::cli: Creating JWT auth secret file path="/var/folders/gn/8krhcpg563g0p6zyjrm6pr_c0000gq/T/reth-test-UXOFiwdf/jwt.hex"
+2026-03-02T12:43:24.691108Z  INFO node{idx=1}: reth::cli: Consensus engine initialized
+2026-03-02T12:43:24.691303Z  INFO node{idx=1}: reth::cli: Engine API handler initialized
+2026-03-02T12:43:24.693805Z  INFO node{idx=1}: reth::cli: RPC auth server started url=127.0.0.1:52296
+2026-03-02T12:43:24.695396Z  INFO node{idx=1}: reth::cli: RPC IPC server started path=/tmp/reth.ipc-anQ1yfgM
+2026-03-02T12:43:24.695406Z  INFO node{idx=1}: reth::cli: RPC HTTP server started url=127.0.0.1:52297
+2026-03-02T12:43:24.695432Z  INFO node{idx=1}: rollup_node::args: Building rollup node with config:
+ScrollRollupNodeConfig {
+    test: true,
+    consensus_args: ConsensusArgs {
+        algorithm: Noop,
+        authorized_signer: None,
+    },
+    database_args: RollupNodeDatabaseArgs {
+        rn_db_path: None,
+    },
+    chain_orchestrator_args: ChainOrchestratorArgs {
+        optimistic_sync_trigger: 100,
+        chain_buffer_size: 100,
+    },
+    engine_driver_args: EngineDriverArgs {
+        sync_at_startup: true,
+    },
+    blob_provider_args: BlobProviderArgs {
+        beacon_node_urls: None,
+        s3_url: None,
+        anvil_url: None,
+        mock: true,
+        compute_units_per_second: 0,
+        max_retries: 0,
+        initial_backoff: 0,
+    },
+    l1_provider_args: L1ProviderArgs {
+        url: None,
+        compute_units_per_second: 10000,
+        max_retries: 10,
+        initial_backoff: 100,
+        logs_query_block_range: 500,
+        cache_max_items: 100,
+    },
+    sequencer_args: SequencerArgs {
+        sequencer_enabled: false,
+        auto_start: false,
+        block_time: 100,
+        payload_building_duration: 40,
+        fee_recipient: 0x0000000000000000000000000000000000000000,
+        l1_message_inclusion_mode: BlockDepth(
+            0,
+        ),
+        allow_empty_blocks: true,
+        max_l1_messages: None,
+    },
+    network_args: RollupNodeNetworkArgs {
+        enable_eth_scroll_wire_bridge: true,
+        enable_scroll_wire: true,
+        sequencer_url: None,
+        signer_address: None,
+    },
+    rpc_args: RpcArgs {
+        basic_enabled: true,
+        admin_enabled: true,
+    },
+    signer_args: SignerArgs {
+        key_file: None,
+        aws_kms_key_id: None,
+        private_key: None,
+    },
+    gas_price_oracle_args: RollupNodeGasPriceOracleArgs {
+        default_suggested_priority_fee: 0,
+    },
+    pprof_args: PprofArgs {
+        enabled: false,
+        addr: 0.0.0.0:6868,
+        default_duration: 30,
+    },
+    database: Some(
+        Database {
+            database: Retry {
+                inner: DatabaseInner {
+                    connection: SqlxSqlitePoolConnection,
+                    write_lock: Mutex {
+                        data: (),
+                    },
+                    read_locks: Semaphore {
+                        ll_sem: Semaphore {
+                            permits: 5,
+                        },
+                        resource_span: Span {
+                            name: "runtime.resource",
+                            level: Level(
+                                Trace,
+                            ),
+                            target: "tokio::sync::semaphore",
+                            disabled: true,
+                            module_path: "tokio::sync::semaphore",
+                            line: 461,
+                            file: "/Users/yiweichi/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/tokio-1.48.0/src/sync/semaphore.rs",
+                        },
+                    },
+                    metrics: DatabaseMetrics,
+                    tmp_dir: None,
+                },
+                max_retries: None,
+                initial_delay_ms: 50,
+                exponential_backoff: false,
+                metrics: RetryMetrics,
+            },
+            metrics: {
+                DeleteBatchFinalizationGtBlockNumber: DatabaseOperationMetrics,
+                RemoveL1BlockInfoGt: DatabaseOperationMetrics,
+                FetchAndUpdateUnprocessedCommittedBatches: DatabaseOperationMetrics,
+                DeleteBatchesGtBlockNumber: DatabaseOperationMetrics,
+                Unwind: DatabaseOperationMetrics,
+                GetBatchByHash: DatabaseOperationMetrics,
+                GetBatchStatusByHash: DatabaseOperationMetrics,
+                InsertBlocks: DatabaseOperationMetrics,
+                GetL2BlockInfoByNumber: DatabaseOperationMetrics,
+                GetHighestBlockForBatchIndex: DatabaseOperationMetrics,
+                FinalizeBatchesUpToIndex: DatabaseOperationMetrics,
+                InsertBatchConsolidationOutcome: DatabaseOperationMetrics,
+                SetLatestL1BlockNumber: DatabaseOperationMetrics,
+                UpdateL1MessagesFromL2Blocks: DatabaseOperationMetrics,
+                SetL2HeadBlockNumber: DatabaseOperationMetrics,
+                ChangeBatchProcessingToCommittedStatus: DatabaseOperationMetrics,
+                InsertBatch: DatabaseOperationMetrics,
+                FetchAndUpdateUnprocessedFinalizedBatches: DatabaseOperationMetrics,
+                InsertBlock: DatabaseOperationMetrics,
+                DeleteBatchesGtBatchIndex: DatabaseOperationMetrics,
+                InsertL1BlockInfo: DatabaseOperationMetrics,
+                SetBatchRevertBlockNumberForBatchRange: DatabaseOperationMetrics,
+                FinalizeConsolidatedBatches: DatabaseOperationMetrics,
+                UpdateL1MessagesWithL2Block: DatabaseOperationMetrics,
+                InsertSignatures: DatabaseOperationMetrics,
+                GetLatestL1BlockNumber: DatabaseOperationMetrics,
+                GetNL2BlockDataHint: DatabaseOperationMetrics,
+                SetFinalizedL1BlockNumber: DatabaseOperationMetrics,
+                PurgeL1MessageToL2BlockMappings: DatabaseOperationMetrics,
+                GetMaxBlockDataHintBlockNumber: DatabaseOperationMetrics,
+                GetHighestBlockForBatchHash: DatabaseOperationMetrics,
+                GetL2BlockAndBatchInfoByHash: DatabaseOperationMetrics,
+                GetBatchByIndex: DatabaseOperationMetrics,
+                GetL1BlockInfo: DatabaseOperationMetrics,
+                DeleteBatchRevertGtBlockNumber: DatabaseOperationMetrics,
+                PrepareOnStartup: DatabaseOperationMetrics,
+                InsertSignature: DatabaseOperationMetrics,
+                UpdateSkippedL1Messages: DatabaseOperationMetrics,
+                GetFinalizedL1BlockNumber: DatabaseOperationMetrics,
+                GetLatestIndexedEventL1BlockNumber: DatabaseOperationMetrics,
+                GetSignature: DatabaseOperationMetrics,
+                SetProcessedL1BlockNumber: DatabaseOperationMetrics,
+                GetNL1Messages: DatabaseOperationMetrics,
+                DeleteL2BlocksGtBatchIndex: DatabaseOperationMetrics,
+                GetLatestSafeL2Info: DatabaseOperationMetrics,
+                InsertGenesisBlock: DatabaseOperationMetrics,
+                GetProcessedL1BlockNumber: DatabaseOperationMetrics,
+                GetL2HeadBlockNumber: DatabaseOperationMetrics,
+                DeleteL2BlocksGtBlockNumber: DatabaseOperationMetrics,
+                InsertL1Message: DatabaseOperationMetrics,
+                RemoveL1BlockInfoLeq: DatabaseOperationMetrics,
+                UpdateBatchStatus: DatabaseOperationMetrics,
+                DeleteL1MessagesGt: DatabaseOperationMetrics,
+            },
+        },
+    ),
+}
+2026-03-02T12:43:24.696340Z  INFO node{idx=1}: sea_orm_migration::migrator: Applying all pending migrations
+2026-03-02T12:43:24.696770Z  INFO node{idx=1}: sea_orm_migration::migrator: Applying migration 'm20220101_000001_create_batch_commit_table'
+2026-03-02T12:43:24.698071Z  INFO node{idx=1}: sea_orm_migration::migrator: Migration 'm20220101_000001_create_batch_commit_table' has been applied
+2026-03-02T12:43:24.698239Z  INFO node{idx=1}: sea_orm_migration::migrator: Applying migration 'm20250304_125946_add_l1_msg_table'
+2026-03-02T12:43:24.698820Z  INFO node{idx=1}: sea_orm_migration::migrator: Migration 'm20250304_125946_add_l1_msg_table' has been applied
+2026-03-02T12:43:24.699019Z  INFO node{idx=1}: sea_orm_migration::migrator: Applying migration 'm20250408_132123_add_header_metadata'
+2026-03-02T12:43:24.699158Z  INFO node{idx=1}: sea_orm_migration::migrator: Migration 'm20250408_132123_add_header_metadata' has been applied
+2026-03-02T12:43:24.699328Z  INFO node{idx=1}: sea_orm_migration::migrator: Applying migration 'm20250408_150338_load_header_metadata'
+2026-03-02T12:43:24.699337Z  INFO node{idx=1}: sea_orm_migration::migrator: Migration 'm20250408_150338_load_header_metadata' has been applied
+2026-03-02T12:43:24.699413Z  INFO node{idx=1}: sea_orm_migration::migrator: Applying migration 'm20250411_072004_add_l2_block'
+2026-03-02T12:43:24.700540Z  INFO node{idx=1}: sea_orm_migration::migrator: Migration 'm20250411_072004_add_l2_block' has been applied
+2026-03-02T12:43:24.700745Z  INFO node{idx=1}: sea_orm_migration::migrator: Applying migration 'm20250616_223947_add_metadata'
+2026-03-02T12:43:24.701060Z  INFO node{idx=1}: sea_orm_migration::migrator: Migration 'm20250616_223947_add_metadata' has been applied
+2026-03-02T12:43:24.701148Z  INFO node{idx=1}: sea_orm_migration::migrator: Applying migration 'm20250904_175949_block_signature'
+2026-03-02T12:43:24.701315Z  INFO node{idx=1}: sea_orm_migration::migrator: Migration 'm20250904_175949_block_signature' has been applied
+2026-03-02T12:43:24.701515Z  INFO node{idx=1}: sea_orm_migration::migrator: Applying migration 'm20251028_110719_add_l1_block_table'
+2026-03-02T12:43:24.701662Z  INFO node{idx=1}: sea_orm_migration::migrator: Migration 'm20251028_110719_add_l1_block_table' has been applied
+2026-03-02T12:43:24.708674Z  INFO node{idx=1}: scroll::node::args: Starting engine driver fcs=ForkchoiceState { head: BlockInfo { number: 0, hash: 0x31ad487404525f8260b2d507892547a39850aa0280a2e4950438f444237fe4b7 }, safe: BlockInfo { number: 0, hash: 0x31ad487404525f8260b2d507892547a39850aa0280a2e4950438f444237fe4b7 }, finalized: BlockInfo { number: 0, hash: 0x31ad487404525f8260b2d507892547a39850aa0280a2e4950438f444237fe4b7 } } payload_building_duration=40
+2026-03-02T12:43:24.708704Z  INFO node{idx=1}: scroll::providers: Running with mock blob provider - all other blob provider configurations are ignored
+2026-03-02T12:43:24.709503Z  INFO node{idx=1}: reth::cli: Starting consensus engine
+2026-03-02T12:43:24.709547Z  INFO scroll::derivation_pipeline: Starting derivation pipeline worker
+2026-03-02T12:43:24.709794Z  INFO node{idx=1}: reth_node_events::node: Forkchoice updated head_block_hash=0x31ad487404525f8260b2d507892547a39850aa0280a2e4950438f444237fe4b7 safe_block_hash=0x31ad487404525f8260b2d507892547a39850aa0280a2e4950438f444237fe4b7 finalized_block_hash=0x31ad487404525f8260b2d507892547a39850aa0280a2e4950438f444237fe4b7
+2026-03-02T12:43:27.566777Z  INFO node{idx=0}: reth::cli: Status connected_peers=0 latest_block=0
+2026-03-02T12:43:27.693300Z  INFO node{idx=1}: reth::cli: Status connected_peers=0 latest_block=0
+2026-03-02T12:43:29.572654Z  INFO node{idx=1}: reth_e2e_test_utils::network: Session established with peer: 0x2a854fec1913ab788092e38bc059988bd54406e53074eaf80662b3f243810b82477f0830b7739dd12a550405b721d790b8fdda008a89da71779a0ed90192e8b3
+2026-03-02T12:43:29.573248Z  INFO node{idx=1}: reth_e2e_test_utils::network: Session established with peer: 0xbe607dbc7586bc1ed99f31b81bbe1a132c1d46579aefcbfd1c3a5ef1c8517ed666ff81a5b8d7e6582c106517523e5f72b7e76d466415aa45f95327baadd0c214
+2026-03-02T12:43:29.580242Z  WARN node{idx=2}: reth_node_builder::launch::common: Failed to build global thread pool err=The global thread pool has already been initialized.
+2026-03-02T12:43:29.580775Z  INFO node{idx=2}: reth::cli: Saving prune config to toml file
+2026-03-02T12:43:29.581176Z  INFO node{idx=2}: reth::cli: Configuration loaded path="/var/folders/gn/8krhcpg563g0p6zyjrm6pr_c0000gq/T/reth-test-43IjIPFl/reth.toml"
+2026-03-02T12:43:29.581597Z  INFO node{idx=2}: reth::cli: Database opened
+2026-03-02T12:43:29.674645Z  INFO node{idx=2}: reth::cli: 
+Pre-merge hard forks (block based):
+- Homestead                        @0
+- Tangerine                        @0
+- SpuriousDragon                   @0
+- Byzantium                        @0
+- Constantinople                   @0
+- Petersburg                       @0
+- Istanbul                         @0
+- Berlin                           @0
+- London                           @0
+- Archimedes                       @0
+- Bernoulli                        @0
+- Curie                            @0
+
+Post-merge hard forks (timestamp based):
+- Shanghai                         @0
+- Darwin                           @0
+- DarwinV2                         @0
+- Euclid                           @0
+- EuclidV2                         @0
+- Feynman                          @0
+- Galileo                          @0
+- GalileoV2                        @0
+2026-03-02T12:43:29.675497Z  INFO node{idx=2}: reth::cli: Transaction pool initialized
+2026-03-02T12:43:29.677419Z  INFO node{idx=2}: reth::cli: P2P networking initialized enode=enode://985963d1985d169e73e741aaa7af71eacad84c47e1247cabd01fe37de11086d5bbfb2301a1c49885981111067d9a950d180a99c2d38869cbd496306d7da9a2da@127.0.0.1:52305
+2026-03-02T12:43:29.677705Z  INFO node{idx=2}: reth::cli: StaticFileProducer initialized
+2026-03-02T12:43:29.678221Z  INFO node{idx=2}: reth::cli: Verifying storage consistency.
+2026-03-02T12:43:29.678596Z  INFO node{idx=2}: reth::cli: Pruner initialized prune_config=PruneConfig { block_interval: 5, segments: PruneModes { sender_recovery: None, transaction_lookup: None, receipts: None, account_history: None, storage_history: None, bodies_history: None, receipts_log_filter: ReceiptsLogPruneConfig({}) } }
+2026-03-02T12:43:29.678791Z  INFO node{idx=2}: reth::cli: Creating JWT auth secret file path="/var/folders/gn/8krhcpg563g0p6zyjrm6pr_c0000gq/T/reth-test-43IjIPFl/jwt.hex"
+2026-03-02T12:43:29.679823Z  INFO node{idx=2}: reth::cli: Consensus engine initialized
+2026-03-02T12:43:29.680040Z  INFO node{idx=2}: reth::cli: Engine API handler initialized
+2026-03-02T12:43:29.682876Z  INFO node{idx=2}: reth::cli: RPC auth server started url=127.0.0.1:52306
+2026-03-02T12:43:29.684728Z  INFO node{idx=2}: reth::cli: RPC IPC server started path=/tmp/reth.ipc-joNGsKf3
+2026-03-02T12:43:29.684740Z  INFO node{idx=2}: reth::cli: RPC HTTP server started url=127.0.0.1:52307
+2026-03-02T12:43:29.684769Z  INFO node{idx=2}: rollup_node::args: Building rollup node with config:
+ScrollRollupNodeConfig {
+    test: true,
+    consensus_args: ConsensusArgs {
+        algorithm: Noop,
+        authorized_signer: None,
+    },
+    database_args: RollupNodeDatabaseArgs {
+        rn_db_path: None,
+    },
+    chain_orchestrator_args: ChainOrchestratorArgs {
+        optimistic_sync_trigger: 100,
+        chain_buffer_size: 100,
+    },
+    engine_driver_args: EngineDriverArgs {
+        sync_at_startup: true,
+    },
+    blob_provider_args: BlobProviderArgs {
+        beacon_node_urls: None,
+        s3_url: None,
+        anvil_url: None,
+        mock: true,
+        compute_units_per_second: 0,
+        max_retries: 0,
+        initial_backoff: 0,
+    },
+    l1_provider_args: L1ProviderArgs {
+        url: None,
+        compute_units_per_second: 10000,
+        max_retries: 10,
+        initial_backoff: 100,
+        logs_query_block_range: 500,
+        cache_max_items: 100,
+    },
+    sequencer_args: SequencerArgs {
+        sequencer_enabled: false,
+        auto_start: false,
+        block_time: 100,
+        payload_building_duration: 40,
+        fee_recipient: 0x0000000000000000000000000000000000000000,
+        l1_message_inclusion_mode: BlockDepth(
+            0,
+        ),
+        allow_empty_blocks: true,
+        max_l1_messages: None,
+    },
+    network_args: RollupNodeNetworkArgs {
+        enable_eth_scroll_wire_bridge: true,
+        enable_scroll_wire: true,
+        sequencer_url: None,
+        signer_address: None,
+    },
+    rpc_args: RpcArgs {
+        basic_enabled: true,
+        admin_enabled: true,
+    },
+    signer_args: SignerArgs {
+        key_file: None,
+        aws_kms_key_id: None,
+        private_key: None,
+    },
+    gas_price_oracle_args: RollupNodeGasPriceOracleArgs {
+        default_suggested_priority_fee: 0,
+    },
+    pprof_args: PprofArgs {
+        enabled: false,
+        addr: 0.0.0.0:6868,
+        default_duration: 30,
+    },
+    database: Some(
+        Database {
+            database: Retry {
+                inner: DatabaseInner {
+                    connection: SqlxSqlitePoolConnection,
+                    write_lock: Mutex {
+                        data: (),
+                    },
+                    read_locks: Semaphore {
+                        ll_sem: Semaphore {
+                            permits: 5,
+                        },
+                        resource_span: Span {
+                            name: "runtime.resource",
+                            level: Level(
+                                Trace,
+                            ),
+                            target: "tokio::sync::semaphore",
+                            disabled: true,
+                            module_path: "tokio::sync::semaphore",
+                            line: 461,
+                            file: "/Users/yiweichi/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/tokio-1.48.0/src/sync/semaphore.rs",
+                        },
+                    },
+                    metrics: DatabaseMetrics,
+                    tmp_dir: None,
+                },
+                max_retries: None,
+                initial_delay_ms: 50,
+                exponential_backoff: false,
+                metrics: RetryMetrics,
+            },
+            metrics: {
+                SetProcessedL1BlockNumber: DatabaseOperationMetrics,
+                UpdateL1MessagesFromL2Blocks: DatabaseOperationMetrics,
+                FetchAndUpdateUnprocessedFinalizedBatches: DatabaseOperationMetrics,
+                Unwind: DatabaseOperationMetrics,
+                GetNL2BlockDataHint: DatabaseOperationMetrics,
+                GetHighestBlockForBatchIndex: DatabaseOperationMetrics,
+                GetNL1Messages: DatabaseOperationMetrics,
+                DeleteL2BlocksGtBatchIndex: DatabaseOperationMetrics,
+                GetL1BlockInfo: DatabaseOperationMetrics,
+                SetBatchRevertBlockNumberForBatchRange: DatabaseOperationMetrics,
+                InsertBatchConsolidationOutcome: DatabaseOperationMetrics,
+                UpdateL1MessagesWithL2Block: DatabaseOperationMetrics,
+                GetBatchByHash: DatabaseOperationMetrics,
+                FetchAndUpdateUnprocessedCommittedBatches: DatabaseOperationMetrics,
+                GetMaxBlockDataHintBlockNumber: DatabaseOperationMetrics,
+                DeleteL1MessagesGt: DatabaseOperationMetrics,
+                UpdateBatchStatus: DatabaseOperationMetrics,
+                RemoveL1BlockInfoGt: DatabaseOperationMetrics,
+                GetLatestL1BlockNumber: DatabaseOperationMetrics,
+                InsertBlock: DatabaseOperationMetrics,
+                GetL2HeadBlockNumber: DatabaseOperationMetrics,
+                GetLatestSafeL2Info: DatabaseOperationMetrics,
+                GetHighestBlockForBatchHash: DatabaseOperationMetrics,
+                GetSignature: DatabaseOperationMetrics,
+                InsertGenesisBlock: DatabaseOperationMetrics,
+                InsertBlocks: DatabaseOperationMetrics,
+                DeleteBatchesGtBatchIndex: DatabaseOperationMetrics,
+                SetLatestL1BlockNumber: DatabaseOperationMetrics,
+                InsertL1Message: DatabaseOperationMetrics,
+                UpdateSkippedL1Messages: DatabaseOperationMetrics,
+                InsertSignature: DatabaseOperationMetrics,
+                DeleteBatchFinalizationGtBlockNumber: DatabaseOperationMetrics,
+                GetBatchStatusByHash: DatabaseOperationMetrics,
+                GetFinalizedL1BlockNumber: DatabaseOperationMetrics,
+                GetBatchByIndex: DatabaseOperationMetrics,
+                FinalizeBatchesUpToIndex: DatabaseOperationMetrics,
+                RemoveL1BlockInfoLeq: DatabaseOperationMetrics,
+                ChangeBatchProcessingToCommittedStatus: DatabaseOperationMetrics,
+                SetL2HeadBlockNumber: DatabaseOperationMetrics,
+                InsertL1BlockInfo: DatabaseOperationMetrics,
+                PrepareOnStartup: DatabaseOperationMetrics,
+                DeleteL2BlocksGtBlockNumber: DatabaseOperationMetrics,
+                InsertSignatures: DatabaseOperationMetrics,
+                InsertBatch: DatabaseOperationMetrics,
+                DeleteBatchesGtBlockNumber: DatabaseOperationMetrics,
+                GetLatestIndexedEventL1BlockNumber: DatabaseOperationMetrics,
+                GetProcessedL1BlockNumber: DatabaseOperationMetrics,
+                GetL2BlockAndBatchInfoByHash: DatabaseOperationMetrics,
+                PurgeL1MessageToL2BlockMappings: DatabaseOperationMetrics,
+                GetL2BlockInfoByNumber: DatabaseOperationMetrics,
+                FinalizeConsolidatedBatches: DatabaseOperationMetrics,
+                DeleteBatchRevertGtBlockNumber: DatabaseOperationMetrics,
+                SetFinalizedL1BlockNumber: DatabaseOperationMetrics,
+            },
+        },
+    ),
+}
+2026-03-02T12:43:29.685918Z  INFO node{idx=2}: sea_orm_migration::migrator: Applying all pending migrations
+2026-03-02T12:43:29.686437Z  INFO node{idx=2}: sea_orm_migration::migrator: Applying migration 'm20220101_000001_create_batch_commit_table'
+2026-03-02T12:43:29.687907Z  INFO node{idx=2}: sea_orm_migration::migrator: Migration 'm20220101_000001_create_batch_commit_table' has been applied
+2026-03-02T12:43:29.688169Z  INFO node{idx=2}: sea_orm_migration::migrator: Applying migration 'm20250304_125946_add_l1_msg_table'
+2026-03-02T12:43:29.688907Z  INFO node{idx=2}: sea_orm_migration::migrator: Migration 'm20250304_125946_add_l1_msg_table' has been applied
+2026-03-02T12:43:29.689124Z  INFO node{idx=2}: sea_orm_migration::migrator: Applying migration 'm20250408_132123_add_header_metadata'
+2026-03-02T12:43:29.689278Z  INFO node{idx=2}: sea_orm_migration::migrator: Migration 'm20250408_132123_add_header_metadata' has been applied
+2026-03-02T12:43:29.689477Z  INFO node{idx=2}: sea_orm_migration::migrator: Applying migration 'm20250408_150338_load_header_metadata'
+2026-03-02T12:43:29.689487Z  INFO node{idx=2}: sea_orm_migration::migrator: Migration 'm20250408_150338_load_header_metadata' has been applied
+2026-03-02T12:43:29.689607Z  INFO node{idx=2}: sea_orm_migration::migrator: Applying migration 'm20250411_072004_add_l2_block'
+2026-03-02T12:43:29.691046Z  INFO node{idx=2}: sea_orm_migration::migrator: Migration 'm20250411_072004_add_l2_block' has been applied
+2026-03-02T12:43:29.691309Z  INFO node{idx=2}: sea_orm_migration::migrator: Applying migration 'm20250616_223947_add_metadata'
+2026-03-02T12:43:29.691681Z  INFO node{idx=2}: sea_orm_migration::migrator: Migration 'm20250616_223947_add_metadata' has been applied
+2026-03-02T12:43:29.691777Z  INFO node{idx=2}: sea_orm_migration::migrator: Applying migration 'm20250904_175949_block_signature'
+2026-03-02T12:43:29.692007Z  INFO node{idx=2}: sea_orm_migration::migrator: Migration 'm20250904_175949_block_signature' has been applied
+2026-03-02T12:43:29.692244Z  INFO node{idx=2}: sea_orm_migration::migrator: Applying migration 'm20251028_110719_add_l1_block_table'
+2026-03-02T12:43:29.692428Z  INFO node{idx=2}: sea_orm_migration::migrator: Migration 'm20251028_110719_add_l1_block_table' has been applied
+2026-03-02T12:43:29.700481Z  INFO node{idx=2}: scroll::node::args: Starting engine driver fcs=ForkchoiceState { head: BlockInfo { number: 0, hash: 0x31ad487404525f8260b2d507892547a39850aa0280a2e4950438f444237fe4b7 }, safe: BlockInfo { number: 0, hash: 0x31ad487404525f8260b2d507892547a39850aa0280a2e4950438f444237fe4b7 }, finalized: BlockInfo { number: 0, hash: 0x31ad487404525f8260b2d507892547a39850aa0280a2e4950438f444237fe4b7 } } payload_building_duration=40
+2026-03-02T12:43:29.700532Z  INFO node{idx=2}: scroll::providers: Running with mock blob provider - all other blob provider configurations are ignored
+2026-03-02T12:43:29.701494Z  INFO node{idx=2}: reth::cli: Starting consensus engine
+2026-03-02T12:43:29.701557Z  INFO scroll::derivation_pipeline: Starting derivation pipeline worker
+2026-03-02T12:43:29.701941Z  INFO node{idx=2}: reth_node_events::node: Forkchoice updated head_block_hash=0x31ad487404525f8260b2d507892547a39850aa0280a2e4950438f444237fe4b7 safe_block_hash=0x31ad487404525f8260b2d507892547a39850aa0280a2e4950438f444237fe4b7 finalized_block_hash=0x31ad487404525f8260b2d507892547a39850aa0280a2e4950438f444237fe4b7
+2026-03-02T12:43:32.682331Z  INFO node{idx=2}: reth::cli: Status connected_peers=0 latest_block=0
+2026-03-02T12:43:34.696510Z  INFO node{idx=2}: reth_e2e_test_utils::network: Session established with peer: 0xbe607dbc7586bc1ed99f31b81bbe1a132c1d46579aefcbfd1c3a5ef1c8517ed666ff81a5b8d7e6582c106517523e5f72b7e76d466415aa45f95327baadd0c214
+2026-03-02T12:43:34.696936Z  INFO node{idx=2}: reth_e2e_test_utils::network: Session established with peer: 0x985963d1985d169e73e741aaa7af71eacad84c47e1247cabd01fe37de11086d5bbfb2301a1c49885981111067d9a950d180a99c2d38869cbd496306d7da9a2da
+2026-03-02T12:43:39.687164Z  INFO node{idx=2}: reth_e2e_test_utils::network: Session established with peer: 0x985963d1985d169e73e741aaa7af71eacad84c47e1247cabd01fe37de11086d5bbfb2301a1c49885981111067d9a950d180a99c2d38869cbd496306d7da9a2da
+2026-03-02T12:43:39.687776Z  INFO node{idx=2}: reth_e2e_test_utils::network: Session established with peer: 0x2a854fec1913ab788092e38bc059988bd54406e53074eaf80662b3f243810b82477f0830b7739dd12a550405b721d790b8fdda008a89da71779a0ed90192e8b3
+2026-03-02T12:44:42.565673Z  INFO node{idx=0}: reth::cli: Status connected_peers=2 latest_block=0
+2026-03-02T12:44:42.692899Z  INFO node{idx=1}: reth::cli: Status connected_peers=2 latest_block=0
+2026-03-02T12:44:47.681405Z  INFO node{idx=2}: reth::cli: Status connected_peers=2 latest_block=0
+2026-03-02T12:45:57.565270Z  INFO node{idx=0}: reth::cli: Status connected_peers=2 latest_block=0
+2026-03-02T12:45:57.691842Z  INFO node{idx=1}: reth::cli: Status connected_peers=2 latest_block=0
+2026-03-02T12:46:02.679649Z  INFO node{idx=2}: reth::cli: Status connected_peers=2 latest_block=0
+2026-03-02T12:46:59.731446Z  INFO node{idx=0}: reth::cli: Wrote network peers to file peers_file="/var/folders/gn/8krhcpg563g0p6zyjrm6pr_c0000gq/T/reth-test-KUYbLIZB/known-peers.json"
+2026-03-02T12:46:59.733156Z  INFO node{idx=1}: reth::cli: Wrote network peers to file peers_file="/var/folders/gn/8krhcpg563g0p6zyjrm6pr_c0000gq/T/reth-test-UXOFiwdf/known-peers.json"

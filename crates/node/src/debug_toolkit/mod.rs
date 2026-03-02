@@ -55,11 +55,13 @@
 //! ```
 
 pub mod actions;
+mod attach_repl;
 pub mod cli;
 mod commands;
 mod event_stream;
 mod repl;
 
+pub use attach_repl::AttachRepl;
 pub use cli::DebugArgs;
 pub use commands::*;
 pub use event_stream::*;
@@ -69,6 +71,6 @@ pub use repl::*;
 pub mod prelude {
     pub use super::{
         actions::{Action, ActionRegistry},
-        DebugRepl, EventStreamState,
+        AttachRepl, DebugRepl, EventStreamState,
     };
 }

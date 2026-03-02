@@ -44,12 +44,32 @@ pub enum Command {
     Db,
     /// Show log file path.
     Logs,
+    /// Admin commands (attach mode only).
+    Admin(AdminCommand),
+    /// Execute a raw JSON-RPC call and print the result.
+    Rpc {
+        /// The RPC method name (e.g. `eth_blockNumber`).
+        method: String,
+        /// Raw JSON params string (e.g. `["latest", false]`).
+        params: Option<String>,
+    },
     /// Show help.
     Help,
     /// Exit the REPL.
     Exit,
     /// Unknown command.
     Unknown(String),
+}
+
+/// Admin commands (attach mode only).
+#[derive(Debug, Clone)]
+pub enum AdminCommand {
+    /// Enable automatic sequencing.
+    EnableSequencing,
+    /// Disable automatic sequencing.
+    DisableSequencing,
+    /// Revert the node state to a specified L1 block number.
+    RevertToL1Block(u64),
 }
 
 /// Run command variants.
@@ -175,6 +195,8 @@ impl Command {
             "nodes" => Self::Nodes,
             "db" | "database" => Self::Db,
             "logs" | "log" => Self::Logs,
+            "admin" => Self::parse_admin(args),
+            "rpc" => Self::parse_rpc(args),
             "help" | "?" => Self::Help,
             "exit" | "quit" | "q" => Self::Exit,
             _ => Self::Unknown(cmd),
@@ -334,6 +356,32 @@ impl Command {
             Self::Run(RunCommand::Execute { name, args: action_args })
         }
     }
+
+    fn parse_admin(args: &[&str]) -> Self {
+        let subcmd = args.first().copied().unwrap_or("help");
+        let subargs = if args.len() > 1 { &args[1..] } else { &[] };
+
+        match subcmd {
+            "enable-seq" | "enable-sequencing" => Self::Admin(AdminCommand::EnableSequencing),
+            "disable-seq" | "disable-sequencing" => Self::Admin(AdminCommand::DisableSequencing),
+            "revert" | "revert-to-l1" => {
+                if let Some(n) = subargs.first().and_then(|s| s.parse::<u64>().ok()) {
+                    Self::Admin(AdminCommand::RevertToL1Block(n))
+                } else {
+                    Self::Unknown("admin revert requires a block number".to_string())
+                }
+            }
+            _ => Self::Unknown(format!("admin {}", subcmd)),
+        }
+    }
+
+    fn parse_rpc(args: &[&str]) -> Self {
+        let Some(method) = args.first() else {
+            return Self::Unknown("rpc requires a method name".to_string());
+        };
+        let params = if args.len() > 1 { Some(args[1..].join(" ")) } else { None };
+        Self::Rpc { method: method.to_string(), params }
+    }
 }
 
 /// Print the help message.
@@ -388,6 +436,16 @@ pub fn print_help() {
     println!();
     println!("{}", "Logs:".underline());
     println!("  logs                Show log file path and tail command");
+    println!();
+    println!("{}", "Admin (attach mode only):".underline());
+    println!("  admin enable-seq    Enable automatic sequencing");
+    println!("  admin disable-seq   Disable automatic sequencing");
+    println!("  admin revert <n>    Revert node state to L1 block number <n>");
+    println!();
+    println!("{}", "Raw RPC (attach mode):".underline());
+    println!("  rpc <method> [params]  Execute any JSON-RPC call and print result");
+    println!("  rpc eth_blockNumber");
+    println!("  rpc eth_getBlockByNumber [\"latest\",false]");
     println!();
     println!("{}", "Other:".underline());
     println!("  help                Show this help message");
