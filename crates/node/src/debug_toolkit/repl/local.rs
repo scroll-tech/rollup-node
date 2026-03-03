@@ -1,32 +1,30 @@
-//! Interactive REPL for debugging rollup nodes.
-
-use super::{
+/// Interactive REPL for debugging rollup nodes.
+use crate::debug_toolkit::{
     actions::ActionRegistry,
     commands::{
-        print_help, BlockArg, Command, EventsCommand, L1Command, PeersCommand, RunCommand,
-        TxCommand, WalletCommand,
+        print_help, AdminCommand, BlockArg, Command, EventsCommand, L1Command, PeersCommand,
+        RunCommand, TxCommand, WalletCommand,
     },
-    event_stream::EventStreamState,
+    event::stream::EventStreamState,
 };
 use crate::test_utils::{fixture::NodeType, TestFixture};
 use alloy_consensus::{SignableTransaction, TxEip1559, TxLegacy};
 use alloy_eips::{eip2718::Encodable2718, BlockNumberOrTag};
 use alloy_network::{TransactionResponse, TxSignerSync};
 use alloy_primitives::{address, Address, Bytes, TxKind, U256};
+use alloy_provider::ProviderBuilder;
 use alloy_rpc_types_eth::TransactionRequest;
 use alloy_signer_local::PrivateKeySigner;
 use alloy_sol_types::{sol, SolCall};
 use colored::Colorize;
-use crossterm::{
-    event::{self, Event, KeyCode, KeyModifiers},
-    terminal::{disable_raw_mode, enable_raw_mode},
-};
+use crossterm::terminal::{disable_raw_mode, enable_raw_mode};
 use futures::StreamExt;
 use reth_network::PeersInfo;
 use reth_network_api::Peers;
 use reth_network_peers::NodeRecord;
 use reth_rpc_api::EthApiServer;
 use reth_transaction_pool::TransactionPool;
+use scroll_alloy_network::Scroll;
 use std::{io::Write, path::PathBuf, str::FromStr, time::Duration};
 
 // L1 contract addresses
@@ -135,17 +133,7 @@ impl DebugRepl {
     pub async fn run(&mut self) -> eyre::Result<()> {
         self.running = true;
 
-        // Enable raw mode for proper terminal control
-        enable_raw_mode()?;
-
-        // Guard to ensure raw mode is disabled on exit
-        struct RawModeGuard;
-        impl Drop for RawModeGuard {
-            fn drop(&mut self) {
-                let _ = disable_raw_mode();
-            }
-        }
-        let _guard = RawModeGuard;
+        let _guard = super::terminal::RawModeGuard::new()?;
 
         // Print welcome message and initial status
         // Disable raw mode temporarily so println! works correctly
@@ -186,61 +174,20 @@ impl DebugRepl {
 
                 // Check for keyboard input (non-blocking)
                 _ = tokio::time::sleep(Duration::from_millis(50)) => {
-                    // Poll for keyboard events
-                    while event::poll(Duration::from_millis(0))? {
-                        if let Event::Key(key_event) = event::read()? {
-                            match key_event.code {
-                                KeyCode::Enter => {
-                                    print!("\r\n");
-                                    let _ = stdout.flush();
-                                    let line = input_buffer.trim().to_string();
-                                    input_buffer.clear();
-
-                                    if !line.is_empty() {
-                                        // Disable raw mode for command output (println! works normally)
-                                        let _ = disable_raw_mode();
-                                        if let Err(e) = self.execute_command(&line).await {
-                                            println!("{}: {}", "Error".red(), e);
-                                        }
-                                        // Re-enable raw mode for input
-                                        let _ = enable_raw_mode();
-                                    }
-
-                                    if self.running {
-                                        print!("{}", self.get_prompt());
-                                        let _ = stdout.flush();
-                                    }
-                                }
-                                KeyCode::Backspace => {
-                                    if !input_buffer.is_empty() {
-                                        input_buffer.pop();
-                                        print!("\x08 \x08"); // Move back, overwrite, move back
-                                        let _ = stdout.flush();
-                                    }
-                                }
-                                KeyCode::Char(c) => {
-                                    if key_event.modifiers.contains(KeyModifiers::CONTROL) && c == 'c' {
-                                        print!("\r\nUse 'exit' to quit\r\n");
-                                        print!("{}{}", self.get_prompt(), input_buffer);
-                                        let _ = stdout.flush();
-                                    } else if key_event.modifiers.contains(KeyModifiers::CONTROL) && c == 'd' {
-                                        print!("\r\n");
-                                        self.running = false;
-                                    } else {
-                                        input_buffer.push(c);
-                                        print!("{}", c);
-                                        let _ = stdout.flush();
-                                    }
-                                }
-                                KeyCode::Esc => {
-                                    // Clear current input
-                                    print!("\r\x1b[K{}", self.get_prompt());
-                                    let _ = stdout.flush();
-                                    input_buffer.clear();
-                                }
-                                _ => {}
+                    match super::terminal::poll_keyboard(&mut input_buffer, &self.get_prompt())? {
+                        super::terminal::InputAction::Command(line) => {
+                            let _ = disable_raw_mode();
+                            if let Err(e) = self.execute_command(&line).await {
+                                println!("{}: {}", "Error".red(), e);
+                            }
+                            let _ = enable_raw_mode();
+                            if self.running {
+                                print!("{}", self.get_prompt());
+                                let _ = stdout.flush();
                             }
                         }
+                        super::terminal::InputAction::Quit => self.running = false,
+                        super::terminal::InputAction::None => {}
                     }
                 }
             }
@@ -280,30 +227,14 @@ impl DebugRepl {
             Command::Nodes => self.cmd_list_nodes(),
             Command::Db => self.cmd_db(),
             Command::Logs => self.cmd_logs(),
+            Command::Admin(admin_cmd) => self.cmd_admin(admin_cmd).await,
+            Command::Rpc { method, params } => self.cmd_rpc(&method, params.as_deref()).await,
             Command::Help => {
                 print_help();
                 Ok(())
             }
             Command::Exit => {
                 self.running = false;
-                Ok(())
-            }
-            Command::Admin(_) => {
-                println!(
-                    "{}",
-                    "admin commands are only available in attach mode (--attach <url>).".yellow()
-                );
-                Ok(())
-            }
-            Command::Rpc { method, params: _ } => {
-                println!(
-                    "{}",
-                    format!(
-                        "rpc {} is only available in attach mode (--attach <url>). Use 'cast rpc {}' instead.",
-                        method, method
-                    )
-                    .yellow()
-                );
                 Ok(())
             }
             Command::Unknown(s) => {
@@ -324,7 +255,6 @@ impl DebugRepl {
         };
 
         let status = node.rollup_manager_handle.status().await?;
-        let fcs = &status.l2.fcs;
 
         println!("{}", format!("=== Node {} ({}) ===", self.active_node, node_type).bold());
 
@@ -336,96 +266,16 @@ impl DebugRepl {
         if let Some(addr) = http_addr {
             println!("  HTTP RPC:  http://{}", addr);
         }
-
-        // L2 Status
-        println!("{}", "L2:".underline());
-        println!(
-            "  Head:      #{} ({:.12}...)",
-            fcs.head_block_info().number.to_string().green(),
-            format!("{:?}", fcs.head_block_info().hash)
-        );
-        println!(
-            "  Safe:      #{} ({:.12}...)",
-            fcs.safe_block_info().number.to_string().yellow(),
-            format!("{:?}", fcs.safe_block_info().hash)
-        );
-        println!(
-            "  Finalized: #{} ({:.12}...)",
-            fcs.finalized_block_info().number.to_string().blue(),
-            format!("{:?}", fcs.finalized_block_info().hash)
-        );
-        println!(
-            "  Synced:    {}",
-            if status.l2.status.is_synced() { "true".green() } else { "false".red() }
-        );
-
-        // L1 Status
-        println!("{}", "L1:".underline());
-        println!("  Head:      #{}", status.l1.latest.to_string().cyan());
-        println!("  Finalized: #{}", status.l1.finalized);
-        println!("  Processed: #{}", status.l1.processed);
-        println!(
-            "  Synced:    {}",
-            if status.l1.status.is_synced() { "true".green() } else { "false".red() }
-        );
+        crate::debug_toolkit::shared::status::print_status_overview(&status);
 
         Ok(())
     }
 
-    /// Show detailed sync status (rollupNode_status RPC equivalent).
+    /// Show detailed sync status (`rollupNode_status` RPC equivalent).
     async fn cmd_sync_status(&self) -> eyre::Result<()> {
         let node = &self.fixture.nodes[self.active_node];
         let status = node.rollup_manager_handle.status().await?;
-
-        println!("{}", "Sync Status:".bold());
-        println!();
-
-        // L1 Sync Status
-        println!("{}", "L1 Sync:".underline());
-        println!(
-            "  Status:      {}",
-            if status.l1.status.is_synced() {
-                "SYNCED".green()
-            } else {
-                format!("{:?}", status.l1.status).yellow().to_string().into()
-            }
-        );
-        println!("  Latest:      #{}", status.l1.latest.to_string().cyan());
-        println!("  Finalized:   #{}", status.l1.finalized);
-        println!("  Processed:   #{}", status.l1.processed);
-        println!();
-
-        // L2 Sync Status
-        println!("{}", "L2 Sync:".underline());
-        println!(
-            "  Status:      {}",
-            if status.l2.status.is_synced() {
-                "SYNCED".green()
-            } else {
-                format!("{:?}", status.l2.status).yellow().to_string().into()
-            }
-        );
-        println!();
-
-        // Forkchoice State
-        let fcs = &status.l2.fcs;
-        println!("{}", "Forkchoice:".underline());
-        println!(
-            "  Head:        #{} ({:.12}...)",
-            fcs.head_block_info().number.to_string().green(),
-            format!("{:?}", fcs.head_block_info().hash)
-        );
-        println!(
-            "  Safe:        #{} ({:.12}...)",
-            fcs.safe_block_info().number.to_string().yellow(),
-            format!("{:?}", fcs.safe_block_info().hash)
-        );
-        println!(
-            "  Finalized:   #{} ({:.12}...)",
-            fcs.finalized_block_info().number.to_string().blue(),
-            format!("{:?}", fcs.finalized_block_info().hash)
-        );
-
+        crate::debug_toolkit::shared::status::print_sync_status(&status);
         Ok(())
     }
 
@@ -499,19 +349,7 @@ impl DebugRepl {
     async fn cmd_fcs(&self) -> eyre::Result<()> {
         let node = &self.fixture.nodes[self.active_node];
         let status = node.rollup_manager_handle.status().await?;
-        let fcs = &status.l2.fcs;
-
-        println!("{}", "Forkchoice State:".bold());
-        println!("  Head:");
-        println!("    Number: {}", fcs.head_block_info().number);
-        println!("    Hash:   {:?}", fcs.head_block_info().hash);
-        println!("  Safe:");
-        println!("    Number: {}", fcs.safe_block_info().number);
-        println!("    Hash:   {:?}", fcs.safe_block_info().hash);
-        println!("  Finalized:");
-        println!("    Number: {}", fcs.finalized_block_info().number);
-        println!("    Hash:   {:?}", fcs.finalized_block_info().hash);
-
+        crate::debug_toolkit::shared::status::print_forkchoice(&status);
         Ok(())
     }
 
@@ -797,16 +635,17 @@ impl DebugRepl {
                 let node = &self.fixture.nodes[self.active_node];
                 let tx_hash = node.node.rpc.inject_tx(raw_tx.clone()).await?;
 
-                println!("{}", "Transaction sent!".green());
-                println!("  Hash: {:?}", tx_hash);
-                println!("  From: {:?}", from_address);
-                println!("  To:   {:?}", to);
-                println!("  Value: {} wei", value);
-                println!("{}", "Note: Run 'build' to include in a block (sequencer mode)".dimmed());
+                crate::debug_toolkit::shared::output::print_tx_sent(
+                    &format!("{:?}", tx_hash),
+                    &format!("{:?}", from_address),
+                    &format!("{:?}", to),
+                    value,
+                    true,
+                );
             }
             TxCommand::Inject(bytes) => {
-                self.fixture.inject_tx_on(self.active_node, bytes.clone()).await?;
-                println!("{}", "Transaction injected".green());
+                let tx_hash = self.fixture.inject_tx_on(self.active_node, bytes.clone()).await?;
+                crate::debug_toolkit::shared::output::print_tx_injected(&format!("{:?}", tx_hash));
             }
         }
         Ok(())
@@ -1063,6 +902,50 @@ impl DebugRepl {
         Ok(())
     }
 
+    /// Call any JSON-RPC method against the active node and pretty-print result.
+    async fn cmd_rpc(&self, method: &str, params: Option<&str>) -> eyre::Result<()> {
+        let node = &self.fixture.nodes[self.active_node];
+        let http_addr = node
+            .node
+            .inner
+            .rpc_server_handle()
+            .http_local_addr()
+            .ok_or_else(|| eyre::eyre!("HTTP RPC is not available on active node"))?;
+        let rpc_url = format!("http://{}", http_addr);
+
+        let provider: alloy_provider::RootProvider<Scroll> = ProviderBuilder::default()
+            .connect(rpc_url.as_str())
+            .await
+            .map_err(|e| eyre::eyre!("Failed to connect to node RPC {}: {}", rpc_url, e))?;
+        let pretty =
+            crate::debug_toolkit::shared::rpc::raw_value(&provider, method, params).await?;
+        crate::debug_toolkit::shared::output::print_pretty_json(&pretty)
+    }
+
+    /// Handle admin commands directly through the in-process rollup manager handle.
+    async fn cmd_admin(&self, cmd: AdminCommand) -> eyre::Result<()> {
+        let handle = &self.fixture.nodes[self.active_node].rollup_manager_handle;
+        match cmd {
+            AdminCommand::EnableSequencing => {
+                let result = handle.enable_automatic_sequencing().await?;
+                crate::debug_toolkit::shared::output::print_admin_enable_result(result);
+            }
+            AdminCommand::DisableSequencing => {
+                let result = handle.disable_automatic_sequencing().await?;
+                crate::debug_toolkit::shared::output::print_admin_disable_result(result);
+            }
+            AdminCommand::RevertToL1Block(block_number) => {
+                crate::debug_toolkit::shared::output::print_admin_revert_start(block_number);
+                let result = handle.revert_to_l1_block(block_number).await?;
+                crate::debug_toolkit::shared::output::print_admin_revert_result(
+                    block_number,
+                    result,
+                );
+            }
+        }
+        Ok(())
+    }
+
     /// Show database path and access command.
     fn cmd_db(&self) -> eyre::Result<()> {
         let node = &self.fixture.nodes[self.active_node];
@@ -1086,16 +969,7 @@ impl DebugRepl {
 
     /// Show log file path and tail command.
     fn cmd_logs(&self) -> eyre::Result<()> {
-        println!("{}", "Log File:".bold());
-        if let Some(path) = &self.log_path {
-            println!("  Path: {}", path.display());
-            println!();
-            println!("{}", "View logs in another terminal:".underline());
-            println!("  tail -f {}", path.display());
-        } else {
-            println!("  {}", "No log file configured (logs going to stdout)".dimmed());
-        }
-
+        crate::debug_toolkit::shared::output::print_log_file(&self.log_path);
         Ok(())
     }
 }

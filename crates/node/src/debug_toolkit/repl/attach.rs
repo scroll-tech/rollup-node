@@ -1,33 +1,19 @@
-//! REPL for attaching to an already-running scroll node via JSON-RPC.
-//!
-//! Unlike [`super::DebugRepl`] which wraps an in-process [`TestFixture`], this REPL
-//! connects to an existing node entirely over JSON-RPC using an alloy HTTP provider.
-//! All namespaces — `eth_*`, `txpool_*`, `admin_*`, `rollupNode_*`, `rollupNodeAdmin_*` —
-//! are accessed via `Provider::raw_request`, keeping the dependency surface minimal.
-//!
-//! # Usage
-//! ```bash
-//! scroll-debug --attach http://localhost:8545
-//! scroll-debug --attach http://localhost:8545 --private-key 0xac0974...
-//! ```
-
-use super::commands::{
+/// REPL for attaching to an already-running scroll node via JSON-RPC.
+use crate::debug_toolkit::commands::{
     print_help, AdminCommand, BlockArg, Command, EventsCommand, L1Command, PeersCommand, TxCommand,
 };
 use alloy_consensus::{SignableTransaction, TxEip1559};
 use alloy_eips::{eip2718::Encodable2718, BlockId, BlockNumberOrTag};
-use alloy_network::{Ethereum, TxSignerSync};
+use alloy_network::TxSignerSync;
 use alloy_primitives::TxKind;
 use alloy_provider::{Provider, ProviderBuilder};
 use alloy_signer_local::PrivateKeySigner;
 use colored::Colorize;
-use crossterm::{
-    event::{self, Event, KeyCode, KeyModifiers},
-    terminal::{disable_raw_mode, enable_raw_mode},
-};
+use crossterm::terminal::{disable_raw_mode, enable_raw_mode};
 use reqwest::Url;
 use rollup_node_chain_orchestrator::ChainOrchestratorStatus;
-use std::{borrow::Cow, io::Write, path::PathBuf, time::Duration};
+use scroll_alloy_network::Scroll;
+use std::{io::Write, path::PathBuf, time::Duration};
 
 /// Interactive REPL that attaches to a running node via JSON-RPC.
 #[derive(Debug)]
@@ -35,7 +21,7 @@ pub struct AttachRepl {
     /// The RPC URL of the target node.
     url: Url,
     /// Alloy provider — all RPC calls including custom namespaces go through `raw_request`.
-    provider: alloy_provider::RootProvider<Ethereum>,
+    provider: alloy_provider::RootProvider<Scroll>,
     /// Optional private key for signing transactions locally.
     signer: Option<PrivateKeySigner>,
     /// Whether the REPL is running.
@@ -96,14 +82,7 @@ impl AttachRepl {
     pub async fn run(&mut self) -> eyre::Result<()> {
         self.running = true;
 
-        enable_raw_mode()?;
-        struct RawModeGuard;
-        impl Drop for RawModeGuard {
-            fn drop(&mut self) {
-                let _ = disable_raw_mode();
-            }
-        }
-        let _guard = RawModeGuard;
+        let _guard = super::terminal::RawModeGuard::new()?;
 
         let _ = disable_raw_mode();
         println!();
@@ -112,7 +91,7 @@ impl AttachRepl {
         if let Some(signer) = &self.signer {
             println!("Signer:       {:?}", signer.address());
         } else {
-            println!("{}", "No signer – tx send/inject require --private-key".yellow());
+            println!("{}", "No signer, tx send/inject require --private-key".yellow());
         }
         println!("Type 'help' for available commands, 'exit' to quit.");
         println!();
@@ -153,58 +132,22 @@ impl AttachRepl {
                     }
                 }
 
-                // Keyboard input (50 ms poll).
+                // Check for keyboard input (non-blocking)
                 _ = tokio::time::sleep(Duration::from_millis(50)) => {
-                    while event::poll(Duration::from_millis(0))? {
-                        if let Event::Key(key_event) = event::read()? {
-                            match key_event.code {
-                                KeyCode::Enter => {
-                                    print!("\r\n");
-                                    let _ = stdout.flush();
-                                    let line = input_buffer.trim().to_string();
-                                    input_buffer.clear();
-
-                                    if !line.is_empty() {
-                                        let _ = disable_raw_mode();
-                                        if let Err(e) = self.execute_command(&line).await {
-                                            println!("{}: {}", "Error".red(), e);
-                                        }
-                                        let _ = enable_raw_mode();
-                                    }
-
-                                    if self.running {
-                                        print!("{}", self.get_prompt());
-                                        let _ = stdout.flush();
-                                    }
-                                }
-                                KeyCode::Backspace => {
-                                    if !input_buffer.is_empty() {
-                                        input_buffer.pop();
-                                        print!("\x08 \x08");
-                                        let _ = stdout.flush();
-                                    }
-                                }
-                                KeyCode::Char(c) => {
-                                    if key_event.modifiers.contains(KeyModifiers::CONTROL) && c == 'c' {
-                                        print!("\r\nUse 'exit' to quit\r\n{}{}", self.get_prompt(), input_buffer);
-                                        let _ = stdout.flush();
-                                    } else if key_event.modifiers.contains(KeyModifiers::CONTROL) && c == 'd' {
-                                        print!("\r\n");
-                                        self.running = false;
-                                    } else {
-                                        input_buffer.push(c);
-                                        print!("{}", c);
-                                        let _ = stdout.flush();
-                                    }
-                                }
-                                KeyCode::Esc => {
-                                    print!("\r\x1b[K{}", self.get_prompt());
-                                    let _ = stdout.flush();
-                                    input_buffer.clear();
-                                }
-                                _ => {}
+                    match super::terminal::poll_keyboard(&mut input_buffer, &self.get_prompt())? {
+                        super::terminal::InputAction::Command(line) => {
+                            let _ = disable_raw_mode();
+                            if let Err(e) = self.execute_command(&line).await {
+                                println!("{}: {}", "Error".red(), e);
+                            }
+                            let _ = enable_raw_mode();
+                            if self.running {
+                                print!("{}", self.get_prompt());
+                                let _ = stdout.flush();
                             }
                         }
+                        super::terminal::InputAction::Quit => self.running = false,
+                        super::terminal::InputAction::None => {}
                     }
                 }
             }
@@ -284,22 +227,14 @@ impl AttachRepl {
 
     /// Call a custom-namespace JSON-RPC method and deserialize the response.
     ///
-    /// Uses `raw_request_dyn` (no trait bounds on P/R) combined with serde_json for
+    /// Uses `raw_request_dyn` (no trait bounds on P/R) combined with `serde_json` for
     /// maximum compatibility regardless of the provider's network/transport generics.
     async fn raw<R: serde::de::DeserializeOwned>(
         &self,
         method: &'static str,
         params: impl serde::Serialize,
     ) -> eyre::Result<R> {
-        let raw_params = serde_json::value::to_raw_value(&params)
-            .map_err(|e| eyre::eyre!("Failed to serialize params for {}: {}", method, e))?;
-        let raw_result = self
-            .provider
-            .raw_request_dyn(Cow::Borrowed(method), &raw_params)
-            .await
-            .map_err(|e| eyre::eyre!("{}: {}", method, e))?;
-        serde_json::from_str(raw_result.get())
-            .map_err(|e| eyre::eyre!("Failed to deserialize response from {}: {}", method, e))
+        crate::debug_toolkit::shared::rpc::raw_typed(&self.provider, method, params).await
     }
 
     // -------------------------------------------------------------------------
@@ -309,7 +244,6 @@ impl AttachRepl {
     /// `status` — show node status via `rollupNode_status`.
     async fn cmd_status(&self) -> eyre::Result<()> {
         let status: ChainOrchestratorStatus = self.raw("rollupNode_status", ()).await?;
-        let fcs = &status.l2.fcs;
 
         println!("{}", "=== Node Status ===".bold());
         println!("{}", "Node:".underline());
@@ -317,36 +251,7 @@ impl AttachRepl {
         if let Some(signer) = &self.signer {
             println!("  From: {:?}", signer.address());
         }
-
-        println!("{}", "L2:".underline());
-        println!(
-            "  Head:      #{} ({:.12}...)",
-            fcs.head_block_info().number.to_string().green(),
-            format!("{:?}", fcs.head_block_info().hash)
-        );
-        println!(
-            "  Safe:      #{} ({:.12}...)",
-            fcs.safe_block_info().number.to_string().yellow(),
-            format!("{:?}", fcs.safe_block_info().hash)
-        );
-        println!(
-            "  Finalized: #{} ({:.12}...)",
-            fcs.finalized_block_info().number.to_string().blue(),
-            format!("{:?}", fcs.finalized_block_info().hash)
-        );
-        println!(
-            "  Synced:    {}",
-            if status.l2.status.is_synced() { "true".green() } else { "false".red() }
-        );
-
-        println!("{}", "L1:".underline());
-        println!("  Head:      #{}", status.l1.latest.to_string().cyan());
-        println!("  Finalized: #{}", status.l1.finalized);
-        println!("  Processed: #{}", status.l1.processed);
-        println!(
-            "  Synced:    {}",
-            if status.l1.status.is_synced() { "true".green() } else { "false".red() }
-        );
+        crate::debug_toolkit::shared::status::print_status_overview(&status);
 
         Ok(())
     }
@@ -354,69 +259,14 @@ impl AttachRepl {
     /// `sync-status` — detailed sync status.
     async fn cmd_sync_status(&self) -> eyre::Result<()> {
         let status: ChainOrchestratorStatus = self.raw("rollupNode_status", ()).await?;
-
-        println!("{}", "Sync Status:".bold());
-        println!();
-        println!("{}", "L1 Sync:".underline());
-        println!(
-            "  Status:    {}",
-            if status.l1.status.is_synced() {
-                "SYNCED".green()
-            } else {
-                format!("{:?}", status.l1.status).yellow().to_string().into()
-            }
-        );
-        println!("  Latest:    #{}", status.l1.latest.to_string().cyan());
-        println!("  Finalized: #{}", status.l1.finalized);
-        println!("  Processed: #{}", status.l1.processed);
-        println!();
-        println!("{}", "L2 Sync:".underline());
-        println!(
-            "  Status:    {}",
-            if status.l2.status.is_synced() {
-                "SYNCED".green()
-            } else {
-                format!("{:?}", status.l2.status).yellow().to_string().into()
-            }
-        );
-        println!();
-        let fcs = &status.l2.fcs;
-        println!("{}", "Forkchoice:".underline());
-        println!(
-            "  Head:      #{} ({:.12}...)",
-            fcs.head_block_info().number.to_string().green(),
-            format!("{:?}", fcs.head_block_info().hash)
-        );
-        println!(
-            "  Safe:      #{} ({:.12}...)",
-            fcs.safe_block_info().number.to_string().yellow(),
-            format!("{:?}", fcs.safe_block_info().hash)
-        );
-        println!(
-            "  Finalized: #{} ({:.12}...)",
-            fcs.finalized_block_info().number.to_string().blue(),
-            format!("{:?}", fcs.finalized_block_info().hash)
-        );
-
+        crate::debug_toolkit::shared::status::print_sync_status(&status);
         Ok(())
     }
 
     /// `fcs` — show forkchoice state.
     async fn cmd_fcs(&self) -> eyre::Result<()> {
         let status: ChainOrchestratorStatus = self.raw("rollupNode_status", ()).await?;
-        let fcs = &status.l2.fcs;
-
-        println!("{}", "Forkchoice State:".bold());
-        println!("  Head:");
-        println!("    Number: {}", fcs.head_block_info().number);
-        println!("    Hash:   {:?}", fcs.head_block_info().hash);
-        println!("  Safe:");
-        println!("    Number: {}", fcs.safe_block_info().number);
-        println!("    Hash:   {:?}", fcs.safe_block_info().hash);
-        println!("  Finalized:");
-        println!("    Number: {}", fcs.finalized_block_info().number);
-        println!("    Hash:   {:?}", fcs.finalized_block_info().hash);
-
+        crate::debug_toolkit::shared::status::print_forkchoice(&status);
         Ok(())
     }
 
@@ -522,7 +372,7 @@ impl AttachRepl {
     }
 
     /// `tx pending` / `tx send` / `tx inject`.
-    async fn cmd_tx(&mut self, cmd: TxCommand) -> eyre::Result<()> {
+    async fn cmd_tx(&self, cmd: TxCommand) -> eyre::Result<()> {
         match cmd {
             TxCommand::Pending => {
                 let result: serde_json::Value = self.raw("txpool_content", ()).await?;
@@ -556,13 +406,48 @@ impl AttachRepl {
                     .as_str()
                     .and_then(|s| u64::from_str_radix(s.trim_start_matches("0x"), 16).ok())
                     .unwrap_or(1_000_000_000);
+                let base_fee_u128 = base_fee as u128;
+                // Keep priority tip conservative on low-fee chains and always satisfy:
+                // max_fee_per_gas >= max_priority_fee_per_gas.
+                let max_priority_fee_per_gas = (base_fee_u128 / 2).max(1);
+                let max_fee_per_gas = (base_fee_u128 * 2).max(max_priority_fee_per_gas);
+                let gas_limit = match self
+                    .raw::<serde_json::Value>(
+                        "eth_estimateGas",
+                        [serde_json::json!({
+                            "from": format!("{:#x}", from_address),
+                            "to": format!("{:#x}", to),
+                            "value": format!("0x{value:x}"),
+                        })],
+                    )
+                    .await
+                {
+                    Ok(v) => v
+                        .as_str()
+                        .and_then(|s| u64::from_str_radix(s.trim_start_matches("0x"), 16).ok())
+                        // Add a small safety buffer on top of estimate.
+                        .map(|g| g.saturating_mul(12) / 10)
+                        .filter(|g| *g > 0)
+                        .unwrap_or(21_000),
+                    Err(e) => {
+                        println!(
+                            "{}",
+                            format!(
+                                "Warning: eth_estimateGas failed ({}), falling back to 21000",
+                                e
+                            )
+                            .yellow()
+                        );
+                        21_000
+                    }
+                };
 
                 let mut tx = TxEip1559 {
                     chain_id,
                     nonce,
-                    gas_limit: 21000,
-                    max_fee_per_gas: base_fee as u128 * 2,
-                    max_priority_fee_per_gas: 1_000_000_000,
+                    gas_limit,
+                    max_fee_per_gas,
+                    max_priority_fee_per_gas,
                     to: TxKind::Call(to),
                     value,
                     access_list: Default::default(),
@@ -575,17 +460,22 @@ impl AttachRepl {
 
                 let tx_hash: serde_json::Value =
                     self.raw("eth_sendRawTransaction", [raw_tx]).await?;
-                println!("{}", "Transaction sent!".green());
-                println!("  Hash: {}", tx_hash);
-                println!("  From: {:?}", from_address);
-                println!("  To:   {:?}", to);
-                println!("  Value: {} wei", value);
+                let tx_hash_str =
+                    tx_hash.as_str().map(ToOwned::to_owned).unwrap_or_else(|| tx_hash.to_string());
+                crate::debug_toolkit::shared::output::print_tx_sent(
+                    &tx_hash_str,
+                    &format!("{:?}", from_address),
+                    &format!("{:?}", to),
+                    value,
+                    false,
+                );
             }
             TxCommand::Inject(bytes) => {
                 let hex = alloy_primitives::hex::encode_prefixed(&bytes);
                 let tx_hash: serde_json::Value = self.raw("eth_sendRawTransaction", [hex]).await?;
-                println!("{}", "Transaction injected!".green());
-                println!("  Hash: {}", tx_hash);
+                let tx_hash_str =
+                    tx_hash.as_str().map(ToOwned::to_owned).unwrap_or_else(|| tx_hash.to_string());
+                crate::debug_toolkit::shared::output::print_tx_injected(&tx_hash_str);
             }
         }
         Ok(())
@@ -640,30 +530,21 @@ impl AttachRepl {
             AdminCommand::EnableSequencing => {
                 let result: bool =
                     self.raw("rollupNodeAdmin_enableAutomaticSequencing", ()).await?;
-                if result {
-                    println!("{}", "Automatic sequencing enabled".green());
-                } else {
-                    println!("{}", "Enable sequencing returned false".yellow());
-                }
+                crate::debug_toolkit::shared::output::print_admin_enable_result(result);
             }
             AdminCommand::DisableSequencing => {
                 let result: bool =
                     self.raw("rollupNodeAdmin_disableAutomaticSequencing", ()).await?;
-                if result {
-                    println!("{}", "Automatic sequencing disabled".yellow());
-                } else {
-                    println!("{}", "Disable sequencing returned false".yellow());
-                }
+                crate::debug_toolkit::shared::output::print_admin_disable_result(result);
             }
             AdminCommand::RevertToL1Block(block_number) => {
-                println!("{}", format!("Reverting to L1 block {}...", block_number).yellow());
+                crate::debug_toolkit::shared::output::print_admin_revert_start(block_number);
                 let result: bool =
                     self.raw("rollupNodeAdmin_revertToL1Block", [block_number]).await?;
-                if result {
-                    println!("{}", format!("Reverted to L1 block {}", block_number).green());
-                } else {
-                    println!("{}", "Revert returned false".yellow());
-                }
+                crate::debug_toolkit::shared::output::print_admin_revert_result(
+                    block_number,
+                    result,
+                );
             }
         }
         Ok(())
@@ -671,41 +552,14 @@ impl AttachRepl {
 
     /// `rpc <method> [params]` — call any JSON-RPC method and pretty-print the result.
     async fn cmd_rpc(&self, method: &str, params: Option<&str>) -> eyre::Result<()> {
-        let raw_params = match params {
-            None => serde_json::value::to_raw_value(&())?,
-            Some(p) => {
-                // Try to parse as JSON first; fall back to treating as a string value
-                let val: serde_json::Value = serde_json::from_str(p)
-                    .unwrap_or_else(|_| serde_json::Value::String(p.to_string()));
-                // Ensure always an array for JSON-RPC
-                let arr = if val.is_array() { val } else { serde_json::Value::Array(vec![val]) };
-                serde_json::value::to_raw_value(&arr)?
-            }
-        };
-
-        let result = self
-            .provider
-            .raw_request_dyn(Cow::Owned(method.to_string()), &raw_params)
-            .await
-            .map_err(|e| eyre::eyre!("{}: {}", method, e))?;
-
-        // Pretty-print via serde_json::Value
-        let pretty: serde_json::Value = serde_json::from_str(result.get())?;
-        println!("{}", serde_json::to_string_pretty(&pretty)?);
-        Ok(())
+        let pretty =
+            crate::debug_toolkit::shared::rpc::raw_value(&self.provider, method, params).await?;
+        crate::debug_toolkit::shared::output::print_pretty_json(&pretty)
     }
 
     /// `logs` — show log file path.
     fn cmd_logs(&self) -> eyre::Result<()> {
-        println!("{}", "Log File:".bold());
-        if let Some(path) = &self.log_path {
-            println!("  Path: {}", path.display());
-            println!();
-            println!("{}", "View logs in another terminal:".underline());
-            println!("  tail -f {}", path.display());
-        } else {
-            println!("  {}", "No log file configured (logs going to stdout)".dimmed());
-        }
+        crate::debug_toolkit::shared::output::print_log_file(&self.log_path);
         Ok(())
     }
 }

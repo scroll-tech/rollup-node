@@ -44,7 +44,7 @@ pub enum Command {
     Db,
     /// Show log file path.
     Logs,
-    /// Admin commands (attach mode only).
+    /// Admin commands.
     Admin(AdminCommand),
     /// Execute a raw JSON-RPC call and print the result.
     Rpc {
@@ -61,7 +61,7 @@ pub enum Command {
     Unknown(String),
 }
 
-/// Admin commands (attach mode only).
+/// Admin commands.
 #[derive(Debug, Clone)]
 pub enum AdminCommand {
     /// Enable automatic sequencing.
@@ -379,7 +379,7 @@ impl Command {
         let Some(method) = args.first() else {
             return Self::Unknown("rpc requires a method name".to_string());
         };
-        let params = if args.len() > 1 { Some(args[1..].join(" ")) } else { None };
+        let params = (args.len() > 1).then(|| args[1..].join(" "));
         Self::Rpc { method: method.to_string(), params }
     }
 }
@@ -437,12 +437,12 @@ pub fn print_help() {
     println!("{}", "Logs:".underline());
     println!("  logs                Show log file path and tail command");
     println!();
-    println!("{}", "Admin (attach mode only):".underline());
+    println!("{}", "Admin:".underline());
     println!("  admin enable-seq    Enable automatic sequencing");
     println!("  admin disable-seq   Disable automatic sequencing");
     println!("  admin revert <n>    Revert node state to L1 block number <n>");
     println!();
-    println!("{}", "Raw RPC (attach mode):".underline());
+    println!("{}", "Raw RPC:".underline());
     println!("  rpc <method> [params]  Execute any JSON-RPC call and print result");
     println!("  rpc eth_blockNumber");
     println!("  rpc eth_getBlockByNumber [\"latest\",false]");

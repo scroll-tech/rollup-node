@@ -1,6 +1,11 @@
 # Debug Toolkit
 
-The Debug Toolkit is an interactive REPL (Read-Eval-Print Loop) for debugging, development, and hackathon scenarios. It allows you to spin up local follower nodes that connect to a remote sequencer and L1, run tests, execute scripts, and inspect chain state.
+The Debug Toolkit is an interactive REPL (Read-Eval-Print Loop) for debugging, development, and hackathon scenarios.
+
+It supports two modes:
+
+- **Attach mode**: connect to an already-running node over JSON-RPC.
+- **Local (spawn) mode**: spin up a local test network and interact with in-process nodes.
 
 ## Getting Started
 
@@ -24,7 +29,22 @@ Build with the `debug-toolkit` feature flag:
 cargo build -p rollup-node --features debug-toolkit --release
 ```
 
-## Connecting to a Remote Network
+## Attach Mode
+
+Use attach mode when you want to inspect or control an already-running node:
+
+```bash
+cargo run --features debug-toolkit --bin scroll-debug -- \
+    --attach http://localhost:8545 \
+    --private-key <hex_private_key>
+```
+
+Notes:
+
+- `--private-key` is optional, but required for `tx send` and `tx inject`.
+- Commands that depend on local fixtures (`build`, `run`, `node`, `db`, L1 mock injection) are only available in local (spawn) mode.
+
+## Connecting to a Remote Network (Local (spawn) Mode)
 
 The primary use case is connecting local follower nodes to a remote sequencer and L1. This allows you to run tests and scripts against a live network.
 
@@ -68,7 +88,7 @@ This creates local follower nodes that:
 | `--valid-signer <addr>` | Authorized block signer address for consensus validation |
 | `--log-file <path>` | Path to log file (default: `./scroll-debug-<pid>.log`) |
 
-## Local-Only Mode
+## Local (Spawn) Mode
 
 You can also run a fully local environment with a mock L1 and local sequencer for offline development:
 
@@ -312,6 +332,27 @@ Log File:
 
 View logs in another terminal:
   tail -f ./scroll-debug-12345.log
+```
+
+### Admin
+
+| Command | Description |
+|---------|-------------|
+| `admin enable-seq` | Enable automatic sequencing |
+| `admin disable-seq` | Disable automatic sequencing |
+| `admin revert <n>` | Revert node state to L1 block number `n` |
+
+### Raw RPC
+
+| Command | Description |
+|---------|-------------|
+| `rpc <method> [params]` | Execute any JSON-RPC call and print result |
+
+**Examples:**
+
+```bash
+rpc eth_blockNumber
+rpc eth_getBlockByNumber ["latest",false]
 ```
 
 ### Other

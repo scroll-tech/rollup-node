@@ -50,7 +50,11 @@ fn main() -> eyre::Result<()> {
     eprintln!("Logs: {}", log_path.display());
     eprintln!("Tail: tail -f {}", log_path.display());
     eprintln!();
-    eprintln!("Starting nodes (this may take a moment)...");
+    if let Some(url) = &args.attach {
+        eprintln!("Attaching to node at {}...", url);
+    } else {
+        eprintln!("Starting nodes (this may take a moment)...");
+    }
 
     // Create tokio runtime and run
     tokio::runtime::Builder::new_multi_thread()

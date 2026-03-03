@@ -55,17 +55,16 @@
 //! ```
 
 pub mod actions;
-mod attach_repl;
 pub mod cli;
 mod commands;
-mod event_stream;
+mod event;
 mod repl;
+mod shared;
 
-pub use attach_repl::AttachRepl;
 pub use cli::DebugArgs;
 pub use commands::*;
-pub use event_stream::*;
-pub use repl::*;
+pub use event::*;
+pub use repl::{AttachRepl, DebugRepl};
 
 /// Prelude for convenient imports.
 pub mod prelude {

@@ -176,9 +176,9 @@ impl TestFixture {
         &mut self,
         node_index: usize,
         tx: impl Into<alloy_primitives::Bytes>,
-    ) -> eyre::Result<()> {
-        self.nodes[node_index].node.rpc.inject_tx(tx.into()).await?;
-        Ok(())
+    ) -> eyre::Result<alloy_primitives::B256> {
+        let tx_hash = self.nodes[node_index].node.rpc.inject_tx(tx.into()).await?;
+        Ok(tx_hash)
     }
 
     /// Get the current (latest) block from a specific node.

@@ -1,5 +1,4 @@
-//! Background event streaming for the debug REPL.
-
+/// Background event streaming for the debug REPL.
 use colored::Colorize;
 use rollup_node_chain_orchestrator::ChainOrchestratorEvent;
 use std::{

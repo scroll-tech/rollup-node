@@ -23,7 +23,7 @@ pub struct DebugArgs {
     // ── Attach mode ──────────────────────────────────────────────────────────
     /// Attach to an already-running node at this RPC URL instead of spawning a test network.
     ///
-    /// Example: --attach http://localhost:8545
+    /// Example: `--attach <http://localhost:8545>`
     #[arg(
         long,
         conflicts_with_all = ["chain", "sequencer", "followers", "l1_url", "bootnodes", "valid_signer"]
