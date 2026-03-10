@@ -14,6 +14,8 @@ use scroll_network::NewBlockWithPeer;
 pub enum ChainOrchestratorEvent {
     /// A received block failed the consensus checks.
     BlockFailedConsensusChecks(B256, PeerId),
+    /// A finalized block was received from a peer.
+    L2FinalizedBlockReceived(B256, PeerId),
     /// A new block has been received from the network but we have insufficient data to process it
     /// due to being in optimistic mode.
     InsufficientDataForReceivedBlock(B256),
@@ -44,7 +46,7 @@ pub enum ChainOrchestratorEvent {
         l1_block_number: u64,
     },
     /// A batch has been finalized returning a list of finalized batches.
-    BatchFinalized {
+    BatchFinalizeIndexed {
         /// The L1 block info at which the batch finalization event was received.
         l1_block_info: BlockInfo,
         /// The list of batches that have been triggered for the derivation pipeline.
@@ -88,6 +90,9 @@ pub enum ChainOrchestratorEvent {
     L2ConsolidatedBlockCommitted(L2BlockInfoWithL1Messages),
     /// A new block has been sequenced by the sequencer.
     BlockSequenced(ScrollBlock),
+    /// Block building was skipped because the built payload was empty and empty blocks are
+    /// disabled.
+    BlockBuildingSkipped,
     /// A new block has been signed by the signer.
     SignedBlock {
         /// The signed block.
@@ -119,4 +124,6 @@ pub enum ChainOrchestratorEvent {
     },
     /// The head of the fork choice state has been updated in the engine driver.
     FcsHeadUpdated(BlockInfo),
+    /// The chain orchestrator is shutting down.
+    Shutdown,
 }

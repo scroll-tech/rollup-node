@@ -71,7 +71,11 @@ impl<'a> TransferTxBuilder<'a> {
         drop(wallet);
 
         // Inject into the target node
-        let node = &self.tx_helper.fixture.nodes[self.tx_helper.target_node_index];
+        let node = self.tx_helper.fixture.nodes[self.tx_helper.target_node_index]
+            .as_ref()
+            .ok_or_else(|| {
+                eyre::eyre!("Node at index {} has been shutdown", self.tx_helper.target_node_index)
+            })?;
         let tx_hash = node.node.rpc.inject_tx(raw_tx).await?;
 
         Ok(tx_hash)

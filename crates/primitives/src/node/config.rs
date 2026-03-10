@@ -14,7 +14,7 @@ pub const SEPOLIA_ROLLUP_CONTRACT_ADDRESS: Address =
 
 /// The address of the Scroll Rollup contract on Devnet.
 pub const DEVNET_ROLLUP_CONTRACT_ADDRESS: Address =
-    address!("000000000000000000000000000000000000dead");
+    address!("0x5FC8d32690cc91D4c39d9d3abcBD16989F875707");
 
 /// The address of the Scroll L1 message queue v1 contract on Mainnet.
 pub const MAINNET_L1_MESSAGE_QUEUE_V1_CONTRACT_ADDRESS: Address =
@@ -26,7 +26,7 @@ pub const SEPOLIA_L1_MESSAGE_QUEUE_V1_CONTRACT_ADDRESS: Address =
 
 /// The address of the Scroll L1 message queue v1 contract on Devnet.
 pub const DEVNET_L1_MESSAGE_QUEUE_V1_CONTRACT_ADDRESS: Address =
-    address!("000000000000000000000000000000000001dead");
+    address!("0xCf7Ed3AccA5a467e9e704C703E8D87F634fB0Fc9");
 
 /// The address of the Scroll L1 message queue v2 contract on Mainnet.
 pub const MAINNET_L1_MESSAGE_QUEUE_V2_CONTRACT_ADDRESS: Address =
@@ -38,7 +38,7 @@ pub const SEPOLIA_L1_MESSAGE_QUEUE_V2_CONTRACT_ADDRESS: Address =
 
 /// The address of the Scroll L1 message queue v2 contract on Devnet.
 pub const DEVNET_L1_MESSAGE_QUEUE_V2_CONTRACT_ADDRESS: Address =
-    address!("000000000000000000000000000000000002dead");
+    address!("0xDc64a140Aa3E981100a9becA4E685f962f0cF6C9");
 
 /// The address of the system contract on Mainnet.
 pub const MAINNET_SYSTEM_CONTRACT_ADDRESS: Address =
@@ -50,7 +50,7 @@ pub const SEPOLIA_SYSTEM_CONTRACT_ADDRESS: Address =
 
 /// The address of the system contract on Devnet.
 pub const DEV_SYSTEM_CONTRACT_ADDRESS: Address =
-    address!("000000000000000000000000000000000003dead");
+    address!("0x9fE46736679d2D9a65F0992F2272dE9f3c7fa6e0");
 
 /// The L1 start block for Mainnet.
 pub const MAINNET_L1_START_BLOCK_NUMBER: u64 = 18306000;

@@ -162,7 +162,7 @@ pub fn event_type_name(event: &ChainOrchestratorEvent) -> String {
         ChainOrchestratorEvent::BlockAlreadyKnown(_, _) => "BlockAlreadyKnown".to_string(),
         ChainOrchestratorEvent::OldForkReceived { .. } => "OldForkReceived".to_string(),
         ChainOrchestratorEvent::BatchCommitIndexed { .. } => "BatchCommitIndexed".to_string(),
-        ChainOrchestratorEvent::BatchFinalized { .. } => "BatchFinalized".to_string(),
+        ChainOrchestratorEvent::BatchFinalizeIndexed { .. } => "BatchFinalizeIndexed".to_string(),
         ChainOrchestratorEvent::L2ChainCommitted(_, _, _) => "L2ChainCommitted".to_string(),
         ChainOrchestratorEvent::L2ConsolidatedBlockCommitted(_) => {
             "L2ConsolidatedBlockCommitted".to_string()
@@ -170,6 +170,11 @@ pub fn event_type_name(event: &ChainOrchestratorEvent) -> String {
         ChainOrchestratorEvent::SignedBlock { .. } => "SignedBlock".to_string(),
         ChainOrchestratorEvent::L1MessageMismatch { .. } => "L1MessageMismatch".to_string(),
         ChainOrchestratorEvent::FcsHeadUpdated(_) => "FcsHeadUpdated".to_string(),
+        ChainOrchestratorEvent::L2FinalizedBlockReceived(_, _) => {
+            "L2FinalizedBlockReceived".to_string()
+        }
+        ChainOrchestratorEvent::BlockBuildingSkipped => "BlockBuildingSkipped".to_string(),
+        ChainOrchestratorEvent::Shutdown => "Shutdown".to_string(),
     }
 }
 
@@ -258,9 +263,9 @@ pub fn format_event_short(event: &ChainOrchestratorEvent) -> String {
                 batch_info.index, l1_block_number
             )
         }
-        ChainOrchestratorEvent::BatchFinalized { l1_block_info, triggered_batches } => {
+        ChainOrchestratorEvent::BatchFinalizeIndexed { l1_block_info, triggered_batches } => {
             format!(
-                "BatchFinalized {{ l1_block: {}, batches: {} }}",
+                "BatchFinalizeIndexed {{ l1_block: {}, batches: {} }}",
                 l1_block_info.number,
                 triggered_batches.len()
             )
@@ -293,5 +298,12 @@ pub fn format_event_short(event: &ChainOrchestratorEvent) -> String {
         ChainOrchestratorEvent::FcsHeadUpdated(info) => {
             format!("FcsHeadUpdated {{ block: {} }}", info.number)
         }
+        ChainOrchestratorEvent::L2FinalizedBlockReceived(hash, peer) => format!(
+            "L2FinalizedBlockReceived {{ hash: {:.8}..., peer: {:.8}... }}",
+            format!("{:?}", hash),
+            format!("{:?}", peer)
+        ),
+        ChainOrchestratorEvent::BlockBuildingSkipped => "BlockBuildingSkipped".to_string(),
+        ChainOrchestratorEvent::Shutdown => "Shutdown".to_string(),
     }
 }

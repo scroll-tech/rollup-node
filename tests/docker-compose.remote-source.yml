@@ -1,0 +1,72 @@
+services:
+  l1-node:
+    image: ghcr.io/foundry-rs/foundry:v1.2.3
+    entrypoint: ["bash", "/launch_l1.bash"]
+    ports:
+      - "8544:8545"
+    volumes:
+      - ./launch_l1.bash:/launch_l1.bash:ro
+      - ./anvil.env:/anvil.env:ro
+      - ./anvil_state.json:/anvil_state.json:ro
+    healthcheck:
+      test: ["CMD", "bash", "-c", "[ \"$(cast storage 0x9fE46736679d2D9a65F0992F2272dE9f3c7fa6e0 0x67 --rpc-url http://localhost:8545)\" = \"0x000000000000000000000000b674ff99cca262c99d3eab5b32796a99188543da\" ]"]
+      interval: 3s
+      timeout: 10s
+      retries: 30
+      start_period: 0s
+
+  rollup-node-sequencer:
+    build:
+      context: ../
+      dockerfile: Dockerfile.test
+    entrypoint: ["bash", "/launch_rollup_node_sequencer.bash"]
+    environment:
+      - RUST_LOG=info
+    ports:
+      - "8545:8545"   # JSON-RPC
+      - "6060:6060"   # Metrics
+    volumes:
+      - ./launch_rollup_node_sequencer.bash:/launch_rollup_node_sequencer.bash:ro
+      - ./l2reth-genesis-e2e.json:/l2reth/l2reth-genesis-e2e.json:ro
+      - l2reth-sequencer:/l2reth
+    depends_on:
+      l1-node:
+        condition: service_healthy
+
+  rollup-node-remote-source:
+    build:
+      context: ../
+      dockerfile: Dockerfile.test
+    entrypoint: ["bash", "/launch_rollup_node_remote_source.bash"]
+    environment:
+      - RUST_LOG=info
+    ports:
+      - "8546:8545"   # JSON-RPC
+      - "6061:6060"   # Metrics
+    volumes:
+      - ./launch_rollup_node_remote_source.bash:/launch_rollup_node_remote_source.bash:ro
+      - ./l2reth-genesis-e2e.json:/l2reth/l2reth-genesis-e2e.json:ro
+      - l2reth-remote-source:/l2reth
+    depends_on:
+      l1-node:
+        condition: service_healthy
+
+  l2geth-skipsignercheck:
+    image: scrolltech/l2geth:scroll-v5.10.2-skip-signer-check
+    platform: linux/amd64
+    entrypoint: ["bash", "/launch_l2geth_skipsignercheck.bash"]
+    ports:
+      - "8547:8545"    # JSON-RPC
+      - "6062:6060"    # Metrics
+    volumes:
+      - ./l2geth-genesis-e2e.json:/l2geth-genesis-e2e.json:ro
+      - ./launch_l2geth_skipsignercheck.bash:/launch_l2geth_skipsignercheck.bash:ro
+      - l2geth-skipsignercheck:/l2geth
+    depends_on:
+      l1-node:
+        condition: service_healthy
+
+volumes:
+  l2reth-sequencer:
+  l2reth-remote-source:
+  l2geth-skipsignercheck:

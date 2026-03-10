@@ -11,6 +11,8 @@ use rollup_node_watcher::{
     random, test_utils::provider::MockProvider, Block, L1Notification, L1Watcher,
 };
 const LOGS_QUERY_BLOCK_RANGE: u64 = 500;
+const L1_LIVENESS_THRESHOLD: u64 = 60;
+const L1_LIVENESS_CHECK_INTERVAL: u64 = 12;
 
 // Generate a set blocks that will be fed to the l1 watcher.
 // Every fork_cycle blocks, generates a small reorg.
@@ -72,11 +74,14 @@ async fn test_should_detect_reorg() -> eyre::Result<()> {
     );
 
     // spawn the watcher and verify received notifications are consistent.
-    let mut l1_watcher = L1Watcher::spawn(
+    let (_, mut l1_watcher) = L1Watcher::spawn(
         mock_provider,
         L1BlockStartupInfo::None,
         Arc::new(config),
         LOGS_QUERY_BLOCK_RANGE,
+        L1_LIVENESS_THRESHOLD,
+        L1_LIVENESS_CHECK_INTERVAL,
+        false,
     )
     .await;
 
@@ -179,11 +184,14 @@ async fn test_should_fetch_gap_in_unfinalized_blocks() -> eyre::Result<()> {
     );
 
     // spawn the watcher and verify received notifications are consistent.
-    let mut l1_watcher = L1Watcher::spawn(
+    let (_, mut l1_watcher) = L1Watcher::spawn(
         mock_provider,
         L1BlockStartupInfo::None,
         Arc::new(config),
         LOGS_QUERY_BLOCK_RANGE,
+        L1_LIVENESS_THRESHOLD,
+        L1_LIVENESS_CHECK_INTERVAL,
+        false,
     )
     .await;
 

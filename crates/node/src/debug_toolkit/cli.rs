@@ -66,7 +66,7 @@ pub struct DebugArgs {
     pub valid_signer: Option<Address>,
 
     // ── Common ───────────────────────────────────────────────────────────────
-    /// Path to log file. Defaults to ./scroll-debug-<pid>.log
+    /// Path to log file. Defaults to `./scroll-debug-{pid}.log` where `{pid}` is the process ID.
     #[arg(long)]
     pub log_file: Option<PathBuf>,
 }
@@ -107,7 +107,7 @@ impl DebugArgs {
             self.valid_signer.is_some()
         {
             // Disable test mode if bootnodes or l1 url are specified
-            builder.config_mut().test = false;
+            builder.config_mut().test_args.test = false;
         }
 
         // Apply L1 URL if provided - build provider for REPL access

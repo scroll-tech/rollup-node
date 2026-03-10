@@ -36,7 +36,7 @@ use rollup_node_providers::{
 use rollup_node_sequencer::{
     L1MessageInclusionMode, PayloadBuildingConfig, Sequencer, SequencerConfig,
 };
-use rollup_node_watcher::{L1Watcher, L1WatcherHandle};
+use rollup_node_watcher::{L1Watcher, L1WatcherCommand};
 use scroll_alloy_hardforks::ScrollHardforks;
 use scroll_alloy_network::Scroll;
 use scroll_alloy_provider::{ScrollAuthApiEngineClient, ScrollEngineApi};
@@ -52,12 +52,23 @@ use scroll_wire::ScrollWireEvent;
 use std::{fs, path::PathBuf, sync::Arc};
 use tokio::sync::mpsc::UnboundedReceiver;
 
-/// A struct that represents the arguments for the rollup node.
-#[derive(Debug, Clone, clap::Args)]
-pub struct ScrollRollupNodeConfig {
+/// Test-related configuration arguments.
+#[derive(Debug, Clone, Default, clap::Args)]
+pub struct TestArgs {
     /// Whether the rollup node should be run in test mode.
     #[arg(long)]
     pub test: bool,
+    /// Test mode: skip L1 watcher Synced notifications.
+    #[arg(long, default_value = "false")]
+    pub skip_l1_synced: bool,
+}
+
+/// A struct that represents the arguments for the rollup node.
+#[derive(Debug, Clone, clap::Args)]
+pub struct ScrollRollupNodeConfig {
+    /// Test-related arguments
+    #[command(flatten)]
+    pub test_args: TestArgs,
     /// Consensus args
     #[command(flatten)]
     pub consensus_args: ConsensusArgs,
@@ -94,9 +105,19 @@ pub struct ScrollRollupNodeConfig {
     /// The pprof server arguments
     #[command(flatten)]
     pub pprof_args: PprofArgs,
+    /// The remote block source arguments
+    #[command(flatten)]
+    pub remote_block_source_args: RemoteBlockSourceArgs,
     /// The database connection (not parsed via CLI but hydrated after validation).
     #[arg(skip)]
     pub database: Option<Arc<Database>>,
+    /// Require an additional L1 data fee buffer in the account balance checks for transactions.
+    #[arg(
+        long = "require-l1-data-fee-buffer",
+        value_name = "REQUIRE_L1_DATA_FEE_BUFFER",
+        default_value = "false"
+    )]
+    pub require_l1_data_fee_buffer: bool,
 }
 
 impl ScrollRollupNodeConfig {
@@ -128,6 +149,10 @@ impl ScrollRollupNodeConfig {
             return Err("System contract consensus requires either an authorized signer or a L1 provider URL".to_string());
         }
 
+        if self.remote_block_source_args.enabled && self.remote_block_source_args.url.is_none() {
+            return Err("Remote source URL required when remote source is enabled".to_string());
+        }
+
         Ok(())
     }
 
@@ -138,6 +163,7 @@ impl ScrollRollupNodeConfig {
     ) -> eyre::Result<()> {
         // Instantiate the database
         let db_path = node_config.datadir().db();
+
         let database_path = if let Some(database_path) = &self.database_args.rn_db_path {
             database_path.to_string_lossy().to_string()
         } else {
@@ -260,7 +286,7 @@ impl ScrollRollupNodeConfig {
         // Run the database migrations
         if let Some(named) = chain_spec.chain().named() {
             named
-                .migrate(db.inner().get_connection(), self.test)
+                .migrate(db.inner().get_connection(), self.test_args.test)
                 .await
                 .expect("failed to perform migration");
         } else {
@@ -357,7 +383,7 @@ impl ScrollRollupNodeConfig {
             td_constant(chain_spec.chain().named()),
             authorized_signer,
         );
-        ctx.task_executor.spawn(scroll_network_manager);
+        ctx.task_executor.spawn(scroll_network_manager.run());
 
         tracing::info!(target: "scroll::node::args", fcs = ?fcs, payload_building_duration = ?self.sequencer_args.payload_building_duration, "Starting engine driver");
         let engine = Engine::new(Arc::new(engine_api), fcs);
@@ -374,49 +400,44 @@ impl ScrollRollupNodeConfig {
         };
         let consensus = self.consensus_args.consensus(authorized_signer)?;
 
-        // Define some types to support definitions of return type of following function in no_std.
-        #[cfg(feature = "test-utils")]
-        type L1WatcherMockOpt = Option<rollup_node_watcher::test_utils::L1WatcherMock>;
+        let is_anvil_provider = self.blob_provider_args.anvil_url.is_some();
 
-        #[cfg(not(feature = "test-utils"))]
-        type L1WatcherMockOpt = Option<std::convert::Infallible>;
+        let (_l1_notification_tx, _l1_command_rx, l1_watcher_handle): (_, _, _) = if let Some(
+            provider,
+        ) =
+            l1_provider.filter(|_| !self.test_args.test || is_anvil_provider)
+        {
+            tracing::info!(target: "scroll::node::args", ?l1_block_startup_info, "Starting L1 watcher");
 
-        let (_l1_watcher_mock, l1_watcher_handle): (L1WatcherMockOpt, Option<L1WatcherHandle>) =
-            if let Some(provider) = l1_provider.filter(|_| !self.test) {
-                tracing::info!(target: "scroll::node::args", ?l1_block_startup_info, "Starting L1 watcher");
-                (
-                    None,
-                    Some(
-                        L1Watcher::spawn(
-                            provider,
-                            l1_block_startup_info,
-                            node_config,
-                            self.l1_provider_args.logs_query_block_range,
-                        )
-                        .await,
-                    ),
-                )
-            } else {
-                // Create a channel for L1 notifications that we can use to inject L1 messages for
-                // testing
+            let (notification_tx, handle) = L1Watcher::spawn(
+                provider,
+                l1_block_startup_info,
+                node_config,
+                self.l1_provider_args.logs_query_block_range,
+                self.l1_provider_args.liveness_threshold,
+                self.l1_provider_args.liveness_check_interval,
                 #[cfg(feature = "test-utils")]
-                {
-                    let (notification_tx, notification_rx) = tokio::sync::mpsc::channel(1000);
-                    let (command_tx, command_rx) = tokio::sync::mpsc::unbounded_channel();
-                    let handle =
-                        rollup_node_watcher::L1WatcherHandle::new(command_tx, notification_rx);
-                    let watcher_mock = rollup_node_watcher::test_utils::L1WatcherMock {
-                        command_rx: Arc::new(tokio::sync::Mutex::new(command_rx)),
-                        notification_tx,
-                    };
-                    (Some(watcher_mock), Some(handle))
-                }
+                self.test_args.skip_l1_synced,
+            )
+            .await;
+            (Some(notification_tx), None::<UnboundedReceiver<L1WatcherCommand>>, Some(handle))
+        } else {
+            // Create a channel for L1 notifications that we can use to inject L1 messages for
+            // testing
+            #[cfg(feature = "test-utils")]
+            {
+                let (notification_tx, notification_rx) = tokio::sync::mpsc::channel(1000);
+                let (command_tx, command_rx) = tokio::sync::mpsc::unbounded_channel();
+                let handle = rollup_node_watcher::L1WatcherHandle::new(command_tx, notification_rx);
 
-                #[cfg(not(feature = "test-utils"))]
-                {
-                    (None, None)
-                }
-            };
+                (Some(notification_tx), Some(command_rx), Some(handle))
+            }
+
+            #[cfg(not(feature = "test-utils"))]
+            {
+                (None, None, None)
+            }
+        };
 
         // Construct the l1 provider.
         let l1_messages_provider = db.clone();
@@ -458,7 +479,7 @@ impl ScrollRollupNodeConfig {
         let signer = if let Some(configured_signer) = self.signer_args.signer(chain_id).await? {
             // Use the signer configured by SignerArgs
             Some(rollup_node_signer::Signer::spawn(configured_signer))
-        } else if self.test {
+        } else if self.test_args.test {
             // Use a random private key signer for testing
             Some(rollup_node_signer::Signer::spawn(PrivateKeySigner::random()))
         } else {
@@ -506,7 +527,14 @@ impl ScrollRollupNodeConfig {
         .await?;
 
         #[cfg(feature = "test-utils")]
-        let handle = handle.with_l1_watcher_mock(_l1_watcher_mock);
+        let handle = {
+            let command_rx = _l1_command_rx.map(|rx| Arc::new(tokio::sync::Mutex::new(rx)));
+            let l1_watcher_mock = rollup_node_watcher::test_utils::L1WatcherMock {
+                command_rx,
+                notification_tx: _l1_notification_tx.expect("L1 notification sender should be set"),
+            };
+            handle.with_l1_watcher_mock(Some(l1_watcher_mock))
+        };
 
         Ok((chain_orchestrator, handle))
     }
@@ -688,6 +716,13 @@ pub struct L1ProviderArgs {
     /// The maximum number of items to be stored in the cache layer.
     #[arg(long = "l1.cache-max-items", id = "l1_cache_max_items", value_name = "L1_CACHE_MAX_ITEMS", default_value_t = constants::L1_PROVIDER_CACHE_MAX_ITEMS)]
     pub cache_max_items: u32,
+    /// The L1 liveness threshold in seconds. If no new L1 block is received within this duration,
+    /// an error is logged.
+    #[arg(long = "l1.liveness-threshold", id = "l1_liveness_threshold", value_name = "L1_LIVENESS_THRESHOLD", default_value_t = constants::L1_LIVENESS_THRESHOLD)]
+    pub liveness_threshold: u64,
+    /// The interval in seconds at which to check L1 liveness.
+    #[arg(long = "l1.liveness-check-interval", id = "l1_liveness_check_interval", value_name = "L1_LIVENESS_CHECK_INTERVAL", default_value_t = constants::L1_LIVENESS_CHECK_INTERVAL)]
+    pub liveness_check_interval: u64,
 }
 
 impl Default for L1ProviderArgs {
@@ -699,6 +734,8 @@ impl Default for L1ProviderArgs {
             initial_backoff: constants::L1_PROVIDER_INITIAL_BACKOFF,
             logs_query_block_range: constants::LOGS_QUERY_BLOCK_RANGE,
             cache_max_items: constants::L1_PROVIDER_CACHE_MAX_ITEMS,
+            liveness_threshold: constants::L1_LIVENESS_THRESHOLD,
+            liveness_check_interval: constants::L1_LIVENESS_CHECK_INTERVAL,
         }
     }
 }
@@ -848,7 +885,7 @@ impl SignerArgs {
                 chain_id
             );
 
-            Ok(Some(Box::new(private_key_signer)))
+            Ok(Some(Box::new(private_key_signer) as Box<dyn Signer + Send + Sync>))
         } else if let Some(aws_kms_key_id) = &self.aws_kms_key_id {
             // Load AWS configuration
             let config_loader = aws_config::defaults(BehaviorVersion::latest());
@@ -867,11 +904,11 @@ impl SignerArgs {
                 chain_id
             );
 
-            Ok(Some(Box::new(aws_signer)))
+            Ok(Some(Box::new(aws_signer) as Box<dyn Signer + Send + Sync>))
         } else if let Some(private_key) = &self.private_key {
             tracing::info!(target: "scroll::node::args", "Created private key signer with address: {} for chain ID: {}", private_key.address(), chain_id);
             let signer = private_key.clone().with_chain_id(Some(chain_id));
-            Ok(Some(Box::new(signer)))
+            Ok(Some(Box::new(signer) as Box<dyn Signer + Send + Sync>))
         } else {
             Ok(None)
         }
@@ -919,6 +956,30 @@ impl Default for PprofArgs {
     fn default() -> Self {
         Self { enabled: false, addr: ([0, 0, 0, 0], 6868).into(), default_duration: 30 }
     }
+}
+
+/// The arguments for the remote block source.
+#[derive(Debug, Default, Clone, clap::Args)]
+pub struct RemoteBlockSourceArgs {
+    /// Enable the remote block source feature
+    #[arg(long = "remote-source.enabled", default_value_t = false)]
+    pub enabled: bool,
+
+    /// URL for the remote L2 source node RPC
+    #[arg(long = "remote-source.url", id = "remote_source_url", value_name = "URL")]
+    pub url: Option<reqwest::Url>,
+
+    /// Polling interval in milliseconds (when already synced)
+    #[arg(
+        long = "remote-source.poll-interval-ms",
+        default_value_t = 100,
+        value_name = "POLL_INTERVAL_MS"
+    )]
+    pub poll_interval_ms: u64,
+
+    /// Whether to build blocks using the remote source.
+    #[arg(long = "remote-source.build")]
+    pub build: bool,
 }
 
 /// Returns the total difficulty constant for the given chain.
@@ -991,7 +1052,7 @@ mod tests {
     #[test]
     fn test_validate_sequencer_enabled_without_any_signer_fails() {
         let config = ScrollRollupNodeConfig {
-            test: false,
+            test_args: TestArgs::default(),
             sequencer_args: SequencerArgs { sequencer_enabled: true, ..Default::default() },
             signer_args: SignerArgs { key_file: None, aws_kms_key_id: None, private_key: None },
             database_args: RollupNodeDatabaseArgs::default(),
@@ -1008,6 +1069,8 @@ mod tests {
             database: None,
             rpc_args: RpcArgs::default(),
             pprof_args: PprofArgs::default(),
+            remote_block_source_args: RemoteBlockSourceArgs::default(),
+            require_l1_data_fee_buffer: false,
         };
 
         let result = config.validate();
@@ -1018,9 +1081,42 @@ mod tests {
     }
 
     #[test]
+    fn test_validate_remote_source_enabled_without_url_fails() {
+        let config = ScrollRollupNodeConfig {
+            test_args: TestArgs::default(),
+            sequencer_args: SequencerArgs::default(),
+            signer_args: SignerArgs::default(),
+            database_args: RollupNodeDatabaseArgs::default(),
+            engine_driver_args: EngineDriverArgs::default(),
+            chain_orchestrator_args: ChainOrchestratorArgs::default(),
+            l1_provider_args: L1ProviderArgs::default(),
+            blob_provider_args: BlobProviderArgs::default(),
+            network_args: RollupNodeNetworkArgs::default(),
+            gas_price_oracle_args: RollupNodeGasPriceOracleArgs::default(),
+            consensus_args: ConsensusArgs::noop(),
+            database: None,
+            rpc_args: RpcArgs::default(),
+            pprof_args: PprofArgs::default(),
+            remote_block_source_args: RemoteBlockSourceArgs {
+                enabled: true,
+                url: None,
+                poll_interval_ms: 100,
+                build: false,
+            },
+            require_l1_data_fee_buffer: false,
+        };
+
+        let result = config.validate();
+        assert!(result.is_err());
+        assert!(result
+            .unwrap_err()
+            .contains("Remote source URL required when remote source is enabled"));
+    }
+
+    #[test]
     fn test_validate_sequencer_enabled_with_both_signers_fails() {
         let config = ScrollRollupNodeConfig {
-            test: false,
+            test_args: TestArgs::default(),
             sequencer_args: SequencerArgs { sequencer_enabled: true, ..Default::default() },
             signer_args: SignerArgs {
                 key_file: Some(PathBuf::from("/path/to/key")),
@@ -1041,6 +1137,8 @@ mod tests {
             database: None,
             rpc_args: RpcArgs::default(),
             pprof_args: PprofArgs::default(),
+            remote_block_source_args: RemoteBlockSourceArgs::default(),
+            require_l1_data_fee_buffer: false,
         };
 
         let result = config.validate();
@@ -1051,7 +1149,7 @@ mod tests {
     #[test]
     fn test_validate_sequencer_enabled_with_key_file_succeeds() {
         let config = ScrollRollupNodeConfig {
-            test: false,
+            test_args: TestArgs::default(),
             sequencer_args: SequencerArgs { sequencer_enabled: true, ..Default::default() },
             signer_args: SignerArgs {
                 key_file: Some(PathBuf::from("/path/to/key")),
@@ -1069,6 +1167,8 @@ mod tests {
             database: None,
             rpc_args: RpcArgs::default(),
             pprof_args: PprofArgs::default(),
+            remote_block_source_args: RemoteBlockSourceArgs::default(),
+            require_l1_data_fee_buffer: false,
         };
 
         assert!(config.validate().is_ok());
@@ -1077,7 +1177,7 @@ mod tests {
     #[test]
     fn test_validate_sequencer_enabled_with_aws_kms_succeeds() {
         let config = ScrollRollupNodeConfig {
-            test: false,
+            test_args: TestArgs::default(),
             sequencer_args: SequencerArgs { sequencer_enabled: true, ..Default::default() },
             signer_args: SignerArgs {
                 key_file: None,
@@ -1095,6 +1195,8 @@ mod tests {
             database: None,
             rpc_args: RpcArgs::default(),
             pprof_args: PprofArgs::default(),
+            remote_block_source_args: RemoteBlockSourceArgs::default(),
+            require_l1_data_fee_buffer: false,
         };
 
         assert!(config.validate().is_ok());
@@ -1103,7 +1205,7 @@ mod tests {
     #[test]
     fn test_validate_sequencer_disabled_without_any_signer_succeeds() {
         let config = ScrollRollupNodeConfig {
-            test: false,
+            test_args: TestArgs::default(),
             sequencer_args: SequencerArgs { sequencer_enabled: false, ..Default::default() },
             signer_args: SignerArgs { key_file: None, aws_kms_key_id: None, private_key: None },
             database_args: RollupNodeDatabaseArgs::default(),
@@ -1117,6 +1219,8 @@ mod tests {
             database: None,
             rpc_args: RpcArgs::default(),
             pprof_args: PprofArgs::default(),
+            remote_block_source_args: RemoteBlockSourceArgs::default(),
+            require_l1_data_fee_buffer: false,
         };
 
         assert!(config.validate().is_ok());

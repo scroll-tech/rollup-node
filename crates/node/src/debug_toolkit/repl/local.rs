@@ -158,22 +158,34 @@ impl DebugRepl {
         let _ = stdout.flush();
 
         while self.running {
-            // Poll for events and input
-            tokio::select! {
-                biased;
+            // Poll for events and input. Keep select borrow scoped to the node only
+            // so we can use self after for event handling or command execution.
+            let select_result = {
+                let node = self.fixture.nodes[self.active_node].as_mut().expect("active node");
+                tokio::select! {
+                    biased;
 
-                // Check for events from the node
-                Some(event) = self.fixture.nodes[self.active_node].chain_orchestrator_rx.next() => {
+                    // Check for events from the node
+                    event = node.chain_orchestrator_rx.next() => Some(event),
+
+                    // Check for keyboard input (non-blocking)
+                    _ = tokio::time::sleep(Duration::from_millis(50)) => None,
+                }
+            };
+
+            match select_result {
+                Some(Some(event)) => {
                     // Display if streaming is enabled
-                    if let Some(formatted) = self.event_streams[self.active_node].record_event(event) {
+                    if let Some(formatted) =
+                        self.event_streams[self.active_node].record_event(event)
+                    {
                         // Clear current line, print event, reprint prompt with input buffer
                         print!("\r\x1b[K{}\r\n{}{}", formatted, self.get_prompt(), input_buffer);
                         let _ = stdout.flush();
                     }
                 }
-
-                // Check for keyboard input (non-blocking)
-                _ = tokio::time::sleep(Duration::from_millis(50)) => {
+                Some(None) => {}
+                None => {
                     match super::terminal::poll_keyboard(&mut input_buffer, &self.get_prompt())? {
                         super::terminal::InputAction::Command(line) => {
                             let _ = disable_raw_mode();
@@ -199,10 +211,12 @@ impl DebugRepl {
 
     /// Get the REPL prompt.
     fn get_prompt(&self) -> String {
-        let node_type = match self.fixture.nodes[self.active_node].typ {
-            NodeType::Sequencer => "seq",
-            NodeType::Follower => "fol",
-        };
+        let node_type =
+            match self.fixture.nodes[self.active_node].as_ref().expect("active node").typ {
+                NodeType::Sequencer => "seq",
+                NodeType::Follower => "fol",
+                NodeType::RemoteSource => "rem",
+            };
         format!("{} [{}:{}]> ", "scroll-debug".cyan(), node_type, self.active_node)
     }
 
@@ -248,10 +262,13 @@ impl DebugRepl {
 
     /// Show node status.
     async fn cmd_status(&self) -> eyre::Result<()> {
-        let node = &self.fixture.nodes[self.active_node];
+        let Some(node) = self.fixture.nodes[self.active_node].as_ref() else {
+            return Err(eyre::eyre!("Node at index {} has been shutdown", self.active_node));
+        };
         let node_type = match node.typ {
             NodeType::Sequencer => "Sequencer",
             NodeType::Follower => "Follower",
+            NodeType::RemoteSource => "RemoteSource",
         };
 
         let status = node.rollup_manager_handle.status().await?;
@@ -273,7 +290,7 @@ impl DebugRepl {
 
     /// Show detailed sync status (`rollupNode_status` RPC equivalent).
     async fn cmd_sync_status(&self) -> eyre::Result<()> {
-        let node = &self.fixture.nodes[self.active_node];
+        let node = self.fixture.nodes[self.active_node].as_ref().expect("active node");
         let status = node.rollup_manager_handle.status().await?;
         crate::debug_toolkit::shared::status::print_sync_status(&status);
         Ok(())
@@ -281,7 +298,7 @@ impl DebugRepl {
 
     /// Show block details.
     async fn cmd_block(&self, arg: BlockArg) -> eyre::Result<()> {
-        let node = &self.fixture.nodes[self.active_node];
+        let node = self.fixture.nodes[self.active_node].as_ref().expect("active node");
 
         let block_id = match arg {
             BlockArg::Latest => BlockNumberOrTag::Latest,
@@ -316,7 +333,7 @@ impl DebugRepl {
 
     /// List blocks in range.
     async fn cmd_blocks(&self, from: u64, to: u64) -> eyre::Result<()> {
-        let node = &self.fixture.nodes[self.active_node];
+        let node = self.fixture.nodes[self.active_node].as_ref().expect("active node");
 
         println!("{}", format!("Blocks {} to {}:", from, to).bold());
 
@@ -347,7 +364,7 @@ impl DebugRepl {
 
     /// Show forkchoice state.
     async fn cmd_fcs(&self) -> eyre::Result<()> {
-        let node = &self.fixture.nodes[self.active_node];
+        let node = self.fixture.nodes[self.active_node].as_ref().expect("active node");
         let status = node.rollup_manager_handle.status().await?;
         crate::debug_toolkit::shared::status::print_forkchoice(&status);
         Ok(())
@@ -357,7 +374,7 @@ impl DebugRepl {
     async fn cmd_l1(&mut self, cmd: L1Command) -> eyre::Result<()> {
         match cmd {
             L1Command::Status => {
-                let node = &self.fixture.nodes[self.active_node];
+                let node = self.fixture.nodes[self.active_node].as_ref().expect("active node");
                 let status = node.rollup_manager_handle.status().await?;
 
                 println!("{}", "L1 Status:".bold());
@@ -511,12 +528,13 @@ impl DebugRepl {
 
     /// Build a new block.
     async fn cmd_build(&self) -> eyre::Result<()> {
-        if !self.fixture.nodes[self.active_node].is_sequencer() {
+        let node = self.fixture.nodes[self.active_node].as_ref().expect("active node");
+        if !node.is_sequencer() {
             println!("{}", "Error: build command requires sequencer node".red());
             return Ok(());
         }
 
-        let handle = &self.fixture.nodes[self.active_node].rollup_manager_handle;
+        let handle = &node.rollup_manager_handle;
 
         // Check if L1 is synced
         let status = handle.status().await?;
@@ -540,7 +558,7 @@ impl DebugRepl {
     async fn cmd_tx(&mut self, cmd: TxCommand) -> eyre::Result<()> {
         match cmd {
             TxCommand::Pending => {
-                let node = &self.fixture.nodes[self.active_node];
+                let node = self.fixture.nodes[self.active_node].as_ref().expect("active node");
                 let pending_txs = node.node.inner.pool.pooled_transactions();
 
                 if pending_txs.is_empty() {
@@ -587,7 +605,7 @@ impl DebugRepl {
                     let address = signer.address();
 
                     // Get the nonce from the chain for this wallet
-                    let node = &self.fixture.nodes[self.active_node];
+                    let node = self.fixture.nodes[self.active_node].as_ref().expect("active node");
                     let nonce = node
                         .node
                         .rpc
@@ -632,7 +650,7 @@ impl DebugRepl {
                 let raw_tx = alloy_primitives::Bytes::from(signed.encoded_2718());
 
                 // Inject the transaction
-                let node = &self.fixture.nodes[self.active_node];
+                let node = self.fixture.nodes[self.active_node].as_ref().expect("active node");
                 let tx_hash = node.node.rpc.inject_tx(raw_tx.clone()).await?;
 
                 crate::debug_toolkit::shared::output::print_tx_sent(
@@ -662,7 +680,7 @@ impl DebugRepl {
                 drop(wallet);
 
                 // Get balance from the node
-                let node = &self.fixture.nodes[self.active_node];
+                let node = self.fixture.nodes[self.active_node].as_ref().expect("active node");
                 let balance = node
                     .node
                     .rpc
@@ -694,7 +712,7 @@ impl DebugRepl {
                 for (i, signer) in wallets.iter().enumerate() {
                     let address = signer.address();
                     // Get balance for each wallet
-                    let node = &self.fixture.nodes[self.active_node];
+                    let node = self.fixture.nodes[self.active_node].as_ref().expect("active node");
                     let balance = node
                         .node
                         .rpc
@@ -718,7 +736,7 @@ impl DebugRepl {
 
     /// Execute peer commands.
     async fn cmd_peers(&self, cmd: PeersCommand) -> eyre::Result<()> {
-        let node = &self.fixture.nodes[self.active_node];
+        let node = self.fixture.nodes[self.active_node].as_ref().expect("active node");
         let network_handle = node.rollup_manager_handle.get_network_handle().await?;
 
         match cmd {
@@ -756,16 +774,18 @@ impl DebugRepl {
                 // Show other nodes in fixture for convenience
                 if self.fixture.nodes.len() > 1 {
                     println!("{}", "Other Nodes in Fixture:".bold());
-                    for (i, other_node) in self.fixture.nodes.iter().enumerate() {
+                    for (i, opt) in self.fixture.nodes.iter().enumerate() {
                         if i == self.active_node {
                             continue;
                         }
+                        let Some(other_node) = opt else { continue };
                         let other_handle =
                             other_node.rollup_manager_handle.get_network_handle().await?;
                         let other_record = other_handle.local_node_record();
                         let node_type = match other_node.typ {
                             NodeType::Sequencer => "Sequencer",
                             NodeType::Follower => "Follower",
+                            NodeType::RemoteSource => "RemoteSource",
                         };
                         println!("  [{}] {} - {}", i, node_type, other_record);
                     }
@@ -879,9 +899,10 @@ impl DebugRepl {
             );
         } else {
             self.active_node = idx;
-            let node_type = match self.fixture.nodes[idx].typ {
+            let node_type = match self.fixture.nodes[idx].as_ref().expect("node").typ {
                 NodeType::Sequencer => "Sequencer",
                 NodeType::Follower => "Follower",
+                NodeType::RemoteSource => "RemoteSource",
             };
             println!("{}", format!("Switched to node {} ({})", idx, node_type).green());
         }
@@ -891,10 +912,15 @@ impl DebugRepl {
     /// List all nodes.
     fn cmd_list_nodes(&self) -> eyre::Result<()> {
         println!("{}", "Nodes:".bold());
-        for (i, node) in self.fixture.nodes.iter().enumerate() {
+        for (i, opt) in self.fixture.nodes.iter().enumerate() {
+            let Some(node) = opt else {
+                println!("  [{}] {} (shutdown)", i, "—".dimmed());
+                continue;
+            };
             let node_type = match node.typ {
                 NodeType::Sequencer => "Sequencer".cyan(),
                 NodeType::Follower => "Follower".normal(),
+                NodeType::RemoteSource => "RemoteSource".dimmed(),
             };
             let marker = if i == self.active_node { " *" } else { "" };
             println!("  [{}] {}{}", i, node_type, marker.green());
@@ -904,7 +930,7 @@ impl DebugRepl {
 
     /// Call any JSON-RPC method against the active node and pretty-print result.
     async fn cmd_rpc(&self, method: &str, params: Option<&str>) -> eyre::Result<()> {
-        let node = &self.fixture.nodes[self.active_node];
+        let node = self.fixture.nodes[self.active_node].as_ref().expect("active node");
         let http_addr = node
             .node
             .inner
@@ -924,7 +950,10 @@ impl DebugRepl {
 
     /// Handle admin commands directly through the in-process rollup manager handle.
     async fn cmd_admin(&self, cmd: AdminCommand) -> eyre::Result<()> {
-        let handle = &self.fixture.nodes[self.active_node].rollup_manager_handle;
+        let handle = &self.fixture.nodes[self.active_node]
+            .as_ref()
+            .expect("active node")
+            .rollup_manager_handle;
         match cmd {
             AdminCommand::EnableSequencing => {
                 let result = handle.enable_automatic_sequencing().await?;
@@ -948,7 +977,7 @@ impl DebugRepl {
 
     /// Show database path and access command.
     fn cmd_db(&self) -> eyre::Result<()> {
-        let node = &self.fixture.nodes[self.active_node];
+        let node = self.fixture.nodes[self.active_node].as_ref().expect("active node");
         let db_dir = node.node.inner.config.datadir().db();
         let db_path = db_dir.join("scroll.db");
 

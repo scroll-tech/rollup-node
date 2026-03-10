@@ -41,6 +41,8 @@ use async_trait::async_trait;
 use colored::Colorize;
 use futures::StreamExt;
 use rollup_node_chain_orchestrator::ChainOrchestratorEvent;
+use rollup_node_watcher::L1Notification;
+use std::sync::Arc;
 
 /// Trait for custom debug actions.
 ///
@@ -147,18 +149,23 @@ impl Action for BuildBlocksAction {
         let sequencer_idx = fixture
             .nodes
             .iter()
-            .position(|n| n.is_sequencer())
+            .position(|n| n.as_ref().is_some_and(|h| h.is_sequencer()))
             .ok_or_else(|| eyre::eyre!("No sequencer node found"))?;
 
         // Get an event listener for the sequencer
-        let mut event_rx = fixture.nodes[sequencer_idx]
+        let sequencer = fixture.nodes[sequencer_idx].as_ref().expect("sequencer node");
+        let mut event_rx = sequencer
             .rollup_manager_handle
             .get_event_listener()
             .await
             .map_err(|e| eyre::eyre!("Failed to get event listener: {}", e))?;
 
         for i in 1..=count {
-            fixture.nodes[sequencer_idx].rollup_manager_handle.build_block();
+            fixture.nodes[sequencer_idx]
+                .as_ref()
+                .expect("sequencer")
+                .rollup_manager_handle
+                .build_block();
             print!("  Block {} triggered, waiting...", i);
             let _ = std::io::Write::flush(&mut std::io::stdout());
 
@@ -183,7 +190,12 @@ impl Action for BuildBlocksAction {
             }
         }
 
-        let status = fixture.nodes[sequencer_idx].rollup_manager_handle.status().await?;
+        let status = fixture.nodes[sequencer_idx]
+            .as_ref()
+            .expect("sequencer")
+            .rollup_manager_handle
+            .status()
+            .await?;
         println!(
             "{}",
             format!("Done! Head is now at block #{}", status.l2.fcs.head_block_info().number)
@@ -225,7 +237,7 @@ impl Action for StressTestAction {
         let sequencer_idx = fixture
             .nodes
             .iter()
-            .position(|n| n.is_sequencer())
+            .position(|n| n.as_ref().is_some_and(|h| h.is_sequencer()))
             .ok_or_else(|| eyre::eyre!("No sequencer node found"))?;
 
         let mut wallet = fixture.wallet.lock().await;
@@ -265,7 +277,11 @@ impl Action for StressTestAction {
             // Build block periodically
             if (i + 1) % build_every == 0 {
                 drop(wallet);
-                fixture.nodes[sequencer_idx].rollup_manager_handle.build_block();
+                fixture.nodes[sequencer_idx]
+                    .as_ref()
+                    .expect("sequencer")
+                    .rollup_manager_handle
+                    .build_block();
                 tokio::time::sleep(std::time::Duration::from_millis(200)).await;
                 wallet = fixture.wallet.lock().await;
                 print!("B");
@@ -275,11 +291,20 @@ impl Action for StressTestAction {
         drop(wallet);
 
         // Final build
-        fixture.nodes[sequencer_idx].rollup_manager_handle.build_block();
+        fixture.nodes[sequencer_idx]
+            .as_ref()
+            .expect("sequencer")
+            .rollup_manager_handle
+            .build_block();
         tokio::time::sleep(std::time::Duration::from_millis(500)).await;
 
         println!();
-        let status = fixture.nodes[sequencer_idx].rollup_manager_handle.status().await?;
+        let status = fixture.nodes[sequencer_idx]
+            .as_ref()
+            .expect("sequencer")
+            .rollup_manager_handle
+            .status()
+            .await?;
         println!(
             "{}",
             format!(
@@ -314,7 +339,18 @@ impl Action for SyncAllAction {
     async fn execute(&self, fixture: &mut TestFixture, _args: &[String]) -> eyre::Result<()> {
         println!("Syncing L1 on all {} nodes...", fixture.nodes.len());
 
-        fixture.l1().sync().await?;
+        // Collect senders first to avoid holding fixture (non-Send) across await
+        let senders: Vec<_> = fixture
+            .nodes
+            .iter()
+            .filter_map(|o| o.as_ref())
+            .filter_map(|n| n.rollup_manager_handle.l1_watcher_mock.as_ref())
+            .map(|m| m.notification_tx.clone())
+            .collect();
+        let notification = Arc::new(L1Notification::Synced);
+        for tx in senders {
+            tx.send(notification.clone()).await?;
+        }
 
         println!("{}", "All nodes synced!".green());
         Ok(())
@@ -356,7 +392,7 @@ impl Action for TemplateAction {
         // fixture.l1().sync().await?;
 
         // Access specific node
-        let node = &fixture.nodes[0];
+        let node = fixture.nodes[0].as_ref().expect("node 0");
         let status = node.rollup_manager_handle.status().await?;
         println!("Head block: {}", status.l2.fcs.head_block_info().number);
 

@@ -189,6 +189,7 @@ impl<
                 biased;
 
                 _guard = &mut shutdown => {
+                    self.notify(ChainOrchestratorEvent::Shutdown);
                     break;
                 }
                 Some(command) = self.handle_rx.recv() => {
@@ -292,13 +293,16 @@ impl<
                 }
             }
             SequencerEvent::PayloadReady(payload_id) => {
-                if let Some(block) = self
+                let block = self
                     .sequencer
                     .as_mut()
                     .expect("sequencer must be present")
                     .finalize_payload_building(payload_id, &mut self.engine)
-                    .await?
-                {
+                    .await?;
+
+                self.metric_handler.finish_block_building_recording(block.as_ref());
+
+                if let Some(block) = block {
                     let block_info: L2BlockInfoWithL1Messages = (&block).into();
                     self.database
                         .update_l1_messages_from_l2_blocks(vec![block_info.clone()])
@@ -307,9 +311,9 @@ impl<
                         .as_mut()
                         .expect("signer must be present")
                         .sign_block(block.clone())?;
-                    self.metric_handler.finish_block_building_recording();
                     return Ok(Some(ChainOrchestratorEvent::BlockSequenced(block)));
                 }
+                return Ok(Some(ChainOrchestratorEvent::BlockBuildingSkipped));
             }
         }
 
@@ -424,6 +428,13 @@ impl<
 
                 self.notify(ChainOrchestratorEvent::UnwoundToL1Block(block_number));
                 let _ = tx.send(true);
+            }
+            ChainOrchestratorCommand::ImportBlock { block_with_peer, response } => {
+                let result = self
+                    .import_chain(vec![block_with_peer.block.clone()], block_with_peer)
+                    .await
+                    .map_err(|e| e.to_string());
+                let _ = response.send(result);
             }
             #[cfg(feature = "test-utils")]
             ChainOrchestratorCommand::SetGossip((enabled, tx)) => {
@@ -838,7 +849,7 @@ impl<
             self.derivation_pipeline.push_batch(*batch, BatchStatus::Finalized).await;
         }
 
-        Ok(Some(ChainOrchestratorEvent::BatchFinalized { l1_block_info, triggered_batches }))
+        Ok(Some(ChainOrchestratorEvent::BatchFinalizeIndexed { l1_block_info, triggered_batches }))
     }
 
     /// Handles a batch revert event by updating the database.
@@ -936,6 +947,17 @@ impl<
         block_with_peer: NewBlockWithPeer,
     ) -> Result<Option<ChainOrchestratorEvent>, ChainOrchestratorError> {
         tracing::debug!(target: "scroll::chain_orchestrator", block_hash = ?block_with_peer.block.header.hash_slow(), block_number = ?block_with_peer.block.number, peer_id = ?block_with_peer.peer_id, "Received new block from peer");
+
+        // Check we are not handling a finalized block.
+        if block_with_peer.block.header.number <= self.engine.fcs().finalized_block_info().number {
+            self.network
+                .handle()
+                .block_import_outcome(BlockImportOutcome::finalized_block(block_with_peer.peer_id));
+            return Ok(Some(ChainOrchestratorEvent::L2FinalizedBlockReceived(
+                block_with_peer.block.header.hash_slow(),
+                block_with_peer.peer_id,
+            )));
+        }
 
         if let Err(err) =
             self.consensus.validate_new_block(&block_with_peer.block, &block_with_peer.signature)
@@ -1218,6 +1240,7 @@ impl<
             chain,
             peer_id: block_with_peer.peer_id,
             signature: block_with_peer.signature,
+            result,
         })
     }
 

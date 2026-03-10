@@ -27,6 +27,9 @@ rollup-node-primitives.workspace = true
 rollup-node-providers.workspace = true
 scroll-l1.workspace = true
 
+# reth
+reth-tasks.workspace = true
+
 # scroll
 scroll-alloy-consensus.workspace = true
 

@@ -17,6 +17,11 @@ pub struct BlockImportOutcome {
 }
 
 impl BlockImportOutcome {
+    /// Creates a new `BlockImportOutcome` instance for a finalized block with the given peer ID.
+    pub fn finalized_block(peer: PeerId) -> Self {
+        Self { peer, result: Err(BlockImportError::L2FinalizedBlockReceived(peer)) }
+    }
+
     /// Creates a new `BlockImportOutcome` instance for an invalid block with the given peer ID.
     pub fn invalid_block(peer: PeerId) -> Self {
         Self { peer, result: Err(BlockImportError::Validation(BlockValidationError::InvalidBlock)) }
@@ -56,6 +61,8 @@ pub enum BlockImportError {
     Consensus(ConsensusError),
     /// An error occurred during block validation.
     Validation(BlockValidationError),
+    /// A finalized block was received from a peer.
+    L2FinalizedBlockReceived(PeerId),
 }
 
 /// A consensus related error that can occur during block import.

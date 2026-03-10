@@ -19,6 +19,8 @@ async fn test_should_not_index_latest_block_multiple_times() -> eyre::Result<()>
     const CHAIN_LEN: usize = 200;
     const HALF_CHAIN_LEN: usize = 100;
     const LOGS_QUERY_BLOCK_RANGE: u64 = 500;
+    const L1_LIVENESS_THRESHOLD: u64 = 60;
+    const L1_LIVENESS_CHECK_INTERVAL: u64 = 12;
 
     // Given
     let (finalized, latest, headers) = chain(CHAIN_LEN);
@@ -59,11 +61,14 @@ async fn test_should_not_index_latest_block_multiple_times() -> eyre::Result<()>
     );
 
     // spawn the watcher and verify received notifications are consistent.
-    let mut l1_watcher = L1Watcher::spawn(
+    let (_, mut l1_watcher) = L1Watcher::spawn(
         mock_provider,
         L1BlockStartupInfo::None,
         Arc::new(config),
         LOGS_QUERY_BLOCK_RANGE,
+        L1_LIVENESS_THRESHOLD,
+        L1_LIVENESS_CHECK_INTERVAL,
+        false,
     )
     .await;
     let mut prev_block_info = Default::default();

@@ -30,7 +30,14 @@ fn main() {
     if let Err(err) = Cli::<ScrollChainSpecParser, ScrollRollupNodeConfig>::parse().run(
         |builder, args| async move {
             info!(target: "reth::cli", "Launching node");
+
+            // Modify the chain spec based on the CLI args.
             let config = builder.config().clone();
+            let mut chain_spec = (*config.chain).clone();
+            chain_spec.config.l1_data_fee_buffer_check = args.require_l1_data_fee_buffer;
+            let config = config.with_chain(chain_spec);
+
+            // Launch the node.
             let handle = builder
                 .node(ScrollRollupNode::new(args, config).await)
                 .launch_with_fn(|builder| {

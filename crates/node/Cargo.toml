@@ -27,9 +27,11 @@ alloy-chains.workspace = true
 alloy-consensus.workspace = true
 alloy-genesis.workspace = true
 alloy-network.workspace = true
+alloy-eips.workspace = true
 alloy-primitives.workspace = true
 alloy-provider.workspace = true
 alloy-rpc-client.workspace = true
+alloy-rpc-types-engine.workspace = true
 alloy-signer-local.workspace = true
 alloy-signer-aws = "1.0.30"
 alloy-signer = "1.0.30"
@@ -64,11 +66,13 @@ reth-network.workspace = true
 reth-network-api.workspace = true
 reth-network-p2p.workspace = true
 reth-network-peers.workspace = true
+reth-provider.workspace = true
 reth-revm.workspace = true
 reth-rpc-api.workspace = true
 reth-rpc-eth-api.workspace = true
 reth-rpc-eth-types.workspace = true
 reth-tasks.workspace = true
+reth-tokio-util.workspace = true
 reth-transaction-pool.workspace = true
 reth-trie-db.workspace = true
 
@@ -86,16 +90,16 @@ aws-config = "1.8.0"
 aws-sdk-kms = "1.76.0"
 
 # test-utils
-alloy-eips = { workspace = true, optional = true }
+anvil = { git = "https://github.com/foundry-rs/foundry.git", rev = "2c84e1c970d11ef5023a77d8002a1cb70b143888", default-features = false, optional = true }
 alloy-rpc-types-eth = { workspace = true, optional = true }
-alloy-rpc-types-engine = { workspace = true, optional = true }
+alloy-rpc-types-anvil = { workspace = true, optional = true }
+reth-db = { workspace = true, optional = true, features = ["test-utils"] }
 reth-e2e-test-utils = { workspace = true, optional = true }
 reth-engine-local = { workspace = true, optional = true }
-reth-provider = { workspace = true, optional = true }
+reth-fs-util = { workspace = true, optional = true }
 reth-rpc-layer = { workspace = true, optional = true }
 reth-rpc-server-types = { workspace = true, optional = true }
 reth-storage-api = { workspace = true, optional = true }
-reth-tokio-util = { workspace = true, optional = true }
 scroll-alloy-rpc-types-engine = { workspace = true, optional = true }
 scroll-alloy-rpc-types.workspace = true
 
@@ -127,15 +131,18 @@ tracing.workspace = true
 console-subscriber = "0.5.0"
 
 # pprof dependencies
-pprof = { version = "0.15.0", features = ["flamegraph", "protobuf-codec"] }
+pprof = { version = "0.15.0", features = ["flamegraph", "prost-codec"] }
 hyper = { version = "1.5", features = ["full"] }
 hyper-util = { version = "0.1", features = ["tokio"] }
 http-body-util = "0.1"
 
 [dev-dependencies]
 alloy-chains.workspace = true
+alloy-consensus.workspace = true
+alloy-genesis.workspace = true
 alloy-eips.workspace = true
 futures.workspace = true
+reth-db = { workspace = true, features = ["test-utils"] }
 reth-e2e-test-utils.workspace = true
 reth-node-core.workspace = true
 reth-provider.workspace = true
@@ -166,7 +173,9 @@ debug-toolkit = [
     "dep:tracing-subscriber",
 ]
 test-utils = [
+    "reth-db",
     "reth-engine-local",
+    "reth-fs-util",
     "reth-trie-db/test-utils",
     "reth-chainspec/test-utils",
     "reth-evm/test-utils",
@@ -184,14 +193,16 @@ test-utils = [
     "reth-e2e-test-utils",
     "reth-rpc-server-types",
     "reth-rpc-layer",
-    "reth-tokio-util",
     "scroll-alloy-rpc-types-engine",
-    "alloy-rpc-types-engine",
     "reth-primitives-traits/test-utils",
     "reth-network-p2p/test-utils",
     "rollup-node-chain-orchestrator/test-utils",
     "scroll-network/test-utils",
-    "alloy-eips",
+    "anvil",
     "reth-storage-api",
     "alloy-rpc-types-eth",
+    "alloy-rpc-types-anvil",
+    "alloy-provider/anvil-api",
+    "alloy-provider/anvil-node",
+    "reth-db?/test-utils",
 ]

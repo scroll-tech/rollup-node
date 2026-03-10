@@ -43,9 +43,17 @@ const RN_FOLLOWER_RPC_URL: &str = "http://localhost:8546";
 /// The l2geth node RPC URL for the Docker Compose environment.
 const L2GETH_SEQUENCER_RPC_URL: &str = "http://localhost:8547";
 
+/// The l2geth follower node RPC URL for the Docker Compose environment.
 const L2GETH_FOLLOWER_RPC_URL: &str = "http://localhost:8548";
 
-const RN_SEQUENCER_ENODE: &str= "enode://e7f7e271f62bd2b697add14e6987419758c97e83b0478bd948f5f2d271495728e7edef5bd78ad65258ac910f28e86928ead0c42ee51f2a0168d8ca23ba939766@{IP}:30303";
+/// The remote source node RPC URL for the Docker Compose environment.
+const RN_REMOTE_SOURCE_RPC_URL: &str = "http://localhost:8546";
+
+/// The l2geth skip signer check node RPC URL for the Docker Compose environment.
+const L2GETH_SKIPSIGNERCHECK_RPC_URL: &str = "http://localhost:8547";
+
+const RN_SEQUENCER_ENODE: &str = "enode://e7f7e271f62bd2b697add14e6987419758c97e83b0478bd948f5f2d271495728e7edef5bd78ad65258ac910f28e86928ead0c42ee51f2a0168d8ca23ba939766@{IP}:30303";
+const RN_REMOTE_SOURCE_ENODE: &str = "enode://849431bd98c23f8203cf475cfd8efb980d1e2af46337141cfb7dd960d4ae6f8c489846da293305705c8918fbf991e41805afc8c7231c96f3f938120b6826affc@{IP}:30303";
 const L2GETH_SEQUENCER_ENODE: &str = "enode://8fc4f6dfd0a2ebf56560d0b0ef5e60ad7bcb01e13f929eae53a4c77086d9c1e74eb8b8c8945035d25c6287afdd871f0d41b3fd7e189697decd0f13538d1ac620@{IP}:30303";
 
 pub struct DockerComposeEnv {
@@ -78,6 +86,33 @@ impl DockerComposeEnv {
         Self::wait_for_l2_node_ready(RN_FOLLOWER_RPC_URL, 30).await?;
         Self::wait_for_l2_node_ready(L2GETH_SEQUENCER_RPC_URL, 30).await?;
         Self::wait_for_l2_node_ready(L2GETH_FOLLOWER_RPC_URL, 30).await?;
+
+        tracing::info!("✅ All services are ready!");
+        Ok(env)
+    }
+
+    /// Create a new DockerComposeEnv for remote block source tests and wait for all services to be
+    /// ready
+    pub async fn new_remote_source(test_name: &str) -> Result<Self> {
+        let project_name = format!("test-{test_name}");
+        let compose_file = "docker-compose.remote-source.yml";
+
+        tracing::info!("🚀 Starting test environment: {project_name}");
+
+        // Pre-cleanup existing containers to avoid conflicts
+        Self::cleanup(compose_file, &project_name, false);
+
+        // Start the environment
+        let env = Self::start_environment(compose_file, &project_name)?;
+
+        // Start streaming logs in the background
+        let _ = Self::stream_container_logs(compose_file, &project_name).await;
+
+        // Wait for all services to be ready
+        tracing::info!("⏳ Waiting for services to be ready...");
+        Self::wait_for_l2_node_ready(RN_SEQUENCER_RPC_URL, 30).await?;
+        Self::wait_for_l2_node_ready(RN_REMOTE_SOURCE_RPC_URL, 30).await?;
+        Self::wait_for_l2_node_ready(L2GETH_SKIPSIGNERCHECK_RPC_URL, 30).await?;
 
         tracing::info!("✅ All services are ready!");
         Ok(env)
@@ -188,6 +223,21 @@ impl DockerComposeEnv {
         ))
     }
 
+    /// Get a configured remote source provider
+    pub async fn get_rn_remote_source_provider(&self) -> Result<NamedProvider> {
+        let provider = ProviderBuilder::<_, _, Scroll>::default()
+            .with_recommended_fillers()
+            .connect(RN_REMOTE_SOURCE_RPC_URL)
+            .await
+            .map_err(|e| eyre::eyre!("Failed to connect to RN remote source: {}", e))?;
+        Ok(NamedProvider::new(
+            Box::new(provider),
+            "RN Remote Source",
+            "rollup-node-remote-source",
+            RN_REMOTE_SOURCE_RPC_URL,
+        ))
+    }
+
     /// Get a configured l2geth sequencer provider
     pub async fn get_l2geth_sequencer_provider(&self) -> Result<NamedProvider> {
         let provider = ProviderBuilder::<_, _, Scroll>::default()
@@ -215,6 +265,21 @@ impl DockerComposeEnv {
             "L2Geth Follower",
             "l2geth-follower",
             L2GETH_FOLLOWER_RPC_URL,
+        ))
+    }
+
+    /// Get a configured l2geth skip signer check provider
+    pub async fn get_l2geth_skipsignercheck_provider(&self) -> Result<NamedProvider> {
+        let provider = ProviderBuilder::<_, _, Scroll>::default()
+            .with_recommended_fillers()
+            .connect(L2GETH_SKIPSIGNERCHECK_RPC_URL)
+            .await
+            .map_err(|e| eyre::eyre!("Failed to connect to l2geth skip signer check: {}", e))?;
+        Ok(NamedProvider::new(
+            Box::new(provider),
+            "L2Geth SkipSignerCheck",
+            "l2geth-skipsignercheck",
+            L2GETH_SKIPSIGNERCHECK_RPC_URL,
         ))
     }
 
@@ -439,6 +504,13 @@ impl DockerComposeEnv {
     pub fn rn_sequencer_enode(&self) -> Result<String> {
         let ip = self.get_container_ip(&self.get_full_container_name("rollup-node-sequencer"))?;
         Ok(RN_SEQUENCER_ENODE.replace("{IP}", &ip))
+    }
+
+    /// Get the rollup node remote source enode URL with resolved IP address
+    pub fn rn_remote_source_enode(&self) -> Result<String> {
+        let ip =
+            self.get_container_ip(&self.get_full_container_name("rollup-node-remote-source"))?;
+        Ok(RN_REMOTE_SOURCE_ENODE.replace("{IP}", &ip))
     }
 
     /// Get the l2geth sequencer enode URL with resolved IP address

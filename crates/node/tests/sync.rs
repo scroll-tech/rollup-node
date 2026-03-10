@@ -14,7 +14,7 @@ use rollup_node::{
     },
     BlobProviderArgs, ChainOrchestratorArgs, ConsensusArgs, EngineDriverArgs, L1ProviderArgs,
     PprofArgs, RollupNodeDatabaseArgs, RollupNodeGasPriceOracleArgs, RollupNodeNetworkArgs,
-    RpcArgs, ScrollRollupNodeConfig, SequencerArgs,
+    RpcArgs, ScrollRollupNodeConfig, SequencerArgs, TestArgs,
 };
 use rollup_node_chain_orchestrator::ChainOrchestratorEvent;
 use rollup_node_primitives::BlockInfo;
@@ -36,7 +36,7 @@ async fn test_should_consolidate_to_block_15k() -> eyre::Result<()> {
     };
 
     let node_config = ScrollRollupNodeConfig {
-        test: false,
+        test_args: TestArgs { test: false, skip_l1_synced: false },
         network_args: RollupNodeNetworkArgs {
             enable_eth_scroll_wire_bridge: false,
             enable_scroll_wire: false,
@@ -55,6 +55,7 @@ async fn test_should_consolidate_to_block_15k() -> eyre::Result<()> {
             initial_backoff: 100,
             logs_query_block_range: 500,
             cache_max_items: 100,
+            ..Default::default()
         },
         engine_driver_args: EngineDriverArgs { sync_at_startup: false },
         sequencer_args: SequencerArgs {
@@ -76,12 +77,14 @@ async fn test_should_consolidate_to_block_15k() -> eyre::Result<()> {
         consensus_args: ConsensusArgs::noop(),
         database: None,
         rpc_args: RpcArgs::default(),
+        remote_block_source_args: Default::default(),
         pprof_args: PprofArgs::default(),
+        require_l1_data_fee_buffer: false,
     };
 
     let chain_spec = (*SCROLL_SEPOLIA).clone();
-    let (mut nodes, _tasks, _) =
-        setup_engine(node_config, 1, chain_spec.clone(), false, false, None).await?;
+    let (mut nodes, _dbs, _wallet) =
+        setup_engine(node_config, 1, chain_spec.clone(), false, false, None, None).await?;
     let node = nodes.pop().unwrap();
 
     // We perform consolidation up to block 15k. This allows us to capture a batch revert event at
@@ -520,7 +523,7 @@ async fn test_chain_orchestrator_l1_reorg() -> eyre::Result<()> {
     reth_tracing::init_test_tracing();
     let node_config = default_test_scroll_rollup_node_config();
     let sequencer_node_config = ScrollRollupNodeConfig {
-        test: true,
+        test_args: TestArgs { test: true, skip_l1_synced: false },
         network_args: RollupNodeNetworkArgs {
             enable_eth_scroll_wire_bridge: false,
             enable_scroll_wire: true,
@@ -546,25 +549,36 @@ async fn test_chain_orchestrator_l1_reorg() -> eyre::Result<()> {
         consensus_args: ConsensusArgs::noop(),
         database: None,
         rpc_args: RpcArgs::default(),
+        remote_block_source_args: Default::default(),
         pprof_args: PprofArgs::default(),
+        require_l1_data_fee_buffer: false,
     };
 
     // Create the chain spec for scroll dev with Feynman activated and a test genesis.
     let chain_spec = (*SCROLL_DEV).clone();
 
     // Create a sequencer node and an unsynced node.
-    let (mut nodes, _tasks, _) =
-        setup_engine(sequencer_node_config.clone(), 1, chain_spec.clone(), false, false, None)
-            .await
-            .unwrap();
+    let (mut nodes, _dbs, _wallet) = setup_engine(
+        sequencer_node_config.clone(),
+        1,
+        chain_spec.clone(),
+        false,
+        false,
+        None,
+        None,
+    )
+    .await
+    .unwrap();
     let mut sequencer = nodes.pop().unwrap();
     let sequencer_handle = sequencer.inner.rollup_manager_handle.clone();
     let mut sequencer_events = sequencer_handle.get_event_listener().await?;
     let sequencer_l1_watcher_tx =
         sequencer.inner.add_ons_handle.rollup_manager_handle.l1_watcher_mock.clone().unwrap();
 
-    let (mut nodes, _tasks, _) =
-        setup_engine(node_config.clone(), 1, chain_spec.clone(), false, false, None).await.unwrap();
+    let (mut nodes, _dbs, _wallet) =
+        setup_engine(node_config.clone(), 1, chain_spec.clone(), false, false, None, None)
+            .await
+            .unwrap();
     let mut follower = nodes.pop().unwrap();
     let mut follower_events = follower.inner.rollup_manager_handle.get_event_listener().await?;
     let follower_l1_watcher_tx =

@@ -69,6 +69,17 @@ where
 
         *self.scroll_wire_events.try_lock().unwrap() = Some(events);
 
+        let mut network_builder = ScrollNetworkBuilder::new(
+            self.config.database.clone().expect("database is set via hydration"),
+        )
+        .with_signer(self.config.network_args.signer_address);
+
+        // Only add scroll-wire sub-protocol if enabled
+        if self.config.network_args.enable_scroll_wire {
+            network_builder =
+                network_builder.with_sub_protocol(scroll_wire_handler.into_rlpx_sub_protocol());
+        }
+
         ScrollNode::components()
             .payload(BasicPayloadServiceBuilder::new(ScrollPayloadBuilderBuilder {
                 payload_building_time_limit: Duration::from_millis(
@@ -77,13 +88,7 @@ where
                 best_transactions: (),
                 block_da_size_limit: Some(constants::DEFAULT_PAYLOAD_SIZE_LIMIT),
             }))
-            .network(
-                ScrollNetworkBuilder::new(
-                    self.config.database.clone().expect("database is set via hydration"),
-                )
-                .with_sub_protocol(scroll_wire_handler.into_rlpx_sub_protocol())
-                .with_signer(self.config.network_args.signer_address),
-            )
+            .network(network_builder)
     }
 
     fn add_ons(&self) -> Self::AddOns {
