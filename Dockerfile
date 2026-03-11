@@ -1,4 +1,4 @@
-FROM rust:1.88.0 AS chef
+FROM rust:1.91 AS chef
 
 ARG CARGO_FEATURES=""
 
