@@ -63,6 +63,8 @@ test-utils = [
     "scroll-l1/test-utils",
     "dep:alloy-rpc-client",
     "rollup-node-providers/test-utils",
+    "reth-tasks/test-utils",
+    "reth-tasks/test-utils",
 ]
 arbitrary = [
     "dep:arbitrary",

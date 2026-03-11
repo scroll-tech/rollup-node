@@ -372,7 +372,7 @@ pub fn create_wallet(chain_id: u64) -> Arc<Mutex<Wallet>> {
 /// Generate a transfer transaction with the given wallet.
 pub async fn generate_tx(wallet: Arc<Mutex<Wallet>>) -> Bytes {
     let mut wallet = wallet.lock().await;
-    let tx_fut = TransactionTestContext::transfer_tx_nonce_bytes(
+    let tx_fut = TransactionTestContext::transfer_tx_bytes_with_nonce(
         wallet.chain_id,
         wallet.inner.clone(),
         wallet.inner_nonce,

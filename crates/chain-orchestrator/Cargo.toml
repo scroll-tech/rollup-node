@@ -99,6 +99,7 @@ test-utils = [
     "scroll-db/test-utils",
     "scroll-engine/test-utils",
     "scroll-network/test-utils",
+    "reth-tasks/test-utils",
 ]
 serde = [
     "dep:serde",

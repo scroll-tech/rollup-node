@@ -217,7 +217,7 @@ impl ScrollRollupNodeConfig {
                 Ok(handle) => {
                     tracing::info!(target: "rollup_node::pprof", "pprof server started successfully");
                     // Spawn the pprof server task
-                    ctx.task_executor.spawn_critical("pprof_server", async move {
+                    ctx.task_executor.spawn_critical_task("pprof_server", async move {
                         if let Err(e) = handle.await {
                             tracing::error!(target: "rollup_node::pprof", "pprof server error: {:?}", e);
                         }
@@ -281,7 +281,7 @@ impl ScrollRollupNodeConfig {
         // Fetch the database from the hydrated config.
         let db = self.database.clone().expect("should hydrate config before build");
         let db_maintenance = DatabaseMaintenance::new(db.clone());
-        ctx.task_executor.spawn(db_maintenance.run());
+        ctx.task_executor.spawn_critical_task("db_maintenance", db_maintenance.run());
 
         // Run the database migrations
         if let Some(named) = chain_spec.chain().named() {
@@ -383,7 +383,8 @@ impl ScrollRollupNodeConfig {
             td_constant(chain_spec.chain().named()),
             authorized_signer,
         );
-        ctx.task_executor.spawn(scroll_network_manager.run());
+        ctx.task_executor
+            .spawn_critical_task("scroll_network_manager", scroll_network_manager.run());
 
         tracing::info!(target: "scroll::node::args", fcs = ?fcs, payload_building_duration = ?self.sequencer_args.payload_building_duration, "Starting engine driver");
         let engine = Engine::new(Arc::new(engine_api), fcs);

@@ -35,7 +35,7 @@ async fn skip_block_with_no_transactions() {
     reth_tracing::init_test_tracing();
 
     // setup a test node
-    let (mut nodes, _tasks, _wallet) = setup(1, false).await.unwrap();
+    let (mut nodes, _wallet) = setup(1, false).await.unwrap();
     let node = nodes.pop().unwrap();
 
     // create a fork choice state
@@ -89,7 +89,7 @@ async fn can_build_blocks() {
     reth_tracing::init_test_tracing();
 
     // setup a test node
-    let (mut nodes, _tasks, wallet) = setup(1, false).await.unwrap();
+    let (mut nodes, wallet) = setup(1, false).await.unwrap();
     let node = nodes.pop().unwrap();
     let wallet = Arc::new(Mutex::new(wallet));
 
@@ -131,7 +131,7 @@ async fn can_build_blocks() {
 
     // add a transaction to the pool
     let mut wallet_lock = wallet.lock().await;
-    let raw_tx = TransactionTestContext::transfer_tx_nonce_bytes(
+    let raw_tx = TransactionTestContext::transfer_tx_bytes_with_nonce(
         wallet_lock.chain_id,
         wallet_lock.inner.clone(),
         wallet_lock.inner_nonce,
@@ -277,7 +277,7 @@ async fn can_build_blocks_with_delayed_l1_messages() {
 
     // add a transaction to the pool
     let mut wallet_lock = wallet.lock().await;
-    let raw_tx = TransactionTestContext::transfer_tx_nonce_bytes(
+    let raw_tx = TransactionTestContext::transfer_tx_bytes_with_nonce(
         wallet_lock.chain_id,
         wallet_lock.inner.clone(),
         wallet_lock.inner_nonce,
@@ -534,7 +534,7 @@ async fn can_sequence_blocks_with_private_key_file() -> eyre::Result<()> {
 
     // Generate and inject transaction
     let mut wallet_lock = wallet.lock().await;
-    let raw_tx = TransactionTestContext::transfer_tx_nonce_bytes(
+    let raw_tx = TransactionTestContext::transfer_tx_bytes_with_nonce(
         wallet_lock.chain_id,
         wallet_lock.inner.clone(),
         wallet_lock.inner_nonce,
@@ -641,7 +641,7 @@ async fn can_sequence_blocks_with_hex_key_file_without_prefix() -> eyre::Result<
 
     // Generate and inject transaction
     let mut wallet_lock = wallet.lock().await;
-    let raw_tx = TransactionTestContext::transfer_tx_nonce_bytes(
+    let raw_tx = TransactionTestContext::transfer_tx_bytes_with_nonce(
         wallet_lock.chain_id,
         wallet_lock.inner.clone(),
         wallet_lock.inner_nonce,
@@ -704,7 +704,7 @@ async fn can_build_blocks_and_exit_at_gas_limit() {
     // add transactions.
     let mut wallet_lock = wallet.lock().await;
     for _ in 0..TRANSACTIONS_COUNT {
-        let raw_tx = TransactionTestContext::transfer_tx_nonce_bytes(
+        let raw_tx = TransactionTestContext::transfer_tx_bytes_with_nonce(
             wallet_lock.chain_id,
             wallet_lock.inner.clone(),
             wallet_lock.inner_nonce,
@@ -791,7 +791,7 @@ async fn can_build_blocks_and_exit_at_time_limit() {
     // add transactions.
     let mut wallet_lock = wallet.lock().await;
     for _ in 0..TRANSACTIONS_COUNT {
-        let raw_tx = TransactionTestContext::transfer_tx_nonce_bytes(
+        let raw_tx = TransactionTestContext::transfer_tx_bytes_with_nonce(
             wallet_lock.chain_id,
             wallet_lock.inner.clone(),
             wallet_lock.inner_nonce,
