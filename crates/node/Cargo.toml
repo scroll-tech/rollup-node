@@ -10,6 +10,11 @@ exclude.workspace = true
 name = "rollup-node"
 path = "src/main.rs"
 
+[[bin]]
+name = "scroll-debug"
+path = "src/bin/scroll_debug.rs"
+required-features = ["debug-toolkit"]
+
 [lints]
 workspace = true
 
@@ -19,6 +24,9 @@ async-trait.workspace = true
 
 # alloy
 alloy-chains.workspace = true
+alloy-consensus.workspace = true
+alloy-genesis.workspace = true
+alloy-network.workspace = true
 alloy-eips.workspace = true
 alloy-primitives.workspace = true
 alloy-provider.workspace = true
@@ -46,6 +54,7 @@ reth-scroll-node.workspace = true
 reth-scroll-rpc.workspace = true
 
 reth-chainspec.workspace = true
+reth-cli.workspace = true
 reth-cli-util.workspace = true
 reth-eth-wire-types.workspace = true
 reth-evm.workspace = true
@@ -56,6 +65,7 @@ reth-node-types.workspace = true
 reth-network.workspace = true
 reth-network-api.workspace = true
 reth-network-p2p.workspace = true
+reth-network-peers.workspace = true
 reth-provider.workspace = true
 reth-revm.workspace = true
 reth-rpc-api.workspace = true
@@ -93,6 +103,15 @@ reth-storage-api = { workspace = true, optional = true }
 scroll-alloy-rpc-types-engine = { workspace = true, optional = true }
 scroll-alloy-rpc-types.workspace = true
 
+# debug-toolkit dependencies
+alloy-sol-types = { workspace = true, optional = true }
+colored = { version = "3.0", optional = true }
+crossterm = { version = "0.28", optional = true }
+glob = { version = "0.3", optional = true }
+regex-lite = { version = "0.1", optional = true }
+serde = { workspace = true, optional = true }
+tracing-subscriber = { version = "0.3", optional = true }
+
 scroll-db.workspace = true
 scroll-engine.workspace = true
 scroll-migration.workspace = true
@@ -103,6 +122,7 @@ auto_impl.workspace = true
 clap = { workspace = true, features = ["derive", "env"] }
 eyre.workspace = true
 futures.workspace = true
+serde_json.workspace = true
 jsonrpsee = { version = "0.26.0", features = ["server", "client", "macros"] }
 rayon.workspace = true
 reqwest.workspace = true
@@ -142,6 +162,16 @@ alloy-rpc-types-eth = { workspace = true }
 
 [features]
 js-tracer = ["reth-scroll-node/js-tracer", "reth-scroll-rpc/js-tracer"]
+debug-toolkit = [
+    "test-utils",
+    "dep:alloy-sol-types",
+    "dep:colored",
+    "dep:crossterm",
+    "dep:glob",
+    "dep:regex-lite",
+    "dep:serde",
+    "dep:tracing-subscriber",
+]
 test-utils = [
     "reth-db",
     "reth-engine-local",

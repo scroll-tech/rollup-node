@@ -11,22 +11,27 @@ use crate::{
 };
 
 use alloy_eips::BlockNumberOrTag;
-use alloy_primitives::{Address, B256};
+use alloy_network::Ethereum;
+use alloy_primitives::Address;
 use alloy_provider::{ext::AnvilApi, layers::CacheLayer, Provider, ProviderBuilder};
 use alloy_rpc_client::RpcClient;
 use alloy_rpc_types_anvil::ReorgOptions;
 use alloy_rpc_types_eth::Block;
 use alloy_signer_local::PrivateKeySigner;
 use alloy_transport::layers::RetryBackoffLayer;
+use reth_chainspec::EthChainSpec;
+use reth_cli::chainspec::ChainSpecParser;
 use reth_e2e_test_utils::{wallet::Wallet, NodeHelperType, TmpDB};
 use reth_eth_wire_types::BasicNetworkPrimitives;
 use reth_fs_util::remove_dir_all;
 use reth_network::NetworkHandle;
+use reth_network_peers::TrustedPeer;
 use reth_node_builder::NodeTypes;
 use reth_node_core::exit::NodeExitFuture;
 use reth_node_types::NodeTypesWithDBAdapter;
 use reth_provider::providers::BlockchainProvider;
-use reth_scroll_chainspec::SCROLL_DEV;
+use reth_scroll_chainspec::{ScrollChainSpec, SCROLL_DEV};
+use reth_scroll_cli::ScrollChainSpecParser;
 use reth_scroll_primitives::ScrollPrimitives;
 use reth_tasks::TaskManager;
 use reth_tokio_util::EventStream;
@@ -45,6 +50,9 @@ use std::{
 };
 use tokio::sync::Mutex;
 
+/// L1 provider type for making L1 RPC calls.
+pub type L1Provider = Box<dyn Provider<Ethereum> + Send + Sync>;
+
 /// Main test fixture providing a high-level interface for testing rollup nodes.
 pub struct TestFixture {
     /// The list of nodes in the test setup.
@@ -57,6 +65,8 @@ pub struct TestFixture {
     pub wallet: Arc<Mutex<Wallet>>,
     /// Chain spec used by the nodes.
     pub chain_spec: Arc<<ScrollRollupNode as NodeTypes>::ChainSpec>,
+    /// L1 provider for making L1 RPC calls (if connected to real L1).
+    pub l1_provider: Option<L1Provider>,
     /// Optional Anvil instance for L1 simulation.
     pub anvil: Option<anvil::NodeHandle>,
     /// The configuration for the nodes.
@@ -72,6 +82,7 @@ impl Debug for TestFixture {
             .field("wallet", &"<Mutex<Wallet>>")
             .field("chain_spec", &self.chain_spec)
             .field("anvil", &self.anvil.is_some())
+            .field("config", &self.config)
             .field("has_remote_source_node", &self.has_remote_source_node)
             .field("_tasks", &"<TaskManager>")
             .finish()
@@ -286,7 +297,7 @@ impl TestFixture {
         &mut self,
         node_index: usize,
         tx: impl Into<alloy_primitives::Bytes>,
-    ) -> eyre::Result<B256> {
+    ) -> eyre::Result<alloy_primitives::B256> {
         let node = self.nodes[node_index]
             .as_ref()
             .ok_or_else(|| eyre::eyre!("Node at index {} has been shutdown", node_index))?;
@@ -409,7 +420,6 @@ pub struct AnvilConfig {
 }
 
 /// Builder for creating test fixtures with a fluent API.
-#[derive(Debug, Clone)]
 pub struct TestFixtureBuilder {
     config: ScrollRollupNodeConfig,
     num_nodes: usize,
@@ -417,7 +427,23 @@ pub struct TestFixtureBuilder {
     chain_spec: Option<Arc<<ScrollRollupNode as NodeTypes>::ChainSpec>>,
     is_dev: bool,
     no_local_transactions_propagation: bool,
+    bootnodes: Option<Vec<TrustedPeer>>,
+    l1_provider: Option<L1Provider>,
     anvil_config: AnvilConfig,
+}
+
+impl std::fmt::Debug for TestFixtureBuilder {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("TestFixtureBuilder")
+            .field("config", &self.config)
+            .field("num_nodes", &self.num_nodes)
+            .field("chain_spec", &self.chain_spec)
+            .field("is_dev", &self.is_dev)
+            .field("no_local_transactions_propagation", &self.no_local_transactions_propagation)
+            .field("bootnodes", &self.bootnodes)
+            .field("l1_provider", &self.l1_provider.as_ref().map(|_| "L1Provider"))
+            .finish()
+    }
 }
 
 impl Default for TestFixtureBuilder {
@@ -436,6 +462,8 @@ impl TestFixtureBuilder {
             chain_spec: None,
             is_dev: false,
             no_local_transactions_propagation: false,
+            bootnodes: None,
+            l1_provider: None,
             anvil_config: AnvilConfig::default(),
         }
     }
@@ -470,7 +498,7 @@ impl TestFixtureBuilder {
     }
 
     /// Adds a sequencer node to the test with default settings.
-    pub fn sequencer(mut self) -> Self {
+    pub const fn sequencer(mut self) -> Self {
         self.config.sequencer_args.sequencer_enabled = true;
         self.config.sequencer_args.auto_start = false;
         self.config.sequencer_args.block_time = 100;
@@ -478,9 +506,13 @@ impl TestFixtureBuilder {
         self.config.sequencer_args.l1_message_inclusion_mode =
             L1MessageInclusionMode::BlockDepth(0);
         self.config.sequencer_args.allow_empty_blocks = true;
-        self.config.database_args.rn_db_path = Some(PathBuf::from("sqlite::memory:"));
-
         self.num_nodes += 1;
+        self
+    }
+
+    /// Sets the bootnodes for the test nodes.
+    pub fn bootnodes(mut self, bootnodes: Vec<TrustedPeer>) -> Self {
+        self.bootnodes = Some(bootnodes);
         self
     }
 
@@ -529,6 +561,17 @@ impl TestFixtureBuilder {
     ) -> Self {
         self.chain_spec = Some(spec);
         self
+    }
+
+    /// Set the chain by name ("dev", "sepolia", "mainnet") or by file path.
+    ///
+    /// This is a convenience method that loads the appropriate chain spec.
+    /// If the input is a file path (contains '/' or ends with '.json'), it will
+    /// load the genesis from the file.
+    pub fn with_chain(mut self, chain: &str) -> eyre::Result<Self> {
+        let chain_spec: Arc<ScrollChainSpec> = ScrollChainSpecParser::parse(chain)?;
+        self.chain_spec = Some(chain_spec);
+        Ok(self)
     }
 
     /// Enable dev mode.
@@ -588,9 +631,18 @@ impl TestFixtureBuilder {
     }
 
     /// Use `SystemContract` consensus with the given authorized signer address.
-    pub const fn with_consensus_system_contract(mut self, authorized_signer: Address) -> Self {
+    pub const fn with_consensus_system_contract(
+        mut self,
+        authorized_signer: Option<Address>,
+    ) -> Self {
         self.config.consensus_args.algorithm = ConsensusAlgorithm::SystemContract;
-        self.config.consensus_args.authorized_signer = Some(authorized_signer);
+        self.config.consensus_args.authorized_signer = authorized_signer;
+        self
+    }
+
+    /// Set the valid signer address for the network.
+    pub const fn with_network_valid_signer(mut self, address: Option<Address>) -> Self {
+        self.config.network_args.signer_address = address;
         self
     }
 
@@ -656,6 +708,12 @@ impl TestFixtureBuilder {
         self
     }
 
+    /// Set the L1 provider for making L1 RPC calls.
+    pub fn with_l1_provider(mut self, provider: L1Provider) -> Self {
+        self.l1_provider = Some(provider);
+        self
+    }
+
     /// Enable Anvil L1 with optional configuration.
     ///
     /// Defaults: `state_path` = `./tests/testdata/anvil_state.json`, others use Anvil defaults.
@@ -712,6 +770,7 @@ impl TestFixtureBuilder {
             chain_spec.clone(),
             self.is_dev,
             self.no_local_transactions_propagation,
+            self.bootnodes,
             None,
         )
         .await?;
@@ -732,12 +791,13 @@ impl TestFixtureBuilder {
             // Use a fast poll interval for tests
             remote_config.remote_block_source_args.poll_interval_ms = 100;
 
-            let (mut remote_nodes, remote_dbs, _) = setup_engine(
+            let (mut remote_nodes, remote_dbs, _wallet) = setup_engine(
                 remote_config,
                 1,
                 chain_spec.clone(),
                 self.is_dev,
                 self.no_local_transactions_propagation,
+                None,
                 None,
             )
             .await?;
@@ -764,6 +824,7 @@ impl TestFixtureBuilder {
             dbs,
             wallet: Arc::new(Mutex::new(wallet)),
             chain_spec,
+            l1_provider: self.l1_provider,
             anvil,
             config: self.config,
             has_remote_source_node: self.has_remote_source_node,

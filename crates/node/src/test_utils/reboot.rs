@@ -124,12 +124,13 @@ impl TestFixture {
         };
 
         // Create node instance with existing database
-        let (mut new_nodes, _, _) = setup_engine(
+        let (mut new_nodes, _tasks, _wallet) = setup_engine(
             config,
             1,
             self.chain_spec.clone(),
             true,
             false,
+            None,
             Some((reboot_node_idx, self.dbs[node_index].clone())),
         )
         .await?;

@@ -83,8 +83,8 @@ async fn test_should_consolidate_to_block_15k() -> eyre::Result<()> {
     };
 
     let chain_spec = (*SCROLL_SEPOLIA).clone();
-    let (mut nodes, _dbs, _) =
-        setup_engine(node_config, 1, chain_spec.clone(), false, false, None).await?;
+    let (mut nodes, _dbs, _wallet) =
+        setup_engine(node_config, 1, chain_spec.clone(), false, false, None, None).await?;
     let node = nodes.pop().unwrap();
 
     // We perform consolidation up to block 15k. This allows us to capture a batch revert event at
@@ -197,6 +197,7 @@ async fn test_should_consolidate_after_optimistic_sync() -> eyre::Result<()> {
 
     let mut sequencer = TestFixture::builder()
         .sequencer()
+        .with_memory_db()
         .with_eth_scroll_bridge(true)
         .with_scroll_wire(true)
         .auto_start(true)
@@ -206,7 +207,7 @@ async fn test_should_consolidate_after_optimistic_sync() -> eyre::Result<()> {
         .build()
         .await?;
 
-    let mut follower = TestFixture::builder().followers(1).build().await?;
+    let mut follower = TestFixture::builder().followers(1).with_memory_db().build().await?;
 
     // Send a notification to the sequencer node that the L1 watcher is synced.
     sequencer.l1().sync().await?;
@@ -557,18 +558,27 @@ async fn test_chain_orchestrator_l1_reorg() -> eyre::Result<()> {
     let chain_spec = (*SCROLL_DEV).clone();
 
     // Create a sequencer node and an unsynced node.
-    let (mut nodes, _dbs, _) =
-        setup_engine(sequencer_node_config.clone(), 1, chain_spec.clone(), false, false, None)
-            .await
-            .unwrap();
+    let (mut nodes, _dbs, _wallet) = setup_engine(
+        sequencer_node_config.clone(),
+        1,
+        chain_spec.clone(),
+        false,
+        false,
+        None,
+        None,
+    )
+    .await
+    .unwrap();
     let mut sequencer = nodes.pop().unwrap();
     let sequencer_handle = sequencer.inner.rollup_manager_handle.clone();
     let mut sequencer_events = sequencer_handle.get_event_listener().await?;
     let sequencer_l1_watcher_tx =
         sequencer.inner.add_ons_handle.rollup_manager_handle.l1_watcher_mock.clone().unwrap();
 
-    let (mut nodes, _dbs, _) =
-        setup_engine(node_config.clone(), 1, chain_spec.clone(), false, false, None).await.unwrap();
+    let (mut nodes, _dbs, _wallet) =
+        setup_engine(node_config.clone(), 1, chain_spec.clone(), false, false, None, None)
+            .await
+            .unwrap();
     let mut follower = nodes.pop().unwrap();
     let mut follower_events = follower.inner.rollup_manager_handle.get_event_listener().await?;
     let follower_l1_watcher_tx =
