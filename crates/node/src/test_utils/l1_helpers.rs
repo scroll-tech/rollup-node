@@ -109,16 +109,23 @@ impl<'a> L1Helper<'a> {
 
     /// Send notification to target nodes.
     async fn send_to_nodes(&self, notification: Arc<L1Notification>) -> eyre::Result<()> {
-        let nodes = if let Some(index) = self.target_node_index {
-            vec![&self.fixture.nodes[index]]
-        } else {
-            self.fixture.nodes.iter().collect()
+        // Collect senders first to avoid holding &self (non-Send) across await.
+        let senders: Vec<_> = {
+            let indices: Vec<usize> = if let Some(index) = self.target_node_index {
+                vec![index]
+            } else {
+                (0..self.fixture.nodes.len()).collect()
+            };
+            indices
+                .into_iter()
+                .filter_map(|i| self.fixture.nodes.get(i).and_then(|o| o.as_ref()))
+                .filter_map(|node| node.rollup_manager_handle.l1_watcher_mock.as_ref())
+                .map(|mock| mock.notification_tx.clone())
+                .collect()
         };
 
-        for node in nodes.into_iter().flatten() {
-            if let Some(tx) = &node.rollup_manager_handle.l1_watcher_mock {
-                tx.notification_tx.send(notification.clone()).await?;
-            }
+        for tx in senders {
+            tx.send(notification.clone()).await?;
         }
 
         Ok(())

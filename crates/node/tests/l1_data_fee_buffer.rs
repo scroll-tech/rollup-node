@@ -49,16 +49,16 @@ async fn test_l1_data_fee_buffer() -> eyre::Result<()> {
             .build(ScrollChainConfig::dev()),
     );
 
-    // Define the base test fixture.
-    let base_fixture =
+    // Base test fixture builder (created twice since .build() consumes it)
+    let base_fixture = || {
         TestFixture::builder().sequencer().with_chain_spec(chain_spec.clone()).config(|cfg| {
             cfg.sequencer_args.auto_start = true;
             cfg.sequencer_args.allow_empty_blocks = false;
-        });
+        })
+    };
 
     // Instantiate the test fixture without L1 data fee buffer requirement.
-    let mut fixture_no_buffer = base_fixture
-        .clone()
+    let mut fixture_no_buffer = base_fixture()
         .config(|cfg| {
             cfg.require_l1_data_fee_buffer = false;
         })
@@ -95,7 +95,7 @@ async fn test_l1_data_fee_buffer() -> eyre::Result<()> {
     drop(fixture_no_buffer);
 
     // Instantiate the test fixture with L1 data fee buffer requirement.
-    let mut fixture_with_buffer = base_fixture
+    let mut fixture_with_buffer = base_fixture()
         .config(|cfg| {
             cfg.require_l1_data_fee_buffer = true;
         })

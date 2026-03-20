@@ -5,6 +5,7 @@ use crate::{
     pprof::PprofConfig,
 };
 use alloy_chains::NamedChain;
+use alloy_consensus::BlockHeader;
 use alloy_primitives::{hex, Address, U128};
 use alloy_provider::{layers::CacheLayer, Provider, ProviderBuilder};
 use alloy_rpc_client::RpcClient;
@@ -19,7 +20,6 @@ use reth_network::NetworkProtocols;
 use reth_network_api::FullNetwork;
 use reth_network_p2p::FullBlockClient;
 use reth_node_builder::{rpc::RethRpcServerHandles, NodeConfig as RethNodeConfig};
-use reth_node_core::primitives::BlockHeader;
 use reth_scroll_chainspec::{
     ChainConfig, ScrollChainConfig, ScrollChainSpec, SCROLL_FEE_VAULT_ADDRESS,
 };
@@ -886,7 +886,7 @@ impl SignerArgs {
                 chain_id
             );
 
-            Ok(Some(Box::new(private_key_signer)))
+            Ok(Some(Box::new(private_key_signer) as Box<dyn Signer + Send + Sync>))
         } else if let Some(aws_kms_key_id) = &self.aws_kms_key_id {
             // Load AWS configuration
             let config_loader = aws_config::defaults(BehaviorVersion::latest());
@@ -905,11 +905,11 @@ impl SignerArgs {
                 chain_id
             );
 
-            Ok(Some(Box::new(aws_signer)))
+            Ok(Some(Box::new(aws_signer) as Box<dyn Signer + Send + Sync>))
         } else if let Some(private_key) = &self.private_key {
             tracing::info!(target: "scroll::node::args", "Created private key signer with address: {} for chain ID: {}", private_key.address(), chain_id);
             let signer = private_key.clone().with_chain_id(Some(chain_id));
-            Ok(Some(Box::new(signer)))
+            Ok(Some(Box::new(signer) as Box<dyn Signer + Send + Sync>))
         } else {
             Ok(None)
         }

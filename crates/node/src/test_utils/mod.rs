@@ -69,6 +69,7 @@ pub mod network_helpers;
 pub mod reboot;
 pub mod tx_helpers;
 
+use alloy_consensus::BlockHeader;
 // Re-export main types for convenience
 pub use database::{DatabaseHelper, DatabaseOperations};
 pub use event_utils::{EventAssertions, EventWaiter};
@@ -76,6 +77,7 @@ pub use fixture::{NodeHandle, TestFixture, TestFixtureBuilder};
 pub use network_helpers::{
     NetworkHelper, NetworkHelperProvider, ReputationChecker, ReputationChecks,
 };
+use reth_network_peers::TrustedPeer;
 
 // Legacy utilities - keep existing functions for backward compatibility
 use crate::{
@@ -96,12 +98,14 @@ use reth_node_builder::{
     rpc::RpcHandleProvider, EngineNodeLauncher, Node, NodeBuilder, NodeConfig,
     NodeHandle as RethNodeHandle, NodeTypes, PayloadAttributesBuilder, PayloadTypes, TreeConfig,
 };
-use reth_node_core::args::{DiscoveryArgs, NetworkArgs, RpcServerArgs, TxPoolArgs};
+use reth_node_core::args::{
+    DiscoveryArgs, NetworkArgs, PayloadBuilderArgs, RpcServerArgs, TxPoolArgs,
+};
 use reth_provider::providers::BlockchainProvider;
 use reth_rpc_server_types::RpcModuleSelection;
 use reth_tasks::TaskExecutor;
 use rollup_node_sequencer::L1MessageInclusionMode;
-use std::{path::PathBuf, sync::Arc};
+use std::sync::Arc;
 use tokio::sync::Mutex;
 use tracing::{span, Level};
 
@@ -115,6 +119,7 @@ pub async fn setup_engine(
     chain_spec: Arc<<ScrollRollupNode as NodeTypes>::ChainSpec>,
     is_dev: bool,
     no_local_transactions_propagation: bool,
+    trusted_peers: Option<Vec<TrustedPeer>>,
     reboot_info: Option<(usize, Arc<reth_db::test_utils::TempDatabase<reth_db::DatabaseEnv>>)>,
 ) -> eyre::Result<(
     Vec<ScrollNodeTestComponents>,
@@ -131,6 +136,8 @@ where
 {
     let network_config = NetworkArgs {
         discovery: DiscoveryArgs { disable_discovery: true, ..DiscoveryArgs::default() },
+        trusted_peers: trusted_peers.clone().unwrap_or_default(),
+        bootnodes: trusted_peers,
         ..NetworkArgs::default()
     };
 
@@ -152,6 +159,10 @@ where
         // Configure node with the test data directory
         let mut node_config = NodeConfig::new(chain_spec.clone())
             .with_network(network_config.clone())
+            .with_payload_builder(PayloadBuilderArgs {
+                gas_limit: Some(chain_spec.genesis_header().gas_limit()),
+                ..Default::default()
+            })
             .with_rpc(RpcServerArgs::default().with_http().with_http_api(RpcModuleSelection::All))
             .with_unused_ports()
             .set_dev(is_dev)
@@ -250,7 +261,7 @@ where
         nodes.push(node);
     }
 
-    Ok((nodes, dbs, Wallet::default().with_chain_id(chain_spec.chain().into())))
+    Ok((nodes, dbs, Wallet::new(10).with_chain_id(chain_spec.chain().into())))
 }
 
 /// Generate a transfer transaction with the given wallet.
@@ -306,9 +317,7 @@ pub fn default_sequencer_test_scroll_rollup_node_config() -> ScrollRollupNodeCon
     ScrollRollupNodeConfig {
         test_args: TestArgs { test: true, skip_l1_synced: false },
         network_args: RollupNodeNetworkArgs::default(),
-        database_args: RollupNodeDatabaseArgs {
-            rn_db_path: Some(PathBuf::from("sqlite::memory:")),
-        },
+        database_args: RollupNodeDatabaseArgs::default(),
         l1_provider_args: L1ProviderArgs::default(),
         engine_driver_args: EngineDriverArgs { sync_at_startup: true },
         chain_orchestrator_args: ChainOrchestratorArgs {
