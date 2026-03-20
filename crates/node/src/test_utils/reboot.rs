@@ -41,10 +41,10 @@ impl TestFixture {
             .get_mut(node_index)
             .and_then(|opt| opt.take())
             .expect("Node existence checked above");
-        let ScrollNodeTestComponents { node, task_manager, exit_future } = node;
+        let ScrollNodeTestComponents { node, task_executor, exit_future } = node;
 
-        tokio::task::spawn_blocking(|| {
-            if !task_manager.graceful_shutdown_with_timeout(Duration::from_secs(10)) {
+        tokio::task::spawn_blocking(move || {
+            if !task_executor.graceful_shutdown_with_timeout(Duration::from_secs(10)) {
                 return Err(eyre::eyre!("Failed to shutdown tasks within timeout"));
             }
             eyre::Ok(())

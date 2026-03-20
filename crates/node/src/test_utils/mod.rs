@@ -103,7 +103,7 @@ use reth_node_core::args::{
 };
 use reth_provider::providers::BlockchainProvider;
 use reth_rpc_server_types::RpcModuleSelection;
-use reth_tasks::TaskManager;
+use reth_tasks::TaskExecutor;
 use rollup_node_sequencer::L1MessageInclusionMode;
 use std::sync::Arc;
 use tokio::sync::Mutex;
@@ -166,7 +166,11 @@ where
             .with_rpc(RpcServerArgs::default().with_http().with_http_api(RpcModuleSelection::All))
             .with_unused_ports()
             .set_dev(is_dev)
-            .with_txpool(TxPoolArgs { no_local_transactions_propagation, ..Default::default() });
+            .with_txpool(TxPoolArgs {
+                no_local_transactions_propagation,
+                max_account_slots: 16_384,
+                ..Default::default()
+            });
 
         // Check if we already have provided a database for a node (reboot scenario)
         let db = if let Some((_, provided_db)) = &reboot_info {
@@ -212,10 +216,10 @@ where
 
         let span = span!(Level::INFO, "node", node_index);
         let _enter = span.enter();
-        let task_manager = TaskManager::current();
+        let task_executor = TaskExecutor::default();
         let testing_node = NodeBuilder::new(node_config.clone())
             .with_database(db.clone())
-            .with_launch_context(task_manager.executor());
+            .with_launch_context(task_executor.clone());
         let testing_config = testing_node.config().clone();
         let node = ScrollRollupNode::new(scroll_node_config.clone(), testing_config).await;
         let RethNodeHandle { node, node_exit_future } = testing_node
@@ -252,7 +256,7 @@ where
             }
         }
 
-        let node = ScrollNodeTestComponents::new(node, task_manager, node_exit_future).await;
+        let node = ScrollNodeTestComponents::new(node, task_executor, node_exit_future).await;
 
         nodes.push(node);
     }
@@ -263,7 +267,7 @@ where
 /// Generate a transfer transaction with the given wallet.
 pub async fn generate_tx(wallet: Arc<Mutex<Wallet>>) -> Bytes {
     let mut wallet = wallet.lock().await;
-    let tx_fut = TransactionTestContext::transfer_tx_nonce_bytes(
+    let tx_fut = TransactionTestContext::transfer_tx_bytes_with_nonce(
         wallet.chain_id,
         wallet.inner.clone(),
         wallet.inner_nonce,

@@ -25,4 +25,8 @@ impl<
     fn rpc_handle(&self) -> &RpcHandle<Node, EthApi> {
         &self.rpc_handle
     }
+
+    fn rpc_handle_mut(&mut self) -> &mut RpcHandle<Node, EthApi> {
+        &mut self.rpc_handle
+    }
 }

@@ -1,4 +1,7 @@
 {
+  "excludes": [
+    "Cargo.toml"
+  ],
   "toml": {
     "useTabs": false,
     "cargo.applyConventions": false,

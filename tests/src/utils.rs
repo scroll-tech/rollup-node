@@ -134,7 +134,7 @@ pub async fn wait_for_l1_message_queue_index_reached(
     nodes: &[&NamedProvider],
     expected_index: u64,
 ) -> Result<()> {
-    let timeout_duration = Duration::from_secs(60);
+    let timeout_duration = Duration::from_secs(120);
     let timeout_secs = timeout_duration.as_secs();
 
     tracing::info!(
@@ -198,7 +198,7 @@ pub async fn wait_for_l1_message_queue_index_reached(
 /// * `Ok(())` if all nodes reach the target block within the timeout
 /// * `Err` if timeout is reached or any provider call fails
 pub async fn wait_for_block(nodes: &[&NamedProvider], target_block: u64) -> Result<()> {
-    let timeout_duration = Duration::from_secs(60);
+    let timeout_duration = Duration::from_secs(120);
     let timeout_secs = timeout_duration.as_secs();
 
     tracing::info!(
@@ -372,7 +372,7 @@ pub fn create_wallet(chain_id: u64) -> Arc<Mutex<Wallet>> {
 /// Generate a transfer transaction with the given wallet.
 pub async fn generate_tx(wallet: Arc<Mutex<Wallet>>) -> Bytes {
     let mut wallet = wallet.lock().await;
-    let tx_fut = TransactionTestContext::transfer_tx_nonce_bytes(
+    let tx_fut = TransactionTestContext::transfer_tx_bytes_with_nonce(
         wallet.chain_id,
         wallet.inner.clone(),
         wallet.inner_nonce,

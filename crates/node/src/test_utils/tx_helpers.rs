@@ -60,7 +60,7 @@ impl<'a> TransferTxBuilder<'a> {
         let mut wallet = self.tx_helper.fixture.wallet.lock().await;
 
         // Generate the transaction
-        let raw_tx = TransactionTestContext::transfer_tx_nonce_bytes(
+        let raw_tx = TransactionTestContext::transfer_tx_bytes_with_nonce(
             wallet.chain_id,
             wallet.inner.clone(),
             wallet.inner_nonce,
@@ -85,7 +85,7 @@ impl<'a> TransferTxBuilder<'a> {
     pub async fn build(self) -> eyre::Result<Bytes> {
         let mut wallet = self.tx_helper.fixture.wallet.lock().await;
 
-        let raw_tx = TransactionTestContext::transfer_tx_nonce_bytes(
+        let raw_tx = TransactionTestContext::transfer_tx_bytes_with_nonce(
             wallet.chain_id,
             wallet.inner.clone(),
             wallet.inner_nonce,

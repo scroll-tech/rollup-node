@@ -33,7 +33,7 @@ use reth_provider::providers::BlockchainProvider;
 use reth_scroll_chainspec::{ScrollChainSpec, SCROLL_DEV};
 use reth_scroll_cli::ScrollChainSpecParser;
 use reth_scroll_primitives::ScrollPrimitives;
-use reth_tasks::TaskManager;
+use reth_tasks::TaskExecutor;
 use reth_tokio_util::EventStream;
 use rollup_node_chain_orchestrator::{ChainOrchestratorEvent, ChainOrchestratorHandle};
 use rollup_node_primitives::BlockInfo;
@@ -130,8 +130,8 @@ pub enum NodeType {
 pub struct ScrollNodeTestComponents {
     /// The node helper type for the test node.
     pub node: ScrollTestNode,
-    /// The task manager for the test node.
-    pub task_manager: TaskManager,
+    /// The task executor for the test node.
+    pub task_executor: TaskExecutor,
     /// The exit future for the test node.
     pub exit_future: NodeExitFuture,
 }
@@ -140,10 +140,10 @@ impl ScrollNodeTestComponents {
     /// Create new test node components.
     pub async fn new(
         node: ScrollTestNode,
-        task_manager: TaskManager,
+        task_executor: TaskExecutor,
         exit_future: NodeExitFuture,
     ) -> Self {
-        Self { node, task_manager, exit_future }
+        Self { node, task_executor, exit_future }
     }
 }
 
