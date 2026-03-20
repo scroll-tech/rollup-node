@@ -1,0 +1,741 @@
+<!DOCTYPE HTML>
+<html lang="en" class="light sidebar-visible" dir="ltr">
+    <head>
+        <!-- Book generated using mdBook -->
+        <meta charset="UTF-8">
+        <title>Debug Toolkit - Rollup node</title>
+
+
+        <!-- Custom HTML head -->
+
+        <meta name="description" content="">
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <meta name="theme-color" content="#ffffff">
+
+        <link rel="icon" href="favicon-de23e50b.svg">
+        <link rel="shortcut icon" href="favicon-8114d1fc.png">
+        <link rel="stylesheet" href="css/variables-8adf115d.css">
+        <link rel="stylesheet" href="css/general-2459343d.css">
+        <link rel="stylesheet" href="css/chrome-ae938929.css">
+        <link rel="stylesheet" href="css/print-9e4910d8.css" media="print">
+
+        <!-- Fonts -->
+        <link rel="stylesheet" href="fonts/fonts-9644e21d.css">
+
+        <!-- Highlight.js Stylesheets -->
+        <link rel="stylesheet" id="mdbook-highlight-css" href="highlight-493f70e1.css">
+        <link rel="stylesheet" id="mdbook-tomorrow-night-css" href="tomorrow-night-4c0ae647.css">
+        <link rel="stylesheet" id="mdbook-ayu-highlight-css" href="ayu-highlight-3fdfc3ac.css">
+
+        <!-- Custom theme stylesheets -->
+
+
+        <!-- Provide site root and default themes to javascript -->
+        <script>
+            const path_to_root = "";
+            const default_light_theme = "light";
+            const default_dark_theme = "navy";
+            window.path_to_searchindex_js = "searchindex-cddfffef.js";
+        </script>
+        <!-- Start loading toc.js asap -->
+        <script src="toc-9a5263bf.js"></script>
+    </head>
+    <body>
+    <div id="mdbook-help-container">
+        <div id="mdbook-help-popup">
+            <h2 class="mdbook-help-title">Keyboard shortcuts</h2>
+            <div>
+                <p>Press <kbd>←</kbd> or <kbd>→</kbd> to navigate between chapters</p>
+                <p>Press <kbd>S</kbd> or <kbd>/</kbd> to search in the book</p>
+                <p>Press <kbd>?</kbd> to show this help</p>
+                <p>Press <kbd>Esc</kbd> to hide this help</p>
+            </div>
+        </div>
+    </div>
+    <div id="mdbook-body-container">
+        <!-- Work around some values being stored in localStorage wrapped in quotes -->
+        <script>
+            try {
+                let theme = localStorage.getItem('mdbook-theme');
+                let sidebar = localStorage.getItem('mdbook-sidebar');
+
+                if (theme.startsWith('"') && theme.endsWith('"')) {
+                    localStorage.setItem('mdbook-theme', theme.slice(1, theme.length - 1));
+                }
+
+                if (sidebar.startsWith('"') && sidebar.endsWith('"')) {
+                    localStorage.setItem('mdbook-sidebar', sidebar.slice(1, sidebar.length - 1));
+                }
+            } catch (e) { }
+        </script>
+
+        <!-- Set the theme before any content is loaded, prevents flash -->
+        <script>
+            const default_theme = window.matchMedia("(prefers-color-scheme: dark)").matches ? default_dark_theme : default_light_theme;
+            let theme;
+            try { theme = localStorage.getItem('mdbook-theme'); } catch(e) { }
+            if (theme === null || theme === undefined) { theme = default_theme; }
+            const html = document.documentElement;
+            html.classList.remove('light')
+            html.classList.add(theme);
+            html.classList.add("js");
+        </script>
+
+        <input type="checkbox" id="mdbook-sidebar-toggle-anchor" class="hidden">
+
+        <!-- Hide / unhide sidebar before it is displayed -->
+        <script>
+            let sidebar = null;
+            const sidebar_toggle = document.getElementById("mdbook-sidebar-toggle-anchor");
+            if (document.body.clientWidth >= 1080) {
+                try { sidebar = localStorage.getItem('mdbook-sidebar'); } catch(e) { }
+                sidebar = sidebar || 'visible';
+            } else {
+                sidebar = 'hidden';
+                sidebar_toggle.checked = false;
+            }
+            if (sidebar === 'visible') {
+                sidebar_toggle.checked = true;
+            } else {
+                html.classList.remove('sidebar-visible');
+            }
+        </script>
+
+        <nav id="mdbook-sidebar" class="sidebar" aria-label="Table of contents">
+            <!-- populated by js -->
+            <mdbook-sidebar-scrollbox class="sidebar-scrollbox"></mdbook-sidebar-scrollbox>
+            <noscript>
+                <iframe class="sidebar-iframe-outer" src="toc.html"></iframe>
+            </noscript>
+            <div id="mdbook-sidebar-resize-handle" class="sidebar-resize-handle">
+                <div class="sidebar-resize-indicator"></div>
+            </div>
+        </nav>
+
+        <div id="mdbook-page-wrapper" class="page-wrapper">
+
+            <div class="page">
+                <div id="mdbook-menu-bar-hover-placeholder"></div>
+                <div id="mdbook-menu-bar" class="menu-bar sticky">
+                    <div class="left-buttons">
+                        <label id="mdbook-sidebar-toggle" class="icon-button" for="mdbook-sidebar-toggle-anchor" title="Toggle Table of Contents" aria-label="Toggle Table of Contents" aria-controls="mdbook-sidebar">
+                            <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M0 96C0 78.3 14.3 64 32 64H416c17.7 0 32 14.3 32 32s-14.3 32-32 32H32C14.3 128 0 113.7 0 96zM0 256c0-17.7 14.3-32 32-32H416c17.7 0 32 14.3 32 32s-14.3 32-32 32H32c-17.7 0-32-14.3-32-32zM448 416c0 17.7-14.3 32-32 32H32c-17.7 0-32-14.3-32-32s14.3-32 32-32H416c17.7 0 32 14.3 32 32z"/></svg></span>
+                        </label>
+                        <button id="mdbook-theme-toggle" class="icon-button" type="button" title="Change theme" aria-label="Change theme" aria-haspopup="true" aria-expanded="false" aria-controls="mdbook-theme-list">
+                            <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 576 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M371.3 367.1c27.3-3.9 51.9-19.4 67.2-42.9L600.2 74.1c12.6-19.5 9.4-45.3-7.6-61.2S549.7-4.4 531.1 9.6L294.4 187.2c-24 18-38.2 46.1-38.4 76.1L371.3 367.1zm-19.6 25.4l-116-104.4C175.9 290.3 128 339.6 128 400c0 3.9 .2 7.8 .6 11.6c1.8 17.5-10.2 36.4-27.8 36.4H96c-17.7 0-32 14.3-32 32s14.3 32 32 32H240c61.9 0 112-50.1 112-112c0-2.5-.1-5-.2-7.5z"/></svg></span>
+                        </button>
+                        <ul id="mdbook-theme-list" class="theme-popup" aria-label="Themes" role="menu">
+                            <li role="none"><button role="menuitem" class="theme" id="mdbook-theme-default_theme">Auto</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="mdbook-theme-light">Light</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="mdbook-theme-rust">Rust</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="mdbook-theme-coal">Coal</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="mdbook-theme-navy">Navy</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="mdbook-theme-ayu">Ayu</button></li>
+                        </ul>
+                        <button id="mdbook-search-toggle" class="icon-button" type="button" title="Search (`/`)" aria-label="Toggle Searchbar" aria-expanded="false" aria-keyshortcuts="/ s" aria-controls="mdbook-searchbar">
+                            <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M416 208c0 45.9-14.9 88.3-40 122.7L502.6 457.4c12.5 12.5 12.5 32.8 0 45.3s-32.8 12.5-45.3 0L330.7 376c-34.4 25.2-76.8 40-122.7 40C93.1 416 0 322.9 0 208S93.1 0 208 0S416 93.1 416 208zM208 352c79.5 0 144-64.5 144-144s-64.5-144-144-144S64 128.5 64 208s64.5 144 144 144z"/></svg></span>
+                        </button>
+                    </div>
+
+                    <h1 class="menu-title">Rollup node</h1>
+
+                    <div class="right-buttons">
+                        <a href="print.html" title="Print this book" aria-label="Print this book">
+                            <span class=fa-svg id="print-button"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M128 0C92.7 0 64 28.7 64 64v96h64V64H354.7L384 93.3V160h64V93.3c0-17-6.7-33.3-18.7-45.3L400 18.7C388 6.7 371.7 0 354.7 0H128zM384 352v32 64H128V384 368 352H384zm64 32h32c17.7 0 32-14.3 32-32V256c0-35.3-28.7-64-64-64H64c-35.3 0-64 28.7-64 64v96c0 17.7 14.3 32 32 32H64v64c0 35.3 28.7 64 64 64H384c35.3 0 64-28.7 64-64V384zm-16-88c-13.3 0-24-10.7-24-24s10.7-24 24-24s24 10.7 24 24s-10.7 24-24 24z"/></svg></span>
+                        </a>
+
+                    </div>
+                </div>
+
+                <div id="mdbook-search-wrapper" class="hidden">
+                    <form id="mdbook-searchbar-outer" class="searchbar-outer">
+                        <div class="search-wrapper">
+                            <input type="search" id="mdbook-searchbar" name="searchbar" placeholder="Search this book ..." aria-controls="mdbook-searchresults-outer" aria-describedby="searchresults-header">
+                            <div class="spinner-wrapper">
+                                <span class=fa-svg id="fa-spin"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M304 48c0-26.5-21.5-48-48-48s-48 21.5-48 48s21.5 48 48 48s48-21.5 48-48zm0 416c0-26.5-21.5-48-48-48s-48 21.5-48 48s21.5 48 48 48s48-21.5 48-48zM48 304c26.5 0 48-21.5 48-48s-21.5-48-48-48s-48 21.5-48 48s21.5 48 48 48zm464-48c0-26.5-21.5-48-48-48s-48 21.5-48 48s21.5 48 48 48s48-21.5 48-48zM142.9 437c18.7-18.7 18.7-49.1 0-67.9s-49.1-18.7-67.9 0s-18.7 49.1 0 67.9s49.1 18.7 67.9 0zm0-294.2c18.7-18.7 18.7-49.1 0-67.9S93.7 56.2 75 75s-18.7 49.1 0 67.9s49.1 18.7 67.9 0zM369.1 437c18.7 18.7 49.1 18.7 67.9 0s18.7-49.1 0-67.9s-49.1-18.7-67.9 0s-18.7 49.1 0 67.9z"/></svg></span>
+                            </div>
+                        </div>
+                    </form>
+                    <div id="mdbook-searchresults-outer" class="searchresults-outer hidden">
+                        <div id="mdbook-searchresults-header" class="searchresults-header"></div>
+                        <ul id="mdbook-searchresults">
+                        </ul>
+                    </div>
+                </div>
+
+                <!-- Apply ARIA attributes after the sidebar and the sidebar toggle button are added to the DOM -->
+                <script>
+                    document.getElementById('mdbook-sidebar-toggle').setAttribute('aria-expanded', sidebar === 'visible');
+                    document.getElementById('mdbook-sidebar').setAttribute('aria-hidden', sidebar !== 'visible');
+                    Array.from(document.querySelectorAll('#mdbook-sidebar a')).forEach(function(link) {
+                        link.setAttribute('tabIndex', sidebar === 'visible' ? 0 : -1);
+                    });
+                </script>
+
+                <div id="mdbook-content" class="content">
+                    <main>
+                        <h1 id="debug-toolkit"><a class="header" href="#debug-toolkit">Debug Toolkit</a></h1>
+<p>The Debug Toolkit is an interactive REPL (Read-Eval-Print Loop) for debugging, development, and hackathon scenarios.</p>
+<p>It supports two modes:</p>
+<ul>
+<li><strong>Attach mode</strong>: connect to an already-running node over JSON-RPC.</li>
+<li><strong>Local (spawn) mode</strong>: spin up a local test network and interact with in-process nodes.</li>
+</ul>
+<h2 id="getting-started"><a class="header" href="#getting-started">Getting Started</a></h2>
+<h3 id="source-code"><a class="header" href="#source-code">Source Code</a></h3>
+<p>The debug toolkit is available on the <code>feat/debug-toolkit</code> branch:</p>
+<p><strong>Repository:</strong> <a href="https://github.com/scroll-tech/rollup-node/tree/feat/debug-toolkit">https://github.com/scroll-tech/rollup-node/tree/feat/debug-toolkit</a></p>
+<pre><code class="language-bash">git clone https://github.com/scroll-tech/rollup-node.git
+cd rollup-node
+git checkout feat/debug-toolkit
+</code></pre>
+<h3 id="building"><a class="header" href="#building">Building</a></h3>
+<p>Build with the <code>debug-toolkit</code> feature flag:</p>
+<pre><code class="language-bash">cargo build -p rollup-node --features debug-toolkit --release
+</code></pre>
+<h2 id="attach-mode"><a class="header" href="#attach-mode">Attach Mode</a></h2>
+<p>Use attach mode when you want to inspect or control an already-running node:</p>
+<pre><code class="language-bash">cargo run --features debug-toolkit --bin scroll-debug -- \
+    --attach http://localhost:8545 \
+    --private-key &lt;hex_private_key&gt;
+</code></pre>
+<p>Notes:</p>
+<ul>
+<li><code>--private-key</code> is optional, but required for <code>tx send</code> and <code>tx inject</code>.</li>
+<li>Commands that depend on local fixtures (<code>build</code>, <code>run</code>, <code>node</code>, <code>db</code>, L1 mock injection) are only available in local (spawn) mode.</li>
+</ul>
+<h2 id="connecting-to-a-remote-network-local-spawn-mode"><a class="header" href="#connecting-to-a-remote-network-local-spawn-mode">Connecting to a Remote Network (Local (spawn) Mode)</a></h2>
+<p>The primary use case is connecting local follower nodes to a remote sequencer and L1. This allows you to run tests and scripts against a live network.</p>
+<h3 id="network-connection-info"><a class="header" href="#network-connection-info">Network Connection Info</a></h3>
+<pre><code>L1 RPC:           http://ec2-54-167-214-30.compute-1.amazonaws.com:8545
+L1 Private Key:   0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80
+Sequencer HTTP:   http://ec2-54-175-126-206.compute-1.amazonaws.com:8545
+Sequencer Enode:  enode://3322bb29bba1f30f3bb40e816779f1be8ab3c14a5d14ff6c76d0585a63bdcc4ba25008be138780dafd03cb3e3ae4546da9a566b4ff9f1d237fa5d3d79bfdd219@54.175.126.206:30303
+Signer:           0xb674ff99cca262c99d3eab5b32796a99188543da
+Genesis:          tests/l2reth-genesis-e2e.json
+</code></pre>
+<h3 id="connect-to-remote-network"><a class="header" href="#connect-to-remote-network">Connect to Remote Network</a></h3>
+<pre><code class="language-bash">cargo run --features debug-toolkit --bin scroll-debug -- \
+    --followers 2 \
+    --chain tests/l2reth-genesis-e2e.json \
+    --bootnodes enode://3322bb29bba1f30f3bb40e816779f1be8ab3c14a5d14ff6c76d0585a63bdcc4ba25008be138780dafd03cb3e3ae4546da9a566b4ff9f1d237fa5d3d79bfdd219@54.175.126.206:30303 \
+    --l1-url http://ec2-54-167-214-30.compute-1.amazonaws.com:8545 \
+    --valid-signer 0xb674ff99cca262c99d3eab5b32796a99188543da
+</code></pre>
+<p>This creates local follower nodes that:</p>
+<ul>
+<li>Connect to the remote sequencer via P2P (<code>--bootnodes</code>)</li>
+<li>Sync L1 state from the remote L1 RPC (<code>--l1-url</code>)</li>
+<li>Validate blocks using the network’s authorized signer (<code>--valid-signer</code>)</li>
+<li>Use the matching genesis configuration (<code>--chain</code>)</li>
+</ul>
+<h3 id="cli-options-explained"><a class="header" href="#cli-options-explained">CLI Options Explained</a></h3>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Option</th><th>Description</th></tr>
+</thead>
+<tbody>
+<tr><td><code>--chain &lt;name|path&gt;</code></td><td>Genesis configuration: <code>dev</code>, <code>scroll-sepolia</code>, <code>scroll-mainnet</code>, or path to JSON file</td></tr>
+<tr><td><code>--sequencer</code></td><td>Enable local sequencer mode</td></tr>
+<tr><td><code>--followers &lt;n&gt;</code></td><td>Number of local follower nodes to spin up (can be any number)</td></tr>
+<tr><td><code>--bootnodes &lt;enode&gt;</code></td><td>Remote sequencer enode URL to connect to</td></tr>
+<tr><td><code>--l1-url &lt;url&gt;</code></td><td>Remote L1 RPC endpoint</td></tr>
+<tr><td><code>--valid-signer &lt;addr&gt;</code></td><td>Authorized block signer address for consensus validation</td></tr>
+<tr><td><code>--log-file &lt;path&gt;</code></td><td>Path to log file (default: <code>./scroll-debug-&lt;pid&gt;.log</code>)</td></tr>
+</tbody>
+</table>
+</div>
+<h2 id="local-spawn-mode"><a class="header" href="#local-spawn-mode">Local (Spawn) Mode</a></h2>
+<p>You can also run a fully local environment with a mock L1 and local sequencer for offline development:</p>
+<pre><code class="language-bash">cargo run --features debug-toolkit --bin scroll-debug -- \
+    --chain dev \
+    --sequencer \
+    --followers 2
+</code></pre>
+<p>This creates:</p>
+<ul>
+<li><strong>Node 0</strong>: Local sequencer (produces blocks)</li>
+<li><strong>Node 1-N</strong>: Local followers (receive blocks via P2P)</li>
+</ul>
+<p>With mock L1, you must manually sync before building blocks:</p>
+<pre><code>scroll-debug [seq:0]&gt; l1 sync
+L1 synced event sent
+
+scroll-debug [seq:0]&gt; build
+Block build triggered!
+</code></pre>
+<h2 id="using-the-network-handle"><a class="header" href="#using-the-network-handle">Using the Network Handle</a></h2>
+<p>The <code>TestFixture</code> provides access to network handles for programmatic control. This is useful for writing custom actions and tests:</p>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>use rollup_node::test_utils::TestFixture;
+
+async fn example(fixture: &amp;TestFixture) -&gt; eyre::Result&lt;()&gt; {
+    // Access a node's network handle
+    let node = &amp;fixture.nodes[0];
+    let network_handle = node.rollup_manager_handle.get_network_handle().await?;
+
+    // Get local node info
+    let local_record = network_handle.local_node_record();
+    println!("Local enode: {}", local_record);
+
+    // Access the inner network handle for P2P operations
+    let inner = network_handle.inner();
+
+    // Get connected peers
+    let peers = inner.get_all_peers().await?;
+    println!("Connected to {} peers", peers.len());
+
+    // Add a peer
+    inner.add_peer(peer_id, socket_addr);
+
+    Ok(())
+}
+<span class="boring">}</span></code></pre>
+<h2 id="commands"><a class="header" href="#commands">Commands</a></h2>
+<h3 id="status--inspection"><a class="header" href="#status--inspection">Status &amp; Inspection</a></h3>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Command</th><th>Description</th></tr>
+</thead>
+<tbody>
+<tr><td><code>status</code></td><td>Show node status (L2 head/safe/finalized, L1 state, sync status)</td></tr>
+<tr><td><code>block [n|latest]</code></td><td>Display block details</td></tr>
+<tr><td><code>blocks &lt;from&gt; &lt;to&gt;</code></td><td>List blocks in range</td></tr>
+<tr><td><code>fcs</code></td><td>Show forkchoice state</td></tr>
+</tbody>
+</table>
+</div>
+<p><strong>Example:</strong></p>
+<pre><code>scroll-debug [fol:0]&gt; status
+=== Node 0 (Follower) ===
+Node:
+  Database:  /tmp/.tmpXYZ/db/scroll.db
+  HTTP RPC:  http://127.0.0.1:62491
+L2:
+  Head:      #42 (0x1234abcd...)
+  Safe:      #40 (0x5678efgh...)
+  Finalized: #35 (0x9abc1234...)
+  Synced:    true
+L1:
+  Head:      #18923456
+  Finalized: #18923400
+  Processed: #18923450
+  Synced:    true
+</code></pre>
+<h3 id="l1-commands"><a class="header" href="#l1-commands">L1 Commands</a></h3>
+<p>These commands allow you to simulate L1 events (useful in local mode with mock L1):</p>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Command</th><th>Description</th></tr>
+</thead>
+<tbody>
+<tr><td><code>l1 status</code></td><td>Show L1 sync state</td></tr>
+<tr><td><code>l1 sync</code></td><td>Inject L1 synced event</td></tr>
+<tr><td><code>l1 block &lt;n&gt;</code></td><td>Inject new L1 block notification</td></tr>
+<tr><td><code>l1 reorg &lt;block&gt;</code></td><td>Inject L1 reorg</td></tr>
+</tbody>
+</table>
+</div>
+<h3 id="block--transaction"><a class="header" href="#block--transaction">Block &amp; Transaction</a></h3>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Command</th><th>Description</th></tr>
+</thead>
+<tbody>
+<tr><td><code>build</code></td><td>Build a new block (local sequencer mode only)</td></tr>
+<tr><td><code>tx send &lt;to&gt; &lt;value&gt; [idx]</code></td><td>Send ETH transfer (value in wei, idx = wallet index)</td></tr>
+<tr><td><code>tx pending</code></td><td>List pending transactions</td></tr>
+<tr><td><code>tx inject &lt;hex&gt;</code></td><td>Inject raw transaction</td></tr>
+</tbody>
+</table>
+</div>
+<p><strong>Example:</strong></p>
+<pre><code>scroll-debug [seq:0]&gt; tx send 0x742d35Cc6634C0532925a3b844Bc9e7595f0bEb2 1000000000000000000
+Transaction sent!
+  Hash: 0xabcd...
+  From: 0x1234...
+  To:   0x742d...
+  Value: 1000000000000000000 wei
+</code></pre>
+<h3 id="wallet"><a class="header" href="#wallet">Wallet</a></h3>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Command</th><th>Description</th></tr>
+</thead>
+<tbody>
+<tr><td><code>wallet</code></td><td>Show wallet address, balance, and nonce</td></tr>
+<tr><td><code>wallet gen</code></td><td>Generate and list all available wallets</td></tr>
+</tbody>
+</table>
+</div>
+<p>The toolkit includes pre-funded test wallets:</p>
+<pre><code>scroll-debug [fol:0]&gt; wallet gen
+Generated Wallets (10):
+  Chain ID: 222222
+
+  [0] 0x1234567890abcdef...
+      Balance: 1000000000000000000000 wei (1000.000000 ETH)
+
+  [1] 0xabcdef1234567890...
+      Balance: 1000000000000000000000 wei (1000.000000 ETH)
+  ...
+</code></pre>
+<h3 id="network"><a class="header" href="#network">Network</a></h3>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Command</th><th>Description</th></tr>
+</thead>
+<tbody>
+<tr><td><code>peers</code></td><td>List connected peers and show local enode</td></tr>
+<tr><td><code>peers connect &lt;url&gt;</code></td><td>Connect to a peer (enode://…)</td></tr>
+</tbody>
+</table>
+</div>
+<p><strong>Example:</strong></p>
+<pre><code>scroll-debug [fol:0]&gt; peers
+Local Node:
+  Peer ID: 0x1234...
+  Enode:   enode://abcd...@127.0.0.1:30303
+
+Connected Peers (1):
+  0x3322bb29...
+    Address:    54.175.126.206:30303
+    Client:     scroll-reth/v1.0.0
+</code></pre>
+<h3 id="events"><a class="header" href="#events">Events</a></h3>
+<p>The REPL streams chain events in real-time:</p>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Command</th><th>Description</th></tr>
+</thead>
+<tbody>
+<tr><td><code>events on</code></td><td>Enable background event stream</td></tr>
+<tr><td><code>events off</code></td><td>Disable background event stream</td></tr>
+<tr><td><code>events filter &lt;pat&gt;</code></td><td>Filter events by type (e.g., <code>Block*</code>, <code>L1*</code>)</td></tr>
+<tr><td><code>events history [n]</code></td><td>Show last N events (default: 20)</td></tr>
+</tbody>
+</table>
+</div>
+<h3 id="custom-actions"><a class="header" href="#custom-actions">Custom Actions</a></h3>
+<p>Run pre-built or custom actions:</p>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Command</th><th>Description</th></tr>
+</thead>
+<tbody>
+<tr><td><code>run list</code></td><td>List available custom actions</td></tr>
+<tr><td><code>run &lt;name&gt; [args]</code></td><td>Execute a custom action</td></tr>
+</tbody>
+</table>
+</div>
+<p><strong>Built-in Actions:</strong></p>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Action</th><th>Description</th></tr>
+</thead>
+<tbody>
+<tr><td><code>build-blocks &lt;count&gt; [delay_ms]</code></td><td>Build multiple blocks in sequence</td></tr>
+<tr><td><code>stress-test &lt;tx_count&gt; [build_every]</code></td><td>Send multiple transactions and build blocks</td></tr>
+<tr><td><code>sync-all</code></td><td>Send L1 sync event to all nodes</td></tr>
+</tbody>
+</table>
+</div>
+<h3 id="node-management"><a class="header" href="#node-management">Node Management</a></h3>
+<p>Switch between nodes when running multiple followers:</p>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Command</th><th>Description</th></tr>
+</thead>
+<tbody>
+<tr><td><code>node &lt;index&gt;</code></td><td>Switch active node context</td></tr>
+<tr><td><code>nodes</code></td><td>List all nodes in fixture</td></tr>
+</tbody>
+</table>
+</div>
+<pre><code>scroll-debug [fol:0]&gt; nodes
+Nodes:
+  [0] Follower *
+  [1] Follower
+  [2] Follower
+
+scroll-debug [fol:0]&gt; node 1
+Switched to node 1 (Follower)
+</code></pre>
+<h3 id="database"><a class="header" href="#database">Database</a></h3>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Command</th><th>Description</th></tr>
+</thead>
+<tbody>
+<tr><td><code>db</code></td><td>Show database path and access command</td></tr>
+</tbody>
+</table>
+</div>
+<pre><code>scroll-debug [fol:0]&gt; db
+Database Info:
+  Path: /path/to/datadir/db/scroll.db
+
+Access from another terminal:
+  sqlite3 /path/to/datadir/db/scroll.db
+
+Useful queries:
+  .tables                       -- List all tables
+  .schema &lt;table&gt;               -- Show table schema
+  SELECT * FROM metadata;       -- View metadata
+  SELECT * FROM l2_block ORDER BY number DESC LIMIT 10;
+</code></pre>
+<h3 id="logs"><a class="header" href="#logs">Logs</a></h3>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Command</th><th>Description</th></tr>
+</thead>
+<tbody>
+<tr><td><code>logs</code></td><td>Show log file path and tail command</td></tr>
+</tbody>
+</table>
+</div>
+<p>Tracing logs are written to a file to keep the REPL display clean:</p>
+<pre><code>scroll-debug [fol:0]&gt; logs
+Log File:
+  Path: ./scroll-debug-12345.log
+
+View logs in another terminal:
+  tail -f ./scroll-debug-12345.log
+</code></pre>
+<h3 id="admin"><a class="header" href="#admin">Admin</a></h3>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Command</th><th>Description</th></tr>
+</thead>
+<tbody>
+<tr><td><code>admin enable-seq</code></td><td>Enable automatic sequencing</td></tr>
+<tr><td><code>admin disable-seq</code></td><td>Disable automatic sequencing</td></tr>
+<tr><td><code>admin revert &lt;n&gt;</code></td><td>Revert node state to L1 block number <code>n</code></td></tr>
+</tbody>
+</table>
+</div>
+<h3 id="raw-rpc"><a class="header" href="#raw-rpc">Raw RPC</a></h3>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Command</th><th>Description</th></tr>
+</thead>
+<tbody>
+<tr><td><code>rpc &lt;method&gt; [params]</code></td><td>Execute any JSON-RPC call and print result</td></tr>
+</tbody>
+</table>
+</div>
+<p><strong>Examples:</strong></p>
+<pre><code class="language-bash">rpc eth_blockNumber
+rpc eth_getBlockByNumber ["latest",false]
+</code></pre>
+<h3 id="other"><a class="header" href="#other">Other</a></h3>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Command</th><th>Description</th></tr>
+</thead>
+<tbody>
+<tr><td><code>help</code></td><td>Show available commands</td></tr>
+<tr><td><code>exit</code></td><td>Exit the REPL</td></tr>
+</tbody>
+</table>
+</div>
+<h2 id="creating-custom-actions"><a class="header" href="#creating-custom-actions">Creating Custom Actions</a></h2>
+<p>You can create custom actions by implementing the <code>Action</code> trait. Actions have full access to the <code>TestFixture</code>:</p>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>use rollup_node::debug_toolkit::actions::{Action, ActionRegistry};
+use rollup_node::test_utils::TestFixture;
+use async_trait::async_trait;
+
+struct MyCustomAction;
+
+#[async_trait]
+impl Action for MyCustomAction {
+    fn name(&amp;self) -&gt; &amp;'static str {
+        "my-action"
+    }
+
+    fn description(&amp;self) -&gt; &amp;'static str {
+        "Does something cool with the fixture"
+    }
+
+    fn usage(&amp;self) -&gt; Option&lt;&amp;'static str&gt; {
+        Some("run my-action [arg1] [arg2]")
+    }
+
+    async fn execute(
+        &amp;self,
+        fixture: &amp;mut TestFixture,
+        args: &amp;[String],
+    ) -&gt; eyre::Result&lt;()&gt; {
+        // Access nodes
+        println!("Fixture has {} nodes", fixture.nodes.len());
+
+        // Access network handle
+        let node = &amp;fixture.nodes[0];
+        let network_handle = node.rollup_manager_handle.get_network_handle().await?;
+        println!("Connected peers: {}", network_handle.inner().num_connected_peers());
+
+        // Access wallet
+        let wallet = fixture.wallet.lock().await;
+        println!("Wallet address: {:?}", wallet.inner.address());
+        drop(wallet);
+
+        // Query chain state
+        let status = node.rollup_manager_handle.status().await?;
+        println!("Head block: {}", status.l2.fcs.head_block_info().number);
+
+        Ok(())
+    }
+}
+<span class="boring">}</span></code></pre>
+<h3 id="registering-actions"><a class="header" href="#registering-actions">Registering Actions</a></h3>
+<p>Add your action to the registry in <code>crates/node/src/debug_toolkit/actions.rs</code>:</p>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>impl ActionRegistry {
+    pub fn new() -&gt; Self {
+        let mut registry = Self { actions: Vec::new() };
+
+        // Built-in actions
+        registry.register(Box::new(BuildBlocksAction));
+        registry.register(Box::new(StressTestAction));
+        registry.register(Box::new(SyncAllAction));
+
+        // Add your custom action here:
+        registry.register(Box::new(MyCustomAction));
+
+        registry
+    }
+}
+<span class="boring">}</span></code></pre>
+<h2 id="useful-cast-commands"><a class="header" href="#useful-cast-commands">Useful Cast Commands</a></h2>
+<p>Use <a href="https://book.getfoundry.sh/cast/">Foundry’s <code>cast</code></a> to interact with the network. The <code>status</code> command in the REPL shows the HTTP RPC endpoint for your local nodes.</p>
+<h3 id="check-block-status"><a class="header" href="#check-block-status">Check Block Status</a></h3>
+<pre><code class="language-bash"># Check latest L1 block
+cast block latest --rpc-url http://ec2-54-167-214-30.compute-1.amazonaws.com:8545
+
+# Check latest L2 block (sequencer)
+cast block latest --rpc-url http://ec2-54-175-126-206.compute-1.amazonaws.com:8545
+</code></pre>
+<h3 id="check-sync-status"><a class="header" href="#check-sync-status">Check Sync Status</a></h3>
+<pre><code class="language-bash"># L2 sequencer sync status
+cast rpc rollupNode_status --rpc-url http://ec2-54-175-126-206.compute-1.amazonaws.com:8545 | jq
+</code></pre>
+<h3 id="check-and-manage-peers"><a class="header" href="#check-and-manage-peers">Check and Manage Peers</a></h3>
+<pre><code class="language-bash"># Check connected peers
+cast rpc admin_peers --rpc-url http://ec2-54-175-126-206.compute-1.amazonaws.com:8545
+
+# Get node info (enode URL)
+cast rpc admin_nodeInfo --rpc-url http://ec2-54-175-126-206.compute-1.amazonaws.com:8545 | jq -r '.enode'
+</code></pre>
+<h3 id="enable-sequencing"><a class="header" href="#enable-sequencing">Enable Sequencing</a></h3>
+<pre><code class="language-bash">cast rpc rollupNodeAdmin_enableAutomaticSequencing --rpc-url http://ec2-54-175-126-206.compute-1.amazonaws.com:8545
+</code></pre>
+<h3 id="send-transactions"><a class="header" href="#send-transactions">Send Transactions</a></h3>
+<pre><code class="language-bash"># Get wallet address from private key
+cast wallet address --private-key 0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80
+
+# Check balance on L2
+cast balance 0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266 --ether --rpc-url http://ec2-54-175-126-206.compute-1.amazonaws.com:8545
+
+# Send L2 transaction
+cast send 0x0000000000000000000000000000000000000002 \
+  --rpc-url http://ec2-54-175-126-206.compute-1.amazonaws.com:8545 \
+  --value 0.00001ether \
+  --private-key 0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80
+</code></pre>
+<h3 id="l1-to-l2-bridge-send-l1-message"><a class="header" href="#l1-to-l2-bridge-send-l1-message">L1 to L2 Bridge (Send L1 Message)</a></h3>
+<pre><code class="language-bash"># Send message from L1 to L2 via the messenger contract
+cast send --rpc-url http://ec2-54-167-214-30.compute-1.amazonaws.com:8545 \
+  --private-key 0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80 \
+  --legacy --gas-price 0.1gwei --gas-limit 200000 --value 0.001ether \
+  "0x8A791620dd6260079BF849Dc5567aDC3F2FdC318" \
+  "sendMessage(address _to, uint256 _value, bytes memory _message, uint256 _gasLimit)" \
+  0x0000000000000000000000000000000000000002 0x1 0x 200000
+
+# Check L1 message queue index
+cast call --rpc-url http://ec2-54-167-214-30.compute-1.amazonaws.com:8545 \
+  "0xDc64a140Aa3E981100a9becA4E685f962f0cF6C9" \
+  "nextCrossDomainMessageIndex()(uint256)"
+</code></pre>
+<h3 id="contract-addresses"><a class="header" href="#contract-addresses">Contract Addresses</a></h3>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Contract</th><th>Address</th></tr>
+</thead>
+<tbody>
+<tr><td>L1 Messenger</td><td><code>0x8A791620dd6260079BF849Dc5567aDC3F2FdC318</code></td></tr>
+<tr><td>L1 Message Queue</td><td><code>0xDc64a140Aa3E981100a9becA4E685f962f0cF6C9</code></td></tr>
+</tbody>
+</table>
+</div>
+
+                    </main>
+
+                    <nav class="nav-wrapper" aria-label="Page navigation">
+                        <!-- Mobile navigation buttons -->
+                            <a rel="prev" href="docker-operations.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                                <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M41.4 233.4c-12.5 12.5-12.5 32.8 0 45.3l160 160c12.5 12.5 32.8 12.5 45.3 0s12.5-32.8 0-45.3L109.3 256 246.6 118.6c12.5-12.5 12.5-32.8 0-45.3s-32.8-12.5-45.3 0l-160 160z"/></svg></span>
+                            </a>
+
+
+                        <div style="clear: both"></div>
+                    </nav>
+                </div>
+            </div>
+
+            <nav class="nav-wide-wrapper" aria-label="Page navigation">
+                    <a rel="prev" href="docker-operations.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                        <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M41.4 233.4c-12.5 12.5-12.5 32.8 0 45.3l160 160c12.5 12.5 32.8 12.5 45.3 0s12.5-32.8 0-45.3L109.3 256 246.6 118.6c12.5-12.5 12.5-32.8 0-45.3s-32.8-12.5-45.3 0l-160 160z"/></svg></span>
+                    </a>
+
+            </nav>
+
+        </div>
+
+        <template id=fa-eye><span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 576 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M288 32c-80.8 0-145.5 36.8-192.6 80.6C48.6 156 17.3 208 2.5 243.7c-3.3 7.9-3.3 16.7 0 24.6C17.3 304 48.6 356 95.4 399.4C142.5 443.2 207.2 480 288 480s145.5-36.8 192.6-80.6c46.8-43.5 78.1-95.4 93-131.1c3.3-7.9 3.3-16.7 0-24.6c-14.9-35.7-46.2-87.7-93-131.1C433.5 68.8 368.8 32 288 32zM432 256c0 79.5-64.5 144-144 144s-144-64.5-144-144s64.5-144 144-144s144 64.5 144 144zM288 192c0 35.3-28.7 64-64 64c-11.5 0-22.3-3-31.6-8.4c-.2 2.8-.4 5.5-.4 8.4c0 53 43 96 96 96s96-43 96-96s-43-96-96-96c-2.8 0-5.6 .1-8.4 .4c5.3 9.3 8.4 20.1 8.4 31.6z"/></svg></span></template>
+        <template id=fa-eye-slash><span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M38.8 5.1C28.4-3.1 13.3-1.2 5.1 9.2S-1.2 34.7 9.2 42.9l592 464c10.4 8.2 25.5 6.3 33.7-4.1s6.3-25.5-4.1-33.7L525.6 386.7c39.6-40.6 66.4-86.1 79.9-118.4c3.3-7.9 3.3-16.7 0-24.6c-14.9-35.7-46.2-87.7-93-131.1C465.5 68.8 400.8 32 320 32c-68.2 0-125 26.3-169.3 60.8L38.8 5.1zM223.1 149.5C248.6 126.2 282.7 112 320 112c79.5 0 144 64.5 144 144c0 24.9-6.3 48.3-17.4 68.7L408 294.5c5.2-11.8 8-24.8 8-38.5c0-53-43-96-96-96c-2.8 0-5.6 .1-8.4 .4c5.3 9.3 8.4 20.1 8.4 31.6c0 10.2-2.4 19.8-6.6 28.3l-90.3-70.8zm223.1 298L373 389.9c-16.4 6.5-34.3 10.1-53 10.1c-79.5 0-144-64.5-144-144c0-6.9 .5-13.6 1.4-20.2L83.1 161.5C60.3 191.2 44 220.8 34.5 243.7c-3.3 7.9-3.3 16.7 0 24.6c14.9 35.7 46.2 87.7 93 131.1C174.5 443.2 239.2 480 320 480c47.8 0 89.9-12.9 126.2-32.5z"/></svg></span></template>
+        <template id=fa-copy><span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M502.6 70.63l-61.25-61.25C435.4 3.371 427.2 0 418.7 0H255.1c-35.35 0-64 28.66-64 64l.0195 256C192 355.4 220.7 384 256 384h192c35.2 0 64-28.8 64-64V93.25C512 84.77 508.6 76.63 502.6 70.63zM464 320c0 8.836-7.164 16-16 16H255.1c-8.838 0-16-7.164-16-16L239.1 64.13c0-8.836 7.164-16 16-16h128L384 96c0 17.67 14.33 32 32 32h47.1V320zM272 448c0 8.836-7.164 16-16 16H63.1c-8.838 0-16-7.164-16-16L47.98 192.1c0-8.836 7.164-16 16-16H160V128H63.99c-35.35 0-64 28.65-64 64l.0098 256C.002 483.3 28.66 512 64 512h192c35.2 0 64-28.8 64-64v-32h-47.1L272 448z"/></svg></span></template>
+        <template id=fa-play><span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 384 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M73 39c-14.8-9.1-33.4-9.4-48.5-.9S0 62.6 0 80V432c0 17.4 9.4 33.4 24.5 41.9s33.7 8.1 48.5-.9L361 297c14.3-8.7 23-24.2 23-41s-8.7-32.2-23-41L73 39z"/></svg></span></template>
+        <template id=fa-clock-rotate-left><span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M75 75L41 41C25.9 25.9 0 36.6 0 57.9V168c0 13.3 10.7 24 24 24H134.1c21.4 0 32.1-25.9 17-41l-30.8-30.8C155 85.5 203 64 256 64c106 0 192 86 192 192s-86 192-192 192c-40.8 0-78.6-12.7-109.7-34.4c-14.5-10.1-34.4-6.6-44.6 7.9s-6.6 34.4 7.9 44.6C151.2 495 201.7 512 256 512c141.4 0 256-114.6 256-256S397.4 0 256 0C185.3 0 121.3 28.7 75 75zm181 53c-13.3 0-24 10.7-24 24V256c0 6.4 2.5 12.5 7 17l72 72c9.4 9.4 24.6 9.4 33.9 0s9.4-24.6 0-33.9l-65-65V152c0-13.3-10.7-24-24-24z"/></svg></span></template>
+
+
+
+        <script>
+            window.playground_copyable = true;
+        </script>
+
+
+        <script src="elasticlunr-ef4e11c1.min.js"></script>
+        <script src="mark-09e88c2c.min.js"></script>
+        <script src="searcher-c2a407aa.js"></script>
+
+        <script src="clipboard-1626706a.min.js"></script>
+        <script src="highlight-abc7f01d.js"></script>
+        <script src="book-a0b12cfe.js"></script>
+
+        <!-- Custom JS scripts -->
+
+
+
+    </div>
+    </body>
+</html>
